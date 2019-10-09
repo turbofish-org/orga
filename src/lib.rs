@@ -1,4 +1,7 @@
-// #![no_std]
+#![no_std]
+
+#[cfg(test)]
+#[macro_use] extern crate std;
 
 #[macro_use] extern crate failure;
 

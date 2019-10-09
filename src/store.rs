@@ -1,6 +1,7 @@
 use crate::error::Result;
 
 // TODO: Iterable trait so state machines can iterate through keys, or should this be required?
+// TODO: Flush trait for stores that wrap a backing store
 
 pub trait Read<K, V> {
   fn get<KR: AsRef<K>>(&self, key: KR) -> Result<V>;
@@ -18,6 +19,7 @@ impl<S, K, V> Store<K, V> for S
 
 #[cfg(test)]
 mod tests {
+    use std::vec::Vec;
     use std::collections::BTreeMap;
     use super::*;
 
