@@ -1,7 +1,10 @@
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
+// #![no_std]
+
+#[macro_use] extern crate failure;
+
+mod error;
+mod store;
+mod state_machine;
+
+pub use state_machine::*;
+
