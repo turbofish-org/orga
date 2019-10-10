@@ -1,7 +1,6 @@
 use crate::error::Result;
 
 // TODO: Iterable trait so state machines can iterate through keys, or should this be required?
-// TODO: Flush trait for stores that wrap a backing store
 
 pub trait Read {
   fn get<K: AsRef<[u8]>>(&self, key: K) -> Result<Vec<u8>>;
@@ -14,6 +13,16 @@ pub trait Write {
 pub trait Store: Read + Write {}
 
 impl<S: Read + Write> Store for S {}
+
+pub trait Flush {
+    fn flush(self) -> Result<()>;
+}
+
+impl<S: Store> Flush for S {
+    fn flush(self) -> Result<()> {
+        Ok(())
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -65,6 +74,12 @@ mod tests {
         store.put(vec![1, 2, 3], vec![4, 5, 6]).unwrap();
         let value = store.get(vec![1, 2, 3]).unwrap();
         assert_eq!(value, vec![4, 5, 6]);
+    }
+
+    #[test]
+    fn mapstore_flush() {
+        let store = MapStore::new();
+        store.flush().unwrap();
     }
 }
 
