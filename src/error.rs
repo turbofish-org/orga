@@ -1,3 +1,7 @@
-use failure::Error;
+use error_chain::error_chain;
 
-pub type Result<T> = core::result::Result<T, Error>;
+error_chain! {
+    foreign_links {
+        Store(crate::store::Error);
+    }
+}
