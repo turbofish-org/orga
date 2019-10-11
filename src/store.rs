@@ -1,6 +1,6 @@
 use crate::error::Result;
 
-// TODO: Iterable trait so state machines can iterate through keys, or should this be required?
+// TODO: iter method?
 
 pub trait Read {
   fn get<K: AsRef<[u8]>>(&self, key: K) -> Result<Vec<u8>>;
@@ -8,6 +8,8 @@ pub trait Read {
 
 pub trait Write {
   fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()>;
+
+  fn delete<K: AsRef<[u8]>>(&mut self, key: K) -> Result<()>;
 }
 
 pub trait Store: Read + Write {}
@@ -18,6 +20,7 @@ pub trait Flush {
     fn flush(self) -> Result<()>;
 }
 
+// TODO: do we need all stores to be flushable?
 impl<S: Store> Flush for S {
     fn flush(self) -> Result<()> {
         Ok(())
@@ -27,6 +30,7 @@ impl<S: Store> Flush for S {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+    use failure::format_err;
     use super::*;
 
     struct MapStore (BTreeMap<Vec<u8>, Vec<u8>>);
@@ -49,6 +53,11 @@ mod tests {
     impl Write for MapStore {
         fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
             self.0.insert(key, value);
+            Ok(())
+        }
+
+        fn delete<K: AsRef<[u8]>>(&mut self, key: K) -> Result<()> {
+            self.0.remove(key.as_ref());
             Ok(())
         }
     }
@@ -77,10 +86,16 @@ mod tests {
     }
 
     #[test]
+    fn mapstore_delete() {
+        let mut store = MapStore::new();
+        store.put(vec![1, 2, 3], vec![4, 5, 6]).unwrap();
+        store.delete(vec![1, 2, 3]).unwrap();
+        assert!(store.get(vec![1, 2, 3]).is_err());
+    }
+
+    #[test]
     fn mapstore_flush() {
         let store = MapStore::new();
         store.flush().unwrap();
     }
 }
-
-
