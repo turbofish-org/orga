@@ -20,13 +20,6 @@ pub trait Flush {
     fn flush(self) -> Result<()>;
 }
 
-// TODO: do we need all stores to be flushable?
-impl<S: Store> Flush for S {
-    fn flush(self) -> Result<()> {
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -91,11 +84,5 @@ mod tests {
         store.put(vec![1, 2, 3], vec![4, 5, 6]).unwrap();
         store.delete(vec![1, 2, 3]).unwrap();
         assert!(store.get(vec![1, 2, 3]).is_err());
-    }
-
-    #[test]
-    fn mapstore_flush() {
-        let store = MapStore::new();
-        store.flush().unwrap();
     }
 }
