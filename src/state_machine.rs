@@ -4,6 +4,8 @@ use crate::store::{Store, MapStore, Flush};
 pub trait StateMachine<A> {
     fn step<S: Store>(&mut self, action: A, store: &mut S) -> Result<()>;
 
+    // TODO: this needs a better name
+    // TODO: is there a way to implement this elsewhere? adding provided methods to the trait doesn't scale
     fn step_flush<S>(&mut self, action: A, store: &mut S) -> Result<()>
         where S: Store
     {
