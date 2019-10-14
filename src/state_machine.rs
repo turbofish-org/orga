@@ -1,8 +1,32 @@
 use crate::error::Result;
-use crate::store::Store;
+use crate::store::{Store, Flush};
 
 pub trait StateMachine<A> {
     fn step<S: Store>(&mut self, action: A, store: &mut S) -> Result<()>;
+}
+
+pub struct Flusher<M, C>
+    where
+        M: StateMachine<A>,
+        C: Fn(&mut Store) -> Flush + Sized
+{
+    state_machine: M,
+    create_store: C
+}
+
+impl<A, M, C> StateMachine<A> for Flusher<M, C>
+    where
+        M: StateMachine<A>,
+        C: Fn(&mut Store) -> Flush + Sized
+{
+    fn step<S: Store>(&mut self, action: A, store: S) -> Result<()> {
+        let flush_store = (self.create_store)(store);
+
+        match self.state_machine.step(action, flush_store) {
+            Err(err) => Err(err),
+            Ok(_) => Ok(flush_store.flush())
+        }
+    }
 }
 
 #[cfg(test)]

@@ -22,6 +22,6 @@ pub trait Store: Read + Write {}
 
 impl<S: Read + Write> Store for S {}
 
-pub trait Flush {
+pub trait Flush: Write {
     fn flush(self) -> Result<()>;
 }
