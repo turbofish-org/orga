@@ -1,31 +1,65 @@
 use std::collections::BTreeMap;
 use super::*;
 
-pub struct MapStore (BTreeMap<Vec<u8>, Vec<u8>>);
+type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
-impl MapStore {
-    pub fn new() -> MapStore {
-        MapStore(BTreeMap::default())
+pub struct MapStore<'a, R: Read> {
+    map: Map,
+    store: &'a R
+}
+
+pub struct MapFlusher (Map);
+
+impl MapStore<'_, NullStore> {
+    pub fn new() -> Self {
+        MapStore::wrap(&NullStore)
     }
 }
 
-impl Read for MapStore {
+impl<'a, R: Read> MapStore<'a, R> {
+    pub fn wrap(store: &'a R) -> Self {
+        MapStore {
+            map: Default::default(),
+            store
+        }
+    }
+
+    pub fn finish(self) -> MapFlusher {
+        MapFlusher(self.map)
+    }
+}
+
+impl<'a, S: Read> Read for MapStore<'a, S> {
     fn get<K: AsRef<[u8]>>(&self, key: K) -> Result<Vec<u8>> {
-        match self.0.get(key.as_ref()) {
-            Some(value) => Ok(value.clone()),
-            None => Err(Error::from(ErrorKind::NotFound).into())
+        match self.map.get(key.as_ref()) {
+            Some(Some(value)) => Ok(value.clone()),
+            Some(None) => Err(Error::from(ErrorKind::NotFound).into()),
+            None => self.store.get(key)
         }
     }
 }
 
-impl Write for MapStore {
+impl<'a, S: Read> Write for MapStore<'a, S> {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
-        self.0.insert(key, value);
+        self.map.insert(key, Some(value));
         Ok(())
     }
 
     fn delete<K: AsRef<[u8]>>(&mut self, key: K) -> Result<()> {
-        self.0.remove(key.as_ref());
+        // TODO: remove if key only exists in map
+        self.map.insert(key.as_ref().to_vec(), None);
+        Ok(())
+    }
+}
+
+impl Flush for MapFlusher {
+    fn flush<W: Write>(self, dest: &mut W) -> Result<()> {
+        for (key, value) in self.0 {
+            match value {
+                Some(value) => dest.put(key, value)?,
+                None => dest.delete(key)?
+            }
+        }
         Ok(())
     }
 }

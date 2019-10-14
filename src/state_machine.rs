@@ -1,51 +1,17 @@
-use std::marker::PhantomData;
 use crate::error::Result;
-use crate::store::{Store, Flush};
+use crate::store::{Store, MapStore, Flush};
 
 pub trait StateMachine<A> {
     fn step<S: Store>(&mut self, action: A, store: &mut S) -> Result<()>;
-}
 
+    fn step_flush<S>(&mut self, action: A, store: &mut S) -> Result<()>
+        where S: Store
+    {
+        let mut flush_store = MapStore::wrap(store);
 
-pub trait WrapStore: Store + Flush {
-    fn wrap<S: Store>(store: &mut S) -> Self;
-} 
-
-pub struct Flusher<A, M, W>
-    where
-        M: StateMachine<A>,
-        W: WrapStore
-{
-    state_machine: M,
-    phantom_a: PhantomData<A>,
-    phantom_w: PhantomData<W>
-}
-
-impl<A, M, W> Flusher<A, M, W>
-    where
-        M: StateMachine<A>,
-        W: WrapStore
-{
-    pub fn new(state_machine: M) -> Self {
-        Self {
-            state_machine,
-            phantom_a: PhantomData,
-            phantom_w: PhantomData
-        }
-    }
-}
-
-impl<A, M, W> StateMachine<A> for Flusher<A, M, W>
-    where
-        M: StateMachine<A>,
-        W: WrapStore
-{
-    fn step<S: Store>(&mut self, action: A, store: &mut S) -> Result<()> {
-        let mut flush_store = W::wrap(store);
-
-        match self.state_machine.step(action, &mut flush_store) {
+        match self.step(action, &mut flush_store) {
             Err(err) => Err(err),
-            Ok(_) => flush_store.flush()
+            Ok(_) => flush_store.finish().flush(store)
         }
     }
 }

@@ -2,8 +2,10 @@ use crate::error::Result;
 
 mod error;
 mod mapstore;
+mod nullstore;
 
 pub use mapstore::MapStore;
+pub use nullstore::NullStore;
 pub use error::{Error, ErrorKind};
 
 // TODO: iter method?
@@ -22,6 +24,6 @@ pub trait Store: Read + Write {}
 
 impl<S: Read + Write> Store for S {}
 
-pub trait Flush: Write {
-    fn flush(self) -> Result<()>;
+pub trait Flush {
+    fn flush<S: Store>(self, dest: &mut S) -> Result<()>;
 }
