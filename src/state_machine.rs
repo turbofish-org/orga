@@ -1,19 +1,22 @@
 use crate::error::Result;
 use crate::store::{Store, MapStore, Flush};
 
-pub trait StateMachine<A> {
-    fn step<S: Store>(&mut self, action: A, store: &mut S) -> Result<()>;
+pub trait StateMachine<A, R> {
+    fn step<S: Store>(&mut self, action: A, store: &mut S) -> Result<R>;
 
     // TODO: this needs a better name
     // TODO: is there a way to implement this elsewhere? adding provided methods to the trait doesn't scale
-    fn step_flush<S>(&mut self, action: A, store: &mut S) -> Result<()>
+    fn step_flush<S>(&mut self, action: A, store: &mut S) -> Result<R>
         where S: Store
     {
         let mut flush_store = MapStore::wrap(store);
 
         match self.step(action, &mut flush_store) {
             Err(err) => Err(err),
-            Ok(_) => flush_store.finish().flush(store)
+            Ok(res) => {
+                flush_store.finish().flush(store)?;
+                Ok(res)
+            }
         }
     }
 }
@@ -26,8 +29,8 @@ mod tests {
 
     struct CounterSM;
 
-    impl StateMachine<u8> for CounterSM {
-        fn step<S: Store>(&mut self, n: u8, store: &mut S) -> Result<()> {
+    impl StateMachine<u8, u8> for CounterSM {
+        fn step<S: Store>(&mut self, n: u8, store: &mut S) -> Result<u8> {
             // set this before checking if `n` is valid, so we can test state
             // mutations on invalid txs
             self.put(b"n", n, store)?;
@@ -37,7 +40,8 @@ mod tests {
             if count != n {
                 return Err("Invalid count".into());
             }
-            self.put(b"count", count + 1, store)
+            self.put(b"count", count + 1, store)?;
+            Ok(count + 1)
         }
     }
 
@@ -80,9 +84,9 @@ mod tests {
     #[test]
     fn step_counter() {
         let mut store = MapStore::new();
-        assert!(CounterSM.step_flush(0, &mut store).is_ok());
+        assert_eq!(CounterSM.step_flush(0, &mut store).unwrap(), 1);
         assert!(CounterSM.step_flush(0, &mut store).is_err());
-        assert!(CounterSM.step_flush(1, &mut store).is_ok());
+        assert_eq!(CounterSM.step_flush(1, &mut store).unwrap(), 2);
         assert!(CounterSM.step_flush(1, &mut store).is_err());
         assert_eq!(store.get(b"n").unwrap(), vec![1]);
         assert_eq!(store.get(b"count").unwrap(), vec![2]);
