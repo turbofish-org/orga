@@ -2,17 +2,16 @@ use std::cell::Cell;
 use std::collections::HashSet;
 use super::*;
 
-pub struct KeyLog<'a, S: Store> {
+pub struct KeyLog<S: Store> {
     // TODO: since most keys are in both sets, we can dedupe and use a hash of
     // slices
     read_keys: Cell<HashSet<Vec<u8>>>,
     write_keys: HashSet<Vec<u8>>,
-    // TODO: should this be owned?
-    store: &'a mut S
+    store: S
 }
 
-impl<'a, S: Store> KeyLog<'a, S> {
-    pub fn wrap(store: &'a mut S) -> Self {
+impl<S: Store> KeyLog<S> {
+    pub fn wrap(store: S) -> Self {
         KeyLog {
             read_keys: Cell::new(Default::default()),
             write_keys: Default::default(),
@@ -25,7 +24,7 @@ impl<'a, S: Store> KeyLog<'a, S> {
     }
 }
 
-impl<'a, S: Store> Read for KeyLog<'a, S> {
+impl<S: Store> Read for KeyLog<S> {
     fn get<K: AsRef<[u8]>>(&self, key: K) -> Result<Option<Vec<u8>>> {
         let mut read_keys = self.read_keys.take();
         read_keys.insert(key.as_ref().to_vec());
@@ -35,7 +34,7 @@ impl<'a, S: Store> Read for KeyLog<'a, S> {
     }
 }
 
-impl<'a, S: Store> Write for KeyLog<'a, S> {
+impl<S: Store> Write for KeyLog<S> {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         self.write_keys.insert(key.clone());
         self.store.put(key, value)
@@ -55,7 +54,7 @@ mod tests {
     fn satisfies_store_trait() {
         // (this is a compile-time assertion)
         fn assert_store<S: Store>(_: S) {}
-        assert_store(KeyLog::wrap(&mut NullStore));
+        assert_store(KeyLog::wrap(NullStore));
     }
 
     #[test]
@@ -63,7 +62,7 @@ mod tests {
         let mut store = WriteCache::new();
         store.put(vec![1, 2, 3], vec![4, 5, 6]).unwrap();
 
-        let log = KeyLog::wrap(&mut store);
+        let log = KeyLog::wrap(store);
         assert_eq!(log.get(vec![1, 2, 3]).unwrap(), Some(vec![4, 5, 6]));
 
         let (read_keys, write_keys) = log.finish();
@@ -74,8 +73,8 @@ mod tests {
 
     #[test]
     fn put() {
-        let mut store = WriteCache::new();
-        let mut log = KeyLog::wrap(&mut store);
+        let store = WriteCache::new();
+        let mut log = KeyLog::wrap(store);
         log.put(vec![1, 2, 3], vec![4, 5, 6]).unwrap();
 
         let (read_keys, write_keys) = log.finish();
@@ -86,8 +85,8 @@ mod tests {
 
     #[test]
     fn delete() {
-        let mut store = WriteCache::new();
-        let mut log = KeyLog::wrap(&mut store);
+        let store = WriteCache::new();
+        let mut log = KeyLog::wrap(store);
         log.delete(vec![1, 2, 3]).unwrap();
 
         let (read_keys, write_keys) = log.finish();

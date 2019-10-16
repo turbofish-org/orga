@@ -8,6 +8,10 @@ impl<T: StateMachine> Atom<T> {
     pub fn new(sm: T) -> Self {
         Atom(sm)
     }
+
+    pub fn into_inner(self) -> T {
+        self.0
+    }
 }
 
 impl<T: StateMachine> StateMachine for Atom<T> {
