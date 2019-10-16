@@ -16,6 +16,12 @@ impl WriteCache<'_, NullStore> {
     }
 }
 
+impl Default for WriteCache<'_, NullStore> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'a, R: Read> WriteCache<'a, R> {
     pub fn wrap(store: &'a R) -> Self {
         WriteCache {
