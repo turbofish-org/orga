@@ -2,29 +2,43 @@ use crate::error::Result;
 use crate::store::{Store, WriteCache, Flush};
 
 pub trait StateMachine {
-    type Action;
-    type Result = ();
+    type Input;
+    type Output = ();
 
-    fn step<S>(&mut self, action: Self::Action, store: &mut S) -> Result<Self::Result>
+    fn step<S>(&mut self, input: Self::Input, store: &mut S) -> Result<Self::Output>
         where S: Store;
 }
 
-// TODO: this needs a better name
-pub fn step_atomic<M, S>(sm: &mut M, action: M::Action, store: &mut S) -> Result<M::Result>
-    where
-        M: StateMachine,
-        S: Store
-{
-    let mut flush_store = WriteCache::wrap(store);
+pub trait Atomic: StateMachine {}
 
-    match sm.step(action, &mut flush_store) {
-        Err(err) => Err(err),
-        Ok(res) => {
-            flush_store.finish().flush(store)?;
-            Ok(res)
+pub struct Atom<T: StateMachine> (T);
+
+impl<T: StateMachine> Atom<T> {
+    pub fn new(sm: T) -> Self {
+        Atom(sm)
+    }
+}
+
+impl<T: StateMachine> StateMachine for Atom<T> {
+    type Input = T::Input;
+    type Output = T::Output;
+
+    fn step<S>(&mut self, action: Self::Input, store: &mut S) -> Result<Self::Output>
+        where S: Store
+    {
+        let mut flush_store = WriteCache::wrap(store);
+
+        match self.0.step(action, &mut flush_store) {
+            Err(err) => Err(err),
+            Ok(res) => {
+                flush_store.finish().flush(store)?;
+                Ok(res)
+            }
         }
     }
 }
+
+impl<T: StateMachine> Atomic for Atom<T> {}
 
 #[cfg(test)]
 mod tests {
@@ -34,8 +48,8 @@ mod tests {
     struct CounterSM;
 
     impl StateMachine for CounterSM {
-        type Action = u8;
-        type Result = u8;
+        type Input = u8;
+        type Output = u8;
 
         fn step<S: Store>(&mut self, n: u8, store: &mut S) -> Result<u8> {
             // set this before checking if `n` is valid, so we can test state
@@ -78,10 +92,11 @@ mod tests {
     }
 
     #[test]
-    fn step_counter_error_flusher() {
+    fn step_counter_atomic_error() {
         let mut store = WriteCache::new();
+        let mut sm = Atom::new(CounterSM);
         // invalid `n`, should error
-        assert!(step_atomic(&mut CounterSM, 100, &mut store).is_err());
+        assert!(sm.step(100, &mut store).is_err());
         // count should not have been mutated
         assert_eq!(store.get(b"count").unwrap(), None);
         // n should not have been mutated
@@ -91,10 +106,11 @@ mod tests {
     #[test]
     fn step_counter() {
         let mut store = WriteCache::new();
-        assert_eq!(step_atomic(&mut CounterSM, 0, &mut store).unwrap(), 1);
-        assert!(step_atomic(&mut CounterSM, 0, &mut store).is_err());
-        assert_eq!(step_atomic(&mut CounterSM, 1, &mut store).unwrap(), 2);
-        assert!(step_atomic(&mut CounterSM, 1, &mut store).is_err());
+        let mut sm = Atom::new(CounterSM);
+        assert_eq!(sm.step(0, &mut store).unwrap(), 1);
+        assert!(sm.step(0, &mut store).is_err());
+        assert_eq!(sm.step(1, &mut store).unwrap(), 2);
+        assert!(sm.step(1, &mut store).is_err());
         assert_eq!(store.get(b"n").unwrap(), Some(vec![1]));
         assert_eq!(store.get(b"count").unwrap(), Some(vec![2]));
     }
