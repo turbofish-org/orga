@@ -7,10 +7,11 @@ pub trait StateMachine {
 
     fn step<S>(&mut self, action: Self::Action, store: &mut S) -> Result<Self::Result>
         where S: Store;
+}
 
+pub trait Atomic: StateMachine {
     // TODO: this needs a better name
-    // TODO: is there a way to implement this elsewhere? adding provided methods to the trait doesn't scale
-    fn step_flush<S>(&mut self, action: Self::Action, store: &mut S) -> Result<Self::Result>
+    fn step_atomic<S>(&mut self, action: Self::Action, store: &mut S) -> Result<Self::Result>
         where S: Store
     {
         let mut flush_store = MapStore::wrap(store);
@@ -24,6 +25,7 @@ pub trait StateMachine {
         }
     }
 }
+impl<M: StateMachine> Atomic for M {}
 
 #[cfg(test)]
 mod tests {
@@ -48,21 +50,6 @@ mod tests {
             }
             self.put(b"count", count + 1, store)?;
             Ok(count + 1)
-        }
-
-        // TODO: this shouldn't have to be copied!
-        fn step_flush<S>(&mut self, action: Self::Action, store: &mut S) -> Result<Self::Result>
-            where S: Store
-        {
-            let mut flush_store = MapStore::wrap(store);
-
-            match self.step(action, &mut flush_store) {
-                Err(err) => Err(err),
-                Ok(res) => {
-                    flush_store.finish().flush(store)?;
-                    Ok(res)
-                }
-            }
         }
     }
 
@@ -95,7 +82,7 @@ mod tests {
     fn step_counter_error_flusher() {
         let mut store = MapStore::new();
         // invalid `n`, should error
-        assert!(CounterSM.step_flush(100, &mut store).is_err());
+        assert!(CounterSM.step_atomic(100, &mut store).is_err());
         // count should not have been mutated
         assert_eq!(store.get(b"count").unwrap(), None);
         // n should not have been mutated
@@ -105,10 +92,10 @@ mod tests {
     #[test]
     fn step_counter() {
         let mut store = MapStore::new();
-        assert_eq!(CounterSM.step_flush(0, &mut store).unwrap(), 1);
-        assert!(CounterSM.step_flush(0, &mut store).is_err());
-        assert_eq!(CounterSM.step_flush(1, &mut store).unwrap(), 2);
-        assert!(CounterSM.step_flush(1, &mut store).is_err());
+        assert_eq!(CounterSM.step_atomic(0, &mut store).unwrap(), 1);
+        assert!(CounterSM.step_atomic(0, &mut store).is_err());
+        assert_eq!(CounterSM.step_atomic(1, &mut store).unwrap(), 2);
+        assert!(CounterSM.step_atomic(1, &mut store).is_err());
         assert_eq!(store.get(b"n").unwrap(), Some(vec![1]));
         assert_eq!(store.get(b"count").unwrap(), Some(vec![2]));
     }
