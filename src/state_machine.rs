@@ -23,8 +23,7 @@ pub trait StateMachine<A, R> {
 
 #[cfg(test)]
 mod tests {
-    use crate::error::{Error, ErrorKind};
-    use crate::store::{ErrorKind::NotFound, MapStore, Read};
+    use crate::store::{MapStore, Read};
     use super::*;
 
     struct CounterSM;
@@ -48,8 +47,8 @@ mod tests {
     impl CounterSM {
         fn get<S: Store>(&mut self, key: &[u8], store: &mut S) -> Result<u8> {
             match store.get(key) {
-                Err(Error(ErrorKind::Store(crate::store::Error(NotFound, _)), _)) => Ok(0),
-                Ok(vec) => Ok(vec[0]),
+                Ok(None) => Ok(0),
+                Ok(Some(vec)) => Ok(vec[0]),
                 Err(err) => return Err(err)
             }
         }
@@ -65,9 +64,9 @@ mod tests {
         // invalid `n`, should error
         assert!(CounterSM.step(100, &mut store).is_err());
         // count should not have been mutated
-        assert!(store.get(b"count").is_err());
+        assert_eq!(store.get(b"count").unwrap(), None);
         // n should have been mutated
-        assert_eq!(store.get(b"n").unwrap(), vec![100]);
+        assert_eq!(store.get(b"n").unwrap(), Some(vec![100]));
     }
 
     #[test]
@@ -76,9 +75,9 @@ mod tests {
         // invalid `n`, should error
         assert!(CounterSM.step_flush(100, &mut store).is_err());
         // count should not have been mutated
-        assert!(store.get(b"count").is_err());
+        assert_eq!(store.get(b"count").unwrap(), None);
         // n should not have been mutated
-        assert!(store.get(b"n").is_err());
+        assert_eq!(store.get(b"n").unwrap(), None);
     }
 
     #[test]
@@ -88,7 +87,7 @@ mod tests {
         assert!(CounterSM.step_flush(0, &mut store).is_err());
         assert_eq!(CounterSM.step_flush(1, &mut store).unwrap(), 2);
         assert!(CounterSM.step_flush(1, &mut store).is_err());
-        assert_eq!(store.get(b"n").unwrap(), vec![1]);
-        assert_eq!(store.get(b"count").unwrap(), vec![2]);
+        assert_eq!(store.get(b"n").unwrap(), Some(vec![1]));
+        assert_eq!(store.get(b"count").unwrap(), Some(vec![2]));
     }
 }

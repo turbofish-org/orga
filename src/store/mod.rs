@@ -11,7 +11,7 @@ pub use error::{Error, ErrorKind};
 // TODO: iter method?
 
 pub trait Read {
-  fn get<K: AsRef<[u8]>>(&self, key: K) -> Result<Vec<u8>>;
+  fn get<K: AsRef<[u8]>>(&self, key: K) -> Result<Option<Vec<u8>>>;
 }
 
 pub trait Write {

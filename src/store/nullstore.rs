@@ -3,8 +3,8 @@ use super::*;
 pub struct NullStore;
 
 impl Read for NullStore {
-    fn get<K: AsRef<[u8]>>(&self, _key: K) -> Result<Vec<u8>> {
-        Err(Error::from(ErrorKind::NotFound).into())
+    fn get<K: AsRef<[u8]>>(&self, _key: K) -> Result<Option<Vec<u8>>> {
+        Ok(None)
     }
 }
 

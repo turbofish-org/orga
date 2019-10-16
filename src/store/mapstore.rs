@@ -30,10 +30,10 @@ impl<'a, R: Read> MapStore<'a, R> {
 }
 
 impl<'a, S: Read> Read for MapStore<'a, S> {
-    fn get<K: AsRef<[u8]>>(&self, key: K) -> Result<Vec<u8>> {
+    fn get<K: AsRef<[u8]>>(&self, key: K) -> Result<Option<Vec<u8>>> {
         match self.map.get(key.as_ref()) {
-            Some(Some(value)) => Ok(value.clone()),
-            Some(None) => Err(Error::from(ErrorKind::NotFound).into()),
+            Some(Some(value)) => Ok(Some(value.clone())),
+            Some(None) => Ok(None),
             None => self.store.get(key)
         }
     }
@@ -46,7 +46,6 @@ impl<'a, S: Read> Write for MapStore<'a, S> {
     }
 
     fn delete<K: AsRef<[u8]>>(&mut self, key: K) -> Result<()> {
-        // TODO: remove if key only exists in map
         self.map.insert(key.as_ref().to_vec(), None);
         Ok(())
     }
@@ -80,7 +79,7 @@ mod tests {
         let mut store = MapStore::new();
         store.put(vec![1, 2, 3], vec![4, 5, 6]).unwrap();
         let value = store.get(&[1, 2, 3]).unwrap();
-        assert_eq!(value, vec![4, 5, 6]);
+        assert_eq!(value, Some(vec![4, 5, 6]));
     }
 
     #[test]
@@ -88,7 +87,7 @@ mod tests {
         let mut store = MapStore::new();
         store.put(vec![1, 2, 3], vec![4, 5, 6]).unwrap();
         let value = store.get(vec![1, 2, 3]).unwrap();
-        assert_eq!(value, vec![4, 5, 6]);
+        assert_eq!(value, Some(vec![4, 5, 6]));
     }
 
     #[test]
@@ -96,6 +95,6 @@ mod tests {
         let mut store = MapStore::new();
         store.put(vec![1, 2, 3], vec![4, 5, 6]).unwrap();
         store.delete(vec![1, 2, 3]).unwrap();
-        assert!(store.get(vec![1, 2, 3]).is_err());
+        assert_eq!(store.get(vec![1, 2, 3]).unwrap(), None);
     }
 }
