@@ -1,5 +1,9 @@
+mod atom;
+
 use crate::error::Result;
-use crate::store::{Store, WriteCache, Flush};
+use crate::store::Store;
+
+pub use atom::Atom;
 
 pub trait StateMachine {
     type Input;
@@ -10,35 +14,6 @@ pub trait StateMachine {
 }
 
 pub trait Atomic: StateMachine {}
-
-pub struct Atom<T: StateMachine> (T);
-
-impl<T: StateMachine> Atom<T> {
-    pub fn new(sm: T) -> Self {
-        Atom(sm)
-    }
-}
-
-impl<T: StateMachine> StateMachine for Atom<T> {
-    type Input = T::Input;
-    type Output = T::Output;
-
-    fn step<S>(&mut self, action: Self::Input, store: &mut S) -> Result<Self::Output>
-        where S: Store
-    {
-        let mut flush_store = WriteCache::wrap(store);
-
-        match self.0.step(action, &mut flush_store) {
-            Err(err) => Err(err),
-            Ok(res) => {
-                flush_store.finish().flush(store)?;
-                Ok(res)
-            }
-        }
-    }
-}
-
-impl<T: StateMachine> Atomic for Atom<T> {}
 
 #[cfg(test)]
 mod tests {

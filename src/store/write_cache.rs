@@ -63,6 +63,12 @@ impl Flush for MapFlusher {
     }
 }
 
+impl MapFlusher {
+    fn flush<W: Write>(self, dest: &mut W) -> Result<()> {
+        self.flush(dest)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

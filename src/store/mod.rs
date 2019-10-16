@@ -12,13 +12,13 @@ pub use error::{Error, ErrorKind};
 // TODO: iter method?
 
 pub trait Read {
-  fn get<K: AsRef<[u8]>>(&self, key: K) -> Result<Option<Vec<u8>>>;
+    fn get<K: AsRef<[u8]>>(&self, key: K) -> Result<Option<Vec<u8>>>;
 }
 
 pub trait Write {
-  fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()>;
+    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()>;
 
-  fn delete<K: AsRef<[u8]>>(&mut self, key: K) -> Result<()>;
+    fn delete<K: AsRef<[u8]>>(&mut self, key: K) -> Result<()>;
 }
 
 pub trait Store: Read + Write {}
