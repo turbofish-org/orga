@@ -1,12 +1,16 @@
 use crate::error::Result;
 use crate::store::{Store, MapStore, Flush};
 
-pub trait StateMachine<A, R> {
-    fn step<S: Store>(&mut self, action: A, store: &mut S) -> Result<R>;
+pub trait StateMachine {
+    type Action;
+    type Result = ();
+
+    fn step<S>(&mut self, action: Self::Action, store: &mut S) -> Result<Self::Result>
+        where S: Store;
 
     // TODO: this needs a better name
     // TODO: is there a way to implement this elsewhere? adding provided methods to the trait doesn't scale
-    fn step_flush<S>(&mut self, action: A, store: &mut S) -> Result<R>
+    fn step_flush<S>(&mut self, action: Self::Action, store: &mut S) -> Result<Self::Result>
         where S: Store
     {
         let mut flush_store = MapStore::wrap(store);
@@ -28,7 +32,10 @@ mod tests {
 
     struct CounterSM;
 
-    impl StateMachine<u8, u8> for CounterSM {
+    impl StateMachine for CounterSM {
+        type Action = u8;
+        type Result = u8;
+
         fn step<S: Store>(&mut self, n: u8, store: &mut S) -> Result<u8> {
             // set this before checking if `n` is valid, so we can test state
             // mutations on invalid txs
@@ -41,6 +48,21 @@ mod tests {
             }
             self.put(b"count", count + 1, store)?;
             Ok(count + 1)
+        }
+
+        // TODO: this shouldn't have to be copied!
+        fn step_flush<S>(&mut self, action: Self::Action, store: &mut S) -> Result<Self::Result>
+            where S: Store
+        {
+            let mut flush_store = MapStore::wrap(store);
+
+            match self.step(action, &mut flush_store) {
+                Err(err) => Err(err),
+                Ok(res) => {
+                    flush_store.finish().flush(store)?;
+                    Ok(res)
+                }
+            }
         }
     }
 
