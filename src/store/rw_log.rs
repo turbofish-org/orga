@@ -61,8 +61,10 @@ mod tests {
     #[test]
     fn get() {
         let mut store = MapStore::new();
+        store.put(vec![1, 2, 3], vec![4, 5, 6]).unwrap();
+
         let log = RWLog::wrap(&mut store);
-        assert_eq!(log.get(vec![1, 2, 3]).unwrap(), None);
+        assert_eq!(log.get(vec![1, 2, 3]).unwrap(), Some(vec![4, 5, 6]));
 
         let (read_keys, write_keys) = log.finish();
         assert_eq!(read_keys.len(), 1);
