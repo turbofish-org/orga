@@ -3,6 +3,7 @@ use crate::error::Result;
 mod error;
 mod mapstore;
 mod nullstore;
+mod rw_log;
 
 pub use mapstore::MapStore;
 pub use nullstore::NullStore;
