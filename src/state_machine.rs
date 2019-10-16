@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::store::{Store, MapStore, Flush};
+use crate::store::{Store, WriteCache, Flush};
 
 pub trait StateMachine {
     type Action;
@@ -15,7 +15,7 @@ pub fn step_atomic<M, S>(sm: &mut M, action: M::Action, store: &mut S) -> Result
         M: StateMachine,
         S: Store
 {
-    let mut flush_store = MapStore::wrap(store);
+    let mut flush_store = WriteCache::wrap(store);
 
     match sm.step(action, &mut flush_store) {
         Err(err) => Err(err),
@@ -28,7 +28,7 @@ pub fn step_atomic<M, S>(sm: &mut M, action: M::Action, store: &mut S) -> Result
 
 #[cfg(test)]
 mod tests {
-    use crate::store::{MapStore, Read};
+    use crate::store::{WriteCache, Read};
     use super::*;
 
     struct CounterSM;
@@ -68,7 +68,7 @@ mod tests {
 
     #[test]
     fn step_counter_error() {
-        let mut store = MapStore::new();
+        let mut store = WriteCache::new();
         // invalid `n`, should error
         assert!(CounterSM.step(100, &mut store).is_err());
         // count should not have been mutated
@@ -79,7 +79,7 @@ mod tests {
 
     #[test]
     fn step_counter_error_flusher() {
-        let mut store = MapStore::new();
+        let mut store = WriteCache::new();
         // invalid `n`, should error
         assert!(step_atomic(&mut CounterSM, 100, &mut store).is_err());
         // count should not have been mutated
@@ -90,7 +90,7 @@ mod tests {
 
     #[test]
     fn step_counter() {
-        let mut store = MapStore::new();
+        let mut store = WriteCache::new();
         assert_eq!(step_atomic(&mut CounterSM, 0, &mut store).unwrap(), 1);
         assert!(step_atomic(&mut CounterSM, 0, &mut store).is_err());
         assert_eq!(step_atomic(&mut CounterSM, 1, &mut store).unwrap(), 2);

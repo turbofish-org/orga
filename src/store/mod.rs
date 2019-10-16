@@ -1,11 +1,11 @@
 use crate::error::Result;
 
 mod error;
-mod mapstore;
+mod write_cache;
 mod nullstore;
-mod rw_log;
+mod key_log;
 
-pub use mapstore::MapStore;
+pub use write_cache::WriteCache;
 pub use nullstore::NullStore;
 pub use error::{Error, ErrorKind};
 

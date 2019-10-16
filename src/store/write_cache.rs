@@ -3,22 +3,22 @@ use super::*;
 
 type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
-pub struct MapStore<'a, R: Read> {
+pub struct WriteCache<'a, R: Read> {
     map: Map,
     store: &'a R
 }
 
 pub struct MapFlusher (Map);
 
-impl MapStore<'_, NullStore> {
+impl WriteCache<'_, NullStore> {
     pub fn new() -> Self {
-        MapStore::wrap(&NullStore)
+        WriteCache::wrap(&NullStore)
     }
 }
 
-impl<'a, R: Read> MapStore<'a, R> {
+impl<'a, R: Read> WriteCache<'a, R> {
     pub fn wrap(store: &'a R) -> Self {
-        MapStore {
+        WriteCache {
             map: Default::default(),
             store
         }
@@ -29,7 +29,7 @@ impl<'a, R: Read> MapStore<'a, R> {
     }
 }
 
-impl<'a, S: Read> Read for MapStore<'a, S> {
+impl<'a, S: Read> Read for WriteCache<'a, S> {
     fn get<K: AsRef<[u8]>>(&self, key: K) -> Result<Option<Vec<u8>>> {
         match self.map.get(key.as_ref()) {
             Some(Some(value)) => Ok(Some(value.clone())),
@@ -39,7 +39,7 @@ impl<'a, S: Read> Read for MapStore<'a, S> {
     }
 }
 
-impl<'a, S: Read> Write for MapStore<'a, S> {
+impl<'a, S: Read> Write for WriteCache<'a, S> {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         self.map.insert(key, Some(value));
         Ok(())
@@ -71,12 +71,12 @@ mod tests {
     fn satisfies_store_trait() {
         // (this is a compile-time assertion)
         fn assert_store<S: Store>(_: S) {}
-        assert_store(MapStore::new());
+        assert_store(WriteCache::new());
     }
 
     #[test]
     fn get_slice() {
-        let mut store = MapStore::new();
+        let mut store = WriteCache::new();
         store.put(vec![1, 2, 3], vec![4, 5, 6]).unwrap();
         let value = store.get(&[1, 2, 3]).unwrap();
         assert_eq!(value, Some(vec![4, 5, 6]));
@@ -84,7 +84,7 @@ mod tests {
 
     #[test]
     fn get_vec() {
-        let mut store = MapStore::new();
+        let mut store = WriteCache::new();
         store.put(vec![1, 2, 3], vec![4, 5, 6]).unwrap();
         let value = store.get(vec![1, 2, 3]).unwrap();
         assert_eq!(value, Some(vec![4, 5, 6]));
@@ -92,7 +92,7 @@ mod tests {
 
     #[test]
     fn delete() {
-        let mut store = MapStore::new();
+        let mut store = WriteCache::new();
         store.put(vec![1, 2, 3], vec![4, 5, 6]).unwrap();
         store.delete(vec![1, 2, 3]).unwrap();
         assert_eq!(store.get(vec![1, 2, 3]).unwrap(), None);

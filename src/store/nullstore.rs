@@ -8,6 +8,7 @@ impl Read for NullStore {
     }
 }
 
+// TODO: should writes fail? or should this only implement Read?
 impl Write for NullStore {
     fn put(&mut self, _key: Vec<u8>, _value: Vec<u8>) -> Result<()> {
         Ok(())
