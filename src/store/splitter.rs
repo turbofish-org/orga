@@ -41,6 +41,7 @@ impl<'a, S: Store> Substore<'a, S> {
     }
 }
 
+#[inline]
 fn prefix<K: AsRef<[u8]>>(prefix: u8, suffix: K) -> [u8; 256] {
     let mut prefixed = [0; 256];
     prefixed[0] = prefix;
@@ -50,19 +51,22 @@ fn prefix<K: AsRef<[u8]>>(prefix: u8, suffix: K) -> [u8; 256] {
 
 impl<'a, S: Store> Read for Substore<'a, S> {
     fn get<K: AsRef<[u8]>>(&self, key: K) -> Result<Option<Vec<u8>>> {
+        let len = key.as_ref().len() + 1;
         let prefixed_key = prefix(self.index, key);
-        self.store().get(&prefixed_key[..])
+        self.store().get(&prefixed_key[..len])
     }
 }
 
 impl<'a, S: Store> Write for Substore<'a, S> {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
-        let prefixed_key = prefix(self.index, key).to_vec();
+        let len = key.len() + 1;
+        let prefixed_key = prefix(self.index, key)[..len].to_vec();
         self.store_mut().put(prefixed_key, value)
     }
 
     fn delete<K: AsRef<[u8]>>(&mut self, key: K) -> Result<()> {
+        let len = key.as_ref().len() + 1;
         let prefixed_key = prefix(self.index, key);
-        self.store_mut().delete(&prefixed_key[..])
+        self.store_mut().delete(&prefixed_key[..len])
     }
 }
