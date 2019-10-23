@@ -1,6 +1,14 @@
 use std::cell::{RefCell, Ref, RefMut};
 use super::*;
 
+// TODO: can we do this without copying every time we prefix the key? can
+// possibly change Store methods to generically support iterator-based
+// concatenated keys, maybe via a Key type.
+
+// TODO: since all operations are non-recursive, we can probably use raw
+// pointers instead of RefCell because each operation will atomically borrow,
+// use, then release the store
+
 pub struct Splitter<S: Store> {
     store: RefCell<S>,
     index: u8
