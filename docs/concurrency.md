@@ -151,11 +151,10 @@ In the future, we can design more efficient schedulers. A few possible enhanceme
 - *Larger epochs* - A simple enhancement is to let each worker contain an ordered queue of N transitions for each epoch, rather than a single transition per worker.
 - *Synchronization barriers* - Rather than epochs, workers could each have their own wait-queues which will also contain *barriers* which reference barriers in other workers as dependencies. When a barrier is encountered, the worker will only block if any dependency barriers have not been passed, otherwise will continue. This can allow for higher utilization while maintaining determinism. Ordering the transitions and barriers can be done many ways for further optimization.
 - *Time estimates* - If we can estimate the runtime of a transition, (e.g. based on recording its initial `CheckTx` runtime or using heuristics which inspect the transition), we can queue the transitions among workers more efficiently with bin-packing.
+- *Execute and flush* - We currently treat transition execution and flushing its writes to our working store as a single atomic operation. If we separate these two phases, we can utilize axiom #3 to execute some transactions in parallel but flush their writes in-order for a slight gain in concurrency.
 
 #### Optimized Set Operations
 
 Since we are doing so many set intersection and union operations, it may make sense to optimize these operations with more efficient data structures. In a significant number of cases, there will no intersection (observation #1 above), so if we can optimize detecting this case then we can have a significant speedup. We can assume the naive implementation probably uses hash or tree-based sets, but it is likely helpful to also use Bloom filters.
 
 If two Bloom filters were computed with the same hash functions, their intersection can be computed with simple bitwise AND - a fast operation that can be applied in constant-time for any number of elements in the set (whereas sets require `O(N)` time to find all intersections, where N is the number of elements in the smaller of the two sets). Likewise, union is computed with bitwise OR. This can give us false positives about intersections (and we can fall back to the full set intersection to check these), but no false negatives.
-
-
