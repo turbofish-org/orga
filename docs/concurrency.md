@@ -26,8 +26,6 @@ As we process data through this interface, we can reason about the state observe
 
 All processing that happens within our state machine logic is within the handling of transitions, so the concurrency model deals with using relations between transitions' read and write sets to guarantee transitions execute deterministically.
 
-XXXXXX: move to more concrete section - Note that for simplicity we apply our concurrency rules to the coarse level of atomic transactions and do not reason about the order that reads and writes happen within a transaction - further optimization could be made in the future if needed by breaking down transactions into sub-transactions which allow concurrency on a more granular level.
-
 ### Axioms
 
 Our reasoning starts from the following axioms:
@@ -149,7 +147,7 @@ This algorithm is not particularly efficient since workers have to synchronize b
 
 In the future, we can design more efficient schedulers. A few possible enhancements are:
 - *Larger epochs* - A simple enhancement is to let each worker contain an ordered queue of N transitions for each epoch, rather than a single transition per worker.
-- *Synchronization barriers* - Rather than epochs, workers could each have their own wait-queues which will also contain *barriers* which reference barriers in other workers as dependencies. When a barrier is encountered, the worker will only block if any dependency barriers have not been passed, otherwise will continue. This can allow for higher utilization while maintaining determinism. Ordering the transitions and barriers can be done many ways for further optimization.
+- *Synchronization barriers* - Rather than epochs, workers could each have their own wait-queues which will also contain *barriers* which reference barriers in other workers as dependencies. When a barrier is encountered, the worker will only block if any of its dependencies have not completed, otherwise will continue. This can allow for higher utilization while maintaining determinism. Ordering the transitions and barriers can be done many ways for further optimization.
 - *Time estimates* - If we can estimate the runtime of a transition, (e.g. based on recording its initial `CheckTx` runtime or using heuristics which inspect the transition), we can queue the transitions among workers more efficiently with bin-packing.
 - *Execute and flush* - We currently treat transition execution and flushing its writes to our working store as a single atomic operation. If we separate these two phases, we can utilize axiom #3 to execute some transactions in parallel but flush their writes in-order for a slight gain in concurrency.
 
