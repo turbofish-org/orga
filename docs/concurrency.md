@@ -113,3 +113,49 @@ After processing the transitions for a block cycle, we can commit the changes by
 
 A possible throughput optimization here is to compute the new state hash before writing to disk, since then we block the consensus process for the lowest possible amount of time. The disk writes can happen in a background thread concurrently after sending the ABCI response as we wait for the next block cycle.
 
+### Scheduling Algorithm
+
+When we process transitions deterministically, e.g. within a single `CheckTx` mempool or during block processing (`DeliverTx`), we need to assign transitions to different worker threads based on a deterministic algorithm which optimizes for utilization while also not breaking any of the concurrency rules (based on the *Axioms* section in this document). A network will need to choose a *concurrency factor*, the number of *virtual workers* to group transitions into, where these virtual workers are guaranteed to be able to be run concurrently but may also be run serially on machines with less available CPUs with no difference in determinism.
+
+Similar to operating systems, there are many possible scheduling algorithms we can use that will have different performance tradeoffs. However, unlike traditional OS schedulers we don't have any context-switching costs since we run transitions atomically, so we can optimize more for utilization. Another difference is that our scheduling algorithm needs to be deterministic (based on a canonically-orderered queue of transitions).
+
+We can assume all transitions have a known set of read and write keys which we can use to ensure the concurrency rules are obeyed. Ideally these sets are exactly correct or a superset of the keys actually used by the transition so that scheduling is correct. However, we may also encouter transitions where the keys have changed between the first execution and the scheduled execution, in which case we should either fail the transaction or have the algorithm re-schedule it based on the updated set of keys.
+
+#### Pseudocode
+
+##### Epoch Scheduler
+
+This is a simple formulation of the algorithm for demonstration, the actual implementation will be slightly more complex in order to optimize for higher utilization.
+
+Note that this scheduling algorithm runs in a single thread and sends work to other threads.
+
+- Given: N virtual workers `W0` to `WN` which each have sets of read and write keys `WXr` and `WXw`, an *input-queue* of transitions with known read and write keys, and an empty *wait-queue* which can hold transitions
+- For every transition *T* in the queue:
+  - Compute intersections between read and write keys of `T` with each virtual worker:
+    - Set of write intersections: `Tw & WXw`
+    - Set of read dependencies: `Tr & WXw`
+    - Set of write dependents: `Tw & WXr`
+  - If all of these sets are empty, our transition is concurrent to all the other transitions being processed (axiom #1):
+    - If no workers are available:
+      - Block until all workers have finished executing then clear their sets of read and write keys (wait until the next epoch)
+      - Iterate through all transitions in the wait-queue (if not-empty) and process them the same way we process the input-queue (the outer loop)
+    - Send the transition to the first idle worker and set its read and write keys to `Tr` and `Tw`
+  - If any of the sets are non-empty, push the transition to the wait-queue
+- If there are still any transitions in the wait-queue, iterate through them and process them the same way we process the input-queue (the loop above)
+
+This algorithm is not particularly efficient since workers have to synchronize between the execution of each transition, so many may be idle while waiting for the last worker to finish (even while there may be more transitions that could be run in parallel).
+
+##### Enhanced Schedulers
+
+In the future, we can design more efficient schedulers. A few possible enhancements are:
+- *Larger epochs* - A simple enhancement is to let each worker contain an ordered queue of N transitions for each epoch, rather than a single transition per worker.
+- *Synchronization barriers* - Rather than epochs, workers could each have their own wait-queues which will also contain *barriers* which reference barriers in other workers as dependencies. When a barrier is encountered, the worker will only block if any dependency barriers have not been passed, otherwise will continue. This can allow for higher utilization while maintaining determinism. Ordering the transitions and barriers can be done many ways for further optimization.
+- *Time estimates* - If we can estimate the runtime of a transition, (e.g. based on recording its initial `CheckTx` runtime or using heuristics which inspect the transition), we can queue the transitions among workers more efficiently with bin-packing.
+
+#### Optimized Set Operations
+
+Since we are doing so many set intersection and union operations, it may make sense to optimize these operations with more efficient data structures. In a significant number of cases, there will no intersection (observation #1 above), so if we can optimize detecting this case then we can have a significant speedup. We can assume the naive implementation probably uses hash or tree-based sets, but it is likely helpful to also use Bloom filters.
+
+If two Bloom filters were computed with the same hash functions, their intersection can be computed with simple bitwise AND - a fast operation that can be applied in constant-time for any number of elements in the set (whereas sets require `O(N)` time to find all intersections, where N is the number of elements in the smaller of the two sets). Likewise, union is computed with bitwise OR. This can give us false positives about intersections (and we can fall back to the full set intersection to check these), but no false negatives.
+
+
