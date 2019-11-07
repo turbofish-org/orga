@@ -10,7 +10,7 @@ Modern blockchain engineers typically stop here and build systems to simply proc
 
 There are many opportunities to scale blockchain processing to use all available compute resources by concurrently breaking up the work in a way where each node still achieves the same deterministic results.
 
-This document explores a simple model for a framework that processes data concurrently but deterministically. Our concurrent processing is done without the need for complicated concurrency primitives such as mutexes and atomics at the application level, but instead coordinates purely through execution scheduling. Many of these concepts can be generalized (for instance, to a compiler which provides concurrency automatically without cognitive load on the developer), but we specifically focus on typical blockchain applications (payments, financial primitives, and other smart contracts).
+This document explores a simple model for a framework that processes data concurrently but deterministically. Our concurrent processing is done without the need for concurrency primitives such as mutexes and atomics at the application level, but instead synchronizes purely through execution scheduling. Many of these concepts can be generalized (for instance, to a compiler which provides concurrency automatically without cognitive load on the developer), but we specifically focus on typical blockchain applications (payments, financial primitives, and other smart contracts).
 
 We'll be taking the model as reasoned about in this document to implement a blockchain state machine framework in Rust, integrated with Tendermint consensus. An additional goal of our implementation will be for logic to be portable to other environments, including centralized web servers and peer-to-peer payment channels.
 
@@ -33,9 +33,11 @@ XXXXXX: move to more concrete section - Note that for simplicity we apply our co
 Our reasoning starts from the following axioms:
 
 1. **Transitions which do not intersect in reads or writes can be processed concurrently with no coordination.** In other words, transitions `A` and `B` can be processed in parallel if the following is true: `(Ar | Aw) & (Br | Bw) = []` (`[]` means an empty set). For example, if Alice sends a payment to Bob, and Carol sends a payment to Dave, these transitions can be processed in any order and still affect the state the same way.
-2. **Transitions which intersect in reads but not writes, and do not write to the intersecting reads can be processed concurrently with no coordination.** In other words, transitions `A` and `B` can be processed in parallel if the following is true: `(Ar & Br) & (Aw | Bw) = []`. For example, if Alice and Bob each send transactions which are calculated based on a current market price, but do not change the market price, these transactions can be processed in any order and still affect the state the same way. This is a similar concept to Rust's `RWLock`, or its borrowing rules which allow multiple immutable borrows.
+2. **Transitions where writes of `A` intersect with with the reads of `B` must be processed serially in a canonical order.** In other words, transitions `A` and `B` must be processed in-order if the following is true: `Aw & Br != []`. For example, if Bob has a balance of 0, Alice sends a payment of 1 to Bob, and Bob sends a payment of 1 to Carol, the second payment will fail if processed before the first. Note that this rule is commutative and for any two transitions it applies both ways.
+
+And also, an optionally-used axiom which is possible due to our implementation:
+
 3. **Transitions where writes of `A` intersect with with writes of `B`, but do not read from the intersecting writes can be processed concurrently, but must have their writes applied in a canonical order.** In other words, transitions `A` and `B` can be processed in parallel if the following is true, but their side-effects to the state must be written in-order: `Aw & Bw != []` and `(Ar | Br) & (Aw & Bw) = []`. For example, if there is a global variable `last_sender` and Alice and Bob each send transactions which set this variable to their own identity but do not read from this variable, we may execute the transactions in any order, but must flush their writes to the state in-order.
-4. **Transitions where writes of `A` intersect with with the reads of `B` must be processed serially in a canonical order.** In other words, transitions `A` and `B` must be processed in-order if the following is true: `Aw & Br != []`. For example, if Bob has a balance of 0, Alice sends a payment of 1 to Bob, and Bob sends a payment of 1 to Carol, the second payment will fail if processed before the first. Note that this rule is commutative and for any two transitions it applies both ways.
 
 ### Concrete Observations
 
@@ -56,7 +58,7 @@ Each ABCI message will be handled in the pipeline as follows:
 
 #### `Query`
 
-To service incoming state queries, query handlers can be created spanning across N threads (e.g. in a Tokio thread pool) which resolve queries against a snapshot of the latest committed state. At a low-level this can use RocksDB's consistent snapshot feature, allowing us to resolve queries against the state at height `H` even while committing a a new state for `H + 1`, increasing query throughput.
+To service incoming state queries, query handlers can be created spanning across N threads (e.g. in a Tokio thread pool) which resolve queries against a snapshot of the latest committed state. At a low-level this can use RocksDB's consistent snapshot feature, allowing us to resolve queries against the state at height `H` even while committing a a new state for `H + 1`, meaning requests do not need to block waiting for the consensus process.
 
 #### `CheckTx`
 
@@ -82,8 +84,32 @@ A concrete case where this matters is in ensuring transactions pay their require
 
 This may be acceptable since it is bounded by the number of mempool workers (e.g. 16) and not unlimited, so has a limited impact in denial-of-service attacks. However, a possible solution is to require the account to have a balance of at least `N * fee_amount` to pass the fee check, so that a separate fee can be paid for each conflicting transaction.
 
+
+##### Read/Write Key Sets
+
+Since at this step we are seeing transactions for the first time, we don't necessarily yet know the read and write keys which we will need for scheduling or correlation. However, there are a few strategies that let us figure these out:
+
+- *Run-first* - If we just start executing the transition, we can simply run it first with no knowledge of the reads and writes, then at the end we will know the full sets of keys. This limits our ability to schedule transitions at the `CheckTx` step but has the benefit of simplicity since the developer doesn't have to write any code other than their core logic.
+- *Derive in framework* - A different strategy is to require application developers to write a function which inspects the transition data and cheaply derives the expected write keys, or a superset of them. For example, a payment from Alice to Bob can cheaply derive the read and write sets which will both be Alice's account key and Bob's account key. This may be harder in some types of transactions but makes scheduling easier.
+- *Conflict detection* - Another method is to proceed with running the transition, and on each read and write operation check against other workers to detect conflicts mid-execution. On detection of a conflict, we may need to halt execution and start again on the relevant worker which we conflicted with, adding some cost but possibly giving us a net-reduction in wasted work.
+
 ##### Result Cache
 
 As we process these transactions and we flush their state changes to mempool states, we can persist their sets of read keys and their side-effects to the state (a map of written keys and values).
 
 Later, when we see the same transactions during block processing (`DeliverTx`), we will read from this result cache for concurrency scheduling, and also to possibly replay the writes if none of the read dependencies have been written to.
+
+#### `BeginBlock`, `DeliverTx`, `EndBlock`
+
+This is the block verification cycle.
+
+Our system will start processing the block by first preparing a new working state based on the most recently committed state (e.g. without the mempool transitions).
+
+When processing the block, any tasks for the beginning of the block can be treated as individual transitions, then all of the `DeliverTx` transactions, then finally any tasks for the end of the block. This ordered queue will run based on our concurrency rules, scheduled since now we must guarantee that these transitions run deterministically. The scheduling algorithm is described in the *Scheduling Algorithm* section below.
+
+#### `Commit`
+
+After processing the transitions for a block cycle, we can commit the changes by flushing all writes to a backing store and computing the new state hash.
+
+A possible throughput optimization here is to compute the new state hash before writing to disk, since then we block the consensus process for the lowest possible amount of time. The disk writes can happen in a background thread concurrently after sending the ABCI response as we wait for the next block cycle.
+
