@@ -13,7 +13,7 @@ impl<F, S, I, O> StateMachine<S, I, O> for F
         S: Store
 {}
 
-pub trait Atomic<I, O>: Fn(I) -> Result<O> {}
+pub trait Atomic<S: Store, I, O>: StateMachine<S, I, O> {}
 
 #[cfg(test)]
 mod tests {
@@ -78,11 +78,12 @@ mod tests {
         assert_eq!(store.get(b"count").unwrap(), Some(vec![2]));
     }
 
-    // #[test]
-    // fn closure_sm() {
-    //     // fn x<S: Store>(_: &mut S, _: u8) -> Result<u8> { Ok(123) }
-    //     let mut x = move |_, _| Ok(123);
-    //     let mut store = WriteCache::new();
-    //     step_atomic(x, &mut store, 123);
-    // }
+    #[test]
+    fn closure_sm() {
+        let mut store = WriteCache::new();
+        assert_eq!(
+            step_atomic(|_, input| Ok(input + 1), &mut store, 100).unwrap(),
+            101
+        );
+    }
 }
