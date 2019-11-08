@@ -1,36 +1,13 @@
 use crate::error::Result;
-use crate::store::{WriteCache, Flush};
-use super::{StateMachine, Store, Atomic};
+use crate::store::{WriteCache, Flush, Store};
 
-pub struct Atom<T: StateMachine> (T);
-
-impl<T: StateMachine> Atom<T> {
-    pub fn new(sm: T) -> Self {
-        Atom(sm)
-    }
-
-    pub fn into_inner(self) -> T {
-        self.0
-    }
+pub fn step_atomic<'a, S, T, I, O>(sm: T, store: &'a mut S, input: I) -> Result<O>
+    where
+        S: Store,
+        T: Fn(&mut WriteCache<'a, S>, I) -> Result<O>
+{
+    let mut flush_store = WriteCache::wrap(store);
+    let res = sm(&mut flush_store, input)?;
+    flush_store.flush()?;
+    Ok(res)
 }
-
-impl<T: StateMachine> StateMachine for Atom<T> {
-    type Input = T::Input;
-    type Output = T::Output;
-
-    fn step<S>(&mut self, action: Self::Input, store: &mut S) -> Result<Self::Output>
-        where S: Store
-    {
-        let mut flush_store = WriteCache::wrap(store);
-
-        match self.0.step(action, &mut flush_store) {
-            Err(err) => Err(err),
-            Ok(res) => {
-                flush_store.finish().flush(store)?;
-                Ok(res)
-            }
-        }
-    }
-}
-
-impl<T: StateMachine> Atomic for Atom<T> {}

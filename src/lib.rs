@@ -1,4 +1,7 @@
 #![feature(associated_type_defaults)]
+#![feature(trait_alias)]
+#![feature(fn_traits)]
+#![feature(unboxed_closures)]
 
 mod error;
 mod store;

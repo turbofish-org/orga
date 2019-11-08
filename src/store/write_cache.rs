@@ -1,18 +1,17 @@
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use super::*;
 
-type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
+// TODO: should this be BTreeMap for efficient merging?
+type Map = HashMap<Vec<u8>, Option<Vec<u8>>>;
 
-pub struct WriteCache<'a, R: Read> {
+pub struct WriteCache<'a, S: Store> {
     map: Map,
-    store: &'a R
+    store: &'a mut S
 }
-
-pub struct MapFlusher (Map);
 
 impl WriteCache<'_, NullStore> {
     pub fn new() -> Self {
-        WriteCache::wrap(&NullStore)
+        WriteCache::wrap(unsafe { &mut StaticNullStore })
     }
 }
 
@@ -22,20 +21,16 @@ impl Default for WriteCache<'_, NullStore> {
     }
 }
 
-impl<'a, R: Read> WriteCache<'a, R> {
-    pub fn wrap(store: &'a R) -> Self {
+impl<'a, S: Store> WriteCache<'a, S> {
+    pub fn wrap(store: &'a mut S) -> Self {
         WriteCache {
             map: Default::default(),
             store
         }
     }
-
-    pub fn finish(self) -> MapFlusher {
-        MapFlusher(self.map)
-    }
 }
 
-impl<'a, S: Read> Read for WriteCache<'a, S> {
+impl<'a, S: Store> Read for WriteCache<'a, S> {
     fn get<K: AsRef<[u8]>>(&self, key: K) -> Result<Option<Vec<u8>>> {
         match self.map.get(key.as_ref()) {
             Some(Some(value)) => Ok(Some(value.clone())),
@@ -45,7 +40,7 @@ impl<'a, S: Read> Read for WriteCache<'a, S> {
     }
 }
 
-impl<'a, S: Read> Write for WriteCache<'a, S> {
+impl<'a, S: Store> Write for WriteCache<'a, S> {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         self.map.insert(key, Some(value));
         Ok(())
@@ -57,21 +52,15 @@ impl<'a, S: Read> Write for WriteCache<'a, S> {
     }
 }
 
-impl Flush for MapFlusher {
-    fn flush<W: Write>(self, dest: &mut W) -> Result<()> {
-        for (key, value) in self.0 {
+impl<'a, S: Store> Flush for WriteCache<'a, S> {
+    fn flush(&mut self) -> Result<()> {
+        for (key, value) in self.map.drain() {
             match value {
-                Some(value) => dest.put(key, value)?,
-                None => dest.delete(key)?
+                Some(value) => self.store.put(key, value)?,
+                None => self.store.delete(key)?
             }
         }
         Ok(())
-    }
-}
-
-impl MapFlusher {
-    fn flush<W: Write>(self, dest: &mut W) -> Result<()> {
-        self.flush(dest)
     }
 }
 
