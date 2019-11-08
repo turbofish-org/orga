@@ -6,18 +6,21 @@ use crate::store::Store;
 
 pub use atom::step_atomic;
 
-// pub trait StateMachine<I, O>: Fn(&mut dyn Store, I) -> Result<O> {}
+pub trait StateMachine<S: Store, I, O>: Fn(&mut S, I) -> Result<O> {}
+impl<F, S, I, O> StateMachine<S, I, O> for F
+    where
+        F: Fn(&mut S, I) -> Result<O>,
+        S: Store
+{}
 
 pub trait Atomic<I, O>: Fn(I) -> Result<O> {}
-
-// impl<I, O> StateMachine<I, O> for dyn Fn(&mut dyn Store, I) -> Result<O> {}
 
 #[cfg(test)]
 mod tests {
     use crate::store::{WriteCache, Read, Write};
     use super::*;
 
-    fn get_u8<R: Read>(key: &[u8], store: &R) -> Result<u8> {
+    fn get_u8(key: &[u8], store: &impl Read) -> Result<u8> {
         match store.get(key) {
             Ok(None) => Ok(0),
             Ok(Some(vec)) => Ok(vec[0]),
@@ -25,13 +28,12 @@ mod tests {
         }
     }
 
-    fn put_u8<W: Write>(key: &[u8], value: u8, store: &mut W) -> Result<()> {
+    fn put_u8(key: &[u8], value: u8, store: &mut impl Write) -> Result<()> {
         store.put(key.to_vec(), vec![value])
     }
 
-    fn counter<S: Store>(store: &mut S, n: u8) -> Result<u8> {
-        // set this before checking if `n` is valid, so we can test state
-        // mutations on invalid txs
+    fn counter(store: &mut impl Store, n: u8) -> Result<u8> {
+        // put to n before checking count (to test atomicity)
         put_u8(b"n", n, store)?;
 
         // get count, compare to n, write if successful
@@ -75,4 +77,12 @@ mod tests {
         assert_eq!(store.get(b"n").unwrap(), Some(vec![1]));
         assert_eq!(store.get(b"count").unwrap(), Some(vec![2]));
     }
+
+    // #[test]
+    // fn closure_sm() {
+    //     // fn x<S: Store>(_: &mut S, _: u8) -> Result<u8> { Ok(123) }
+    //     let mut x = move |_, _| Ok(123);
+    //     let mut store = WriteCache::new();
+    //     step_atomic(x, &mut store, 123);
+    // }
 }

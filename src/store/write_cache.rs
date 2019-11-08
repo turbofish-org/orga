@@ -11,7 +11,7 @@ pub struct WriteCache<'a, S: Store> {
 
 impl WriteCache<'_, NullStore> {
     pub fn new() -> Self {
-        WriteCache::wrap(unsafe { &mut StaticNullStore })
+        WriteCache::wrap(unsafe { &mut NULL_STORE })
     }
 }
 
