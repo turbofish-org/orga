@@ -24,9 +24,21 @@ pub trait Write {
     fn delete(&mut self, key: &[u8]) -> Result<()>;
 }
 
-pub trait Store: Read + Write {}
+pub trait Store: Read + Write {
+    fn as_read(&self) -> &dyn Read;
 
-impl<S: Read + Write> Store for S {}
+    fn as_write(&mut self) -> &mut dyn Write;
+}
+
+impl<S: Read + Write + Sized> Store for S {
+    fn as_read(&self) -> &dyn Read {
+        self
+    }
+
+    fn as_write(&mut self) -> &mut dyn Write {
+        self
+    }
+}
 
 pub trait Flush {
     // TODO: should this consume the store? or will we want it like this so we

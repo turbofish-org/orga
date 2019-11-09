@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::store::{WriteCache, Flush, Store};
+use crate::store::{WriteCache, Flush, Store, Read, Write};
 
 pub fn step_atomic<F, S, I, O>(sm: F, store: &mut S, input: I) -> Result<O>
     where
@@ -25,7 +25,7 @@ mod tests {
     use crate::store::{WriteCache, Read};
     use super::*;
 
-    fn get_u8(key: &[u8], store: &dyn Store) -> Result<u8> {
+    fn get_u8(key: &[u8], store: &dyn Read) -> Result<u8> {
         match store.get(key) {
             Ok(None) => Ok(0),
             Ok(Some(vec)) => Ok(vec[0]),
@@ -33,20 +33,20 @@ mod tests {
         }
     }
 
-    fn put_u8(key: &[u8], value: u8, store: &mut dyn Store) -> Result<()> {
+    fn put_u8(key: &[u8], value: u8, store: &mut dyn Write) -> Result<()> {
         store.put(key.to_vec(), vec![value])
     }
 
     fn counter(store: &mut dyn Store, n: u8) -> Result<u8> {
         // put to n before checking count (to test atomicity)
-        put_u8(b"n", n, store)?;
+        put_u8(b"n", n, store.as_write())?;
 
         // get count, compare to n, write if successful
-        let count = get_u8(b"count", store)?;
+        let count = get_u8(b"count", store.as_read())?;
         if count != n {
             return Err("Invalid count".into());
         }
-        put_u8(b"count", count + 1, store)?;
+        put_u8(b"count", count + 1, store.as_write())?;
         Ok(count + 1)
     }
 
