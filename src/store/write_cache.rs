@@ -31,7 +31,7 @@ impl<'a, S: Store> WriteCache<'a, S> {
 }
 
 impl<'a, S: Store> Read for WriteCache<'a, S> {
-    fn get<K: AsRef<[u8]>>(&self, key: K) -> Result<Option<Vec<u8>>> {
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         match self.map.get(key.as_ref()) {
             Some(Some(value)) => Ok(Some(value.clone())),
             Some(None) => Ok(None),
@@ -46,7 +46,7 @@ impl<'a, S: Store> Write for WriteCache<'a, S> {
         Ok(())
     }
 
-    fn delete<K: AsRef<[u8]>>(&mut self, key: K) -> Result<()> {
+    fn delete(&mut self, key: &[u8]) -> Result<()> {
         self.map.insert(key.as_ref().to_vec(), None);
         Ok(())
     }
@@ -57,7 +57,7 @@ impl<'a, S: Store> Flush for WriteCache<'a, S> {
         for (key, value) in self.map.drain() {
             match value {
                 Some(value) => self.store.put(key, value)?,
-                None => self.store.delete(key)?
+                None => self.store.delete(key.as_slice())?
             }
         }
         Ok(())
@@ -84,18 +84,10 @@ mod tests {
     }
 
     #[test]
-    fn get_vec() {
-        let mut store = WriteCache::new();
-        store.put(vec![1, 2, 3], vec![4, 5, 6]).unwrap();
-        let value = store.get(vec![1, 2, 3]).unwrap();
-        assert_eq!(value, Some(vec![4, 5, 6]));
-    }
-
-    #[test]
     fn delete() {
         let mut store = WriteCache::new();
         store.put(vec![1, 2, 3], vec![4, 5, 6]).unwrap();
-        store.delete(vec![1, 2, 3]).unwrap();
-        assert_eq!(store.get(vec![1, 2, 3]).unwrap(), None);
+        store.delete(&[1, 2, 3]).unwrap();
+        assert_eq!(store.get(&[1, 2, 3]).unwrap(), None);
     }
 }

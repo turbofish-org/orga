@@ -5,7 +5,7 @@ pub struct NullStore;
 pub static mut NULL_STORE: NullStore = NullStore;
 
 impl Read for NullStore {
-    fn get<K: AsRef<[u8]>>(&self, _key: K) -> Result<Option<Vec<u8>>> {
+    fn get(&self, _key: &[u8]) -> Result<Option<Vec<u8>>> {
         Ok(None)
     }
 }
@@ -16,7 +16,7 @@ impl Write for NullStore {
         Ok(())
     }
 
-    fn delete<K: AsRef<[u8]>>(&mut self, _key: K) -> Result<()> {
+    fn delete(&mut self, _key: &[u8]) -> Result<()> {
         Ok(())
     }
 }

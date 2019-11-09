@@ -14,14 +14,14 @@ pub use splitter::Splitter;
 // TODO: iter method?
 // TODO: Key type (for cheaper concat, enum over ref or owned slice, etc)
 
-pub trait Read: Sized {
-    fn get<K: AsRef<[u8]>>(&self, key: K) -> Result<Option<Vec<u8>>>;
+pub trait Read {
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>>;
 }
 
-pub trait Write: Sized {
+pub trait Write {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()>;
 
-    fn delete<K: AsRef<[u8]>>(&mut self, key: K) -> Result<()>;
+    fn delete(&mut self, key: &[u8]) -> Result<()>;
 }
 
 pub trait Store: Read + Write {}
@@ -48,11 +48,5 @@ mod tests {
     fn slice_key() {
         let key = vec![1, 2, 3, 4];
         NullStore.get(key.as_slice()).unwrap();
-    }
-
-    #[test]
-    fn vec_key() {
-        let key = vec![1, 2, 3, 4];
-        NullStore.get(key).unwrap();
     }
 }
