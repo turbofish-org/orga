@@ -1,5 +1,4 @@
 mod atomic;
-mod router;
 
 use crate::error::Result;
 use crate::store::Store;
