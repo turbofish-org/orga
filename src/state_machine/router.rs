@@ -18,8 +18,8 @@ pub struct Router {
 
 pub struct Transaction {
     // TODO: use slices so we don't have to alloc/copy
-    route: String,
-    data: Vec<u8>
+    pub route: String,
+    pub data: Vec<u8>
 }
 
 impl Router {
