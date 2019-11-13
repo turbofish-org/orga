@@ -10,6 +10,7 @@ pub use write_cache::WriteCache;
 pub use nullstore::{NullStore, NULL_STORE};
 pub use error::{Error, ErrorKind};
 pub use splitter::Splitter;
+pub use rwlog::RWLog;
 
 // TODO: iter method?
 // TODO: Key type (for cheaper concat, enum over ref or owned slice, etc)
