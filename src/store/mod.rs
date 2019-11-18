@@ -6,7 +6,7 @@ mod nullstore;
 mod rwlog;
 mod splitter;
 
-pub use write_cache::WriteCache;
+pub use write_cache::{WriteCache, MapStore};
 pub use nullstore::{NullStore, NULL_STORE};
 pub use error::{Error, ErrorKind};
 pub use splitter::Splitter;

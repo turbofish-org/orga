@@ -4,6 +4,8 @@ use super::*;
 // TODO: should this be BTreeMap for efficient merging?
 type Map = HashMap<Vec<u8>, Option<Vec<u8>>>;
 
+pub type MapStore = WriteCache<'static, NullStore>;
+
 pub struct WriteCache<'a, S: Store> {
     map: Map,
     store: &'a mut S
@@ -89,5 +91,10 @@ mod tests {
         store.put(vec![1, 2, 3], vec![4, 5, 6]).unwrap();
         store.delete(&[1, 2, 3]).unwrap();
         assert_eq!(store.get(&[1, 2, 3]).unwrap(), None);
+    }
+
+    #[test]
+    fn mapstore_new() {
+        let _store: MapStore = MapStore::new();
     }
 }
