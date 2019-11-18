@@ -1,3 +1,4 @@
+use std::ops::{Deref, DerefMut};
 use crate::error::Result;
 
 mod error;
@@ -38,6 +39,22 @@ impl<S: Read + Write + Sized> Store for S {
 
     fn as_write(&mut self) -> &mut dyn Write {
         self
+    }
+}
+
+impl<S: Read, D: Deref<Target=S>> Read for D {
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        (*self).get(key)
+    }
+}
+
+impl<S: Read, D: DerefMut<Target=S>> Write for D {
+    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
+        (*self).put(key, value)
+    }
+
+    fn delete(&mut self, key: &[u8]) -> Result<()> {
+        (*self).delete(key)
     }
 }
 
