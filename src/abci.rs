@@ -264,22 +264,3 @@ pub trait Application {
         Ok(Default::default())
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    struct TestApplication {}
-
-    impl Application for TestApplication {}
-
-    #[test]
-    fn simple() {
-        let app = TestApplication {};
-        let store = MapStore::new();
-
-        ABCIStateMachine::new(app, store)
-            .listen("localhost:26658")
-            .unwrap();
-    }
-}
