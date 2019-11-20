@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use super::*;
 
 // TODO: should this be BTreeMap for efficient merging?
-type Map = HashMap<Vec<u8>, Option<Vec<u8>>>;
+pub type Map = HashMap<Vec<u8>, Option<Vec<u8>>>;
 
 pub type MapStore = WriteCache<'static, NullStore>;
 
@@ -26,9 +26,17 @@ impl Default for WriteCache<'_, NullStore> {
 impl<'a, S: Store> WriteCache<'a, S> {
     pub fn wrap(store: &'a mut S) -> Self {
         WriteCache {
-            map: Default::default(),
-            store
+            store,
+            map: Default::default()
         }
+    }
+
+    pub fn wrap_with_map(store: &'a mut S, map: Map) -> Self {
+        WriteCache { store, map }
+    }
+
+    pub fn into_map(self) -> Map {
+        self.map
     }
 }
 
