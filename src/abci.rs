@@ -119,7 +119,12 @@ impl<A: Application, S: Store> ABCIStateMachine<A, S> {
 
                 let res_deliver_tx = match step_atomic(|store, req| app.deliver_tx(store, req), &mut store, req) {
                     Ok(res) => res,
-                    Err(_) => Default::default()
+                    Err(err) => {
+                        let mut res: ResponseDeliverTx = Default::default();
+                        res.set_code(1);
+                        res.set_info(err.description().to_string());
+                        res
+                    }
                 };
 
                 self.app.replace(app);
@@ -173,7 +178,12 @@ impl<A: Application, S: Store> ABCIStateMachine<A, S> {
 
                 let res_check_tx = match step_atomic(|store, req| app.check_tx(store, req), &mut store, req) {
                     Ok(res) => res,
-                    Err(_) => Default::default()
+                    Err(err) => {
+                        let mut res: ResponseCheckTx = Default::default();
+                        res.set_code(1);
+                        res.set_info(err.description().to_string());
+                        res
+                    }
                 };
 
                 self.app.replace(app);
