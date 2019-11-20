@@ -6,4 +6,11 @@ edition = "2018"
 
 [dependencies]
 error-chain = "0.12.1"
-abci2 = { git = "https://github.com/nomic-io/abci2" }
+abci2 = { path = "../abci2" }
+
+[dev-dependencies]
+byteorder = "1.3.2"
+
+[[example]]
+name = "counter"
+path = "./examples/counter.rs"

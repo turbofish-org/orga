@@ -3,7 +3,7 @@
 mod error;
 mod store;
 mod state_machine;
-mod abci;
+pub mod abci;
 
 pub use state_machine::*;
 pub use store::*;
