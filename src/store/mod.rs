@@ -43,22 +43,6 @@ impl<S: Read + Write + Sized> Store for S {
     }
 }
 
-impl<S: Read, D: Deref<Target=S>> Read for D {
-    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        (*self).get(key)
-    }
-}
-
-impl<S: Read, D: DerefMut<Target=S>> Write for D {
-    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
-        (*self).put(key, value)
-    }
-
-    fn delete(&mut self, key: &[u8]) -> Result<()> {
-        (*self).delete(key)
-    }
-}
-
 pub trait Flush {
     // TODO: should this consume the store? or will we want it like this so we
     // can persist the same wrapper store and flush it multiple times?
