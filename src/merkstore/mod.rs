@@ -1,2 +1,2 @@
 mod merkstore;
-pub use merkstore::Merkstore;
+pub use merkstore::MerkStore;
