@@ -6,3 +6,4 @@ edition = "2018"
 
 [dependencies]
 error-chain = "0.12.1"
+merk = "0.2.0"
