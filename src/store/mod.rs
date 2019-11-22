@@ -44,7 +44,7 @@ impl<S: Read + Write + Sized> Store for S {
 pub trait Flush {
     // TODO: should this consume the store? or will we want it like this so we
     // can persist the same wrapper store and flush it multiple times?
-    fn flush(self) -> Result<()>;
+    fn flush(&mut self) -> Result<()>;
 }
 
 #[cfg(test)]
