@@ -55,7 +55,7 @@ impl<'a, S: Store> Write for WriteCache<'a, S> {
 }
 
 impl<'a, S: Store> Flush for WriteCache<'a, S> {
-    fn flush(mut self) -> Result<()> {
+    fn flush(&mut self) -> Result<()> {
         for (key, value) in self.map.drain() {
             match value {
                 Some(value) => self.store.put(key, value)?,
