@@ -3,7 +3,6 @@ use std::collections::BTreeMap;
 use crate::error::Result;
 use crate::store::*;
 
-// use BTreeMap???
 type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
 pub struct MerkStore<'a> {
@@ -20,7 +19,6 @@ impl<'a> MerkStore<'a> {
     }
 }
 
-// get from the map, if it doesn't exist, get from merk
 impl<'a> Read for MerkStore<'a> {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         match self.map.get(key) {
@@ -31,7 +29,6 @@ impl<'a> Read for MerkStore<'a> {
     }
 }
 
-// write and delete from map
 impl<'a> Write for MerkStore<'a> {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         self.map.insert(key, Some(value));
