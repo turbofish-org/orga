@@ -32,8 +32,6 @@ impl<A: Application, S: Store + RootHash + Query> ABCIStateMachine<A, S> {
     }
 
     pub fn run(&mut self, req: Request) -> Result<Response> {
-        println!("request: {:?}", &req);
-
         let value = match req.value {
             None => bail!("Received empty request"),
             Some(value) => value
