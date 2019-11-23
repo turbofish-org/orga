@@ -3,13 +3,13 @@ use std::net::ToSocketAddrs;
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::sync::{Arc, Mutex, MutexGuard};
 use error_chain::bail;
-use crate::{StateMachine, Store, RootHash, Flush, WriteCache, MapStore, Result, step_atomic, WriteCacheMap};
+use crate::{StateMachine, Store, RootHash, Flush, Query, WriteCache, MapStore, Result, step_atomic, WriteCacheMap};
 
 pub use abci2::messages::abci::{Request, Response};
 use abci2::messages::abci::*;
 use abci2::messages::abci::Request_oneof_value::*;
 
-pub struct ABCIStateMachine<A: Application, S: Store + RootHash> {
+pub struct ABCIStateMachine<A: Application, S: Store + RootHash + Query> {
     app: Option<A>,
     store: S,
     receiver: Receiver<(Request, SyncSender<Response>)>,
@@ -18,7 +18,7 @@ pub struct ABCIStateMachine<A: Application, S: Store + RootHash> {
     consensus_state: Option<WriteCacheMap>
 }
 
-impl<A: Application, S: Store + RootHash> ABCIStateMachine<A, S> {
+impl<A: Application, S: Store + RootHash + Query> ABCIStateMachine<A, S> {
     pub fn new(app: A, store: S) -> Self {
         let (sender, receiver) = sync_channel(0);
         ABCIStateMachine {
