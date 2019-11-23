@@ -62,6 +62,14 @@ impl<'a, S: Store> Write for WriteCache<'a, S> {
     }
 }
 
+
+//TODO: temporary?
+impl RootHash for MapStore {
+    fn root_hash(&self) -> [u8; 20] {
+        [0;20]
+    }
+}
+
 impl<'a, S: Store> Flush for WriteCache<'a, S> {
     fn flush(&mut self) -> Result<()> {
         for (key, value) in self.map.drain() {
