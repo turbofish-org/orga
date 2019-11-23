@@ -41,6 +41,10 @@ impl<S: Read + Write + Sized> Store for S {
     }
 }
 
+pub trait RootHash {
+    fn root_hash(&self) -> [u8; 20];
+}
+
 pub trait Flush {
     // TODO: should this consume the store? or will we want it like this so we
     // can persist the same wrapper store and flush it multiple times?
