@@ -1,4 +1,4 @@
-use merk::{Merk, Op};
+use merk::{Merk, Op, Hash};
 use std::collections::BTreeMap;
 use crate::error::Result;
 use crate::store::*;
@@ -53,5 +53,11 @@ impl<'a> Flush for MerkStore<'a> {
         }
         self.merk.apply(batch.as_ref())?;
         Ok(())
+    }
+}
+
+impl<'a> RootHash for MerkStore<'a> {
+    fn root_hash(&self) -> [u8; 20] {
+        self.merk.root_hash()
     }
 }
