@@ -1,3 +1,4 @@
+use std::ops::{Deref, DerefMut};
 use crate::error::Result;
 
 mod error;
@@ -7,6 +8,7 @@ mod rwlog;
 mod splitter;
 
 pub use write_cache::{WriteCache, MapStore};
+pub use write_cache::Map as WriteCacheMap;
 pub use nullstore::{NullStore, NULL_STORE};
 pub use error::{Error, ErrorKind};
 pub use splitter::Splitter;
@@ -39,6 +41,14 @@ impl<S: Read + Write + Sized> Store for S {
     fn as_write(&mut self) -> &mut dyn Write {
         self
     }
+}
+
+pub trait Query {
+    fn query(&mut self, key: &[u8]) -> Result<Vec<u8>>;
+}
+
+pub trait RootHash {
+    fn root_hash(&self) -> Vec<u8>;
 }
 
 pub trait Flush {

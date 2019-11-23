@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use super::*;
 
 // TODO: should this be BTreeMap for efficient merging?
-type Map = HashMap<Vec<u8>, Option<Vec<u8>>>;
+pub type Map = HashMap<Vec<u8>, Option<Vec<u8>>>;
 
 pub type MapStore = WriteCache<'static, NullStore>;
 
@@ -26,9 +26,17 @@ impl Default for WriteCache<'_, NullStore> {
 impl<'a, S: Store> WriteCache<'a, S> {
     pub fn wrap(store: &'a mut S) -> Self {
         WriteCache {
-            map: Default::default(),
-            store
+            store,
+            map: Default::default()
         }
+    }
+
+    pub fn wrap_with_map(store: &'a mut S, map: Map) -> Self {
+        WriteCache { store, map }
+    }
+
+    pub fn into_map(self) -> Map {
+        self.map
     }
 }
 
@@ -54,6 +62,14 @@ impl<'a, S: Store> Write for WriteCache<'a, S> {
     }
 }
 
+
+//TODO: temporary?
+impl RootHash for MapStore {
+    fn root_hash(&self) -> Vec<u8> {
+        [0;20].to_vec()
+    }
+}
+
 impl<'a, S: Store> Flush for WriteCache<'a, S> {
     fn flush(&mut self) -> Result<()> {
         for (key, value) in self.map.drain() {
@@ -64,6 +80,16 @@ impl<'a, S: Store> Flush for WriteCache<'a, S> {
         }
         Ok(())
     }
+}
+
+impl<'a, S: Store> Query for WriteCache<'a, S> {
+    fn query(&mut self, key: &[u8]) -> Result<Vec<u8>> {
+        match self.get(key) {
+            Ok(Some(val)) => Ok(val),
+            Err(e) => Err(e),
+            Ok(None) => Ok(Vec::new())
+        }
+    }       
 }
 
 #[cfg(test)]
