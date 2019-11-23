@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 error-chain = "0.12.1"
-abci2 = { path = "../abci2" }
+abci2 = { git = "https://github.com/nomic-io/abci2" }
 merk = "1.0.0-alpha.6"
 
 [dev-dependencies]
