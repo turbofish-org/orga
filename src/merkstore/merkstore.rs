@@ -61,3 +61,10 @@ impl<'a> RootHash for MerkStore<'a> {
         self.merk.root_hash()
     }
 }
+
+impl<'a> Query for MerkStore<'a> {
+    fn query(&mut self, key: &[u8]) -> Result<Vec<u8>> {
+        let val = &[key.to_vec()];
+        Ok(self.merk.prove(val)?)
+    }
+}
