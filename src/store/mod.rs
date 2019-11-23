@@ -43,6 +43,10 @@ impl<S: Read + Write + Sized> Store for S {
     }
 }
 
+pub trait Query {
+    fn query(&mut self, key: &[u8]) -> Result<Vec<u8>>;
+}
+
 pub trait RootHash {
     fn root_hash(&self) -> [u8; 20];
 }
