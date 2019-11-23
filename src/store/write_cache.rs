@@ -82,6 +82,16 @@ impl<'a, S: Store> Flush for WriteCache<'a, S> {
     }
 }
 
+impl<'a, S: Store> Query for WriteCache<'a, S> {
+    fn query(&mut self, key: &[u8]) -> Result<Vec<u8>> {
+        match self.get(key) {
+            Ok(Some(val)) => Ok(val),
+            Err(e) => Err(e),
+            Ok(None) => Ok(Vec::new())
+        }
+    }       
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
