@@ -65,8 +65,8 @@ impl<'a, S: Store> Write for WriteCache<'a, S> {
 
 //TODO: temporary?
 impl RootHash for MapStore {
-    fn root_hash(&self) -> [u8; 20] {
-        [0;20]
+    fn root_hash(&self) -> Vec<u8> {
+        [0;20].to_vec()
     }
 }
 

@@ -57,8 +57,8 @@ impl<'a> Flush for MerkStore<'a> {
 }
 
 impl<'a> RootHash for MerkStore<'a> {
-    fn root_hash(&self) -> [u8; 20] {
-        self.merk.root_hash()
+    fn root_hash(&self) -> Vec<u8> {
+        self.merk.root_hash().to_vec()
     }
 }
 

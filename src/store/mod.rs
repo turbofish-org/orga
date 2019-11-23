@@ -48,7 +48,7 @@ pub trait Query {
 }
 
 pub trait RootHash {
-    fn root_hash(&self) -> [u8; 20];
+    fn root_hash(&self) -> Vec<u8>;
 }
 
 pub trait Flush {
