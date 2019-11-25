@@ -64,10 +64,16 @@ impl<A: Application, S: Store + RootHash + Query> ABCIStateMachine<A, S> {
                 res.set_set_option(ResponseSetOption::new());
                 Ok(res)
             },
-            query(_) => {
-                // TODO: resolve query
+            query(req) => {
+                // TODO: handle multiple keys (or should this be handled by store impl?)
+                let key = req.get_data();
+
+                let data = self.store.query(key)?;
+
                 let mut res = Response::new();
-                res.set_query(ResponseQuery::new());
+                let mut res_query = ResponseQuery::new();
+                res_query.set_value(data);
+                res.set_query(res_query);
                 Ok(res)
             },
             init_chain(req) => {
