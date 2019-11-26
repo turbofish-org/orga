@@ -46,7 +46,7 @@ impl<A: Application, S: Store + RootHash + Query> ABCIStateMachine<A, S> {
                 message.set_data("Rust ABCI State Machine".to_string());
                 message.set_version("X".to_string());
                 message.set_app_version(0);
-                message.set_last_block_height(self.start_height);
+                message.set_last_block_height(self.start_height as i64);
                 message.set_last_block_app_hash(self.store.root_hash().to_vec());
                 res.set_info(message);
                 Ok(res) 
