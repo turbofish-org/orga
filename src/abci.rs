@@ -47,7 +47,12 @@ impl<A: Application, S: Store + RootHash + Query> ABCIStateMachine<A, S> {
                 message.set_version("X".to_string());
                 message.set_app_version(0);
                 message.set_last_block_height(self.start_height as i64);
-                message.set_last_block_app_hash(self.store.root_hash().to_vec());
+                let app_hash = if self.start_height == 0 {
+                    vec![]
+                } else {
+                    self.store.root_hash().to_vec()
+                };
+                message.set_last_block_app_hash(app_hash);
                 res.set_info(message);
                 Ok(res) 
             },
