@@ -15,11 +15,12 @@ pub struct ABCIStateMachine<A: Application, S: Store + RootHash + Query> {
     receiver: Receiver<(Request, SyncSender<Response>)>,
     sender: SyncSender<(Request, SyncSender<Response>)>,
     mempool_state: Option<WriteCacheMap>,
-    consensus_state: Option<WriteCacheMap>
+    consensus_state: Option<WriteCacheMap>,
+    start_height: u64
 }
 
 impl<A: Application, S: Store + RootHash + Query> ABCIStateMachine<A, S> {
-    pub fn new(app: A, store: S) -> Self {
+    pub fn new(app: A, store: S, start_height: u64) -> Self {
         let (sender, receiver) = sync_channel(0);
         ABCIStateMachine {
             app: Some(app),
@@ -27,7 +28,8 @@ impl<A: Application, S: Store + RootHash + Query> ABCIStateMachine<A, S> {
             sender,
             receiver,
             mempool_state: Some(Default::default()),
-            consensus_state: Some(Default::default())
+            consensus_state: Some(Default::default()),
+            start_height
         }
     }
 
@@ -44,8 +46,8 @@ impl<A: Application, S: Store + RootHash + Query> ABCIStateMachine<A, S> {
                 message.set_data("Rust ABCI State Machine".to_string());
                 message.set_version("X".to_string());
                 message.set_app_version(0);
-                message.set_last_block_height(0); // TODO:
-                message.set_last_block_app_hash(vec![]); // TODO:
+                message.set_last_block_height(self.start_height);
+                message.set_last_block_app_hash(self.store.root_hash().to_vec());
                 res.set_info(message);
                 Ok(res) 
             },

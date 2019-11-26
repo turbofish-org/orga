@@ -53,7 +53,7 @@ impl Application for CounterApp {
 
 pub fn main() {
     let store = MapStore::new();
-    ABCIStateMachine::new(CounterApp, store)
+    ABCIStateMachine::new(CounterApp, store, 0)
         .listen("localhost:26658")
         .unwrap();
 }
