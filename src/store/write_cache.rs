@@ -62,14 +62,6 @@ impl<'a, S: Store> Write for WriteCache<'a, S> {
     }
 }
 
-
-//TODO: temporary?
-impl RootHash for MapStore {
-    fn root_hash(&self) -> Vec<u8> {
-        [0;20].to_vec()
-    }
-}
-
 impl<'a, S: Store> Flush for WriteCache<'a, S> {
     fn flush(&mut self) -> Result<()> {
         for (key, value) in self.map.drain() {
@@ -80,16 +72,6 @@ impl<'a, S: Store> Flush for WriteCache<'a, S> {
         }
         Ok(())
     }
-}
-
-impl<'a, S: Store> Query for WriteCache<'a, S> {
-    fn query(&mut self, key: &[u8]) -> Result<Vec<u8>> {
-        match self.get(key) {
-            Ok(Some(val)) => Ok(val),
-            Err(e) => Err(e),
-            Ok(None) => Ok(Vec::new())
-        }
-    }       
 }
 
 #[cfg(test)]

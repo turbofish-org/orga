@@ -3,7 +3,7 @@ use std::net::ToSocketAddrs;
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::sync::{Arc, Mutex, MutexGuard};
 use error_chain::bail;
-use crate::{StateMachine, Store, Flush, WriteCache, MapStore, Result, step_atomic, WriteCacheMap};
+use crate::{StateMachine, Read, Write, Store, Flush, WriteCache, MapStore, Result, step_atomic, WriteCacheMap};
 
 pub use abci2::messages::abci::{Request, Response};
 use abci2::messages::abci::*;
@@ -150,7 +150,7 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
             },
             end_block(req) => {
                 self.height = req.get_height() as u64;
-                
+
                 let app = self.app.take().unwrap();
                 let mut store = WriteCache::wrap_with_map(
                     &mut self.store,
@@ -292,3 +292,56 @@ pub trait ABCIStore: Store {
     fn commit(&mut self, height: u64) -> Result<()>;
 }
 
+pub struct MemStore {
+    height: u64,
+    store: MapStore
+}
+
+impl MemStore {
+    pub fn new() -> Self {
+        MemStore {
+            height: 0,
+            store: MapStore::new()
+        }
+    }
+}
+
+impl Read for MemStore {
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        self.store.get(key)
+    }
+}
+
+impl Write for MemStore {
+    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
+        self.store.put(key, value)
+    }
+
+    fn delete(&mut self, key: &[u8]) -> Result<()> {
+        self.store.delete(key)
+    }
+}
+
+impl ABCIStore for MemStore {
+    fn height(&self) -> Result<u64> {
+        Ok(self.height)
+    }
+
+    fn root_hash(&self) -> Result<Vec<u8>> {
+        // TODO: real hashing based on writes
+        Ok(vec![])
+    }
+
+    fn query(&self, key: &[u8]) -> Result<Vec<u8>> {
+        match self.get(key) {
+            Ok(Some(val)) => Ok(val),
+            Ok(None) => Ok(Vec::new()),
+            Err(e) => Err(e)
+        }
+    }
+
+    fn commit(&mut self, height: u64) -> Result<()> {
+        self.height = height;
+        Ok(())
+    }
+}
