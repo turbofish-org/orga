@@ -3,24 +3,24 @@ use std::net::ToSocketAddrs;
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::sync::{Arc, Mutex, MutexGuard};
 use error_chain::bail;
-use crate::{StateMachine, Store, RootHash, Flush, Query, WriteCache, MapStore, Result, step_atomic, WriteCacheMap};
+use crate::{StateMachine, Store, Flush, WriteCache, MapStore, Result, step_atomic, WriteCacheMap};
 
 pub use abci2::messages::abci::{Request, Response};
 use abci2::messages::abci::*;
 use abci2::messages::abci::Request_oneof_value::*;
 
-pub struct ABCIStateMachine<A: Application, S: Store + RootHash + Query> {
+pub struct ABCIStateMachine<A: Application, S: ABCIStore> {
     app: Option<A>,
     store: S,
     receiver: Receiver<(Request, SyncSender<Response>)>,
     sender: SyncSender<(Request, SyncSender<Response>)>,
     mempool_state: Option<WriteCacheMap>,
     consensus_state: Option<WriteCacheMap>,
-    start_height: u64
+    height: u64
 }
 
-impl<A: Application, S: Store + RootHash + Query> ABCIStateMachine<A, S> {
-    pub fn new(app: A, store: S, start_height: u64) -> Self {
+impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
+    pub fn new(app: A, store: S) -> Self {
         let (sender, receiver) = sync_channel(0);
         ABCIStateMachine {
             app: Some(app),
@@ -29,7 +29,7 @@ impl<A: Application, S: Store + RootHash + Query> ABCIStateMachine<A, S> {
             receiver,
             mempool_state: Some(Default::default()),
             consensus_state: Some(Default::default()),
-            start_height
+            height: 0
         }
     }
 
@@ -46,15 +46,18 @@ impl<A: Application, S: Store + RootHash + Query> ABCIStateMachine<A, S> {
                 message.set_data("Rust ABCI State Machine".to_string());
                 message.set_version("X".to_string());
                 message.set_app_version(0);
-                message.set_last_block_height(self.start_height as i64);
-                let app_hash = if self.start_height == 0 {
+
+                let start_height = self.store.height()?;
+                let app_hash = if start_height == 0 {
                     vec![]
                 } else {
-                    self.store.root_hash().to_vec()
+                    self.store.root_hash()?
                 };
+                message.set_last_block_height(start_height as i64);
                 message.set_last_block_app_hash(app_hash);
+
                 res.set_info(message);
-                Ok(res) 
+                Ok(res)
             },
             flush(_) => {
                 let mut res = Response::new();
@@ -146,6 +149,8 @@ impl<A: Application, S: Store + RootHash + Query> ABCIStateMachine<A, S> {
                 Ok(res)
             },
             end_block(req) => {
+                self.height = req.get_height() as u64;
+                
                 let app = self.app.take().unwrap();
                 let mut store = WriteCache::wrap_with_map(
                     &mut self.store,
@@ -170,13 +175,14 @@ impl<A: Application, S: Store + RootHash + Query> ABCIStateMachine<A, S> {
                     self.consensus_state.take().unwrap()
                 );
                 store.flush()?;
+                self.store.commit(self.height)?;
 
                 self.mempool_state.replace(Default::default());
                 self.consensus_state.replace(Default::default());
 
                 let mut res = Response::new();
                 let mut message = ResponseCommit::new();
-                message.set_data(self.store.root_hash().to_vec());
+                message.set_data(self.store.root_hash()?);
                 res.set_commit(message);
                 Ok(res)
             },
@@ -275,3 +281,14 @@ pub trait Application {
         Ok(Default::default())
     }
 }
+
+pub trait ABCIStore: Store {
+    fn height(&self) -> Result<u64>;
+
+    fn root_hash(&self) -> Result<Vec<u8>>;
+
+    fn query(&self, key: &[u8]) -> Result<Vec<u8>>;
+
+    fn commit(&mut self, height: u64) -> Result<()>;
+}
+
