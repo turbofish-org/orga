@@ -1,7 +1,9 @@
-use merk::{Merk, Op, Hash};
 use std::collections::BTreeMap;
+use merk::{Merk, Op, Hash, BatchEntry};
+use byteorder::{ByteOrder, BigEndian};
 use crate::error::Result;
 use crate::store::*;
+use crate::abci::ABCIStore;
 
 type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
@@ -17,6 +19,27 @@ impl<'a> MerkStore<'a> {
             merk
         }
     }
+
+    fn write(&mut self, aux: Vec<(Vec<u8>, Option<Vec<u8>>)>) -> Result<()> {
+        let map = self.map.take().unwrap();
+        self.map = Some(Map::new());
+
+        let batch = to_batch(map);
+        let aux_batch = to_batch(aux);
+
+        Ok(self.merk.apply(batch.as_ref(), aux_batch.as_ref())?)
+    }
+}
+
+fn to_batch<I: IntoIterator<Item = (Vec<u8>, Option<Vec<u8>>)>>(i: I) -> Vec<BatchEntry> {
+    let mut batch = Vec::new();
+    for (key, val) in i {
+        match val {
+            Some(val) => batch.push((key, Op::Put(val))),
+            None => batch.push((key, Op::Delete))
+        }
+    }
+    batch
 }
 
 impl<'a> Read for MerkStore<'a> {
@@ -34,6 +57,7 @@ impl<'a> Write for MerkStore<'a> {
         self.map.as_mut().unwrap().insert(key, Some(value));
         Ok(())
     }
+
     fn delete(&mut self, key:  &[u8]) -> Result<()> {
         self.map.as_mut().unwrap().insert(key.to_vec(), None);
         Ok(())
@@ -42,29 +66,36 @@ impl<'a> Write for MerkStore<'a> {
 
 impl<'a> Flush for MerkStore<'a> {
     fn flush(&mut self) -> Result<()> {
-        let map = self.map.take().unwrap();
-        self.map = Some(Map::new());
-        let mut batch = Vec::new();
-        for (key, val) in map {
-            match val {
-                Some(val) => batch.push((key, Op::Put(val))),
-                None => batch.push((key, Op::Delete))
-            }
+        self.write(vec![])
+    }
+}
+
+impl<'a> ABCIStore for MerkStore<'a> {
+    fn height(&self) -> Result<u64> {
+        let maybe_bytes = self.merk.get_aux(b"height")?;
+        match maybe_bytes {
+            None => Ok(0),
+            Some(bytes) => Ok(BigEndian::read_u64(&bytes))
         }
-        self.merk.apply(batch.as_ref())?;
-        Ok(())
     }
-}
 
-impl<'a> RootHash for MerkStore<'a> {
-    fn root_hash(&self) -> Vec<u8> {
-        self.merk.root_hash().to_vec()
+    fn root_hash(&self) -> Result<Vec<u8>> {
+        Ok(self.merk.root_hash().to_vec())
     }
-}
 
-impl<'a> Query for MerkStore<'a> {
-    fn query(&mut self, key: &[u8]) -> Result<Vec<u8>> {
+    fn query(&self, key: &[u8]) -> Result<Vec<u8>> {
         let val = &[key.to_vec()];
         Ok(self.merk.prove(val)?)
+    }
+
+    fn commit(&mut self, height: u64) -> Result<()> {
+        let mut height_bytes = [0; 8];
+        BigEndian::write_u64(&mut height_bytes, height);
+
+        let metadata = vec![
+            (b"height".to_vec(), Some(height_bytes.to_vec()))
+        ];
+
+        self.write(metadata)
     }
 }
