@@ -1,5 +1,5 @@
-use orga::{Store, Result, MapStore};
-use orga::abci::{Application, ABCIStateMachine};
+use orga::{Store, Result};
+use orga::abci::{Application, ABCIStateMachine, MemStore};
 use abci2::messages::abci::*;
 use byteorder::{ByteOrder, BigEndian};
 use error_chain::bail;
@@ -52,8 +52,8 @@ impl Application for CounterApp {
 }
 
 pub fn main() {
-    let store = MapStore::new();
-    ABCIStateMachine::new(CounterApp, store, 0)
+    let store = MemStore::new();
+    ABCIStateMachine::new(CounterApp, store)
         .listen("localhost:26658")
         .unwrap();
 }
