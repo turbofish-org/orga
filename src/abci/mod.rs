@@ -2,7 +2,7 @@ use std::clone::Clone;
 use std::net::ToSocketAddrs;
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::sync::{Arc, Mutex, MutexGuard};
-use error_chain::bail;
+use failure::{Error, bail};
 use crate::{StateMachine, Read, Write, Store, Flush, WriteCache, MapStore, Result, step_atomic, WriteCacheMap};
 
 pub use abci2::messages::abci::{Request, Response};
@@ -136,7 +136,7 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                     Err(err) => {
                         let mut res: ResponseDeliverTx = Default::default();
                         res.set_code(1);
-                        res.set_info(err.description().to_string());
+                        res.set_info(format!("{}", err));
                         res
                     }
                 };
@@ -198,7 +198,7 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                     Err(err) => {
                         let mut res: ResponseCheckTx = Default::default();
                         res.set_code(1);
-                        res.set_info(err.description().to_string());
+                        res.set_info(format!("{}", err));
                         res
                     }
                 };
