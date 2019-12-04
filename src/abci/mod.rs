@@ -9,6 +9,8 @@ pub use abci2::messages::abci::{Request, Response};
 use abci2::messages::abci::*;
 use abci2::messages::abci::Request_oneof_value::*;
 
+mod tendermint_client;
+
 pub struct ABCIStateMachine<A: Application, S: ABCIStore> {
     app: Option<A>,
     store: S,
