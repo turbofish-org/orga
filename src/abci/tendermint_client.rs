@@ -2,15 +2,15 @@ use tendermint::rpc::Client;
 use crate::{Read, Result};
 use failure::Error;
 
-struct TendermintClient {
+pub struct TendermintClient {
     client: Client
 }
 
 impl TendermintClient {
-    fn new(addr: &str) -> Result<TendermintClient> {
+    pub fn new(addr: &str) -> Result<TendermintClient> {
         Ok(TendermintClient {  
             client: Client::new(&(addr.parse()?))?
-        })
+        })  
     }
 }
 
