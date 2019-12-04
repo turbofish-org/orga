@@ -80,9 +80,14 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
 
                 let data = self.store.query(key)?;
 
+                // TODO: indicate if key doesn't exist vs just being empty
                 let mut res = Response::new();
                 let mut res_query = ResponseQuery::new();
+                res_query.set_code(0);
+                res_query.set_index(0);
+                res_query.set_log("".to_string());
                 res_query.set_value(data);
+                res_query.set_height(self.height as i64);
                 res.set_query(res_query);
                 Ok(res)
             },
