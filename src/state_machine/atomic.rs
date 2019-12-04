@@ -1,5 +1,6 @@
 use crate::error::Result;
 use crate::store::{WriteCache, Flush, Store, Read, Write};
+use failure::bail;
 
 pub fn step_atomic<F, S, I, O>(sm: F, store: &mut S, input: I) -> Result<O>
     where
@@ -44,7 +45,7 @@ mod tests {
         // get count, compare to n, write if successful
         let count = get_u8(b"count", store.as_read())?;
         if count != n {
-            return Err("Invalid count".into());
+            bail!("Invalid count");
         }
         put_u8(b"count", count + 1, store.as_write())?;
         Ok(count + 1)

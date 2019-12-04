@@ -83,9 +83,13 @@ impl<'a> ABCIStore for MerkStore<'a> {
         Ok(self.merk.root_hash().to_vec())
     }
 
+//TODO: we don't need the hash 
     fn query(&self, key: &[u8]) -> Result<Vec<u8>> {
         let val = &[key.to_vec()];
-        Ok(self.merk.prove(val)?)
+        let mut hash = self.root_hash()?;
+        let data = self.merk.prove(val)?;
+        hash.extend(data);
+        Ok(hash)
     }
 
     fn commit(&mut self, height: u64) -> Result<()> {

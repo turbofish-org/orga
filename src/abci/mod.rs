@@ -2,12 +2,15 @@ use std::clone::Clone;
 use std::net::ToSocketAddrs;
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::sync::{Arc, Mutex, MutexGuard};
-use error_chain::bail;
+use failure::{Error, bail};
 use crate::{StateMachine, Read, Write, Store, Flush, WriteCache, MapStore, Result, step_atomic, WriteCacheMap};
 
 pub use abci2::messages::abci::{Request, Response};
 use abci2::messages::abci::*;
 use abci2::messages::abci::Request_oneof_value::*;
+
+mod tendermint_client;
+pub use tendermint_client::TendermintClient;
 
 pub struct ABCIStateMachine<A: Application, S: ABCIStore> {
     app: Option<A>,
@@ -77,12 +80,16 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
             query(req) => {
                 // TODO: handle multiple keys (or should this be handled by store impl?)
                 let key = req.get_data();
-
                 let data = self.store.query(key)?;
 
+                // TODO: indicate if key doesn't exist vs just being empty
                 let mut res = Response::new();
                 let mut res_query = ResponseQuery::new();
+                res_query.set_code(0);
+                res_query.set_index(0);
+                res_query.set_log("".to_string());
                 res_query.set_value(data);
+                res_query.set_height(self.height as i64);
                 res.set_query(res_query);
                 Ok(res)
             },
@@ -136,7 +143,7 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                     Err(err) => {
                         let mut res: ResponseDeliverTx = Default::default();
                         res.set_code(1);
-                        res.set_info(err.description().to_string());
+                        res.set_info(format!("{}", err));
                         res
                     }
                 };
@@ -198,7 +205,7 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                     Err(err) => {
                         let mut res: ResponseCheckTx = Default::default();
                         res.set_code(1);
-                        res.set_info(err.description().to_string());
+                        res.set_info(format!("{}", err));
                         res
                     }
                 };

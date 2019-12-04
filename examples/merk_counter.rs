@@ -1,5 +1,6 @@
 use orga::{Store, Result};
-use orga::abci::{Application, ABCIStateMachine, MemStore};
+use orga::merkstore::MerkStore;
+use orga::abci::{Application, ABCIStateMachine};
 use abci2::messages::abci::*;
 use byteorder::{ByteOrder, BigEndian};
 use failure::bail;
@@ -52,7 +53,8 @@ impl Application for CounterApp {
 }
 
 pub fn main() {
-    let store = MemStore::new();
+    let mut m = merk::test_utils::TempMerk::new().unwrap();
+    let store = MerkStore::new(&mut m);
     ABCIStateMachine::new(CounterApp, store)
         .listen("localhost:26658")
         .unwrap();
