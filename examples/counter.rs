@@ -2,7 +2,7 @@ use orga::{Store, Result};
 use orga::abci::{Application, ABCIStateMachine, MemStore};
 use abci2::messages::abci::*;
 use byteorder::{ByteOrder, BigEndian};
-use error_chain::bail;
+use failure::bail;
 
 struct CounterApp;
 
