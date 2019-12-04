@@ -10,6 +10,7 @@ use abci2::messages::abci::*;
 use abci2::messages::abci::Request_oneof_value::*;
 
 mod tendermint_client;
+pub use tendermint_client::TendermintClient;
 
 pub struct ABCIStateMachine<A: Application, S: ABCIStore> {
     app: Option<A>,
@@ -79,7 +80,6 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
             query(req) => {
                 // TODO: handle multiple keys (or should this be handled by store impl?)
                 let key = req.get_data();
-
                 let data = self.store.query(key)?;
 
                 // TODO: indicate if key doesn't exist vs just being empty
