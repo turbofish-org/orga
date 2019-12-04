@@ -13,4 +13,6 @@ tendermint = { git = "https://github.com/interchainio/tendermint-rs" }
 
 [[example]]
 name = "counter"
-path = "./examples/counter.rs"
+
+[[example]]
+name = "merk_counter"
