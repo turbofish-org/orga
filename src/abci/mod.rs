@@ -105,8 +105,11 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                     Err(_) => Default::default()
                 };
 
+                store.flush()?;
+                self.store.commit(self.height)?;
+
                 self.app.replace(app);
-                self.consensus_state.replace(store.into_map());
+                self.consensus_state.replace(Default::default());
 
                 let mut res = Response::new();
                 res.set_init_chain(res_init_chain);
