@@ -39,6 +39,11 @@ impl CounterApp {
 }
 
 impl Application for CounterApp {
+    fn init_chain(&self, store: &mut dyn Store, req: RequestInitChain) -> Result<ResponseInitChain> {
+        self.set_count(store, 100)?;
+        Ok(Default::default())
+    }
+
     fn deliver_tx(&self, store: &mut dyn Store, req: RequestDeliverTx) -> Result<ResponseDeliverTx> {
         let bytes = req.get_tx();
         self.run(store, bytes)?;
