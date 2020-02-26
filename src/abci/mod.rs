@@ -195,8 +195,7 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                         .parse()
                         .expect("Invalid STOP_HEIGHT value");
                     if self.height >= stop_height {
-                        eprintln!("Reached stop height ({})", stop_height);
-                        std::process::exit(0);
+                        panic!("Reached stop height ({})", stop_height);
                     }
                 }
 
