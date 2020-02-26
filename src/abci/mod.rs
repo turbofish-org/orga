@@ -1,4 +1,5 @@
 use std::clone::Clone;
+use std::env;
 use std::net::ToSocketAddrs;
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -186,6 +187,18 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                 );
                 store.flush()?;
                 self.store.commit(self.height)?;
+
+                if let Some(stop_height_str) = env::var_os("STOP_HEIGHT") {
+                    let stop_height: u64 = stop_height_str
+                        .into_string()
+                        .unwrap()
+                        .parse()
+                        .expect("Invalid STOP_HEIGHT value");
+                    if self.height >= stop_height {
+                        eprintln!("Reached stop height ({})", stop_height);
+                        std::process::exit(0);
+                    }
+                }
 
                 self.mempool_state.replace(Default::default());
                 self.consensus_state.replace(Default::default());
