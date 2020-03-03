@@ -7,6 +7,7 @@ use failure::{Error, bail};
 use crate::{StateMachine, Read, Write, Store, Flush, WriteCache, MapStore, Result, step_atomic, WriteCacheMap};
 
 pub use abci2::messages::abci::{Request, Response};
+pub use abci2::messages::abci as messages;
 use abci2::messages::abci::*;
 use abci2::messages::abci::Request_oneof_value::*;
 
