@@ -8,7 +8,7 @@ edition = "2018"
 failure = "0.1.6"
 abci2 = { git = "https://github.com/nomic-io/abci2" }
 byteorder = "1.3.2"
-merk = "1.0.0-alpha.9"
+merk = "1.0.0-alpha.10"
 tendermint = { git = "https://github.com/interchainio/tendermint-rs", rev = "0b9450ddcd00a6ed39c8c6b0931ef9c8e6c86e4b" }
 
 [[example]]
