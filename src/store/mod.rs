@@ -47,16 +47,12 @@ pub trait Flush {
     fn flush(&mut self) -> Result<()>;
 }
 
-pub trait WrapStore<'a> {
-    fn wrap_store(store: &'a mut dyn Store) -> Self;
-}
-
 #[cfg(test)]
 mod tests {
     use std::ops::Add;
     use std::marker::PhantomData;
-    use super::{Read, NullStore, WrapStore, Store, Result};
-    use crate::{Encode, Decode};
+    use super::{Read, NullStore, Store, Result};
+    use crate::{Encode, Decode, WrapStore};
 
     const EMPTY_KEY: &[u8] = &[];
 
