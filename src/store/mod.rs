@@ -47,9 +47,78 @@ pub trait Flush {
     fn flush(&mut self) -> Result<()>;
 }
 
+pub trait WrapStore<'a> {
+    fn wrap_store(store: &'a mut dyn Store) -> Self;
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Read, NullStore};
+    use std::ops::Add;
+    use std::marker::PhantomData;
+    use super::{Read, NullStore, WrapStore, Store, Result};
+    use crate::{Encode, Decode};
+
+    const EMPTY_KEY: &[u8] = &[];
+
+    struct Counter<'a, T>
+        where T:
+            Add<T, Output = T> +
+            From<u8> +
+            Encode +
+            Decode +
+            Default
+    {
+        store: &'a mut dyn Store,
+        number_type: PhantomData<T>
+    }
+
+    impl<'a, T> Counter<'a, T>
+        where T:
+            Add<T, Output = T> +
+            From<u8> +
+            Encode +
+            Decode +
+            Default
+    {
+        fn get(&self) -> Result<T> {
+            Ok(self.store.get(EMPTY_KEY)?
+                .map(|bytes| T::decode(bytes.as_slice()))
+                .transpose()?
+                .unwrap_or_default())
+        }
+
+        fn increment(&mut self) -> Result<()> {
+            let value = self.get()?;
+            let value = value + T::from(1u8);
+            let bytes = value.encode()?;
+            self.store.put(EMPTY_KEY.to_vec(), bytes)
+        }
+    }
+
+    impl<'a, T: Add<T>> WrapStore<'a> for Counter<'a, T>
+        where T:
+            Add<T, Output = T> +
+            From<u8> +
+            Encode +
+            Decode +
+            Default
+    {
+        fn wrap_store(store: &'a mut dyn Store) -> Self {
+            Counter { store, number_type: PhantomData }
+        }
+    }
+
+    #[test]
+    fn wrap_store() {
+        use super::MapStore;
+
+        let mut store = MapStore::new();
+        let mut counter: Counter<u64> = Counter::wrap_store(&mut store);
+        assert_eq!(counter.get().unwrap(), 0);
+        counter.increment().unwrap();
+        assert_eq!(counter.get().unwrap(), 1);
+        assert_eq!(store.get(EMPTY_KEY).unwrap(), Some(vec![0, 0, 0, 0, 0, 0, 0, 1]));
+    }
         
     #[test]
     fn fixed_length_slice_key() {
