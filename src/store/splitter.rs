@@ -1,80 +1,116 @@
-use std::cell::{RefCell, Ref, RefMut};
-use super::*;
+use std::rc::Rc;
+use std::sync::Mutex;
+use super::{Store, Read, Write};
+use crate::Result;
 
 // TODO: can we do this without copying every time we prefix the key? can
 // possibly change Store methods to generically support iterator-based
 // concatenated keys, maybe via a Key type.
 
-// TODO: since all operations are non-recursive, we can probably use raw
-// pointers instead of RefCell because each operation will atomically borrow,
-// use, then release the store
+// TODO: we can probably use unsafe pointers instead of Rc<Mutex> since
+// operations are guaranteed not to interfere with each other
 
-pub struct Splitter<S: Store> {
-    store: RefCell<S>,
+#[derive(Clone)]
+pub struct Splitter<'a> {
+    inner: Rc<Mutex<SplitterInner<'a>>>
+}
+
+struct SplitterInner<'a> {
+    store: &'a mut dyn Store,
     index: u8
 }
 
-pub struct Substore<'a, S: Store> {
-    parent: &'a Splitter<S>,
+pub struct Substore<'a> {
+    parent: Splitter<'a>,
     index: u8
 }
 
-impl<S: Store> Splitter<S> {
-    pub fn new(store: S) -> Self {
+impl<'a> Splitter<'a> {
+    pub fn new(store: &'a mut dyn Store) -> Self {
         Splitter {
-            store: RefCell::new(store),
-            index: 0
+            inner: Rc::new(Mutex::new(SplitterInner {
+                store,
+                index: 0
+            }))
         }
     }
 
-    pub fn split(&mut self) -> Substore<'_, S> {
-        if self.index == 255 {
-            panic!("Splitter split too many times");
+    pub fn split(&mut self) -> Substore<'a> {
+        let mut inner = self.inner.lock().unwrap();
+
+        if inner.index == 255 {
+            panic!("Reached split limit");
         }
         
-        let index = self.index;
-        self.index += 1;
+        let index = inner.index;
+        inner.index += 1;
 
-        Substore { parent: self, index }
+        Substore {
+            parent: self.clone(),
+            index
+        }
     }
 }
 
-impl<'a, S: Store> Substore<'a, S> {
-    fn store(&self) -> Ref<S> {
-        self.parent.store.borrow()
-    }
-
-    fn store_mut(&mut self) -> RefMut<S> {
-        self.parent.store.borrow_mut()
-    }
-}
-
+// TODO: make a Key type which doesn't need copying
 #[inline]
 fn prefix(prefix: u8, suffix: &[u8]) -> [u8; 256] {
     let mut prefixed = [0; 256];
     prefixed[0] = prefix;
-    prefixed[1..].copy_from_slice(suffix.as_ref());
+    prefixed[1..suffix.len() + 1].copy_from_slice(suffix);
     prefixed
 }
 
-impl<'a, S: Store> Read for Substore<'a, S> {
+impl<'a> Read for Substore<'a> {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        let len = key.as_ref().len() + 1;
+        let len = key.len() + 1;
         let prefixed_key = prefix(self.index, key);
-        self.store().get(&prefixed_key[..len])
+
+        let store = &self.parent.inner.lock().unwrap().store;
+        store.get(&prefixed_key[..len])
     }
 }
 
-impl<'a, S: Store> Write for Substore<'a, S> {
+impl<'a> Write for Substore<'a> {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         let len = key.len() + 1;
         let prefixed_key = prefix(self.index, key.as_slice())[..len].to_vec();
-        self.store_mut().put(prefixed_key, value)
+
+        let store = &mut self.parent.inner.lock().unwrap().store;
+        store.put(prefixed_key, value)
     }
 
     fn delete(&mut self, key: &[u8]) -> Result<()> {
         let len = key.as_ref().len() + 1;
         let prefixed_key = prefix(self.index, key);
-        self.store_mut().delete(&prefixed_key[..len])
+
+        let store = &mut self.parent.inner.lock().unwrap().store;
+        store.delete(&prefixed_key[..len])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{MapStore, Read, Write};
+
+    #[test]
+    fn split() {
+        let mut store = MapStore::new();
+
+        let mut splitter = Splitter::new(&mut store);
+        let mut sub0 = splitter.split();
+        let mut sub1 = splitter.split();
+
+        sub0.put(vec![123], vec![5]).unwrap();
+        assert_eq!(sub0.get(&[123]).unwrap(), Some(vec![5]));
+        assert_eq!(sub1.get(&[123]).unwrap(), None);
+
+        sub1.put(vec![123], vec![6]).unwrap();
+        assert_eq!(sub0.get(&[123]).unwrap(), Some(vec![5]));
+        assert_eq!(sub1.get(&[123]).unwrap(), Some(vec![6]));
+
+        assert_eq!(store.get(&[0, 123]).unwrap(), Some(vec![5]));
+        assert_eq!(store.get(&[1, 123]).unwrap(), Some(vec![6]));
     }
 }
