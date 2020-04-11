@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 use std::marker::PhantomData;
 use failure::{bail, Fail};
-use crate::{Encode, Decode, Store, WrapStore, RefStore};
+use crate::{Encode, Decode, Store, WrapStore};
 
 const EMPTY_KEY: &[u8] = &[];
 
@@ -76,7 +76,7 @@ mod tests {
         let mut store = MapStore::new();
         
         {
-            let mut n: Value<_, u64> = Value::wrap_store(store.to_ref()).unwrap();
+            let mut n: Value<_, u64> = Value::wrap_store(&mut store).unwrap();
 
             assert_eq!(
                 n.get().unwrap_err().to_string(),
@@ -96,7 +96,7 @@ mod tests {
     #[test]
     fn default() {
         let mut store = MapStore::new();
-        let n = Value::<_, u64>::wrap_store(store.to_ref()).unwrap();
+        let n = Value::<_, u64>::wrap_store(&mut store).unwrap();
         assert_eq!(n.get_or_default().unwrap(), 0);
     }
 }

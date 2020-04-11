@@ -42,7 +42,7 @@ impl Decode for State {
 
 impl<S: Store, T: Encode + Decode> WrapStore<S> for Deque<S, T> {
     fn wrap_store(mut store: S) -> Result<Self> {
-        let state: State = Value::wrap_store(store.to_ref())?
+        let state: State = Value::wrap_store(&mut store)?
             .get_or_default()?;
 
         Ok(Self {
@@ -62,7 +62,7 @@ impl<S: Store, T: Encode + Decode> Deque<S, T> {
         let index = self.state.tail;
 
         self.state.tail += 1;
-        Value::<_, State>::wrap_store(self.store.to_ref())?
+        Value::<_, State>::wrap_store(&mut self.store)?
             .set(&self.state)?;
         
         let bytes = value.encode()?;
@@ -124,7 +124,7 @@ mod tests {
     fn simple() {
         let mut store = MapStore::new();
 
-        let mut deque: Deque<_, u64> = Deque::wrap_store(store.to_ref()).unwrap();
+        let mut deque: Deque<_, u64> = Deque::wrap_store(&mut store).unwrap();
         assert_eq!(deque.len(), 0);
 
         deque.push_back(10).unwrap();
@@ -141,14 +141,14 @@ mod tests {
     fn reinstantiate() {
         let mut store = MapStore::new();
 
-        let mut deque: Deque<_, u64> = Deque::wrap_store(store.to_ref()).unwrap();
+        let mut deque: Deque<_, u64> = Deque::wrap_store(&mut store).unwrap();
         assert_eq!(deque.len(), 0);
 
         deque.push_back(1).unwrap();
         assert_eq!(deque.len(), 1);
         assert_eq!(deque.get(0).unwrap(), 1);
 
-        let mut deque: Deque<_, u64> = Deque::wrap_store(store.to_ref()).unwrap();
+        let mut deque: Deque<_, u64> = Deque::wrap_store(&mut store).unwrap();
         assert_eq!(deque.len(), 1);
         assert_eq!(deque.get(0).unwrap(), 1);
         deque.push_back(2).unwrap();
@@ -160,7 +160,7 @@ mod tests {
     #[test]
     fn iter() {
         let mut store = MapStore::new();
-        let mut deque: Deque<_, u64> = Deque::wrap_store(store.to_ref()).unwrap();
+        let mut deque: Deque<_, u64> = Deque::wrap_store(&mut store).unwrap();
 
         deque.push_back(1).unwrap();
         deque.push_back(2).unwrap();

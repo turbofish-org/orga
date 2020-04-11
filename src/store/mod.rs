@@ -29,8 +29,6 @@ pub trait Store: Read + Write {
     fn as_read(&self) -> &dyn Read;
 
     fn as_write(&mut self) -> &mut dyn Write;
-
-    fn to_ref<'a>(&'a mut self) -> RefStore<'a>;
 }
 
 impl<S: Read + Write + Sized> Store for S {
@@ -41,41 +39,27 @@ impl<S: Read + Write + Sized> Store for S {
     fn as_write(&mut self) -> &mut dyn Write {
         self
     }
-
-    fn to_ref<'a>(&'a mut self) -> RefStore<'a> {
-        RefStore(self)
-    }
 }
 
-pub struct RefStore<'a>(&'a mut dyn Store);
-
-impl<'a> Read for RefStore<'a> {
+impl<S: Store> Read for &S {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        self.0.get(key)
+        (**self).get(key)
     }
 }
 
-impl<'a> Write for RefStore<'a> {
+impl<S: Store> Read for &mut S {
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        (**self).get(key)
+    }
+}
+
+impl<S: Store> Write for &mut S {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
-        self.0.put(key, value)
+        (**self).put(key, value)
     }
 
     fn delete(&mut self, key: &[u8]) -> Result<()> {
-        self.0.delete(key)
-    }
-}
-
-impl<'a> Deref for RefStore<'a> {
-    type Target = &'a mut dyn Store;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<'a> DerefMut for RefStore<'a> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+        (**self).delete(key)
     }
 }
 
