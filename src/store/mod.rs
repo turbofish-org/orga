@@ -29,6 +29,8 @@ pub trait Store: Read + Write {
     fn as_read(&self) -> &dyn Read;
 
     fn as_write(&mut self) -> &mut dyn Write;
+
+    fn to_ref<'a>(&'a mut self) -> RefStore<'a>;
 }
 
 impl<S: Read + Write + Sized> Store for S {
@@ -38,6 +40,42 @@ impl<S: Read + Write + Sized> Store for S {
 
     fn as_write(&mut self) -> &mut dyn Write {
         self
+    }
+
+    fn to_ref<'a>(&'a mut self) -> RefStore<'a> {
+        RefStore(self)
+    }
+}
+
+pub struct RefStore<'a>(&'a mut dyn Store);
+
+impl<'a> Read for RefStore<'a> {
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        self.0.get(key)
+    }
+}
+
+impl<'a> Write for RefStore<'a> {
+    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
+        self.0.put(key, value)
+    }
+
+    fn delete(&mut self, key: &[u8]) -> Result<()> {
+        self.0.delete(key)
+    }
+}
+
+impl<'a> Deref for RefStore<'a> {
+    type Target = &'a mut dyn Store;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'a> DerefMut for RefStore<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
@@ -49,72 +87,7 @@ pub trait Flush {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Add;
-    use std::marker::PhantomData;
-    use super::{Read, NullStore, Store, Result};
-    use crate::{Encode, Decode, WrapStore};
-
-    const EMPTY_KEY: &[u8] = &[];
-
-    struct Counter<'a, T>
-        where T:
-            Add<T, Output = T> +
-            From<u8> +
-            Encode +
-            Decode +
-            Default
-    {
-        store: &'a mut dyn Store,
-        number_type: PhantomData<T>
-    }
-
-    impl<'a, T> Counter<'a, T>
-        where T:
-            Add<T, Output = T> +
-            From<u8> +
-            Encode +
-            Decode +
-            Default
-    {
-        fn get(&self) -> Result<T> {
-            Ok(self.store.get(EMPTY_KEY)?
-                .map(|bytes| T::decode(bytes.as_slice()))
-                .transpose()?
-                .unwrap_or_default())
-        }
-
-        fn increment(&mut self) -> Result<()> {
-            let value = self.get()?;
-            let value = value + T::from(1u8);
-            let bytes = value.encode()?;
-            self.store.put(EMPTY_KEY.to_vec(), bytes)
-        }
-    }
-
-    impl<'a, T: Add<T>> WrapStore<'a> for Counter<'a, T>
-        where T:
-            Add<T, Output = T> +
-            From<u8> +
-            Encode +
-            Decode +
-            Default
-    {
-        fn wrap_store(store: &'a mut dyn Store) -> Self {
-            Counter { store, number_type: PhantomData }
-        }
-    }
-
-    #[test]
-    fn wrap_store() {
-        use super::MapStore;
-
-        let mut store = MapStore::new();
-        let mut counter: Counter<u64> = Counter::wrap_store(&mut store);
-        assert_eq!(counter.get().unwrap(), 0);
-        counter.increment().unwrap();
-        assert_eq!(counter.get().unwrap(), 1);
-        assert_eq!(store.get(EMPTY_KEY).unwrap(), Some(vec![0, 0, 0, 0, 0, 0, 0, 1]));
-    }
+    use super::{Read, NullStore};
         
     #[test]
     fn fixed_length_slice_key() {
