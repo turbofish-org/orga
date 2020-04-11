@@ -34,21 +34,21 @@ impl<'a, T: Encode + Decode> WrapStore<'a, StateValue<'a, T>> for T {
 }
 
 impl<'a, T: Encode + Decode> StateValue<'a, T> {
-    fn get(&self) -> Result<T> {
+    pub fn get(&self) -> Result<T> {
         match self.store.get(EMPTY_KEY)? {
             Some(bytes) => Ok(T::decode(bytes.as_slice())?),
             None => Err(Error::NotFound)
         }
     }
 
-    fn set<B: Borrow<T>>(&mut self, value: B) -> Result<()> {
+    pub fn set<B: Borrow<T>>(&mut self, value: B) -> Result<()> {
         let bytes = value.borrow().encode()?;
         Ok(self.store.put(EMPTY_KEY.to_vec(), bytes)?)
     }
 }
 
 impl<'a, T: Encode + Decode + Default> StateValue<'a, T> {
-    fn get_or_default(&self) -> Result<T> {
+    pub fn get_or_default(&self) -> Result<T> {
         match self.get() {
             Ok(value) => Ok(value),
             Err(err) => {
