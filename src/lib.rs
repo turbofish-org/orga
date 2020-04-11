@@ -1,6 +1,7 @@
 #![feature(trait_alias)]
 
 pub mod abci;
+pub mod collections;
 mod encoding;
 mod error;
 mod store;

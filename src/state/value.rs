@@ -22,21 +22,23 @@ impl From<failure::Error> for Error {
     }
 }
 
-pub struct Value<'a, T: Encode + Decode> {
-    store: Box<dyn Store + 'a>,
+pub struct Value<S: Store, T: Encode + Decode> {
+    store: S,
     value_type: PhantomData<T>
 }
 
-impl<'a, T: Encode + Decode> WrapStore<'a> for Value<'a, T> {
-    fn wrap_store<S: Store + 'a>(store: S) -> Value<'a, T> {
-        Value {
-            store: Box::new(store),
+impl<S: Store, T: Encode + Decode> WrapStore<S> for Value<S, T> {
+    fn wrap_store(
+        store: S
+    ) -> std::result::Result<Value<S, T>, failure::Error> {
+        Ok(Value {
+            store,
             value_type: PhantomData
-        }
+        })
     }
 }
 
-impl<'a, T: Encode + Decode> Value<'a, T> {
+impl<S: Store, T: Encode + Decode> Value<S, T> {
     pub fn get(&self) -> Result<T> {
         match self.store.get(EMPTY_KEY)? {
             Some(bytes) => Ok(T::decode(bytes.as_slice())?),
@@ -50,7 +52,7 @@ impl<'a, T: Encode + Decode> Value<'a, T> {
     }
 }
 
-impl<'a, T: Encode + Decode + Default> Value<'a, T> {
+impl<S: Store, T: Encode + Decode + Default> Value<S, T> {
     pub fn get_or_default(&self) -> Result<T> {
         match self.get() {
             Ok(value) => Ok(value),
@@ -74,7 +76,7 @@ mod tests {
         let mut store = MapStore::new();
         
         {
-            let mut n: Value<u64> = Value::wrap_store(store.to_ref());
+            let mut n: Value<_, u64> = Value::wrap_store(store.to_ref()).unwrap();
 
             assert_eq!(
                 n.get().unwrap_err().to_string(),
@@ -94,7 +96,7 @@ mod tests {
     #[test]
     fn default() {
         let mut store = MapStore::new();
-        let n: Value<u64> = Value::wrap_store(store.to_ref());
+        let n = Value::<_, u64>::wrap_store(store.to_ref()).unwrap();
         assert_eq!(n.get_or_default().unwrap(), 0);
     }
 }

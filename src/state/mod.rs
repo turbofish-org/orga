@@ -1,7 +1,9 @@
-use crate::Store;
+use crate::{Store, Result};
 
-pub mod value;
+mod value;
 
-pub trait WrapStore<'a> {
-    fn wrap_store<S: Store + 'a>(store: S) -> Self;
+pub use value::Value;
+
+pub trait WrapStore<S: Store>: Sized {
+    fn wrap_store(store: S) -> Result<Self>;
 }
