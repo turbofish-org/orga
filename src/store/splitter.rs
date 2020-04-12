@@ -10,43 +10,34 @@ use crate::Result;
 // TODO: we can probably use unsafe pointers instead of Rc<Mutex> since
 // operations are guaranteed not to interfere with each other
 
-#[derive(Clone)]
-pub struct Splitter<'a> {
-    inner: Rc<RefCell<SplitterInner<'a>>>
-}
-
-struct SplitterInner<'a> {
-    store: &'a mut dyn Store,
+pub struct Splitter<S: Store> {
+    store: Rc<RefCell<S>>,
     index: u8
 }
 
-pub struct Substore<'a> {
-    parent: Splitter<'a>,
+pub struct Substore<S: Store> {
+    store: Rc<RefCell<S>>,
     index: u8
 }
 
-impl<'a> Splitter<'a> {
-    pub fn new(store: &'a mut dyn Store) -> Self {
+impl<S: Store> Splitter<S> {
+    pub fn new(store: S) -> Self {
         Splitter {
-            inner: Rc::new(RefCell::new(SplitterInner {
-                store,
-                index: 0
-            }))
+            store: Rc::new(RefCell::new(store)),
+            index: 0
         }
     }
 
-    pub fn split(&mut self) -> Substore<'a> {
-        let mut inner = self.inner.borrow_mut();
-
-        if inner.index == 255 {
+    pub fn split(&mut self) -> Substore<S> {
+        if self.index == 255 {
             panic!("Reached split limit");
         }
         
-        let index = inner.index;
-        inner.index += 1;
+        let index = self.index;
+        self.index += 1;
 
         Substore {
-            parent: self.clone(),
+            store: self.store.clone(),
             index
         }
     }
@@ -61,22 +52,22 @@ fn prefix(prefix: u8, suffix: &[u8]) -> [u8; 256] {
     prefixed
 }
 
-impl<'a> Read for Substore<'a> {
+impl<S: Store> Read for Substore<S> {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         let len = key.len() + 1;
         let prefixed_key = prefix(self.index, key);
 
-        let store = &self.parent.inner.borrow().store;
+        let store = &self.store.borrow();
         store.get(&prefixed_key[..len])
     }
 }
 
-impl<'a> Write for Substore<'a> {
+impl<S: Store> Write for Substore<S> {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         let len = key.len() + 1;
         let prefixed_key = prefix(self.index, key.as_slice())[..len].to_vec();
 
-        let store = &mut self.parent.inner.borrow_mut().store;
+        let store = &mut self.store.borrow_mut();
         store.put(prefixed_key, value)
     }
 
@@ -84,7 +75,7 @@ impl<'a> Write for Substore<'a> {
         let len = key.as_ref().len() + 1;
         let prefixed_key = prefix(self.index, key);
 
-        let store = &mut self.parent.inner.borrow_mut().store;
+        let store = &mut self.store.borrow_mut();
         store.delete(&prefixed_key[..len])
     }
 }
