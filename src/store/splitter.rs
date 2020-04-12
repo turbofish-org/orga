@@ -1,5 +1,5 @@
 use std::rc::Rc;
-use std::sync::Mutex;
+use std::cell::RefCell;
 use super::{Store, Read, Write};
 use crate::Result;
 
@@ -12,7 +12,7 @@ use crate::Result;
 
 #[derive(Clone)]
 pub struct Splitter<'a> {
-    inner: Rc<Mutex<SplitterInner<'a>>>
+    inner: Rc<RefCell<SplitterInner<'a>>>
 }
 
 struct SplitterInner<'a> {
@@ -28,7 +28,7 @@ pub struct Substore<'a> {
 impl<'a> Splitter<'a> {
     pub fn new(store: &'a mut dyn Store) -> Self {
         Splitter {
-            inner: Rc::new(Mutex::new(SplitterInner {
+            inner: Rc::new(RefCell::new(SplitterInner {
                 store,
                 index: 0
             }))
@@ -36,7 +36,7 @@ impl<'a> Splitter<'a> {
     }
 
     pub fn split(&mut self) -> Substore<'a> {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.borrow_mut();
 
         if inner.index == 255 {
             panic!("Reached split limit");
@@ -66,7 +66,7 @@ impl<'a> Read for Substore<'a> {
         let len = key.len() + 1;
         let prefixed_key = prefix(self.index, key);
 
-        let store = &self.parent.inner.lock().unwrap().store;
+        let store = &self.parent.inner.borrow().store;
         store.get(&prefixed_key[..len])
     }
 }
@@ -76,7 +76,7 @@ impl<'a> Write for Substore<'a> {
         let len = key.len() + 1;
         let prefixed_key = prefix(self.index, key.as_slice())[..len].to_vec();
 
-        let store = &mut self.parent.inner.lock().unwrap().store;
+        let store = &mut self.parent.inner.borrow_mut().store;
         store.put(prefixed_key, value)
     }
 
@@ -84,7 +84,7 @@ impl<'a> Write for Substore<'a> {
         let len = key.as_ref().len() + 1;
         let prefixed_key = prefix(self.index, key);
 
-        let store = &mut self.parent.inner.lock().unwrap().store;
+        let store = &mut self.parent.inner.borrow_mut().store;
         store.delete(&prefixed_key[..len])
     }
 }
