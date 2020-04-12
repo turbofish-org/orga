@@ -1,5 +1,4 @@
 use crate::{Read, Result};
-use failure::Error;
 
 pub struct Client<R: Read> {
     read: R

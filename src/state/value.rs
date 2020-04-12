@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 use std::marker::PhantomData;
-use failure::{bail, Fail};
+use failure::Fail;
 use crate::{Encode, Decode, Store, WrapStore};
 
 const EMPTY_KEY: &[u8] = &[];
@@ -69,7 +69,7 @@ impl<S: Store, T: Encode + Decode + Default> Value<S, T> {
 #[cfg(test)]
 mod tests {
     use super::Value;
-    use crate::{MapStore, Read, WrapStore, Store};
+    use crate::{MapStore, Read, WrapStore};
 
     #[test]
     fn u64_wrapper() {

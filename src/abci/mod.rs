@@ -2,9 +2,8 @@ use std::clone::Clone;
 use std::env;
 use std::net::ToSocketAddrs;
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
-use std::sync::{Arc, Mutex, MutexGuard};
-use failure::{Error, bail};
-use crate::{StateMachine, Read, Write, Store, Flush, WriteCache, MapStore, Result, step_atomic, WriteCacheMap};
+use failure::bail;
+use crate::{Read, Write, Store, Flush, WriteCache, MapStore, Result, step_atomic, WriteCacheMap};
 
 pub use abci2::messages::abci::{Request, Response};
 pub use abci2::messages::abci as messages;
@@ -249,8 +248,6 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
             let res = self.run(req)?;
             cb.send(res).unwrap();   
         }
-
-        Ok(())
     }
 
     fn create_worker(&self, conn: abci2::Connection) -> Result<Worker> {
@@ -284,23 +281,23 @@ impl Worker {
 }
 
 pub trait Application {
-    fn init_chain(&self, store: &mut dyn Store, req: RequestInitChain) -> Result<ResponseInitChain> {
+    fn init_chain(&self, _store: &mut dyn Store, _req: RequestInitChain) -> Result<ResponseInitChain> {
         Ok(Default::default())
     }
 
-    fn begin_block(&self, store: &mut dyn Store, req: RequestBeginBlock) -> Result<ResponseBeginBlock> {
+    fn begin_block(&self, _store: &mut dyn Store, _req: RequestBeginBlock) -> Result<ResponseBeginBlock> {
         Ok(Default::default())
     }
 
-    fn deliver_tx(&self, store: &mut dyn Store, req: RequestDeliverTx) -> Result<ResponseDeliverTx> {
+    fn deliver_tx(&self, _store: &mut dyn Store, _req: RequestDeliverTx) -> Result<ResponseDeliverTx> {
         Ok(Default::default())
     }
 
-    fn end_block(&self, store: &mut dyn Store, req: RequestEndBlock) -> Result<ResponseEndBlock> {
+    fn end_block(&self, _store: &mut dyn Store, _req: RequestEndBlock) -> Result<ResponseEndBlock> {
         Ok(Default::default())
     }
 
-    fn check_tx(&self, store: &mut dyn Store, req: RequestCheckTx) -> Result<ResponseCheckTx> {
+    fn check_tx(&self, _store: &mut dyn Store, _req: RequestCheckTx) -> Result<ResponseCheckTx> {
         Ok(Default::default())
     }
 }

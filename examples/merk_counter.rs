@@ -39,7 +39,7 @@ impl CounterApp {
 }
 
 impl Application for CounterApp {
-    fn init_chain(&self, store: &mut dyn Store, req: RequestInitChain) -> Result<ResponseInitChain> {
+    fn init_chain(&self, store: &mut dyn Store, _req: RequestInitChain) -> Result<ResponseInitChain> {
         self.set_count(store, 100)?;
         Ok(Default::default())
     }

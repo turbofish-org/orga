@@ -1,6 +1,5 @@
 use tendermint::rpc::Client;
 use crate::{Read, Result};
-use failure::Error;
 
 pub struct TendermintClient {
     client: Client

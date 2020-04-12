@@ -1,6 +1,5 @@
 use crate::error::Result;
-use crate::store::{WriteCache, Flush, Store, Read, Write};
-use failure::bail;
+use crate::store::{WriteCache, Flush, Store};
 
 pub fn step_atomic<F, S, I, O>(sm: F, store: &mut S, input: I) -> Result<O>
     where
@@ -23,7 +22,8 @@ pub fn atomize<F, S, I, O>(sm: F) -> impl Fn(&mut S, I) -> Result<O>
 
 #[cfg(test)]
 mod tests {
-    use crate::store::{WriteCache, Read};
+    use failure::bail;
+    use crate::store::{WriteCache, Read, Write};
     use super::*;
 
     fn get_u8(key: &[u8], store: &dyn Read) -> Result<u8> {

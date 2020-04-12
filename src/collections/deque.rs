@@ -1,6 +1,5 @@
 use std::io::{Read, Write};
 use std::marker::PhantomData;
-use std::ops::{Drop, Index, IndexMut};
 use failure::bail;
 use crate::{WrapStore, Store, Encode, Decode, Value, Result};
 

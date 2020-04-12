@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use merk::{Merk, Op, Hash, BatchEntry};
+use merk::{Merk, Op, BatchEntry};
 use byteorder::{ByteOrder, BigEndian};
 use crate::error::Result;
 use crate::store::*;

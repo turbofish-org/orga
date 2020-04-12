@@ -1,4 +1,3 @@
-use std::ops::{Deref, DerefMut};
 use crate::error::Result;
 
 mod write_cache;
