@@ -91,6 +91,61 @@ impl<T: Decode> Decode for Option<T> {
     }
 }
 
+// impl<T: Encode> Encode for () {
+//     fn encode_into<W: Write>(&self, dest: &mut W) -> Result<()> {
+//         Ok(())
+//     }
+
+//     fn encoding_length(&self) -> Result<usize> {
+//         Ok(0)
+//     }
+// }
+
+// impl<T: Decode> Decode for () {
+//     fn decode<R: Read>(mut input: R) -> Result<Self> {
+//         Ok(())
+//     }
+// }
+
+macro_rules! tuple_impl {
+    ($( $type:ident ),*) => {
+        impl<$($type: Encode),*> Encode for ($($type),*) {
+            #[allow(non_snake_case, unused_mut, unused_variables)]
+            fn encode_into<W: Write>(&self, mut dest: &mut W) -> Result<()> {
+                let ($($type),*) = self;
+                $($type.encode_into(&mut dest)?;)*
+                Ok(())
+            }             
+
+            #[allow(non_snake_case)]
+            fn encoding_length(&self) -> Result<usize> {
+                let ($($type),*) = self;
+                Ok(
+                    0
+                    $(+ $type.encoding_length()?)*
+                )
+            }
+        }
+
+        impl<$($type: Decode),*> Decode for ($($type),*) {
+            #[allow(unused_mut, unused_variables)]
+            fn decode<R: Read>(mut input: R) -> Result<Self> {
+                Ok((
+                    $($type::decode(&mut input)?),*
+                ))
+            }
+        }
+    }
+}
+
+tuple_impl!();
+tuple_impl!(A, B);
+tuple_impl!(A, B, C);
+tuple_impl!(A, B, C, D);
+tuple_impl!(A, B, C, D, E);
+tuple_impl!(A, B, C, D, E, F);
+tuple_impl!(A, B, C, D, E, F, G);
+
 #[cfg(test)]
 mod tests {
     use super::*;
