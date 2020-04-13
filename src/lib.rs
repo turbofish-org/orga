@@ -4,13 +4,15 @@ pub mod abci;
 pub mod collections;
 mod encoding;
 mod error;
-mod store;
+pub mod merkstore;
 mod state;
 mod state_machine;
-pub mod merkstore;
+mod store;
 
 pub use encoding::*;
+pub use error::*;
 pub use state::*;
 pub use state_machine::*;
-pub use store::{*, split};
-pub use error::*;
+pub use store::{split, *};
+
+pub use orga_macros::*;
