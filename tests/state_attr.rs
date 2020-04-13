@@ -1,9 +1,9 @@
-use orga::{Store, MapStore, WrapStore, Value, state, Read, Write};
+use orga::{MapStore, WrapStore, Value, state, Read};
 
 #[state]
 struct MyStruct {
     a: Value<u64>,
-    b: Value<u32>,
+    _b: Value<u32>,
     c: MyStruct2
 }
 

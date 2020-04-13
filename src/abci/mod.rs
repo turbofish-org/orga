@@ -256,6 +256,7 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
 }
 
 struct Worker {
+    #[allow(dead_code)]
     thread: std::thread::JoinHandle<()>
     // TODO: keep handle to connection or socket so we can close it
 }

@@ -1,10 +1,9 @@
-use proc_macro2::{TokenStream, Span};
-use quote::{quote, quote_spanned, ToTokens};
-use syn::{*, punctuated::*};
+use quote::quote;
+use syn::*;
 
 #[proc_macro_attribute]
 pub fn state(
-    attr: proc_macro::TokenStream,
+    _attr: proc_macro::TokenStream,
     item: proc_macro::TokenStream
 ) -> proc_macro::TokenStream {
     let mut item = parse_macro_input!(item as DeriveInput);
@@ -22,7 +21,7 @@ pub fn state(
     (quote! {
         #item
 
-        impl<S: orga::Store> WrapStore<S> for #name<S> {
+        impl<S: orga::Store> orga::WrapStore<S> for #name<S> {
             fn wrap_store(store: S) -> orga::Result<Self> {
                 let mut splitter = orga::Splitter::new(store);
                 Ok(Self {
@@ -52,7 +51,7 @@ fn struct_fields<'a>(
 fn struct_fields_mut<'a>(
     item: &'a mut DeriveInput
 ) -> impl Iterator<Item=&'a mut Field> {
-    let mut data = match item.data {
+    let data = match item.data {
         Data::Struct(ref mut data) => data,
         _ => panic!("The #[state] attribute can only be used on structs")
     };
