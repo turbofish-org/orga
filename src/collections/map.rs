@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::marker::PhantomData;
 use crate::{WrapStore, Store, Encode, Decode, Result};
 
@@ -39,13 +40,13 @@ impl<S, K, V> Map<S, K, V>
         self.store.put(key_bytes, value_bytes)
     }
 
-    pub fn delete(&mut self, key: K) -> Result<()> {
-        let (key_bytes, key_length) = encode_key_array(&key)?;
+    pub fn delete<B: Borrow<K>>(&mut self, key: B) -> Result<()> {
+        let (key_bytes, key_length) = encode_key_array(key.borrow())?;
         self.store.delete(&key_bytes[..key_length])
     }
 
-    pub fn get(&self, key: K) -> Result<Option<V>> {
-        let (key_bytes, key_length) = encode_key_array(&key)?;
+    pub fn get<B: Borrow<K>>(&self, key: B) -> Result<Option<V>> {
+        let (key_bytes, key_length) = encode_key_array(key.borrow())?;
         self.store.get(&key_bytes[..key_length])?
             .map(|value_bytes| V::decode(value_bytes.as_slice()))
             .transpose()
@@ -73,5 +74,8 @@ mod tests {
 
         map.insert(1234, 5678).unwrap();
         assert_eq!(map.get(1234).unwrap(), Some(5678));
+
+        map.delete(1234).unwrap();
+        assert_eq!(map.get(1234).unwrap(), None);
     }
 }
