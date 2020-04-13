@@ -39,12 +39,23 @@ impl<S, K, V> Map<S, K, V>
         self.store.put(key_bytes, value_bytes)
     }
 
+    pub fn delete(&mut self, key: K) -> Result<()> {
+        let (key_bytes, key_length) = encode_key_array(&key)?;
+        self.store.delete(&key_bytes[..key_length])
+    }
+
     pub fn get(&self, key: K) -> Result<Option<V>> {
-        let key_bytes = key.encode()?;
-        self.store.get(key_bytes.as_slice())?
+        let (key_bytes, key_length) = encode_key_array(&key)?;
+        self.store.get(&key_bytes[..key_length])?
             .map(|value_bytes| V::decode(value_bytes.as_slice()))
             .transpose()
     }
+}
+
+fn encode_key_array<K: Encode>(key: &K) -> Result<([u8; 256], usize)> {
+    let mut bytes = [0; 256];
+    key.encode_into(&mut &mut bytes[..])?;
+    Ok((bytes, key.encoding_length()?))
 }
 
 #[cfg(test)]
