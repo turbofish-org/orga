@@ -7,7 +7,7 @@ use crate::Result;
 // possibly change Store methods to generically support iterator-based
 // concatenated keys, maybe via a Key type.
 
-// TODO: we can probably use unsafe pointers instead of Rc<Mutex> since
+// TODO: we can probably use UnsafeCell instead of RefCell since
 // operations are guaranteed not to interfere with each other
 
 pub struct Splitter<S: Store> {

@@ -3,12 +3,12 @@ use crate::error::Result;
 mod write_cache;
 mod nullstore;
 mod rwlog;
-mod splitter;
+pub mod split;
 
 pub use write_cache::{WriteCache, MapStore};
 pub use write_cache::Map as WriteCacheMap;
 pub use nullstore::{NullStore, NULL_STORE};
-pub use splitter::Splitter;
+pub use split::Splitter;
 pub use rwlog::RWLog;
 
 // TODO: iter method?

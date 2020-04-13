@@ -12,5 +12,5 @@ pub mod merkstore;
 pub use encoding::*;
 pub use state::*;
 pub use state_machine::*;
-pub use store::*;
+pub use store::{*, split};
 pub use error::*;
