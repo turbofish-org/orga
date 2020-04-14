@@ -1,7 +1,7 @@
+use crate::{Decode, Encode, Store, WrapStore};
+use failure::Fail;
 use std::borrow::Borrow;
 use std::marker::PhantomData;
-use failure::Fail;
-use crate::{Encode, Decode, Store, WrapStore};
 
 const EMPTY_KEY: &[u8] = &[];
 
@@ -11,7 +11,7 @@ pub enum Error {
     NotFound,
 
     #[fail(display = "{}", _0)]
-    Other(failure::Error)
+    Other(failure::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -24,25 +24,30 @@ impl From<failure::Error> for Error {
 
 pub struct Value<S: Store, T: Encode + Decode> {
     store: S,
-    value_type: PhantomData<T>
+    value_type: PhantomData<T>,
 }
 
 impl<S: Store, T: Encode + Decode> WrapStore<S> for Value<S, T> {
-    fn wrap_store(
-        store: S
-    ) -> std::result::Result<Value<S, T>, failure::Error> {
+    fn wrap_store(store: S) -> std::result::Result<Value<S, T>, failure::Error> {
         Ok(Value {
             store,
-            value_type: PhantomData
+            value_type: PhantomData,
         })
     }
 }
 
 impl<S: Store, T: Encode + Decode> Value<S, T> {
     pub fn get(&self) -> Result<T> {
+        match self.maybe_get()? {
+            Some(value) => Ok(value),
+            None => Err(Error::NotFound),
+        }
+    }
+
+    pub fn maybe_get(&self) -> Result<Option<T>> {
         match self.store.get(EMPTY_KEY)? {
-            Some(bytes) => Ok(T::decode(bytes.as_slice())?),
-            None => Err(Error::NotFound)
+            Some(bytes) => Ok(Some(T::decode(bytes.as_slice())?)),
+            None => Ok(None),
         }
     }
 
@@ -58,7 +63,7 @@ impl<S: Store, T: Encode + Decode + Default> Value<S, T> {
             Ok(value) => Ok(value),
             Err(err) => {
                 if let Error::NotFound = err {
-                    return Ok(T::default())
+                    return Ok(T::default());
                 }
                 Err(err)
             }
@@ -74,17 +79,16 @@ mod tests {
     #[test]
     fn u64_wrapper() {
         let mut store = MapStore::new();
-        
+
         {
             let mut n: Value<_, u64> = Value::wrap_store(&mut store).unwrap();
 
-            assert_eq!(
-                n.get().unwrap_err().to_string(),
-                "Value does not exist"
-            );
+            assert_eq!(n.get().unwrap_err().to_string(), "Value does not exist");
+            assert_eq!(n.maybe_get().unwrap(), None);
 
             n.set(0x1234567890u64).unwrap();
             assert_eq!(n.get().unwrap(), 0x1234567890);
+            assert_eq!(n.maybe_get().unwrap(), Some(0x1234567890u64));
         }
 
         assert_eq!(
