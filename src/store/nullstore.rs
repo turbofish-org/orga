@@ -2,8 +2,6 @@ use super::*;
 
 pub struct NullStore;
 
-pub static mut NULL_STORE: NullStore = NullStore;
-
 impl Read for NullStore {
     fn get(&self, _key: &[u8]) -> Result<Option<Vec<u8>>> {
         Ok(None)

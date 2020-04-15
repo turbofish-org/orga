@@ -4,13 +4,14 @@ mod router;
 use crate::error::Result;
 use crate::store::Store;
 
-pub use atomic::{step_atomic, atomize};
-// pub use router::Router;
-// pub use router::Transaction as RouterTransaction;
+pub use atomic::{atomize, step_atomic};
 
-pub trait StateMachine<I, O>: Fn(&mut dyn Store, I) -> Result<O> {}
-impl<F, I, O> StateMachine<I, O> for F
-    where F: Fn(&mut dyn Store, I) -> Result<O>
-{}
+pub trait StateMachine<S: Store, I, O>: Fn(S, I) -> Result<O> {}
+impl<S, F, I, O> StateMachine<S, I, O> for F
+where
+    S: Store,
+    F: Fn(S, I) -> Result<O>,
+{
+}
 
-pub trait Atomic<I, O>: StateMachine<I, O> {}
+pub trait Atomic<S: Store, I, O>: StateMachine<S, I, O> {}

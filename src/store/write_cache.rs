@@ -1,37 +1,37 @@
-use std::collections::HashMap;
 use super::*;
+use std::collections::HashMap;
 
 // TODO: should this be BTreeMap for efficient merging?
 pub type Map = HashMap<Vec<u8>, Option<Vec<u8>>>;
 
-pub type MapStore = WriteCache<'static, NullStore>;
+pub type MapStore = WriteCache<NullStore>;
 
-pub struct WriteCache<'a, S: Store> {
+pub struct WriteCache<S: Store> {
     map: Map,
-    store: &'a mut S
+    store: S,
 }
 
-impl WriteCache<'_, NullStore> {
+impl WriteCache<NullStore> {
     pub fn new() -> Self {
-        WriteCache::wrap(unsafe { &mut NULL_STORE })
+        WriteCache::wrap(NullStore)
     }
 }
 
-impl Default for WriteCache<'_, NullStore> {
+impl Default for WriteCache<NullStore> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'a, S: Store> WriteCache<'a, S> {
-    pub fn wrap(store: &'a mut S) -> Self {
+impl<S: Store> WriteCache<S> {
+    pub fn wrap(store: S) -> Self {
         WriteCache {
             store,
-            map: Default::default()
+            map: Default::default(),
         }
     }
 
-    pub fn wrap_with_map(store: &'a mut S, map: Map) -> Self {
+    pub fn wrap_with_map(store: S, map: Map) -> Self {
         WriteCache { store, map }
     }
 
@@ -40,17 +40,17 @@ impl<'a, S: Store> WriteCache<'a, S> {
     }
 }
 
-impl<'a, S: Store> Read for WriteCache<'a, S> {
+impl<S: Store> Read for WriteCache<S> {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         match self.map.get(key.as_ref()) {
             Some(Some(value)) => Ok(Some(value.clone())),
             Some(None) => Ok(None),
-            None => self.store.get(key)
+            None => self.store.get(key),
         }
     }
 }
 
-impl<'a, S: Store> Write for WriteCache<'a, S> {
+impl<S: Store> Write for WriteCache<S> {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         self.map.insert(key, Some(value));
         Ok(())
@@ -62,12 +62,12 @@ impl<'a, S: Store> Write for WriteCache<'a, S> {
     }
 }
 
-impl<'a, S: Store> Flush for WriteCache<'a, S> {
+impl<S: Store> Flush for WriteCache<S> {
     fn flush(&mut self) -> Result<()> {
         for (key, value) in self.map.drain() {
             match value {
                 Some(value) => self.store.put(key, value)?,
-                None => self.store.delete(key.as_slice())?
+                None => self.store.delete(key.as_slice())?,
             }
         }
         Ok(())

@@ -1,10 +1,10 @@
 use crate::error::Result;
-use crate::store::{WriteCache, Flush, Store};
+use crate::store::{Flush, Store, WriteCache};
 
-pub fn step_atomic<F, S, I, O>(sm: F, store: &mut S, input: I) -> Result<O>
-    where
-        S: Store,
-        F: Fn(&mut dyn Store, I) -> Result<O>
+pub fn step_atomic<F, S, I, O>(sm: F, store: S, input: I) -> Result<O>
+where
+    S: Store,
+    F: Fn(&mut WriteCache<S>, I) -> Result<O>,
 {
     let mut flush_store = WriteCache::wrap(store);
     let res = sm(&mut flush_store, input)?;
@@ -12,42 +12,42 @@ pub fn step_atomic<F, S, I, O>(sm: F, store: &mut S, input: I) -> Result<O>
     Ok(res)
 }
 
-pub fn atomize<F, S, I, O>(sm: F) -> impl Fn(&mut S, I) -> Result<O>
-    where
-        S: Store,
-        F: Fn(&mut dyn Store, I) -> Result<O>
+pub fn atomize<F, S, I, O>(sm: F) -> impl Fn(S, I) -> Result<O>
+where
+    S: Store,
+    F: Fn(&mut WriteCache<S>, I) -> Result<O>,
 {
     move |store, input| step_atomic(&sm, store, input)
 }
 
 #[cfg(test)]
 mod tests {
-    use failure::bail;
-    use crate::store::{WriteCache, Read, Write};
     use super::*;
+    use crate::store::{Read, Write, WriteCache};
+    use failure::bail;
 
-    fn get_u8(key: &[u8], store: &dyn Read) -> Result<u8> {
+    fn get_u8<R: Read>(key: &[u8], store: Read) -> Result<u8> {
         match store.get(key) {
             Ok(None) => Ok(0),
             Ok(Some(vec)) => Ok(vec[0]),
-            Err(err) => Err(err)
+            Err(err) => Err(err),
         }
     }
 
-    fn put_u8(key: &[u8], value: u8, store: &mut dyn Write) -> Result<()> {
+    fn put_u8<W: Write>(key: &[u8], value: u8, store: Write) -> Result<()> {
         store.put(key.to_vec(), vec![value])
     }
 
-    fn counter(store: &mut dyn Store, n: u8) -> Result<u8> {
+    fn counter(store: &mut Store, n: u8) -> Result<u8> {
         // put to n before checking count (to test atomicity)
-        put_u8(b"n", n, store.as_write())?;
+        put_u8(b"n", n, store)?;
 
         // get count, compare to n, write if successful
-        let count = get_u8(b"count", store.as_read())?;
+        let count = get_u8(b"count", store)?;
         if count != n {
             bail!("Invalid count");
         }
-        put_u8(b"count", count + 1, store.as_write())?;
+        put_u8(b"count", count + 1, store)?;
         Ok(count + 1)
     }
 
