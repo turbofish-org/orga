@@ -1,23 +1,15 @@
 use crate::error::Result;
 use crate::store::{Flush, Store, WriteCache};
 
-pub fn step_atomic<F, S, I, O>(sm: F, store: S, input: I) -> Result<O>
+pub fn step_atomic<F, S, I, O>(f: F, store: S, input: I) -> Result<O>
 where
     S: Store,
-    F: Fn(&mut WriteCache<S>, I) -> Result<O>,
+    F: Fn(&mut dyn Store, I) -> Result<O>,
 {
     let mut flush_store = WriteCache::wrap(store);
-    let res = sm(&mut flush_store, input)?;
+    let res = f(&mut flush_store, input)?;
     flush_store.flush()?;
     Ok(res)
-}
-
-pub fn atomize<F, S, I, O>(sm: F) -> impl Fn(S, I) -> Result<O>
-where
-    S: Store,
-    F: Fn(&mut WriteCache<S>, I) -> Result<O>,
-{
-    move |store, input| step_atomic(&sm, store, input)
 }
 
 #[cfg(test)]
@@ -26,7 +18,7 @@ mod tests {
     use crate::store::{Read, Write, WriteCache};
     use failure::bail;
 
-    fn get_u8<R: Read>(key: &[u8], store: Read) -> Result<u8> {
+    fn get_u8(key: &[u8], store: &dyn Store) -> Result<u8> {
         match store.get(key) {
             Ok(None) => Ok(0),
             Ok(Some(vec)) => Ok(vec[0]),
@@ -34,11 +26,11 @@ mod tests {
         }
     }
 
-    fn put_u8<W: Write>(key: &[u8], value: u8, store: Write) -> Result<()> {
+    fn put_u8(key: &[u8], value: u8, store: &mut dyn Store) -> Result<()> {
         store.put(key.to_vec(), vec![value])
     }
 
-    fn counter(store: &mut Store, n: u8) -> Result<u8> {
+    fn counter(store: &mut dyn Store, n: u8) -> Result<u8> {
         // put to n before checking count (to test atomicity)
         put_u8(b"n", n, store)?;
 
@@ -91,18 +83,5 @@ mod tests {
             step_atomic(|_, input| Ok(input + 1), &mut store, 100).unwrap(),
             101
         );
-    }
-
-    #[test]
-    fn atomize_counter() {
-        let mut store = WriteCache::new();
-        let atomic_counter = atomize(counter);
-
-        assert_eq!(atomic_counter(&mut store, 0).unwrap(), 1);
-        assert!(atomic_counter(&mut store, 0).is_err());
-        assert_eq!(atomic_counter(&mut store, 1).unwrap(), 2);
-        assert!(atomic_counter(&mut store, 1).is_err());
-        assert_eq!(store.get(b"n").unwrap(), Some(vec![1]));
-        assert_eq!(store.get(b"count").unwrap(), Some(vec![2]));
     }
 }

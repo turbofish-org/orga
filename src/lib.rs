@@ -1,4 +1,5 @@
 #![feature(trait_alias)]
+#![feature(fn_traits)]
 
 pub mod abci;
 pub mod collections;

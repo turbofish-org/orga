@@ -102,7 +102,9 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                 );
 
                 let res_init_chain =
-                    match step_atomic(|store, req| app.init_chain(store, req), &mut store, req) {
+                    match step_atomic(|store, req| {
+                        app.init_chain(store, req)
+                    }, &mut store, req) {
                         Ok(res) => res,
                         Err(_) => Default::default(),
                     };
@@ -125,7 +127,9 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                 );
 
                 let res_begin_block =
-                    match step_atomic(|store, req| app.begin_block(store, req), &mut store, req) {
+                    match step_atomic(|store, req| {
+                        app.begin_block(store, req)
+                    }, &mut store, req) {
                         Ok(res) => res,
                         Err(_) => Default::default(),
                     };
@@ -285,27 +289,27 @@ impl Worker {
 }
 
 pub trait Application {
-    fn init_chain<S: Store>(&self, _store: S, _req: RequestInitChain) -> Result<ResponseInitChain> {
+    fn init_chain(&self, _store: &mut dyn Store, _req: RequestInitChain) -> Result<ResponseInitChain> {
         Ok(Default::default())
     }
 
-    fn begin_block<S: Store>(
+    fn begin_block(
         &self,
-        _store: S,
+        _store: &mut dyn Store,
         _req: RequestBeginBlock,
     ) -> Result<ResponseBeginBlock> {
         Ok(Default::default())
     }
 
-    fn deliver_tx<S: Store>(&self, _store: S, _req: RequestDeliverTx) -> Result<ResponseDeliverTx> {
+    fn deliver_tx(&self, _store: &mut dyn Store, _req: RequestDeliverTx) -> Result<ResponseDeliverTx> {
         Ok(Default::default())
     }
 
-    fn end_block<S: Store>(&self, _store: S, _req: RequestEndBlock) -> Result<ResponseEndBlock> {
+    fn end_block(&self, _store: &mut dyn Store, _req: RequestEndBlock) -> Result<ResponseEndBlock> {
         Ok(Default::default())
     }
 
-    fn check_tx<S: Store>(&self, _store: S, _req: RequestCheckTx) -> Result<ResponseCheckTx> {
+    fn check_tx(&self, _store: &mut dyn Store, _req: RequestCheckTx) -> Result<ResponseCheckTx> {
         Ok(Default::default())
     }
 }
