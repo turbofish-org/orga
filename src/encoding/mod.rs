@@ -63,6 +63,33 @@ int_impl!(i32, 4);
 int_impl!(i64, 8);
 int_impl!(i128, 16);
 
+
+impl Encode for bool {
+    fn encode_into<W: Write>(&self, dest: &mut W) -> Result<()> {
+        let bytes = [ *self as u8 ];
+        dest.write_all(&bytes[..])?;
+        Ok(())
+    }
+
+    fn encoding_length(&self) -> Result<usize> {
+        Ok(1)
+    }
+}
+
+impl Decode for bool {
+    fn decode<R: Read>(mut input: R) -> Result<Self> {
+        let mut buf = [0; 1];
+        input.read_exact(&mut buf[..])?;
+        match buf[0] {
+            0 => Ok(false),
+            1 => Ok(true),
+            byte => bail!("Unexpected byte {}", byte)
+        }
+    }
+}
+
+impl Terminated for bool {}
+
 impl<T: Encode> Encode for Option<T> {
     fn encode_into<W: Write>(&self, dest: &mut W) -> Result<()> {
         match self {
