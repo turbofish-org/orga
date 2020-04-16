@@ -208,6 +208,79 @@ array_impl!(64);
 array_impl!(128);
 array_impl!(256);
 
+impl<T: Encode> Encode for Vec<T> {
+    fn encode_into<W: Write>(&self, mut dest: &mut W) -> Result<()> {
+        for element in self.iter() {
+            element.encode_into(&mut dest)?;
+        }
+        Ok(())
+    }
+
+    fn encoding_length(&self) -> Result<usize> {
+        let mut sum = 0;
+        for element in self.iter() {
+            sum += element.encoding_length()?;
+        }
+        Ok(sum)
+    }
+}
+
+impl<T: Decode> Decode for Vec<T> {
+    fn decode<R: Read>(input: R) -> Result<Self> {
+        let mut input = EofRead::new(input);
+        let mut vec = vec![];
+        while !input.eof()? {
+            let el = T::decode(&mut input)?;
+            vec.push(el);
+        }
+        Ok(vec)
+    }
+}
+
+struct EofRead<R: Read> {
+    inner: R,
+    next_byte: Option<u8>
+}
+
+impl<R: Read> EofRead<R> {
+    fn new(read: R) -> Self {
+        EofRead {
+            inner: read,
+            next_byte: None
+        }
+    }
+
+    fn eof(&mut self) -> Result<bool> {
+        if let Some(_) = self.next_byte {
+            return Ok(false);
+        }
+
+        let mut buf = [0];
+        let bytes_read = self.inner.read(&mut buf)?;
+        if bytes_read == 0 {
+            Ok(true)
+        } else {
+            self.next_byte = Some(buf[0]);
+            Ok(false)
+        }
+    }
+}
+
+type IoResult<T> = std::result::Result<T, std::io::Error>;
+impl<R: Read> Read for EofRead<R> {
+    fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
+        match self.next_byte.take() {
+            Some(byte) => {
+                // TODO: error if buf is len 0
+                buf[0] = byte;
+                let bytes_read = self.inner.read(&mut buf[1..])?;
+                Ok(1 + bytes_read)
+            },
+            None => self.inner.read(buf)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -270,5 +343,35 @@ mod tests {
         assert_eq!(bytes.as_slice(), &[0, 1, 0, 2, 0, 3, 0, 4]);
         let decoded_value: [u16; 4] = Decode::decode(bytes.as_slice()).unwrap();
         assert_eq!(decoded_value, value);
+    }
+
+    #[test]
+    #[should_panic(expected = "failed to fill whole buffer")]
+    fn encode_decode_array_eof_length() {
+        let bytes = [0, 1, 0, 2, 0, 3];
+        let _: [u16; 4] = Decode::decode(&bytes[..]).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "failed to fill whole buffer")]
+    fn encode_decode_array_eof_element() {
+        let bytes = [0, 1, 0, 2, 0, 3, 0];
+        let _: [u16; 4] = Decode::decode(&bytes[..]).unwrap();
+    }
+
+    #[test]
+    fn encode_decode_vec() {
+        let value: Vec<u16> = vec![1, 2, 3, 4];
+        let bytes = value.encode().unwrap();
+        assert_eq!(bytes.as_slice(), &[0, 1, 0, 2, 0, 3, 0, 4]);
+        let decoded_value: Vec<u16> = Decode::decode(bytes.as_slice()).unwrap();
+        assert_eq!(decoded_value, value);
+    }
+
+    #[test]
+    #[should_panic(expected = "failed to fill whole buffer")]
+    fn encode_decode_vec_eof_element() {
+        let bytes = [0, 1, 0, 2, 0, 3, 0];
+        let _: Vec<u16> = Decode::decode(&bytes[..]).unwrap();
     }
 }
