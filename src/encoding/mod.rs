@@ -93,50 +93,68 @@ impl<T: Decode> Decode for Option<T> {
 
 impl<T: Terminated> Terminated for Option<T> {}
 
+impl Encode for () {
+    fn encode_into<W: Write>(&self, _: &mut W) -> Result<()> {
+        Ok(())
+    }
+
+    fn encoding_length(&self) -> Result<usize> {
+        Ok(0)
+    }
+}
+
+impl Decode for () {
+    fn decode<R: Read>(_: R) -> Result<Self> {
+        Ok(())
+    }
+}
+
+impl Terminated for () {}
+
 macro_rules! tuple_impl {
-    ($( $type:ident ),*) => {
-        impl<$($type: Encode),*> Encode for ($($type),*) {
+    ($( $type:ident ),*; $last_type:ident) => {
+        impl<$($type: Encode + Terminated,)* $last_type: Encode> Encode for ($($type,)* $last_type) {
             #[allow(non_snake_case, unused_mut, unused_variables)]
             fn encode_into<W: Write>(&self, mut dest: &mut W) -> Result<()> {
-                let ($($type),*) = self;
+                let ($($type,)* $last_type) = self;
                 $($type.encode_into(&mut dest)?;)*
-                Ok(())
+                $last_type.encode_into(dest)
             }
 
             #[allow(non_snake_case)]
             fn encoding_length(&self) -> Result<usize> {
-                let ($($type),*) = self;
+                let ($($type,)* $last_type) = self;
                 Ok(
-                    0
-                    $(+ $type.encoding_length()?)*
+                    $($type.encoding_length()? +)*
+                    $last_type.encoding_length()?
                 )
             }
         }
 
-        impl<$($type: Decode),*> Decode for ($($type),*) {
+        impl<$($type: Decode + Terminated,)* $last_type: Decode> Decode for ($($type,)* $last_type) {
             #[allow(unused_mut, unused_variables)]
             fn decode<R: Read>(mut input: R) -> Result<Self> {
                 Ok((
-                    $($type::decode(&mut input)?),*
+                    $($type::decode(&mut input)?,)*
+                    $last_type::decode(input)?
                 ))
             }
         }
 
-        impl<$($type: Terminated),*> Terminated for ($($type),*) {}
+        impl<$($type: Terminated,)* $last_type: Terminated> Terminated for ($($type,)* $last_type) {}
     }
 }
 
-tuple_impl!();
-tuple_impl!(A, B);
-tuple_impl!(A, B, C);
-tuple_impl!(A, B, C, D);
-tuple_impl!(A, B, C, D, E);
-tuple_impl!(A, B, C, D, E, F);
-tuple_impl!(A, B, C, D, E, F, G);
+tuple_impl!(A; B);
+tuple_impl!(A, B; C);
+tuple_impl!(A, B, C; D);
+tuple_impl!(A, B, C, D; E);
+tuple_impl!(A, B, C, D, E; F);
+tuple_impl!(A, B, C, D, E, F; G);
 
 macro_rules! array_impl {
     ($length:expr) => {
-        impl<T: Encode> Encode for [T; $length] {
+        impl<T: Encode + Terminated> Encode for [T; $length] {
             #[allow(non_snake_case, unused_mut, unused_variables)]
             fn encode_into<W: Write>(&self, mut dest: &mut W) -> Result<()> {
                 for element in self[..].iter() {
@@ -156,7 +174,7 @@ macro_rules! array_impl {
         }
 
         // TODO: support T without Default + Copy
-        impl<T: Decode + Default + Copy> Decode for [T; $length] {
+        impl<T: Decode + Terminated + Default + Copy> Decode for [T; $length] {
             #[allow(unused_mut, unused_variables)]
             fn decode<R: Read>(mut input: R) -> Result<Self> {
                 let mut array = [Default::default(); $length];
