@@ -113,17 +113,17 @@ impl Terminated for () {}
 
 macro_rules! tuple_impl {
     ($( $type:ident ),*; $last_type:ident) => {
-        impl<$($type: Encode + Terminated,)* $last_type: Encode> Encode for ($($type,)* $last_type) {
+        impl<$($type: Encode + Terminated,)* $last_type: Encode> Encode for ($($type,)* $last_type,) {
             #[allow(non_snake_case, unused_mut, unused_variables)]
             fn encode_into<W: Write>(&self, mut dest: &mut W) -> Result<()> {
-                let ($($type,)* $last_type) = self;
+                let ($($type,)* $last_type,) = self;
                 $($type.encode_into(&mut dest)?;)*
                 $last_type.encode_into(dest)
             }
 
             #[allow(non_snake_case)]
             fn encoding_length(&self) -> Result<usize> {
-                let ($($type,)* $last_type) = self;
+                let ($($type,)* $last_type,) = self;
                 Ok(
                     $($type.encoding_length()? +)*
                     $last_type.encoding_length()?
@@ -131,20 +131,21 @@ macro_rules! tuple_impl {
             }
         }
 
-        impl<$($type: Decode + Terminated,)* $last_type: Decode> Decode for ($($type,)* $last_type) {
+        impl<$($type: Decode + Terminated,)* $last_type: Decode> Decode for ($($type,)* $last_type,) {
             #[allow(unused_mut, unused_variables)]
             fn decode<R: Read>(mut input: R) -> Result<Self> {
                 Ok((
                     $($type::decode(&mut input)?,)*
-                    $last_type::decode(input)?
+                    $last_type::decode(input)?,
                 ))
             }
         }
 
-        impl<$($type: Terminated,)* $last_type: Terminated> Terminated for ($($type,)* $last_type) {}
+        impl<$($type: Terminated,)* $last_type: Terminated> Terminated for ($($type,)* $last_type,) {}
     }
 }
 
+tuple_impl!(; A);
 tuple_impl!(A; B);
 tuple_impl!(A, B; C);
 tuple_impl!(A, B, C; D);
@@ -189,6 +190,7 @@ macro_rules! array_impl {
     };
 }
 
+array_impl!(0);
 array_impl!(1);
 array_impl!(2);
 array_impl!(3);
