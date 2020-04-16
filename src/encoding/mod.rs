@@ -18,6 +18,8 @@ pub trait Decode: Sized {
     fn decode<R: Read>(input: R) -> Result<Self>;
 }
 
+pub trait Terminated {}
+
 macro_rules! int_impl {
     ($type:ty, $length:expr) => {
         impl Encode for $type {
@@ -39,6 +41,8 @@ macro_rules! int_impl {
                 Ok(Self::from_be_bytes(bytes))
             }
         }
+
+        impl Terminated for $type {}
     };
 }
 
@@ -87,21 +91,7 @@ impl<T: Decode> Decode for Option<T> {
     }
 }
 
-// impl<T: Encode> Encode for () {
-//     fn encode_into<W: Write>(&self, dest: &mut W) -> Result<()> {
-//         Ok(())
-//     }
-
-//     fn encoding_length(&self) -> Result<usize> {
-//         Ok(0)
-//     }
-// }
-
-// impl<T: Decode> Decode for () {
-//     fn decode<R: Read>(mut input: R) -> Result<Self> {
-//         Ok(())
-//     }
-// }
+impl<T: Terminated> Terminated for Option<T> {}
 
 macro_rules! tuple_impl {
     ($( $type:ident ),*) => {
@@ -131,6 +121,8 @@ macro_rules! tuple_impl {
                 ))
             }
         }
+
+        impl<$($type: Terminated),*> Terminated for ($($type),*) {}
     }
 }
 
@@ -174,6 +166,8 @@ macro_rules! array_impl {
                 Ok(array)
             }
         }
+
+        impl<T: Terminated> Terminated for [T; $length] {}
     };
 }
 

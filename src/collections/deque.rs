@@ -16,6 +16,7 @@ struct State {
     tail: u64
 }
 
+// TODO: use a derive macro
 impl Encode for State {
     fn encode_into<W: Write>(&self, dest: &mut W) -> Result<()> {
         self.head.encode_into(dest)?;
@@ -30,6 +31,7 @@ impl Encode for State {
     }
 }
 
+// TODO: use a derive macro
 impl Decode for State {
     fn decode<R: Read>(mut input: R) -> Result<Self> {
         Ok(Self {
