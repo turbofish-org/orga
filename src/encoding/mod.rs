@@ -279,7 +279,7 @@ impl<T: Decode> Decode for Vec<T> {
     }
 
     fn decode_into<R: Read>(&mut self, input: R) -> Result<()> {
-        let mut input = EofRead::new(input);
+        let mut input = EofReader::new(input);
         let old_len = self.len();
 
         let mut i = 0;
@@ -302,14 +302,14 @@ impl<T: Decode> Decode for Vec<T> {
     }
 }
 
-struct EofRead<R: Read> {
+struct EofReader<R: Read> {
     inner: R,
     next_byte: Option<u8>
 }
 
-impl<R: Read> EofRead<R> {
+impl<R: Read> EofReader<R> {
     fn new(read: R) -> Self {
-        EofRead {
+        EofReader {
             inner: read,
             next_byte: None
         }
@@ -332,11 +332,14 @@ impl<R: Read> EofRead<R> {
 }
 
 type IoResult<T> = std::result::Result<T, std::io::Error>;
-impl<R: Read> Read for EofRead<R> {
+impl<R: Read> Read for EofReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
+        if buf.len() == 0 {
+            return Ok(0)
+        }
+
         match self.next_byte.take() {
             Some(byte) => {
-                // TODO: don't consume byte if buf is len 0
                 buf[0] = byte;
                 let bytes_read = self.inner.read(&mut buf[1..])?;
                 Ok(1 + bytes_read)
