@@ -127,7 +127,7 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                 );
 
                 let res_begin_block =
-                    match step_atomic(|store, req| {
+                    match step_atomic(|store: &mut WriteCache<&mut WriteCache<&mut S>>, req| {
                         app.begin_block(store, req)
                     }, &mut store, req) {
                         Ok(res) => res,
@@ -149,7 +149,7 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                 );
 
                 let res_deliver_tx =
-                    match step_atomic(|store, req| app.deliver_tx(store, req), &mut store, req) {
+                    match step_atomic(|store: &mut WriteCache<&mut WriteCache<&mut S>>, req| app.deliver_tx(store, req), &mut store, req) {
                         Ok(res) => res,
                         Err(err) => {
                             let mut res: ResponseDeliverTx = Default::default();
@@ -176,7 +176,7 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                 );
 
                 let res_end_block =
-                    match step_atomic(|store, req| app.end_block(store, req), &mut store, req) {
+                    match step_atomic(|store: &mut WriteCache<&mut WriteCache<&mut S>>, req| app.end_block(store, req), &mut store, req) {
                         Ok(res) => res,
                         Err(_) => Default::default(),
                     };
@@ -222,7 +222,7 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                     WriteCache::wrap_with_map(&mut self.store, self.mempool_state.take().unwrap());
 
                 let res_check_tx =
-                    match step_atomic(|store, req| app.check_tx(store, req), &mut store, req) {
+                    match step_atomic(|store: &mut WriteCache<&mut WriteCache<&mut S>>, req| app.check_tx(store, req), &mut store, req) {
                         Ok(res) => res,
                         Err(err) => {
                             let mut res: ResponseCheckTx = Default::default();
@@ -289,27 +289,27 @@ impl Worker {
 }
 
 pub trait Application {
-    fn init_chain(&self, _store: &mut dyn Store, _req: RequestInitChain) -> Result<ResponseInitChain> {
+    fn init_chain<S: Store>(&self, _store: S, _req: RequestInitChain) -> Result<ResponseInitChain> {
         Ok(Default::default())
     }
 
-    fn begin_block(
+    fn begin_block<S: Store>(
         &self,
-        _store: &mut dyn Store,
+        _store: S,
         _req: RequestBeginBlock,
     ) -> Result<ResponseBeginBlock> {
         Ok(Default::default())
     }
 
-    fn deliver_tx(&self, _store: &mut dyn Store, _req: RequestDeliverTx) -> Result<ResponseDeliverTx> {
+    fn deliver_tx<S: Store>(&self, _store: S, _req: RequestDeliverTx) -> Result<ResponseDeliverTx> {
         Ok(Default::default())
     }
 
-    fn end_block(&self, _store: &mut dyn Store, _req: RequestEndBlock) -> Result<ResponseEndBlock> {
+    fn end_block<S: Store>(&self, _store: S, _req: RequestEndBlock) -> Result<ResponseEndBlock> {
         Ok(Default::default())
     }
 
-    fn check_tx(&self, _store: &mut dyn Store, _req: RequestCheckTx) -> Result<ResponseCheckTx> {
+    fn check_tx<S: Store>(&self, _store: S, _req: RequestCheckTx) -> Result<ResponseCheckTx> {
         Ok(Default::default())
     }
 }

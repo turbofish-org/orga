@@ -4,7 +4,7 @@ use crate::store::{Flush, Store, WriteCache};
 pub fn step_atomic<F, S, I, O>(f: F, store: S, input: I) -> Result<O>
 where
     S: Store,
-    F: Fn(&mut dyn Store, I) -> Result<O>,
+    F: Fn(&mut WriteCache<S>, I) -> Result<O>,
 {
     let mut flush_store = WriteCache::wrap(store);
     let res = f(&mut flush_store, input)?;
@@ -18,7 +18,7 @@ mod tests {
     use crate::store::{Read, Write, WriteCache};
     use failure::bail;
 
-    fn get_u8(key: &[u8], store: &dyn Store) -> Result<u8> {
+    fn get_u8<R: Read>(key: &[u8], store: R) -> Result<u8> {
         match store.get(key) {
             Ok(None) => Ok(0),
             Ok(Some(vec)) => Ok(vec[0]),
@@ -26,20 +26,20 @@ mod tests {
         }
     }
 
-    fn put_u8(key: &[u8], value: u8, store: &mut dyn Store) -> Result<()> {
+    fn put_u8<W: Write>(key: &[u8], value: u8, mut store: W) -> Result<()> {
         store.put(key.to_vec(), vec![value])
     }
 
-    fn counter(store: &mut dyn Store, n: u8) -> Result<u8> {
+    fn counter<S: Store>(mut store: S, n: u8) -> Result<u8> {
         // put to n before checking count (to test atomicity)
-        put_u8(b"n", n, store)?;
+        put_u8(b"n", n, &mut store)?;
 
         // get count, compare to n, write if successful
-        let count = get_u8(b"count", store)?;
+        let count = get_u8(b"count", &store)?;
         if count != n {
             bail!("Invalid count");
         }
-        put_u8(b"count", count + 1, store)?;
+        put_u8(b"count", count + 1, &mut store)?;
         Ok(count + 1)
     }
 
@@ -58,7 +58,7 @@ mod tests {
     fn step_counter_atomic_error() {
         let mut store = WriteCache::new();
         // invalid `n`, should error
-        assert!(step_atomic(counter, &mut store, 100).is_err());
+        assert!(step_atomic(|s, i| counter(s, i), &mut store, 100).is_err());
         // count should not have been mutated
         assert_eq!(store.get(b"count").unwrap(), None);
         // n should not have been mutated
@@ -68,10 +68,10 @@ mod tests {
     #[test]
     fn step_counter() {
         let mut store = WriteCache::new();
-        assert_eq!(step_atomic(counter, &mut store, 0).unwrap(), 1);
-        assert!(step_atomic(counter, &mut store, 0).is_err());
-        assert_eq!(step_atomic(counter, &mut store, 1).unwrap(), 2);
-        assert!(step_atomic(counter, &mut store, 1).is_err());
+        assert_eq!(step_atomic(|s, i| counter(s, i), &mut store, 0).unwrap(), 1);
+        assert!(step_atomic(|s, i| counter(s, i), &mut store, 0).is_err());
+        assert_eq!(step_atomic(|s, i| counter(s, i), &mut store, 1).unwrap(), 2);
+        assert!(step_atomic(|s, i| counter(s, i), &mut store, 1).is_err());
         assert_eq!(store.get(b"n").unwrap(), Some(vec![1]));
         assert_eq!(store.get(b"count").unwrap(), Some(vec![2]));
     }
