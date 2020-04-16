@@ -281,7 +281,7 @@ array_impl!(64);
 array_impl!(128);
 array_impl!(256);
 
-impl<T: Encode> Encode for Vec<T> {
+impl<T: Encode + Terminated> Encode for Vec<T> {
     fn encode_into<W: Write>(&self, mut dest: &mut W) -> Result<()> {
         for element in self.iter() {
             element.encode_into(&mut dest)?;
@@ -298,7 +298,7 @@ impl<T: Encode> Encode for Vec<T> {
     }
 }
 
-impl<T: Decode> Decode for Vec<T> {
+impl<T: Decode + Terminated> Decode for Vec<T> {
     fn decode<R: Read>(input: R) -> Result<Self> {
         let mut vec = vec![];
         vec.decode_into(input)?;
@@ -326,6 +326,23 @@ impl<T: Decode> Decode for Vec<T> {
         }
 
         Ok(())
+    }
+}
+
+impl<T: Encode + Terminated> Encode for [T] {
+    fn encode_into<W: Write>(&self, mut dest: &mut W) -> Result<()> {
+        for element in self[..].iter() {
+            element.encode_into(&mut dest)?;
+        }
+        Ok(())
+    }
+
+    fn encoding_length(&self) -> Result<usize> {
+        let mut sum = 0;
+        for element in self[..].iter() {
+            sum += element.encoding_length()?;
+        }
+        Ok(sum)
     }
 }
 
