@@ -1,6 +1,7 @@
 use crate::Result;
-use failure::{bail, format_err};
 use std::io::{Read, Write};
+use failure::{bail, format_err};
+use seq_macro::seq;
 
 pub trait Encode {
     fn encode_into<W: Write>(&self, dest: &mut W) -> Result<()>;
@@ -224,10 +225,14 @@ macro_rules! array_impl {
             }
         }
 
-        impl<T: Decode + Terminated + Default + Copy> Decode for [T; $length] {
-            fn decode<R: Read>(input: R) -> Result<Self> {
-                let mut array = [Default::default(); $length];
-                array.decode_into(input)?;
+        impl<T: Decode + Terminated> Decode for [T; $length] {
+            #[allow(unused_variables, unused_mut)]
+            fn decode<R: Read>(mut input: R) -> Result<Self> {
+                seq!(N in 0..$length {
+                    let mut array = [
+                        #(T::decode(&mut input)?,)*
+                    ];
+                });
                 Ok(array)
             }
 

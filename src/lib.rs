@@ -1,5 +1,6 @@
 #![feature(trait_alias)]
 #![feature(fn_traits)]
+#![feature(proc_macro_hygiene)]
 
 pub mod abci;
 pub mod collections;
