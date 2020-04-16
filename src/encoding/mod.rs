@@ -16,6 +16,12 @@ pub trait Encode {
 
 pub trait Decode: Sized {
     fn decode<R: Read>(input: R) -> Result<Self>;
+
+    fn decode_into<R: Read>(&mut self, input: R) -> Result<()> {
+        let value = Self::decode(input)?;
+        *self = value;
+        Ok(())
+    }
 }
 
 pub trait Terminated {}
@@ -77,17 +83,26 @@ impl<T: Encode> Encode for Option<T> {
 }
 
 impl<T: Decode> Decode for Option<T> {
-    fn decode<R: Read>(mut input: R) -> Result<Self> {
+    fn decode<R: Read>(input: R) -> Result<Self> {
+        let mut option: Option<T> = None;
+        option.decode_into(input)?;
+        Ok(option)
+    }
+
+    fn decode_into<R: Read>(&mut self, mut input: R) -> Result<()> {
         let mut byte = [0; 1];
         input.read_exact(&mut byte[..])?;
 
-        let value = match byte[0] {
-            0 => None,
-            1 => Some(T::decode(input)?),
-            byte => bail!("Unexpected byte {}", byte),
+        match byte[0] {
+            0 => *self = None,
+            1 => match self {
+                None => *self = Some(T::decode(input)?),
+                Some(value) => value.decode_into(input)?
+            },
+            byte => bail!("Unexpected byte {}", byte)
         };
 
-        Ok(value)
+        Ok(())
     }
 }
 
@@ -114,7 +129,7 @@ impl Terminated for () {}
 macro_rules! tuple_impl {
     ($( $type:ident ),*; $last_type:ident) => {
         impl<$($type: Encode + Terminated,)* $last_type: Encode> Encode for ($($type,)* $last_type,) {
-            #[allow(non_snake_case, unused_mut, unused_variables)]
+            #[allow(non_snake_case, unused_mut)]
             fn encode_into<W: Write>(&self, mut dest: &mut W) -> Result<()> {
                 let ($($type,)* $last_type,) = self;
                 $($type.encode_into(&mut dest)?;)*
@@ -132,12 +147,20 @@ macro_rules! tuple_impl {
         }
 
         impl<$($type: Decode + Terminated,)* $last_type: Decode> Decode for ($($type,)* $last_type,) {
-            #[allow(unused_mut, unused_variables)]
+            #[allow(unused_mut)]
             fn decode<R: Read>(mut input: R) -> Result<Self> {
                 Ok((
                     $($type::decode(&mut input)?,)*
                     $last_type::decode(input)?,
                 ))
+            }
+
+            #[allow(non_snake_case, unused_mut)]
+            fn decode_into<R: Read>(&mut self, mut input: R) -> Result<()> {
+                let ($($type,)* $last_type,) = self;
+                $($type.decode_into(&mut input)?;)*
+                $last_type.decode_into(input)?;
+                Ok(())
             }
         }
 
@@ -174,15 +197,18 @@ macro_rules! array_impl {
             }
         }
 
-        // TODO: support T without Default + Copy
         impl<T: Decode + Terminated + Default + Copy> Decode for [T; $length] {
-            #[allow(unused_mut, unused_variables)]
-            fn decode<R: Read>(mut input: R) -> Result<Self> {
+            fn decode<R: Read>(input: R) -> Result<Self> {
                 let mut array = [Default::default(); $length];
-                for i in 0..$length {
-                    array[i] = T::decode(&mut input)?;
-                }
+                array.decode_into(input)?;
                 Ok(array)
+            }
+
+            fn decode_into<R: Read>(&mut self, mut input: R) -> Result<()> {
+                for i in 0..$length {
+                    T::decode_into(&mut self[i], &mut input)?;
+                }
+                Ok(())
             }
         }
 
@@ -247,13 +273,32 @@ impl<T: Encode> Encode for Vec<T> {
 
 impl<T: Decode> Decode for Vec<T> {
     fn decode<R: Read>(input: R) -> Result<Self> {
-        let mut input = EofRead::new(input);
         let mut vec = vec![];
-        while !input.eof()? {
-            let el = T::decode(&mut input)?;
-            vec.push(el);
-        }
+        vec.decode_into(input)?;
         Ok(vec)
+    }
+
+    fn decode_into<R: Read>(&mut self, input: R) -> Result<()> {
+        let mut input = EofRead::new(input);
+        let old_len = self.len();
+
+        let mut i = 0;
+        while !input.eof()? {
+            if i < old_len {
+                self[i].decode_into(&mut input)?;
+            } else {
+                let el = T::decode(&mut input)?;
+                self.push(el);
+            }
+
+            i += 1;
+        }
+
+        if i < old_len {
+            self.truncate(i);
+        }
+
+        Ok(())
     }
 }
 
@@ -291,7 +336,7 @@ impl<R: Read> Read for EofRead<R> {
     fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
         match self.next_byte.take() {
             Some(byte) => {
-                // TODO: error if buf is len 0
+                // TODO: don't consume byte if buf is len 0
                 buf[0] = byte;
                 let bytes_read = self.inner.read(&mut buf[1..])?;
                 Ok(1 + bytes_read)
