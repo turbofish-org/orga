@@ -3,7 +3,6 @@ use orga::{MapStore, WrapStore, Value, state, Read};
 #[state]
 struct MyStruct {
     a: Value<u64>,
-    _b: Value<u32>,
     c: MyStruct2
 }
 
@@ -33,7 +32,7 @@ fn struct_state() {
         Some(vec![0, 0, 0, 0, 0, 0, 4, 210])
     );
     assert_eq!(
-        store.get(&[2, 0]).unwrap(),
+        store.get(&[1, 0]).unwrap(),
         Some(vec![0, 0, 0, 0, 0, 0, 0, 5])
     );
 }
