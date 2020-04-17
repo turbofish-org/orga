@@ -1,37 +1,30 @@
 use quote::quote;
 use syn::*;
 
+mod encoding;
+mod state_attr;
+
 #[proc_macro_attribute]
 pub fn state(
-    _attr: proc_macro::TokenStream,
+    attr: proc_macro::TokenStream,
     item: proc_macro::TokenStream
 ) -> proc_macro::TokenStream {
-    let mut item = parse_macro_input!(item as DeriveInput);
+    state_attr::state(attr, item)
+}
 
-    let store_param: GenericParam = parse_quote!(S: orga::Store);
-    item.generics.params.insert(0, store_param);
+#[proc_macro_derive(Encode)]
+pub fn encode(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    encoding::derive_encode(item)
+}
 
-    struct_fields_mut(&mut item)
-        .for_each(add_store_param_to_field);
+#[proc_macro_derive(Decode)]
+pub fn decode(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    encoding::derive_decode(item)
+}
 
-    let name = &item.ident;
-    let field_names = struct_fields(&item)
-        .map(|field| &field.ident);
-
-    (quote! {
-        #item
-
-        impl<S: orga::Store> orga::WrapStore<S> for #name<S> {
-            fn wrap_store(store: S) -> orga::Result<Self> {
-                let mut splitter = orga::Splitter::new(store);
-                Ok(Self {
-                    #(
-                        #field_names: orga::WrapStore::wrap_store(splitter.split())?,
-                    )*
-                })
-            }
-        }
-    }).into()
+#[proc_macro_derive(Terminated)]
+pub fn terminated(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    encoding::derive_terminated(item)
 }
 
 fn struct_fields<'a>(
