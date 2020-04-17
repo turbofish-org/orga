@@ -1,6 +1,6 @@
 use super::*;
 
-// TODO: use corrent spans show errors are shown on fields
+// TODO: use correct spans so errors are shown on fields
 
 pub fn derive_encode(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let item = parse_macro_input!(item as DeriveInput);
@@ -64,32 +64,6 @@ pub fn derive_decode(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
                 Ok(())
             }
-        }
-    };
-    
-    output.into()
-}
-
-pub fn derive_terminated(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let item = parse_macro_input!(item as DeriveInput);
-
-    let name = &item.ident;
-    
-    let field_names = struct_fields(&item)
-        .map(|field| &field.ident);
-
-    let assert_fn_name = Ident::new(
-        format!("__assert_fields_are_terminated_{}", name).as_str(),
-        proc_macro2::Span::call_site()
-    );
-
-    let output = quote! {
-        impl orga::Terminated for #name {}
-
-        #[allow(unused_variables)]
-        fn #assert_fn_name(s: #name) {
-            fn assert_terminated<T: Terminated>(_: T) {}
-            #(assert_terminated(s.#field_names);)*
         }
     };
     

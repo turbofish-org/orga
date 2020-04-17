@@ -25,7 +25,7 @@ pub trait Decode: Sized {
     }
 }
 
-pub trait Terminated {}
+pub auto trait Terminated {}
 
 macro_rules! int_impl {
     ($type:ty, $length:expr) => {

@@ -1,6 +1,6 @@
-use orga::{Encode, Decode, Terminated};
+use orga::{Encode, Decode};
 
-#[derive(Encode, Decode, Terminated, PartialEq, Debug)]
+#[derive(Encode, Decode, PartialEq, Debug)]
 struct Foo {
     a: u8,
     b: Option<u8>

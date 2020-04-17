@@ -22,11 +22,6 @@ pub fn decode(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     encoding::derive_decode(item)
 }
 
-#[proc_macro_derive(Terminated)]
-pub fn terminated(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    encoding::derive_terminated(item)
-}
-
 fn struct_fields<'a>(
     item: &'a DeriveInput
 ) -> impl Iterator<Item=&'a Field> {
