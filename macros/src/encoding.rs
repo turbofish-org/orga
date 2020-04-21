@@ -6,21 +6,18 @@ pub fn derive_encode(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let item = parse_macro_input!(item as DeriveInput);
 
     let name = &item.ident;
-    
-    let field_names: Vec<_> = struct_fields(&item)
-        .map(|field| &field.ident)
-        .collect();
-    
-    let mut field_names_minus_last: Vec<_> = struct_fields(&item)
-        .map(|field| &field.ident)
-        .collect();
+
+    let field_names: Vec<_> = struct_fields(&item).map(|field| &field.ident).collect();
+
+    let mut field_names_minus_last: Vec<_> =
+        struct_fields(&item).map(|field| &field.ident).collect();
     field_names_minus_last.pop();
 
     let output = quote! {
         impl orga::Encode for #name {
             fn encode_into<W: std::io::Write>(&self, mut dest: &mut W) -> orga::Result<()> {
-                fn assert_trait_bounds<T: orga::Encode + orga::Terminated>(_: T) {}
-                #(assert_trait_bounds(self.#field_names_minus_last);)*
+                fn assert_trait_bounds<T: orga::Encode + orga::Terminated>(_: &T) {}
+                #(assert_trait_bounds(&self.#field_names_minus_last);)*
 
                 #(self.#field_names.encode_into(&mut dest)?;)*
 
@@ -34,7 +31,7 @@ pub fn derive_encode(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
             }
         }
     };
-    
+
     output.into()
 }
 
@@ -42,10 +39,8 @@ pub fn derive_decode(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let item = parse_macro_input!(item as DeriveInput);
 
     let name = &item.ident;
-    
-    let field_names: Vec<_> = struct_fields(&item)
-        .map(|field| &field.ident)
-        .collect();
+
+    let field_names: Vec<_> = struct_fields(&item).map(|field| &field.ident).collect();
 
     let output = quote! {
         impl orga::Decode for #name {
@@ -66,6 +61,6 @@ pub fn derive_decode(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
             }
         }
     };
-    
+
     output.into()
 }
