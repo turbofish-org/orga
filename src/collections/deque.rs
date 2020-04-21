@@ -1,19 +1,19 @@
+use crate::{Decode, Encode, Result, Store, Value, WrapStore};
+use failure::bail;
 use std::io::{Read, Write};
 use std::marker::PhantomData;
-use failure::bail;
-use crate::{WrapStore, Store, Encode, Decode, Value, Result};
 
 pub struct Deque<S: Store, T: Encode + Decode> {
     // TODO: make a type that holds the store reference
     store: S,
     state: State,
-    item_type: PhantomData<T>
+    item_type: PhantomData<T>,
 }
 
 #[derive(Debug, Default)]
 struct State {
     head: u64,
-    tail: u64
+    tail: u64,
 }
 
 // TODO: use a derive macro
@@ -24,10 +24,7 @@ impl Encode for State {
     }
 
     fn encoding_length(&self) -> Result<usize> {
-        Ok(
-            self.head.encoding_length()? +
-            self.tail.encoding_length()?
-        )
+        Ok(self.head.encoding_length()? + self.tail.encoding_length()?)
     }
 }
 
@@ -36,20 +33,19 @@ impl Decode for State {
     fn decode<R: Read>(mut input: R) -> Result<Self> {
         Ok(Self {
             head: u64::decode(&mut input)?,
-            tail: u64::decode(&mut input)?
+            tail: u64::decode(&mut input)?,
         })
     }
 }
 
 impl<S: Store, T: Encode + Decode> WrapStore<S> for Deque<S, T> {
     fn wrap_store(mut store: S) -> Result<Self> {
-        let state: State = Value::wrap_store(&mut store)?
-            .get_or_default()?;
+        let state: State = Value::wrap_store(&mut store)?.get_or_default()?;
 
         Ok(Self {
             store,
             state,
-            item_type: PhantomData
+            item_type: PhantomData,
         })
     }
 }
@@ -63,26 +59,36 @@ impl<S: Store, T: Encode + Decode> Deque<S, T> {
         let index = self.state.tail;
 
         self.state.tail += 1;
-        Value::<_, State>::wrap_store(&mut self.store)?
-            .set(&self.state)?;
-        
+        Value::<_, State>::wrap_store(&mut self.store)?.set(&self.state)?;
+
         let bytes = value.encode()?;
         self.store.put(store_key(index).to_vec(), bytes)
     }
 
     pub fn get(&self, index: u64) -> Result<T> {
+        self.get_fixed(index + self.state.head)
+    }
+
+    pub fn fixed_index(&self, index: u64) -> Result<u64> {
         if self.len() < index {
             bail!("Index out of bounds");
         }
-        let store_index = index - self.state.head;
-        let bytes = self.store.get(&store_key(store_index)[..])?;
+
+        Ok(index + self.state.head)
+    }
+
+    pub fn get_fixed(&self, index: u64) -> Result<T> {
+        if index < self.state.head || index >= self.state.tail {
+            bail!("Index out of bounds");
+        }
+        let bytes = self.store.get(&store_key(index)[..])?;
         T::decode(bytes.unwrap().as_slice())
     }
 
     pub fn iter<'a>(&'a self) -> Iter<'a, S, T> {
         Iter {
             deque: self,
-            index: 0
+            index: 0,
         }
     }
 }
@@ -93,7 +99,7 @@ fn store_key(index: u64) -> [u8; 8] {
 
 pub struct Iter<'a, S: Store, T: Encode + Decode> {
     deque: &'a Deque<S, T>,
-    index: u64
+    index: u64,
 }
 
 impl<'a, S: Store, T: Encode + Decode> Iterator for Iter<'a, S, T> {
@@ -139,6 +145,21 @@ mod tests {
     }
 
     #[test]
+    fn fixed() {
+        let mut store = MapStore::new();
+
+        let mut deque: Deque<_, u64> = Deque::wrap_store(&mut store).unwrap();
+        assert_eq!(deque.len(), 0);
+
+        deque.push_back(10).unwrap();
+        assert_eq!(deque.len(), 1);
+        assert_eq!(deque.get_fixed(0).unwrap(), 10);
+        assert_eq!(deque.fixed_index(0).unwrap(), 0);
+
+        // TODO: pop front and assert
+    }
+
+    #[test]
     fn reinstantiate() {
         let mut store = MapStore::new();
 
@@ -167,10 +188,7 @@ mod tests {
         deque.push_back(2).unwrap();
         deque.push_back(3).unwrap();
 
-        let collected = deque
-            .iter()
-            .collect::<Result<Vec<u64>>>()
-            .unwrap();
+        let collected = deque.iter().collect::<Result<Vec<u64>>>().unwrap();
         assert_eq!(collected, vec![1, 2, 3]);
     }
 }
