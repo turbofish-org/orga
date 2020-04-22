@@ -71,13 +71,16 @@ impl<S: Store, T: Encode + Decode> Deque<S, T> {
         }
 
         let value = self.get(0)?;
+
         self.state.head += 1;
+        Value::<_, State>::wrap_store(&mut self.store)?.set(&self.state)?;
+
         Ok(Some(value))
     }
 
     pub fn set(&mut self, index: u64, value: T) -> Result<()> {
         let index = self.fixed_index(index);
-        
+
         let bytes = value.encode()?;
         self.store.put(store_key(index).to_vec(), bytes)
     }
