@@ -1,4 +1,5 @@
 use crate::error::Result;
+use std::ops::{Deref, DerefMut};
 
 mod nullstore;
 mod rwlog;
@@ -28,41 +29,19 @@ pub trait Store: Read + Write {}
 
 impl<S: Read + Write + Sized> Store for S {}
 
-impl<S: Store> Read for &S {
+impl<S: Store, T: Deref<Target = S>> Read for T {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        (**self).get(key)
+        self.deref().get(key)
     }
 }
 
-impl<S: Store> Read for &mut S {
-    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        (**self).get(key)
-    }
-}
-
-impl<S: Store> Write for &mut S {
+impl<S: Store, T: DerefMut<Target = S>> Write for T {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
-        (**self).put(key, value)
+        self.deref_mut().put(key, value)
     }
 
     fn delete(&mut self, key: &[u8]) -> Result<()> {
-        (**self).delete(key)
-    }
-}
-
-impl<S: Store> Read for Box<S> {
-    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        (**self).get(key)
-    }
-}
-
-impl<S: Store> Write for Box<S> {
-    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
-        (**self).put(key, value)
-    }
-
-    fn delete(&mut self, key: &[u8]) -> Result<()> {
-        (**self).delete(key)
+        self.deref_mut().delete(key)
     }
 }
 
