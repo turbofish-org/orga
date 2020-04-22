@@ -7,6 +7,7 @@ pub mod abci;
 pub mod collections;
 mod encoding;
 mod error;
+#[cfg(feature = "merk")]
 pub mod merkstore;
 mod state;
 mod state_machine;
