@@ -6,17 +6,21 @@ edition = "2018"
 
 [dependencies]
 failure = "=0.1.6"
-abci2 = { git = "https://github.com/nomic-io/abci2" }
+abci2 = { git = "https://github.com/nomic-io/abci2", optional = true }
 byteorder = "1.3.2"
 merk = { version = "1.0.0", optional = true }
-tendermint = { git = "https://github.com/interchainio/tendermint-rs", rev = "0b9450ddcd00a6ed39c8c6b0931ef9c8e6c86e4b" }
+tendermint = { git = "https://github.com/interchainio/tendermint-rs", rev = "0b9450ddcd00a6ed39c8c6b0931ef9c8e6c86e4b", optional = true }
 orga-macros = { path = "macros" }
 seq-macro = "0.1.4"
 
+[features]
+abci = ["abci2", "tendermint"]
+
 [[example]]
 name = "counter"
+required-features = ["abci"]
 
 [[example]]
 name = "merk_counter"
-required-features = ["merk"]
+required-features = ["abci", "merk"]
 

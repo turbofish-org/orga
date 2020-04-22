@@ -3,6 +3,7 @@
 #![feature(proc_macro_hygiene)]
 #![feature(optin_builtin_traits)]
 
+#[cfg(feature = "abci")]
 pub mod abci;
 pub mod collections;
 mod encoding;
