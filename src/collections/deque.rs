@@ -65,16 +65,49 @@ impl<S: Store, T: Encode + Decode> Deque<S, T> {
         self.store.put(store_key(index).to_vec(), bytes)
     }
 
-    pub fn get(&self, index: u64) -> Result<T> {
-        self.get_fixed(index + self.state.head)
-    }
-
-    pub fn fixed_index(&self, index: u64) -> Result<u64> {
-        if self.len() < index {
-            bail!("Index out of bounds");
+    pub fn pop_front(&mut self) -> Result<Option<T>> {
+        if self.is_empty() {
+            return Ok(None);
         }
 
-        Ok(index + self.state.head)
+        let value = self.get(0)?;
+        self.state.head += 1;
+        Ok(Some(value))
+    }
+
+    pub fn set(&mut self, index: u64, value: T) -> Result<()> {
+        let index = self.fixed_index(index);
+        
+        let bytes = value.encode()?;
+        self.store.put(store_key(index).to_vec(), bytes)
+    }
+
+    pub fn clear(&mut self) -> Result<()> {
+        while !self.is_empty() {
+            self.pop_front()?;
+        }
+        Ok(())
+    }
+
+    pub fn drain_into<S2: Store>(&mut self, other: &mut Deque<S2, T>) -> Result<()> {
+        loop {
+            match self.pop_front()? {
+                None => return Ok(()),
+                Some(value) => other.push_back(value)?,
+            };
+        }
+    }
+
+    pub fn get(&self, index: u64) -> Result<T> {
+        self.get_fixed(self.fixed_index(index))
+    }
+
+    pub fn fixed_index(&self, index: u64) -> u64 {
+        if self.len() < index {
+            panic!("Index out of bounds");
+        }
+
+        index + self.state.head
     }
 
     pub fn get_fixed(&self, index: u64) -> Result<T> {
@@ -89,6 +122,18 @@ impl<S: Store, T: Encode + Decode> Deque<S, T> {
         Iter {
             deque: self,
             index: 0,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn back(&self) -> Result<Option<T>> {
+        if self.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(self.get(self.len() - 1)?))
         }
     }
 }
