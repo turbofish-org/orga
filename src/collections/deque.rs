@@ -197,11 +197,17 @@ mod tests {
         assert_eq!(deque.len(), 0);
 
         deque.push_back(10).unwrap();
-        assert_eq!(deque.len(), 1);
+        deque.push_back(20).unwrap();
+        assert_eq!(deque.len(), 2);
         assert_eq!(deque.get_fixed(0).unwrap(), 10);
-        assert_eq!(deque.fixed_index(0).unwrap(), 0);
+        assert_eq!(deque.fixed_index(0), 0);
+        assert_eq!(deque.get_fixed(1).unwrap(), 20);
+        assert_eq!(deque.fixed_index(1), 1);
 
-        // TODO: pop front and assert
+        deque.pop_front().unwrap();
+        assert_eq!(deque.len(), 1);
+        assert_eq!(deque.get_fixed(1).unwrap(), 20);
+        assert_eq!(deque.fixed_index(0), 1);
     }
 
     #[test]
