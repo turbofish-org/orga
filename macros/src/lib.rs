@@ -50,26 +50,34 @@ fn struct_fields_mut<'a>(
     }
 }
 
-fn add_store_param_to_field(field: &mut Field) {
+fn add_store_param_to_field(
+    field: &mut Field,
+    param: &GenericArgument
+) {
     let ty = match field.ty {
         Type::Path(ref mut ty) => ty,
         _ => unimplemented!("must have path type")
     };
 
-    let store_param: GenericArgument =
-        parse_quote!(orga::Prefixed<orga::Shared<S>>);
     let base = ty.path.segments.last_mut().unwrap();
 
     match &mut base.arguments {
         PathArguments::AngleBracketed(args) => {
-            args.args.insert(0, store_param);
+            args.args.insert(0, param.clone());
         },
         PathArguments::None => {
-            let args = parse_quote!(<#store_param>);
+            let args = parse_quote!(<#param>);
             base.arguments = PathArguments::AngleBracketed(args);
         },
         PathArguments::Parenthesized(_) => {
             panic!("Unexpected parenthesized type arguments")
         }
     };
+}
+
+fn get_generic_param_name<'a>(param: &'a GenericParam) -> &'a Ident {
+    match param {
+        GenericParam::Type(type_param) => &type_param.ident,
+        _ => panic!("must be type argument")
+    }
 }

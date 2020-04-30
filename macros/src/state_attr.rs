@@ -8,28 +8,36 @@ pub fn state(
 ) -> proc_macro::TokenStream {
     let mut item = parse_macro_input!(item as DeriveInput);
 
-    let store_param: GenericParam = parse_quote!(S: orga::Store);
-    item.generics.params.insert(0, store_param);
+    let store_outer_param = item.generics.params
+        .first()
+        .expect("Expected a generic type parameter of type Store")
+        .clone();
+    let store_type_name = get_generic_param_name(&store_outer_param);
 
-    struct_fields_mut(&mut item)
-        .for_each(add_store_param_to_field);
+    let store_param: GenericArgument =
+        parse_quote!(orga::Prefixed<orga::Shared<#store_type_name>>);
+    for field in struct_fields_mut(&mut item) {
+        add_store_param_to_field(field, &store_param);
+    }
 
     let name = &item.ident;
     let field_names = struct_fields(&item)
         .map(|field| &field.ident);
 
-    (quote! {
+    let output = quote! {
         #item
 
-        impl<S: orga::Store> orga::State<S> for #name<S> {
-            fn wrap_store(store: S) -> orga::Result<Self> {
+        impl<#store_outer_param> orga::State<#store_type_name> for #name<#store_type_name> {
+            fn wrap_store(store: #store_type_name) -> orga::Result<Self> {
                 let mut splitter = orga::Splitter::new(store);
                 Ok(Self {
                     #(
-                        #field_names: orga::State::wrap_store(splitter.split())?,
+                        #field_names: splitter.split().wrap()?,
                     )*
                 })
             }
         }
-    }).into()
+    };
+
+    output.into()
 }

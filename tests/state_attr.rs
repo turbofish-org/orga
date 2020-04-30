@@ -1,13 +1,13 @@
-use orga::{MapStore, State, Value, state, Read};
+use orga::{Store, MapStore, State, Value, state, Read};
 
 #[state]
-struct MyStruct {
+struct MyStruct<S: Store> {
     a: Value<u64>,
     c: MyStruct2
 }
 
 #[state]
-struct MyStruct2 {
+struct MyStruct2<T: Store> {
     a: Value<u64>
 }
 
@@ -16,7 +16,7 @@ fn struct_state() {
     let mut store = MapStore::new();
 
     {
-        let mut state = MyStruct::wrap_store(&mut store).unwrap();
+        let mut state: MyStruct<_> = store.as_mut().wrap().unwrap();
 
         assert_eq!(state.a.get_or_default().unwrap(), 0);
         state.a.set(1234).unwrap();
