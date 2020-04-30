@@ -32,9 +32,7 @@ pub trait Write {
 }
 
 pub trait Store: Read + Write + Sized {
-    fn wrap<'a, T: State<&'a mut Self>>(&'a mut self) -> Result<T>
-        where Self: Sized
-    {
+    fn wrap<T: State<Self>>(self) -> Result<T> {
         T::wrap_store(self)
     }
 
@@ -44,6 +42,18 @@ pub trait Store: Read + Write + Sized {
 
     fn prefix(self, prefix: u8) -> Prefixed<Self> {
         Prefixed::new(self, prefix)
+    }
+
+    fn into_splitter(self) -> Splitter<Self> {
+        Splitter::new(self)
+    }
+
+    fn as_ref<'a>(&'a self) -> &'a Self {
+        self
+    }
+
+    fn as_mut<'a>(&'a mut self) -> &'a mut Self {
+        self
     }
 }
 
