@@ -57,7 +57,7 @@ fn add_store_param_to_field(field: &mut Field) {
     };
 
     let store_param: GenericArgument =
-        parse_quote!(orga::split::Substore<S>);
+        parse_quote!(orga::Prefixed<orga::Shared<S>>);
     let base = ty.path.segments.last_mut().unwrap();
 
     match &mut base.arguments {

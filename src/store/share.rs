@@ -6,9 +6,6 @@ use crate::Result;
 // TODO: we can probably use UnsafeCell instead of RefCell since operations are
 // guaranteed not to interfere with each other.
 
-// TODO: can this can work with &RefCell instead of Rc<RefCell> for normal use
-// cases?
-
 pub struct Shared<T>(Rc<RefCell<T>>);
 
 impl<T> Shared<T> {

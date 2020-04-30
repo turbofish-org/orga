@@ -4,6 +4,7 @@ use std::ops::{Deref, DerefMut};
 
 mod iter;
 mod nullstore;
+mod prefix;
 mod rwlog;
 pub mod share;
 pub mod split;
@@ -11,6 +12,7 @@ mod write_cache;
 
 pub use iter::{Entry, Iter};
 pub use nullstore::NullStore;
+pub use prefix::Prefixed;
 pub use rwlog::RWLog;
 pub use share::Shared;
 pub use split::Splitter;
@@ -23,7 +25,7 @@ pub trait Read {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>>;
 }
 
-pub trait Write: Read {
+pub trait Write {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()>;
 
     fn delete(&mut self, key: &[u8]) -> Result<()>;
@@ -38,6 +40,10 @@ pub trait Store: Read + Write + Sized {
 
     fn into_shared(self) -> Shared<Self> {
         Shared::new(self)
+    }
+
+    fn prefix(self, prefix: u8) -> Prefixed<Self> {
+        Prefixed::new(self, prefix)
     }
 }
 
@@ -67,7 +73,7 @@ pub trait Flush {
 
 #[cfg(test)]
 mod tests {
-    use super::{NullStore, Read, Store};
+    use super::{NullStore, MapStore, Read, Store};
     use crate::Value;
 
     #[test]

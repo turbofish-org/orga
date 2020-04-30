@@ -1,34 +1,25 @@
-use super::{Read, Store, Write};
-use crate::Result;
-use std::cell::RefCell;
-use std::rc::Rc;
+use super::prefix::Prefixed;
+use super::share::Shared;
+use super::Store;
 
 // TODO: can we do this without copying every time we prefix the key? can
 // possibly change Store methods to generically support iterator-based
 // concatenated keys, maybe via a Key type.
 
-// TODO: we can probably use UnsafeCell instead of RefCell since
-// operations are guaranteed not to interfere with each other
-
 pub struct Splitter<S: Store> {
-    store: Rc<RefCell<S>>,
-    index: u8,
-}
-
-pub struct Substore<S> {
-    store: Rc<RefCell<S>>,
+    store: Shared<S>,
     index: u8,
 }
 
 impl<S: Store> Splitter<S> {
     pub fn new(store: S) -> Self {
         Splitter {
-            store: Rc::new(RefCell::new(store)),
+            store: store.into_shared(),
             index: 0,
         }
     }
 
-    pub fn split(&mut self) -> Substore<S> {
+    pub fn split(&mut self) -> Prefixed<Shared<S>> {
         if self.index == 255 {
             panic!("Reached split limit");
         }
@@ -36,47 +27,7 @@ impl<S: Store> Splitter<S> {
         let index = self.index;
         self.index += 1;
 
-        Substore {
-            store: self.store.clone(),
-            index,
-        }
-    }
-}
-
-// TODO: make a Key type which doesn't need copying
-#[inline]
-fn prefix(prefix: u8, suffix: &[u8]) -> [u8; 256] {
-    let mut prefixed = [0; 256];
-    prefixed[0] = prefix;
-    prefixed[1..suffix.len() + 1].copy_from_slice(suffix);
-    prefixed
-}
-
-impl<S: Store> Read for Substore<S> {
-    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        let len = key.len() + 1;
-        let prefixed_key = prefix(self.index, key);
-
-        let store = &self.store.borrow();
-        store.get(&prefixed_key[..len])
-    }
-}
-
-impl<S: Store> Write for Substore<S> {
-    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
-        let len = key.len() + 1;
-        let prefixed_key = prefix(self.index, key.as_slice())[..len].to_vec();
-
-        let store = &mut self.store.borrow_mut();
-        store.put(prefixed_key, value)
-    }
-
-    fn delete(&mut self, key: &[u8]) -> Result<()> {
-        let len = key.as_ref().len() + 1;
-        let prefixed_key = prefix(self.index, key);
-
-        let store = &mut self.store.borrow_mut();
-        store.delete(&prefixed_key[..len])
+        self.store.clone().prefix(index)
     }
 }
 
