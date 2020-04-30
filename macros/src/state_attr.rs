@@ -21,12 +21,12 @@ pub fn state(
     (quote! {
         #item
 
-        impl<S: orga::Store> orga::WrapStore<S> for #name<S> {
+        impl<S: orga::Store> orga::State<S> for #name<S> {
             fn wrap_store(store: S) -> orga::Result<Self> {
                 let mut splitter = orga::Splitter::new(store);
                 Ok(Self {
                     #(
-                        #field_names: orga::WrapStore::wrap_store(splitter.split())?,
+                        #field_names: orga::State::wrap_store(splitter.split())?,
                     )*
                 })
             }

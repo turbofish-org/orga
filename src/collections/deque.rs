@@ -1,4 +1,4 @@
-use crate::{Decode, Encode, Result, Store, Value, WrapStore};
+use crate::{Decode, Encode, Result, Store, Value, State};
 use failure::bail;
 use std::io::{Read, Write};
 use std::marker::PhantomData;
@@ -6,18 +6,18 @@ use std::marker::PhantomData;
 pub struct Deque<S: Store, T: Encode + Decode> {
     // TODO: make a type that holds the store reference
     store: S,
-    state: State,
+    state: Meta,
     item_type: PhantomData<T>,
 }
 
 #[derive(Debug, Default)]
-struct State {
+struct Meta {
     head: u64,
     tail: u64,
 }
 
 // TODO: use a derive macro
-impl Encode for State {
+impl Encode for Meta {
     fn encode_into<W: Write>(&self, dest: &mut W) -> Result<()> {
         self.head.encode_into(dest)?;
         self.tail.encode_into(dest)
@@ -29,7 +29,7 @@ impl Encode for State {
 }
 
 // TODO: use a derive macro
-impl Decode for State {
+impl Decode for Meta {
     fn decode<R: Read>(mut input: R) -> Result<Self> {
         Ok(Self {
             head: u64::decode(&mut input)?,
@@ -38,9 +38,9 @@ impl Decode for State {
     }
 }
 
-impl<S: Store, T: Encode + Decode> WrapStore<S> for Deque<S, T> {
+impl<S: Store, T: Encode + Decode> State<S> for Deque<S, T> {
     fn wrap_store(mut store: S) -> Result<Self> {
-        let state: State = Value::wrap_store(&mut store)?.get_or_default()?;
+        let state: Meta = Value::wrap_store(&mut store)?.get_or_default()?;
 
         Ok(Self {
             store,
@@ -59,7 +59,7 @@ impl<S: Store, T: Encode + Decode> Deque<S, T> {
         let index = self.state.tail;
 
         self.state.tail += 1;
-        Value::<_, State>::wrap_store(&mut self.store)?.set(&self.state)?;
+        Value::<_, Meta>::wrap_store(&mut self.store)?.set(&self.state)?;
 
         let bytes = value.encode()?;
         self.store.put(store_key(index).to_vec(), bytes)
@@ -73,7 +73,7 @@ impl<S: Store, T: Encode + Decode> Deque<S, T> {
         let value = self.get(0)?;
 
         self.state.head += 1;
-        Value::<_, State>::wrap_store(&mut self.store)?.set(&self.state)?;
+        Value::<_, Meta>::wrap_store(&mut self.store)?.set(&self.state)?;
 
         Ok(Some(value))
     }

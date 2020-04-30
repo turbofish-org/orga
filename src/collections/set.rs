@@ -1,12 +1,12 @@
 use std::borrow::Borrow;
-use crate::{WrapStore, Store, Encode, Decode, Result};
+use crate::{State, Store, Encode, Decode, Result};
 use super::Map;
 
 pub struct Set<S: Store, T: Encode + Decode> {
     map: Map<S, T, ()>
 }
 
-impl<S: Store, T: Encode + Decode> WrapStore<S> for Set<S, T> {
+impl<S: Store, T: Encode + Decode> State<S> for Set<S, T> {
     fn wrap_store(store: S) -> Result<Self> {
         Ok(Self {
             map: Map::wrap_store(store)?

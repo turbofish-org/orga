@@ -1,4 +1,4 @@
-use crate::{Decode, Encode, Store, WrapStore};
+use crate::{Decode, Encode, Store, State};
 use failure::Fail;
 use std::borrow::Borrow;
 use std::marker::PhantomData;
@@ -27,7 +27,7 @@ pub struct Value<S: Store, T: Encode + Decode> {
     value_type: PhantomData<T>,
 }
 
-impl<S: Store, T: Encode + Decode> WrapStore<S> for Value<S, T> {
+impl<S: Store, T: Encode + Decode> State<S> for Value<S, T> {
     fn wrap_store(store: S) -> std::result::Result<Value<S, T>, failure::Error> {
         Ok(Value {
             store,
@@ -74,7 +74,7 @@ impl<S: Store, T: Encode + Decode + Default> Value<S, T> {
 #[cfg(test)]
 mod tests {
     use super::Value;
-    use crate::{MapStore, Read, WrapStore};
+    use crate::{MapStore, Read, State};
 
     #[test]
     fn u64_wrapper() {

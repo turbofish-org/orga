@@ -1,4 +1,4 @@
-use crate::{Decode, Encode, Result, Store, WrapStore};
+use crate::{Decode, Encode, Result, State, Store};
 use std::borrow::Borrow;
 use std::marker::PhantomData;
 
@@ -13,7 +13,7 @@ where
     value_type: PhantomData<V>,
 }
 
-impl<S, K, V> WrapStore<S> for Map<S, K, V>
+impl<S, K, V> State<S> for Map<S, K, V>
 where
     S: Store,
     K: Encode + Decode,

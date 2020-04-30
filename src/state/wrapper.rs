@@ -1,11 +1,11 @@
-use super::WrapStore;
+use super::State;
 use crate::error::Result;
-use crate::store::{Read, Store, Write};
+use crate::store::Store;
 use std::ops::{Deref, DerefMut};
 
 pub struct Wrapper<S: Store>(S);
 
-impl<S: Store> WrapStore<S> for Wrapper<S> {
+impl<S: Store> State<S> for Wrapper<S> {
     fn wrap_store(store: S) -> Result<Wrapper<S>> {
         Ok(Wrapper(store))
     }
