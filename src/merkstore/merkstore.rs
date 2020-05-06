@@ -83,7 +83,7 @@ impl<'a> ABCIStore for MerkStore<'a> {
         Ok(self.merk.root_hash().to_vec())
     }
 
-//TODO: we don't need the hash 
+    // TODO: we don't need the hash 
     fn query(&self, key: &[u8]) -> Result<Vec<u8>> {
         let val = &[key.to_vec()];
         let mut hash = self.root_hash()?;
@@ -100,6 +100,9 @@ impl<'a> ABCIStore for MerkStore<'a> {
             (b"height".to_vec(), Some(height_bytes.to_vec()))
         ];
 
-        self.write(metadata)
+        self.write(metadata)?;
+        self.merk.flush()?;
+
+        Ok(())
     }
 }

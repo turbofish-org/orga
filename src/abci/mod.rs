@@ -4,6 +4,7 @@ use std::clone::Clone;
 use std::env;
 use std::net::ToSocketAddrs;
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+use log::info;
 
 pub use abci2::messages::abci as messages;
 use abci2::messages::abci::Request_oneof_value::*;
@@ -52,11 +53,14 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                 message.set_app_version(0);
 
                 let start_height = self.store.height()?;
+                info!("State is at height {}", start_height);
+
                 let app_hash = if start_height == 0 {
                     vec![]
                 } else {
                     self.store.root_hash()?
                 };
+
                 message.set_last_block_height(start_height as i64);
                 message.set_last_block_app_hash(app_hash);
 

@@ -12,6 +12,7 @@ merk = { version = "1.0.0", optional = true }
 tendermint = { git = "https://github.com/interchainio/tendermint-rs", rev = "0b9450ddcd00a6ed39c8c6b0931ef9c8e6c86e4b", optional = true }
 orga-macros = { path = "macros" }
 seq-macro = "0.1.4"
+log = "0.4.6"
 
 [features]
 abci = ["abci2", "tendermint"]
