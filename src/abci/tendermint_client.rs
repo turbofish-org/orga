@@ -1,21 +1,28 @@
-use tendermint::rpc::Client;
 use crate::{Read, Result};
+use blocking::block_on;
+use failure::format_err;
+use tendermint_rpc::Client;
 
 pub struct TendermintClient {
-    client: Client
+    client: Client,
 }
 
 impl TendermintClient {
     pub fn new(addr: &str) -> Result<TendermintClient> {
-        Ok(TendermintClient {  
-            client: Client::new(&(addr.parse()?))?
-        })  
+        Ok(TendermintClient {
+            client: Client::new(
+                addr.parse()
+                    .map_err(|_| format_err!("Invalid Tendermint RPC address"))?,
+            ),
+        })
     }
 }
 
 impl Read for TendermintClient {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        Ok((self.client.abci_query(None, key, None, false)?).value)
+        Ok(Some(
+            block_on(self.client.abci_query(None, key, None, false))?.value,
+        ))
     }
 }
 
@@ -30,6 +37,4 @@ mod tests {
         let data = tc.get(b"count").unwrap();
         println!("{:?}", data.unwrap()[3]);
     }
-
 }
-
