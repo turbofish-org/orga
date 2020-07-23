@@ -21,7 +21,7 @@ impl TendermintClient {
 impl Read for TendermintClient {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         Ok(Some(
-            block_on(async { self.client.abci_query(None, key, None, false).await })?.value,
+            block_on(self.client.abci_query(None, key, None, false))?.value,
         ))
     }
 }
