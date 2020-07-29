@@ -1,18 +1,19 @@
 use crate::error::Result;
 use std::ops::{Deref, DerefMut};
 
+mod iter;
 mod nullstore;
 mod rwlog;
 pub mod split;
 mod write_cache;
 
+pub use iter::{Entry, Iter};
 pub use nullstore::NullStore;
 pub use rwlog::RWLog;
 pub use split::Splitter;
 pub use write_cache::Map as WriteCacheMap;
 pub use write_cache::{MapStore, WriteCache};
 
-// TODO: iter method?
 // TODO: Key type (for cheaper concat, enum over ref or owned slice, etc)
 
 pub trait Read {

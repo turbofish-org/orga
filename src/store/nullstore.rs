@@ -18,3 +18,21 @@ impl Write for NullStore {
         Ok(())
     }
 }
+
+impl<'a> Iter<'a, 'static> for NullStore {
+    type Iter = NullIter;
+
+    fn iter(&'a self, _start: &[u8]) -> NullIter {
+        NullIter
+    }
+}
+
+pub struct NullIter;
+
+impl Iterator for NullIter {
+    type Item = (&'static [u8], &'static [u8]);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        None
+    }
+}

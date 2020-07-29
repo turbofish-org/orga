@@ -1,8 +1,10 @@
-use super::*;
-use std::collections::HashMap;
+use std::cmp::Ordering;
+use std::collections::{btree_map, BTreeMap};
+use std::iter::Peekable;
 
-// TODO: should this be BTreeMap for efficient merging?
-pub type Map = HashMap<Vec<u8>, Option<Vec<u8>>>;
+use super::*;
+
+pub type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
 pub type MapStore = WriteCache<NullStore>;
 
@@ -64,13 +66,93 @@ impl<S: Store> Write for WriteCache<S> {
 
 impl<S: Store> Flush for WriteCache<S> {
     fn flush(&mut self) -> Result<()> {
-        for (key, value) in self.map.drain() {
+        while let Some((key, value)) = self.map.pop_first() {
             match value {
                 Some(value) => self.store.put(key, value)?,
                 None => self.store.delete(key.as_slice())?,
             }
         }
         Ok(())
+    }
+}
+
+type MapIter<'a> = btree_map::Range<'a, Vec<u8>, Option<Vec<u8>>>;
+
+// TODO: implement generically for all backing stores
+impl<'a> super::Iter<'a, 'a> for WriteCache<NullStore> {
+    type Iter = Iter<'a, 'static, super::nullstore::NullIter>;
+
+    fn iter(&'a self, start: &[u8]) -> Self::Iter {
+        let map_iter = self.map.range(start.to_vec()..);
+        let backing_iter = self.store.iter(start);
+        Iter {
+            map_iter: map_iter.peekable(),
+            backing_iter: backing_iter.peekable(),
+        }
+    }
+}
+
+pub struct Iter<'a, 'b: 'a, B>
+where
+    B: Iterator<Item = (&'b [u8], &'b [u8])>,
+{
+    map_iter: Peekable<MapIter<'a>>,
+    backing_iter: Peekable<B>,
+}
+
+impl<'a, 'b: 'a, B> Iterator for Iter<'a, 'b, B>
+where
+    B: Iterator<Item = (&'b [u8], &'b [u8])>,
+{
+    type Item = (&'a [u8], &'a [u8]);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let has_map_entry = self.map_iter.peek().is_some();
+            let has_backing_entry = self.backing_iter.peek().is_some();
+
+            return match (has_map_entry, has_backing_entry) {
+                // consumed both iterators, end here
+                (false, false) => None,
+
+                // consumed backing iterator, still have map values
+                (true, false) => {
+                    match self.map_iter.next().unwrap() {
+                        // map value is not a delete, emit value
+                        (key, Some(value)) => Some((key.as_slice(), value.as_slice())),
+                        // map value is a delete, go to next entry
+                        (_, None) => continue,
+                    }
+                }
+
+                // consumed map iterator, still have backing values
+                (false, true) => self.backing_iter.next(),
+
+                // merge values from both iterators
+                (true, true) => {
+                    let map_key = self.map_iter.peek().unwrap().0;
+                    let backing_key = self.backing_iter.peek().unwrap().0;
+                    let key_cmp = map_key.as_slice().cmp(backing_key);
+
+                    // map key > backing key, emit backing entry
+                    if key_cmp == Ordering::Greater {
+                        let entry = self.backing_iter.next().unwrap();
+                        return Some(entry);
+                    }
+
+                    // map key == backing key, map entry shadows backing entry
+                    if key_cmp == Ordering::Equal {
+                        self.backing_iter.next();
+                    }
+
+                    // map key <= backing key, emit map entry (or skip if delete)
+                    match self.map_iter.next().unwrap() {
+                        (key, Some(value)) => Some((key, value.as_slice())),
+                        (_, None) => continue,
+                    }
+                }
+            };
+        }
     }
 }
 
