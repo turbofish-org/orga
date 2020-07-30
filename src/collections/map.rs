@@ -60,15 +60,15 @@ where
     K: Encode + Decode,
     V: Encode + Decode,
 {
-    pub fn iter(&'a self, start: &K) -> Result<Iter<'a, 'b, S::Iter, K, V>> {
+    pub fn iter_from(&'a self, start: &K) -> Result<Iter<'a, 'b, S::Iter, K, V>> {
         let start_bytes = start.encode()?;
-        let iter = self.store.iter(start_bytes.as_slice());
-        Ok(Iter {
-            iter,
-            phantom_a: PhantomData,
-            phantom_k: PhantomData,
-            phantom_v: PhantomData,
-        })
+        let iter = self.store.iter_from(start_bytes.as_slice());
+        Ok(Iter::new(iter))
+    }
+
+    pub fn iter(&'a self) -> Iter<'a, 'b, S::Iter, K, V> {
+        let iter = self.store.iter();
+        Iter::new(iter)
     }
 }
 
@@ -82,6 +82,22 @@ where
     phantom_a: PhantomData<&'a u8>,
     phantom_k: PhantomData<K>,
     phantom_v: PhantomData<V>,
+}
+
+impl<'a, 'b: 'a, I, K, V> Iter<'a, 'b, I, K, V>
+where
+    I: Iterator<Item = (&'b [u8], &'b [u8])>,
+    K: Decode,
+    V: Decode,
+{
+    fn new(iter: I) -> Self {
+        Iter {
+            iter,
+            phantom_a: PhantomData,
+            phantom_k: PhantomData,
+            phantom_v: PhantomData,
+        }
+    }
 }
 
 impl<'a, 'b: 'a, I, K, V> Iterator for Iter<'a, 'b, I, K, V>
@@ -126,14 +142,14 @@ mod tests {
 
     #[test]
     fn iter() {
-        let mut store = MapStore::new();
+        let store = MapStore::new();
         let mut map: Map<_, u64, u64> = Map::wrap_store(store).unwrap();
 
         map.insert(123, 456).unwrap();
         map.insert(100, 100).unwrap();
         map.insert(400, 100).unwrap();
 
-        let mut iter = map.iter(&101).unwrap();
+        let mut iter = map.iter_from(&101).unwrap();
         assert_eq!(iter.next(), Some((123, 456)));
         assert_eq!(iter.next(), Some((400, 100)));
         assert_eq!(iter.next(), None);

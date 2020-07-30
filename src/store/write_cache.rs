@@ -80,11 +80,11 @@ type MapIter<'a> = btree_map::Range<'a, Vec<u8>, Option<Vec<u8>>>;
 
 // TODO: implement generically for all backing stores
 impl<'a> super::Iter<'a, 'a> for WriteCache<NullStore> {
-    type Iter = Iter<'a, 'static, super::nullstore::NullIter>;
+    type Iter = Iter<'a, 'a, super::nullstore::NullIter<'a>>;
 
-    fn iter(&'a self, start: &[u8]) -> Self::Iter {
+    fn iter_from(&'a self, start: &[u8]) -> Self::Iter {
         let map_iter = self.map.range(start.to_vec()..);
-        let backing_iter = self.store.iter(start);
+        let backing_iter = self.store.iter_from(start);
         Iter {
             map_iter: map_iter.peekable(),
             backing_iter: backing_iter.peekable(),
