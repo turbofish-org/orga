@@ -19,18 +19,18 @@ impl Write for NullStore {
     }
 }
 
-impl<'a> Iter<'a, 'static> for NullStore {
-    type Iter = NullIter;
+impl<'a> Iter<'a, 'a> for NullStore {
+    type Iter = NullIter<'a>;
 
-    fn iter(&'a self, _start: &[u8]) -> NullIter {
-        NullIter
+    fn iter_from(&'a self, _start: &[u8]) -> NullIter {
+        NullIter(std::marker::PhantomData)
     }
 }
 
-pub struct NullIter;
+pub struct NullIter<'a>(std::marker::PhantomData<&'a ()>);
 
-impl Iterator for NullIter {
-    type Item = (&'static [u8], &'static [u8]);
+impl<'a> Iterator for NullIter<'a> {
+    type Item = (&'a [u8], &'a [u8]);
 
     fn next(&mut self) -> Option<Self::Item> {
         None

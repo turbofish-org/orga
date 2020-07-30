@@ -15,6 +15,7 @@ mod state;
 mod state_machine;
 mod store;
 
+pub use collections::Entry;
 pub use encoding::*;
 pub use error::*;
 pub use state::*;
