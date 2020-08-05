@@ -7,7 +7,6 @@
 #[cfg(feature = "abci")]
 pub mod abci;
 pub mod collections;
-mod encoding;
 mod error;
 #[cfg(feature = "merk")]
 pub mod merkstore;
@@ -16,7 +15,7 @@ mod state_machine;
 mod store;
 
 pub use collections::Entry;
-pub use encoding::*;
+pub use ed::{Decode, Encode, Terminated};
 pub use error::*;
 pub use state::*;
 pub use state_machine::*;

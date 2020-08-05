@@ -83,7 +83,7 @@ pub trait Flush {
 
 #[cfg(test)]
 mod tests {
-    use super::{NullStore, MapStore, Read, Store};
+    use super::{MapStore, NullStore, Read, Store};
     use crate::Value;
 
     #[test]

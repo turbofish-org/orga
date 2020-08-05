@@ -1,4 +1,4 @@
-use crate::{Decode, Encode, Result, Store, Value, State};
+use crate::{Decode, Encode, Result, State, Store, Value};
 use failure::bail;
 use std::io::{Read, Write};
 use std::marker::PhantomData;

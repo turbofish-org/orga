@@ -1,4 +1,4 @@
-use crate::{Decode, Encode, Store, State};
+use crate::{Decode, Encode, State, Store};
 use failure::Fail;
 use std::borrow::Borrow;
 use std::marker::PhantomData;
