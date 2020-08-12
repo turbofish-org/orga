@@ -2,13 +2,13 @@ use crate::error::Result;
 use crate::state::State;
 use std::ops::{Deref, DerefMut};
 
+mod bufstore;
 mod iter;
 mod nullstore;
 mod prefix;
 mod rwlog;
 pub mod share;
 pub mod split;
-mod write_cache;
 
 pub use iter::{Entry, Iter};
 pub use nullstore::NullStore;
@@ -16,8 +16,8 @@ pub use prefix::Prefixed;
 pub use rwlog::RWLog;
 pub use share::Shared;
 pub use split::Splitter;
-pub use write_cache::Map as WriteCacheMap;
-pub use write_cache::{MapStore, WriteCache};
+pub use bufstore::Map as BufStoreMap;
+pub use bufstore::{MapStore, BufStore};
 
 // TODO: Key type (for cheaper concat, enum over ref or owned slice, etc)
 

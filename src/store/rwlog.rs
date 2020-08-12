@@ -61,7 +61,7 @@ mod tests {
 
     #[test]
     fn get() {
-        let mut store = WriteCache::new();
+        let mut store = BufStore::new();
         store.put(vec![1, 2, 3], vec![4, 5, 6]).unwrap();
 
         let log = RWLog::wrap(store);
@@ -75,7 +75,7 @@ mod tests {
 
     #[test]
     fn get_missing() {
-        let store = WriteCache::new();
+        let store = BufStore::new();
 
         let log = RWLog::wrap(store);
         assert_eq!(log.get(&[1, 2, 3]).unwrap(), None);
@@ -88,7 +88,7 @@ mod tests {
 
     #[test]
     fn put() {
-        let store = WriteCache::new();
+        let store = BufStore::new();
         let mut log = RWLog::wrap(store);
         log.put(vec![1, 2, 3], vec![4, 5, 6]).unwrap();
 
@@ -100,7 +100,7 @@ mod tests {
 
     #[test]
     fn delete() {
-        let store = WriteCache::new();
+        let store = BufStore::new();
         let mut log = RWLog::wrap(store);
         log.delete(&[1, 2, 3]).unwrap();
 

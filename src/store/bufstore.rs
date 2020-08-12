@@ -6,35 +6,35 @@ use super::*;
 
 pub type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
-pub type MapStore = WriteCache<NullStore>;
+pub type MapStore = BufStore<NullStore>;
 
-pub struct WriteCache<S: Store> {
+pub struct BufStore<S: Store> {
     map: Map,
     store: S,
 }
 
-impl WriteCache<NullStore> {
+impl BufStore<NullStore> {
     pub fn new() -> Self {
-        WriteCache::wrap(NullStore)
+        BufStore::wrap(NullStore)
     }
 }
 
-impl Default for WriteCache<NullStore> {
+impl Default for BufStore<NullStore> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<S: Store> WriteCache<S> {
+impl<S: Store> BufStore<S> {
     pub fn wrap(store: S) -> Self {
-        WriteCache {
+        BufStore {
             store,
             map: Default::default(),
         }
     }
 
     pub fn wrap_with_map(store: S, map: Map) -> Self {
-        WriteCache { store, map }
+        BufStore { store, map }
     }
 
     pub fn into_map(self) -> Map {
@@ -42,7 +42,7 @@ impl<S: Store> WriteCache<S> {
     }
 }
 
-impl<S: Store> Read for WriteCache<S> {
+impl<S: Store> Read for BufStore<S> {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         match self.map.get(key.as_ref()) {
             Some(Some(value)) => Ok(Some(value.clone())),
@@ -52,7 +52,7 @@ impl<S: Store> Read for WriteCache<S> {
     }
 }
 
-impl<S: Store> Write for WriteCache<S> {
+impl<S: Store> Write for BufStore<S> {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         self.map.insert(key, Some(value));
         Ok(())
@@ -64,7 +64,7 @@ impl<S: Store> Write for WriteCache<S> {
     }
 }
 
-impl<S: Store> Flush for WriteCache<S> {
+impl<S: Store> Flush for BufStore<S> {
     fn flush(&mut self) -> Result<()> {
         while let Some((key, value)) = self.map.pop_first() {
             match value {
@@ -79,7 +79,7 @@ impl<S: Store> Flush for WriteCache<S> {
 type MapIter<'a> = btree_map::Range<'a, Vec<u8>, Option<Vec<u8>>>;
 
 // TODO: implement generically for all backing stores
-impl<'a> super::Iter<'a, 'a> for WriteCache<NullStore> {
+impl<'a> super::Iter<'a, 'a> for BufStore<NullStore> {
     type Iter = Iter<'a, 'a, super::nullstore::NullIter<'a>>;
 
     fn iter_from(&'a self, start: &[u8]) -> Self::Iter {
@@ -164,12 +164,12 @@ mod tests {
     fn satisfies_store_trait() {
         // (this is a compile-time assertion)
         fn assert_store<S: Store>(_: S) {}
-        assert_store(WriteCache::new());
+        assert_store(BufStore::new());
     }
 
     #[test]
     fn get_slice() {
-        let mut store = WriteCache::new();
+        let mut store = BufStore::new();
         store.put(vec![1, 2, 3], vec![4, 5, 6]).unwrap();
         let value = store.get(&[1, 2, 3]).unwrap();
         assert_eq!(value, Some(vec![4, 5, 6]));
@@ -177,7 +177,7 @@ mod tests {
 
     #[test]
     fn delete() {
-        let mut store = WriteCache::new();
+        let mut store = BufStore::new();
         store.put(vec![1, 2, 3], vec![4, 5, 6]).unwrap();
         store.delete(&[1, 2, 3]).unwrap();
         assert_eq!(store.get(&[1, 2, 3]).unwrap(), None);

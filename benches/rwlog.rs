@@ -3,7 +3,7 @@
 extern crate test;
 
 use test::Bencher;
-use orga::{RWLog, NullStore, WriteCache, Read, Write};
+use orga::{RWLog, NullStore, BufStore, Read, Write};
 
 #[bench]
 fn rwlog_null_get_8b_2keys(b: &mut Bencher) {
@@ -117,7 +117,7 @@ fn rwlog_null_delete_8b_65536keys(b: &mut Bencher) {
 
 #[bench]
 fn rwlog_writecache_get_8b_2keys(b: &mut Bencher) {
-    let store = RWLog::wrap(WriteCache::new());
+    let store = RWLog::wrap(BufStore::new());
 
     let mut i: u32 = 0;
     b.iter(|| {
@@ -128,7 +128,7 @@ fn rwlog_writecache_get_8b_2keys(b: &mut Bencher) {
 
 #[bench]
 fn rwlog_writecache_get_8b_256keys(b: &mut Bencher) {
-    let store = RWLog::wrap(WriteCache::new());
+    let store = RWLog::wrap(BufStore::new());
 
     let mut i: u32 = 0;
     b.iter(|| {
@@ -139,7 +139,7 @@ fn rwlog_writecache_get_8b_256keys(b: &mut Bencher) {
 
 #[bench]
 fn rwlog_writecache_get_8b_65536keys(b: &mut Bencher) {
-    let store = RWLog::wrap(WriteCache::new());
+    let store = RWLog::wrap(BufStore::new());
 
     let mut i: u32 = 0;
     b.iter(|| {
@@ -150,7 +150,7 @@ fn rwlog_writecache_get_8b_65536keys(b: &mut Bencher) {
 
 #[bench]
 fn rwlog_writecache_put_8b_2keys(b: &mut Bencher) {
-    let mut store = RWLog::wrap(WriteCache::new());
+    let mut store = RWLog::wrap(BufStore::new());
 
     let mut i: u32 = 0;
     b.iter(|| {
@@ -164,7 +164,7 @@ fn rwlog_writecache_put_8b_2keys(b: &mut Bencher) {
 
 #[bench]
 fn rwlog_writecache_put_8b_256keys(b: &mut Bencher) {
-    let mut store = RWLog::wrap(WriteCache::new());
+    let mut store = RWLog::wrap(BufStore::new());
 
     let mut i: u32 = 0;
     b.iter(|| {
@@ -178,7 +178,7 @@ fn rwlog_writecache_put_8b_256keys(b: &mut Bencher) {
 
 #[bench]
 fn rwlog_writecache_put_8b_65536keys(b: &mut Bencher) {
-    let mut store = RWLog::wrap(WriteCache::new());
+    let mut store = RWLog::wrap(BufStore::new());
 
     let mut i: u32 = 0;
     b.iter(|| {
@@ -193,7 +193,7 @@ fn rwlog_writecache_put_8b_65536keys(b: &mut Bencher) {
 
 #[bench]
 fn rwlog_writecache_delete_8b_2keys(b: &mut Bencher) {
-    let mut store = RWLog::wrap(WriteCache::new());
+    let mut store = RWLog::wrap(BufStore::new());
 
     let mut i: u32 = 0;
     b.iter(|| {
@@ -204,7 +204,7 @@ fn rwlog_writecache_delete_8b_2keys(b: &mut Bencher) {
 
 #[bench]
 fn rwlog_writecache_delete_8b_256keys(b: &mut Bencher) {
-    let mut store = RWLog::wrap(WriteCache::new());
+    let mut store = RWLog::wrap(BufStore::new());
 
     let mut i: u32 = 0;
     b.iter(|| {
@@ -215,7 +215,7 @@ fn rwlog_writecache_delete_8b_256keys(b: &mut Bencher) {
 
 #[bench]
 fn rwlog_writecache_delete_8b_65536keys(b: &mut Bencher) {
-    let mut store = RWLog::wrap(WriteCache::new());
+    let mut store = RWLog::wrap(BufStore::new());
 
     let mut i: u32 = 0;
     b.iter(|| {

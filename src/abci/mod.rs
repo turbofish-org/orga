@@ -1,4 +1,4 @@
-use crate::{step_atomic, Flush, MapStore, Read, Result, Store, Write, WriteCache, WriteCacheMap};
+use crate::{step_atomic, Flush, MapStore, Read, Result, Store, Write, BufStore, BufStoreMap};
 use failure::bail;
 use std::clone::Clone;
 use std::env;
@@ -14,13 +14,15 @@ pub use abci2::messages::abci::{Request, Response};
 mod tendermint_client;
 pub use tendermint_client::TendermintClient;
 
+/// Top-level struct for running an ABCI application. Maintains an ABCI server,
+/// mempool, and handles committing data to the store.
 pub struct ABCIStateMachine<A: Application, S: ABCIStore> {
     app: Option<A>,
     store: S,
     receiver: Receiver<(Request, SyncSender<Response>)>,
     sender: SyncSender<(Request, SyncSender<Response>)>,
-    mempool_state: Option<WriteCacheMap>,
-    consensus_state: Option<WriteCacheMap>,
+    mempool_state: Option<BufStoreMap>,
+    consensus_state: Option<BufStoreMap>,
     height: u64,
 }
 
@@ -100,7 +102,7 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
             }
             init_chain(req) => {
                 let app = self.app.take().unwrap();
-                let mut store = WriteCache::wrap_with_map(
+                let mut store = BufStore::wrap_with_map(
                     &mut self.store,
                     self.consensus_state.take().unwrap(),
                 );
@@ -125,13 +127,13 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
             }
             begin_block(req) => {
                 let app = self.app.take().unwrap();
-                let mut store = WriteCache::wrap_with_map(
+                let mut store = BufStore::wrap_with_map(
                     &mut self.store,
                     self.consensus_state.take().unwrap(),
                 );
 
                 let res_begin_block =
-                    match step_atomic(|store: &mut WriteCache<&mut WriteCache<&mut S>>, req| {
+                    match step_atomic(|store: &mut BufStore<&mut BufStore<&mut S>>, req| {
                         app.begin_block(store, req)
                     }, &mut store, req) {
                         Ok(res) => res,
@@ -147,13 +149,13 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
             }
             deliver_tx(req) => {
                 let app = self.app.take().unwrap();
-                let mut store = WriteCache::wrap_with_map(
+                let mut store = BufStore::wrap_with_map(
                     &mut self.store,
                     self.consensus_state.take().unwrap(),
                 );
 
                 let res_deliver_tx =
-                    match step_atomic(|store: &mut WriteCache<&mut WriteCache<&mut S>>, req| app.deliver_tx(store, req), &mut store, req) {
+                    match step_atomic(|store: &mut BufStore<&mut BufStore<&mut S>>, req| app.deliver_tx(store, req), &mut store, req) {
                         Ok(res) => res,
                         Err(err) => {
                             let mut res: ResponseDeliverTx = Default::default();
@@ -174,13 +176,13 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                 self.height = req.get_height() as u64;
 
                 let app = self.app.take().unwrap();
-                let mut store = WriteCache::wrap_with_map(
+                let mut store = BufStore::wrap_with_map(
                     &mut self.store,
                     self.consensus_state.take().unwrap(),
                 );
 
                 let res_end_block =
-                    match step_atomic(|store: &mut WriteCache<&mut WriteCache<&mut S>>, req| app.end_block(store, req), &mut store, req) {
+                    match step_atomic(|store: &mut BufStore<&mut BufStore<&mut S>>, req| app.end_block(store, req), &mut store, req) {
                         Ok(res) => res,
                         Err(_) => Default::default(),
                     };
@@ -193,7 +195,7 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                 Ok(res)
             }
             commit(_) => {
-                let mut store = WriteCache::wrap_with_map(
+                let mut store = BufStore::wrap_with_map(
                     &mut self.store,
                     self.consensus_state.take().unwrap(),
                 );
@@ -223,10 +225,10 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
             check_tx(req) => {
                 let app = self.app.take().unwrap();
                 let mut store =
-                    WriteCache::wrap_with_map(&mut self.store, self.mempool_state.take().unwrap());
+                    BufStore::wrap_with_map(&mut self.store, self.mempool_state.take().unwrap());
 
                 let res_check_tx =
-                    match step_atomic(|store: &mut WriteCache<&mut WriteCache<&mut S>>, req| app.check_tx(store, req), &mut store, req) {
+                    match step_atomic(|store: &mut BufStore<&mut BufStore<&mut S>>, req| app.check_tx(store, req), &mut store, req) {
                         Ok(res) => res,
                         Err(err) => {
                             let mut res: ResponseCheckTx = Default::default();

@@ -24,6 +24,6 @@ Orga is a stack for building blockchain applications powered by [Tendermint](htt
 
 ## Project Goals
 - *Performance* - To serve a large user base, blockchains need to be engineered for high throughput, e.g. 10k+ transactions per second. Orga is engineered for maximum concurrency and with the ability to use the right data structures.
-- *Simplicity* - Keeping complexity under control makes it easier to understand the system, prevent flaws, and introduce new functionality. When thinking something through, a good heuristic is to choose the solution with fewer lines of code.
+- *Simplicity* - Keeping complexity under control makes it easier to understand the system, prevent flaws, and introduce new functionality. When thinking something through, a good heuristic is to choose the solution with fewer lines of code or smaller compiler output.
 - *Ease of use* - In our earlier work on [`LotionJS`](https://github.com/nomic-io/lotion), we discovered that blockchain development can be fast and pleasant with the right abstractions. We aim to replicate this experience in Orga.
 - *Idiomatic Rust* - When figuring out how to do something, we can often answer it by asking "what would the Rust standard library do?".
