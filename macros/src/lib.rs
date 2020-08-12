@@ -1,7 +1,6 @@
 use quote::quote;
 use syn::*;
 
-mod encoding;
 mod state_attr;
 
 #[proc_macro_attribute]
@@ -10,16 +9,6 @@ pub fn state(
     item: proc_macro::TokenStream
 ) -> proc_macro::TokenStream {
     state_attr::state(attr, item)
-}
-
-#[proc_macro_derive(Encode)]
-pub fn encode(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    encoding::derive_encode(item)
-}
-
-#[proc_macro_derive(Decode)]
-pub fn decode(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    encoding::derive_decode(item)
 }
 
 fn struct_fields<'a>(
