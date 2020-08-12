@@ -294,6 +294,13 @@ impl Worker {
     }
 }
 
+/// An interface for handling ABCI requests.
+///
+/// All methods have a default implemenation which returns an empty response.
+///
+/// Only exposes the core state machine requests since messages like Echo and
+/// Info are automatically handled within
+/// [`ABCIStateMachine`](struct.ABCIStateMachine.html).
 pub trait Application {
     fn init_chain<S: Store>(&self, _store: S, _req: RequestInitChain) -> Result<ResponseInitChain> {
         Ok(Default::default())
@@ -320,6 +327,7 @@ pub trait Application {
     }
 }
 
+/// Interface for persisting ABCI app state, as a supertrait of [`store::Store`](../store/trait.Store.html).
 pub trait ABCIStore: Store {
     fn height(&self) -> Result<u64>;
 
@@ -330,6 +338,8 @@ pub trait ABCIStore: Store {
     fn commit(&mut self, height: u64) -> Result<()>;
 }
 
+/// A basic implementation of [`ABCIStore`](trait.ABCIStore.html) which persists
+/// data in memory (mostly for use in testing).
 pub struct MemStore {
     height: u64,
     store: MapStore,
