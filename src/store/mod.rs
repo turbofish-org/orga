@@ -21,16 +21,20 @@ pub use bufstore::{MapStore, BufStore};
 
 // TODO: Key type (for cheaper concat, enum over ref or owned slice, etc)
 
+/// Trait for read access to key/value stores.
 pub trait Read {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>>;
 }
 
+/// Trait for write access to key/value stores.
 pub trait Write {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()>;
 
     fn delete(&mut self, key: &[u8]) -> Result<()>;
 }
 
+/// Trait for key/value stores, automatically implemented for any type which has
+/// both `Read` and `Write`.
 pub trait Store: Read + Write + Sized {
     fn wrap<T: State<Self>>(self) -> Result<T> {
         T::wrap_store(self)
@@ -75,6 +79,8 @@ impl<S: Store, T: DerefMut<Target = S>> Write for T {
     }
 }
 
+/// A trait for types which contain data that can be flushed to an underlying
+/// store.
 pub trait Flush {
     // TODO: should this consume the store? or will we want it like this so we
     // can persist the same wrapper store and flush it multiple times?

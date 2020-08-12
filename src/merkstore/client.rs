@@ -1,5 +1,7 @@
 use crate::{Read, Result};
 
+/// A client which decodes and verifies Merk proofs when accessing data from an
+/// underlying [`Read`](../store/trait.Read.html).
 pub struct Client<R: Read> {
     read: R
 }

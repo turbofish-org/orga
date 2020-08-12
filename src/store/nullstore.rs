@@ -1,5 +1,6 @@
 use super::*;
 
+/// A dummy implementation of `Store` which is always empty.
 pub struct NullStore;
 
 impl Read for NullStore {

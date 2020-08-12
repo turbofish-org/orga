@@ -3,6 +3,11 @@ use crate::error::Result;
 use crate::store::Store;
 use std::ops::{Deref, DerefMut};
 
+/// A `State` implementation which exposes the underlying raw `Store` (itself
+/// implementing `Store`).
+///
+/// This can be useful when composing `State` types into a hierarchy, when
+/// access to the raw `Store` API is still necessary.
 pub struct WrapperStore<S: Store>(S);
 
 impl<S: Store> State<S> for WrapperStore<S> {

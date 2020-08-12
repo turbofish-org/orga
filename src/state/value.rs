@@ -22,6 +22,8 @@ impl From<failure::Error> for Error {
     }
 }
 
+/// A simple implementation of `State` which gets or sets a single value,
+/// automatically decoding when getting and encoding when setting.
 pub struct Value<S: Store, T: Encode + Decode> {
     store: S,
     value_type: PhantomData<T>,

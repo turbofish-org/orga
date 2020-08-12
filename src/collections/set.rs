@@ -2,6 +2,7 @@ use std::borrow::Borrow;
 use crate::{State, Store, Encode, Decode, Result};
 use super::Map;
 
+/// A set data structure.
 pub struct Set<S: Store, T: Encode + Decode> {
     map: Map<S, T, ()>
 }

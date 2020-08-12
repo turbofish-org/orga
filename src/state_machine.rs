@@ -1,6 +1,8 @@
 use crate::error::Result;
 use crate::store::{Flush, Store, BufStore};
 
+/// A helper which runs state machine logic, discarding the writes to the store
+/// for error results and flushing to the underlying store on success.
 pub fn step_atomic<F, S, I, O>(f: F, store: S, input: I) -> Result<O>
 where
     S: Store,

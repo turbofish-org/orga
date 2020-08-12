@@ -4,10 +4,14 @@ use std::iter::Peekable;
 
 use super::*;
 
+/// An in-memory map containing values modified by writes to a `BufStore`.
 pub type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
+/// A simple `Store` implementation which persists data in an in-memory map.
 pub type MapStore = BufStore<NullStore>;
 
+/// Wraps a `Store` and records mutations in an in-memory map, so that
+/// modifications do not affect the underlying `Store` until `flush` is called.
 pub struct BufStore<S: Store> {
     map: Map,
     store: S,
@@ -92,6 +96,10 @@ impl<'a> super::Iter<'a, 'a> for BufStore<NullStore> {
     }
 }
 
+/// An iterator implementation over entries in a `BufStore`.
+///
+/// Entries will be emitted for values in the underlying store, reflecting the
+/// modifications stored in the in-memory map.
 pub struct Iter<'a, 'b: 'a, B>
 where
     B: Iterator<Item = (&'b [u8], &'b [u8])>,

@@ -7,6 +7,8 @@ use crate::abci::ABCIStore;
 
 type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
+/// A [`store::Store`] implementation backed by a [`merk`](https://docs.rs/merk)
+/// Merkle key/value store.
 pub struct MerkStore<'a> {
     merk: &'a mut Merk,
     map: Option<Map>

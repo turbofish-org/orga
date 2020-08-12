@@ -1,6 +1,11 @@
 use super::{Store, Read, Write};
 use crate::Result;
 
+/// A `Store` which wraps another `Store` and appends a prefix byte to the key
+/// for every read or write.
+///
+/// This can be useful to create a hierarchy of data within a single store -
+/// effectively namespacing the keys to prevent key conflicts.
 pub struct Prefixed<S> {
     store: S,
     prefix: u8

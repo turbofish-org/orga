@@ -6,6 +6,8 @@ use crate::Result;
 // TODO: we can probably use UnsafeCell instead of RefCell since operations are
 // guaranteed not to interfere with each other.
 
+/// A shared reference to a store, allowing the store to be cloned and read from
+/// or written to by multiple consumers.
 pub struct Shared<T>(Rc<RefCell<T>>);
 
 impl<T> Shared<T> {

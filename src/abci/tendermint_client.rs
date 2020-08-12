@@ -3,9 +3,8 @@ use blocking::block_on;
 use failure::format_err;
 use tendermint_rpc::Client;
 
-/// A client which queries a Tendermint node's state via RPC, implementing the
-/// [`store::Read`](../store/trait.Read.html) trait for compatibility with
-/// [`state::State`](../state/trait.State.html) implementations.
+/// A [`store::Read`](../store/trait.Read.html) implementation which queries a
+/// Tendermint node's state via RPC.
 ///
 /// This client simply passes the query response through as bytes, so if the
 /// query response is a merkle proof then another layer must be used to verify,

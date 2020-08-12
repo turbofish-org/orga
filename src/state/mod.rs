@@ -6,6 +6,8 @@ mod wrapper;
 pub use value::Value;
 pub use wrapper::WrapperStore;
 
+/// A trait for types which provide a higher-level API for data stored within a
+/// [`store::Store`](../store/trait.Store.html).
 pub trait State<S: Store>: Sized {
     fn wrap_store(store: S) -> Result<Self>;
 }

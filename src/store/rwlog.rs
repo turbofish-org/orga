@@ -4,6 +4,8 @@ use super::*;
 
 type Set = HashSet<Vec<u8>>;
 
+/// A `Store` wrapper which records the keys of all reads and writes made
+/// through it.
 pub struct RWLog<S: Store> {
     // TODO: since most keys are in both sets, we can dedupe and use a hash of
     // slices

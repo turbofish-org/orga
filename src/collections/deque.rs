@@ -3,6 +3,7 @@ use failure::bail;
 use std::io::{Read, Write};
 use std::marker::PhantomData;
 
+/// A double-ended queue data structure.
 pub struct Deque<S: Store, T: Encode + Decode> {
     // TODO: make a type that holds the store reference
     store: S,
@@ -145,6 +146,7 @@ fn store_key(index: u64) -> [u8; 8] {
     index.to_be_bytes()
 }
 
+/// An iterator over the entries of a `Deque`.
 pub struct Iter<'a, S: Store, T: Encode + Decode> {
     deque: &'a Deque<S, T>,
     index: u64,

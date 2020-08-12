@@ -2,6 +2,7 @@ use crate::{Decode, Encode, Result, State, Store};
 use std::borrow::Borrow;
 use std::marker::PhantomData;
 
+/// A map data structure.
 pub struct Map<S, K, V>
 where
     S: Store,
