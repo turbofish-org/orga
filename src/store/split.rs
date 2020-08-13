@@ -6,6 +6,9 @@ use super::Store;
 // possibly change Store methods to generically support iterator-based
 // concatenated keys, maybe via a Key type.
 
+/// A store wrapper which can be used to create multiple substores, which all
+/// read from and write to the same underlying store with a unique prefix per
+/// substore.
 pub struct Splitter<S: Store> {
     store: Shared<S>,
     index: u8,
