@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 use merk::{Merk, Op, BatchEntry};
-use byteorder::{ByteOrder, BigEndian};
 use crate::error::Result;
 use crate::store::*;
 use crate::abci::ABCIStore;
@@ -77,7 +76,7 @@ impl<'a> ABCIStore for MerkStore<'a> {
         let maybe_bytes = self.merk.get_aux(b"height")?;
         match maybe_bytes {
             None => Ok(0),
-            Some(bytes) => Ok(BigEndian::read_u64(&bytes))
+            Some(bytes) => Ok(read_u64(&bytes))
         }
     }
 
@@ -95,8 +94,7 @@ impl<'a> ABCIStore for MerkStore<'a> {
     }
 
     fn commit(&mut self, height: u64) -> Result<()> {
-        let mut height_bytes = [0; 8];
-        BigEndian::write_u64(&mut height_bytes, height);
+        let height_bytes = height.to_be_bytes();
 
         let metadata = vec![
             (b"height".to_vec(), Some(height_bytes.to_vec()))
@@ -107,4 +105,10 @@ impl<'a> ABCIStore for MerkStore<'a> {
 
         Ok(())
     }
+}
+
+fn read_u64(bytes: &[u8]) -> u64 {
+    let mut array = [0; 8];
+    array.copy_from_slice(&bytes);
+    u64::from_be_bytes(array)
 }

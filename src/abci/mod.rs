@@ -1,14 +1,18 @@
-use crate::{step_atomic, Flush, MapStore, Read, Result, Store, Write, BufStore, BufStoreMap};
-use failure::bail;
 use std::clone::Clone;
 use std::env;
 use std::net::ToSocketAddrs;
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+
+use failure::bail;
 use log::info;
 
-pub use abci2::messages::abci as messages;
+use crate::state_machine::step_atomic;
+use crate::store::{Flush, MapStore, Read, Store, Write, BufStore, BufStoreMap};
+use crate::Result;
+
 use abci2::messages::abci::Request_oneof_value::*;
 use abci2::messages::abci::*;
+pub use abci2::messages::abci as messages;
 pub use abci2::messages::abci::{Request, Response};
 
 mod tendermint_client;

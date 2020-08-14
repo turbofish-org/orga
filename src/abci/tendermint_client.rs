@@ -1,4 +1,4 @@
-use crate::{Read, Result};
+use crate::{store::Read, Result};
 use blocking::block_on;
 use failure::format_err;
 use tendermint_rpc::Client;

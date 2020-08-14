@@ -1,4 +1,4 @@
-use crate::{Read, Result};
+use crate::{store::Read, Result};
 
 /// A client which decodes and verifies Merk proofs when accessing data from an
 /// underlying [`Read`](../store/trait.Read.html).
