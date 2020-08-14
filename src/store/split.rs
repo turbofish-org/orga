@@ -99,7 +99,7 @@ impl<S: Store> Splitter<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{MapStore, Read, Write};
+    use crate::store::{MapStore, Read, Write};
 
     #[test]
     fn split() {

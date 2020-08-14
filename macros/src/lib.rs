@@ -1,4 +1,3 @@
-use quote::quote;
 use syn::*;
 
 mod state_attr;

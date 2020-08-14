@@ -15,7 +15,7 @@ pub fn state(
     let store_type_name = get_generic_param_name(&store_outer_param);
 
     let store_param: GenericArgument =
-        parse_quote!(orga::Prefixed<orga::Shared<#store_type_name>>);
+        parse_quote!(orga::store::Prefixed<orga::store::Shared<#store_type_name>>);
     for field in struct_fields_mut(&mut item) {
         add_store_param_to_field(field, &store_param);
     }
@@ -27,9 +27,9 @@ pub fn state(
     let output = quote! {
         #item
 
-        impl<#store_outer_param> orga::State<#store_type_name> for #name<#store_type_name> {
+        impl<#store_outer_param> orga::state::State<#store_type_name> for #name<#store_type_name> {
             fn wrap_store(store: #store_type_name) -> orga::Result<Self> {
-                let mut splitter = orga::Splitter::new(store);
+                let mut splitter = orga::store::Splitter::new(store);
                 Ok(Self {
                     #(
                         #field_names: splitter.split().wrap()?,

@@ -1,4 +1,4 @@
-use super::{Store, Read, Write};
+use super::{Read, Write};
 use crate::Result;
 
 /// A `Store` which wraps another `Store` and appends a prefix byte to the key
@@ -48,7 +48,7 @@ impl<W: Write> Write for Prefixed<W> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{MapStore, Read, Write, Store};
+    use crate::store::*;
 
     #[test]
     fn share() {

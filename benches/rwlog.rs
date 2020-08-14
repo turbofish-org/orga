@@ -3,7 +3,7 @@
 extern crate test;
 
 use test::Bencher;
-use orga::{RWLog, NullStore, BufStore, Read, Write};
+use orga::store::{RWLog, NullStore, BufStore, Read, Write};
 
 #[bench]
 fn rwlog_null_get_8b_2keys(b: &mut Bencher) {

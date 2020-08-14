@@ -89,8 +89,8 @@ pub trait Flush {
 
 #[cfg(test)]
 mod tests {
-    use super::{MapStore, NullStore, Read, Store};
-    use crate::Value;
+    use super::{NullStore, Read, Store};
+    use crate::state::Value;
 
     #[test]
     fn fixed_length_slice_key() {

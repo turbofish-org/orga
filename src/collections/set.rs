@@ -1,5 +1,8 @@
 use std::borrow::Borrow;
-use crate::{State, Store, Encode, Decode, Result};
+
+use crate::{Result, Store};
+use crate::encoding::{Encode, Decode};
+use crate::state::State;
 use super::Map;
 
 /// A set data structure.
@@ -32,7 +35,7 @@ impl<S: Store, T: Encode + Decode> Set<S, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::*;
+    use crate::store::*;
 
     #[test]
     fn simple() {

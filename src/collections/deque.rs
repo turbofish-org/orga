@@ -1,7 +1,11 @@
-use crate::{Decode, Encode, Result, State, Store, Value};
-use failure::bail;
 use std::io::{Read, Write};
 use std::marker::PhantomData;
+
+use failure::bail;
+
+use crate::{Result, Store};
+use crate::encoding::{Encode, Decode};
+use crate::state::{State, Value};
 
 /// A double-ended queue data structure.
 pub struct Deque<S: Store, T: Encode + Decode> {
@@ -175,7 +179,7 @@ impl<'a, S: Store, T: Encode + Decode> Iter<'a, S, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::*;
+    use crate::{*, store::*};
 
     #[test]
     fn simple() {

@@ -3,7 +3,7 @@
 extern crate test;
 
 use test::Bencher;
-use orga::{BufStore, Read, Write};
+use orga::store::{BufStore, Read, Write};
 
 #[bench]
 fn bufstore_get_8b(b: &mut Bencher) {

@@ -32,11 +32,8 @@ pub mod state_machine;
 pub mod store;
 
 mod error;
+
+// re-exports
 pub use error::*;
-
-pub use state::*;
-pub use encoding::{Encode, Decode, Terminated};
-pub use state_machine::*;
-pub use store::{split, *};
-
-pub use orga_macros::*;
+pub use store::Store;
+pub use orga_macros as macros;

@@ -1,6 +1,9 @@
-use crate::{Decode, Encode, Result, State, Store};
 use std::borrow::Borrow;
 use std::marker::PhantomData;
+
+use crate::{Result, Store};
+use crate::encoding::{Encode, Decode};
+use crate::state::State;
 
 /// A map data structure.
 pub struct Map<S, K, V>
@@ -57,7 +60,7 @@ where
 
 impl<'a, 'b: 'a, S, K, V> Map<S, K, V>
 where
-    S: Store + crate::Iter<'a, 'b>,
+    S: Store + crate::store::Iter<'a, 'b>,
     K: Encode + Decode,
     V: Encode + Decode,
 {
@@ -125,7 +128,7 @@ fn encode_key_array<K: Encode>(key: &K) -> Result<([u8; 256], usize)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::*;
+    use crate::store::*;
 
     #[test]
     fn simple() {
