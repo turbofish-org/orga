@@ -14,7 +14,7 @@ pub mod collections;
 
 /// Integration with [merk](https://docs.rs/merk) (gated by `merk` feature).
 #[cfg(feature = "merk")]
-pub mod merkstore;
+pub mod merk;
 
 /// Traits for deterministic encoding and decoding.
 ///

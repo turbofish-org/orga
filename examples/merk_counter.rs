@@ -1,6 +1,6 @@
 use orga::abci::{Application, ABCIStateMachine};
 use orga::encoding::Decode;
-use orga::merkstore::MerkStore;
+use orga::merk::MerkStore;
 use orga::state::Value;
 use orga::store::Store;
 use orga::Result;
