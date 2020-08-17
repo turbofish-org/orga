@@ -10,7 +10,7 @@ pub fn state(
 
     let store_outer_param = item.generics.params
         .first()
-        .expect("Expected a generic type parameter of type Store")
+        .expect("Expected a generic type parameter")
         .clone();
     let store_type_name = get_generic_param_name(&store_outer_param);
 
@@ -29,6 +29,7 @@ pub fn state(
 
         impl<#store_outer_param> orga::state::State<#store_type_name> for #name<#store_type_name> {
             fn wrap_store(store: #store_type_name) -> orga::Result<Self> {
+                use orga::store::Read;
                 let mut splitter = orga::store::Splitter::new(store);
                 Ok(Self {
                     #(
