@@ -7,8 +7,8 @@ mod iter;
 mod nullstore;
 mod prefix;
 mod rwlog;
-pub mod share;
-pub mod split;
+mod share;
+mod split;
 
 pub use iter::{Entry, Iter};
 pub use nullstore::NullStore;
@@ -22,20 +22,9 @@ pub use bufstore::{MapStore, BufStore};
 // TODO: Key type (for cheaper concat, enum over ref or owned slice, etc)
 
 /// Trait for read access to key/value stores.
-pub trait Read {
+pub trait Read: Sized {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>>;
-}
 
-/// Trait for write access to key/value stores.
-pub trait Write {
-    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()>;
-
-    fn delete(&mut self, key: &[u8]) -> Result<()>;
-}
-
-/// Trait for key/value stores, automatically implemented for any type which has
-/// both `Read` and `Write`.
-pub trait Store: Read + Write + Sized {
     fn wrap<T: State<Self>>(self) -> Result<T> {
         T::wrap_store(self)
     }
@@ -55,11 +44,22 @@ pub trait Store: Read + Write + Sized {
     fn as_ref<'a>(&'a self) -> &'a Self {
         self
     }
+}
+
+/// Trait for write access to key/value stores.
+pub trait Write {
+    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()>;
+
+    fn delete(&mut self, key: &[u8]) -> Result<()>;
 
     fn as_mut<'a>(&'a mut self) -> &'a mut Self {
         self
     }
 }
+
+/// Trait for key/value stores, automatically implemented for any type which has
+/// both `Read` and `Write`.
+pub trait Store: Read + Write {}
 
 impl<S: Read + Write + Sized> Store for S {}
 

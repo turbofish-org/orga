@@ -1,6 +1,6 @@
 use super::prefix::Prefixed;
 use super::share::Shared;
-use super::Store;
+use super::Read;
 
 // TODO: can we do this without copying every time we prefix the key? can
 // possibly change Store methods to generically support iterator-based
@@ -9,12 +9,12 @@ use super::Store;
 /// A store wrapper which can be used to create multiple substores, which all
 /// read from and write to the same underlying store with a unique prefix per
 /// substore.
-pub struct Splitter<S: Store> {
+pub struct Splitter<S: Read> {
     store: Shared<S>,
     index: u8,
 }
 
-impl<S: Store> Splitter<S> {
+impl<S: Read> Splitter<S> {
     pub fn new(store: S) -> Self {
         Splitter {
             store: store.into_shared(),
