@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 
 use failure::Fail;
 
-use crate::Store;
+use crate::store::{Store, Read};
 use crate::encoding::{Encode, Decode};
 use crate::state::State;
 
@@ -28,12 +28,12 @@ impl From<failure::Error> for Error {
 
 /// A simple implementation of `State` which gets or sets a single value,
 /// automatically decoding when getting and encoding when setting.
-pub struct Value<S: Store, T: Encode + Decode> {
+pub struct Value<S: Read, T: Encode + Decode> {
     store: S,
     value_type: PhantomData<T>,
 }
 
-impl<S: Store, T: Encode + Decode> State<S> for Value<S, T> {
+impl<S: Read, T: Encode + Decode> State<S> for Value<S, T> {
     fn wrap_store(store: S) -> std::result::Result<Value<S, T>, failure::Error> {
         Ok(Value {
             store,
@@ -42,7 +42,7 @@ impl<S: Store, T: Encode + Decode> State<S> for Value<S, T> {
     }
 }
 
-impl<S: Store, T: Encode + Decode> Value<S, T> {
+impl<S: Read, T: Encode + Decode> Value<S, T> {
     pub fn get(&self) -> Result<T> {
         match self.maybe_get()? {
             Some(value) => Ok(value),
@@ -56,14 +56,9 @@ impl<S: Store, T: Encode + Decode> Value<S, T> {
             None => Ok(None),
         }
     }
-
-    pub fn set<B: Borrow<T>>(&mut self, value: B) -> Result<()> {
-        let bytes = value.borrow().encode()?;
-        Ok(self.store.put(EMPTY_KEY.to_vec(), bytes)?)
-    }
 }
 
-impl<S: Store, T: Encode + Decode + Default> Value<S, T> {
+impl<S: Read, T: Encode + Decode + Default> Value<S, T> {
     pub fn get_or_default(&self) -> Result<T> {
         match self.get() {
             Ok(value) => Ok(value),
@@ -74,6 +69,13 @@ impl<S: Store, T: Encode + Decode + Default> Value<S, T> {
                 Err(err)
             }
         }
+    }
+}
+
+impl<S: Store, T: Encode + Decode> Value<S, T> {
+    pub fn set<B: Borrow<T>>(&mut self, value: B) -> Result<()> {
+        let bytes = value.borrow().encode()?;
+        Ok(self.store.put(EMPTY_KEY.to_vec(), bytes)?)
     }
 }
 
@@ -111,5 +113,18 @@ mod tests {
         let mut store = MapStore::new();
         let n = Value::<_, u64>::wrap_store(&mut store).unwrap();
         assert_eq!(n.get_or_default().unwrap(), 0);
+    }
+
+    #[test]
+    fn read_only() {
+        let mut store = MapStore::new();
+        let mut n: Value<_, u64> = (&mut store).wrap().unwrap();
+        n.set(123).unwrap();
+
+        let read = store;
+        let n: Value<_, u64> = read.wrap().unwrap();
+        assert_eq!(n.get_or_default().unwrap(), 123);
+        assert_eq!(n.get().unwrap(), 123);
+        assert_eq!(n.maybe_get().unwrap(), Some(123));
     }
 }
