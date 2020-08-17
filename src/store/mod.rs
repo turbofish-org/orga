@@ -63,13 +63,13 @@ pub trait Store: Read + Write {}
 
 impl<S: Read + Write + Sized> Store for S {}
 
-impl<S: Store, T: Deref<Target = S>> Read for T {
+impl<S: Read, T: Deref<Target = S>> Read for T {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         self.deref().get(key)
     }
 }
 
-impl<S: Store, T: DerefMut<Target = S>> Write for T {
+impl<S: Write, T: DerefMut<Target = S>> Write for T {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         self.deref_mut().put(key, value)
     }
