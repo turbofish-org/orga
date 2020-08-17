@@ -1,20 +1,27 @@
 use std::borrow::Borrow;
 
-use crate::{Result, Store};
+use crate::Result;
 use crate::encoding::{Encode, Decode};
 use crate::state::State;
+use crate::store::{Read, Store};
 use super::Map;
 
 /// A set data structure.
-pub struct Set<S: Store, T: Encode + Decode> {
+pub struct Set<S: Read, T: Encode + Decode> {
     map: Map<S, T, ()>
 }
 
-impl<S: Store, T: Encode + Decode> State<S> for Set<S, T> {
+impl<S: Read, T: Encode + Decode> State<S> for Set<S, T> {
     fn wrap_store(store: S) -> Result<Self> {
         Ok(Self {
             map: Map::wrap_store(store)?
         })
+    }
+}
+
+impl<S: Read, T: Encode + Decode> Set<S, T> {
+    pub fn contains<U: Borrow<T>>(&self, value: U) -> Result<bool> {
+        Ok(self.map.get(value)?.is_some())
     }
 }
 
@@ -25,10 +32,6 @@ impl<S: Store, T: Encode + Decode> Set<S, T> {
 
     pub fn delete<U: Borrow<T>>(&mut self, value: U) -> Result<()> {
         self.map.delete(value)
-    }
-
-    pub fn contains<U: Borrow<T>>(&self, value: U) -> Result<bool> {
-        Ok(self.map.get(value)?.is_some())
     }
 }
 
@@ -54,5 +57,19 @@ mod tests {
         assert_eq!(set.contains(1234).unwrap(), false);
         
         set.delete(1234).unwrap();
+    }
+
+    #[test]
+    fn read_only() {
+        let mut store = MapStore::new();
+        let mut set: Set<_, u64> = (&mut store).wrap().unwrap();
+        set.insert(1234).unwrap();
+        set.insert(5678).unwrap();
+
+        let store = store;
+        let set: Set<_, u64> = store.wrap().unwrap();
+        assert_eq!(set.contains(0).unwrap(), false);
+        assert_eq!(set.contains(1234).unwrap(), true);
+        assert_eq!(set.contains(5678).unwrap(), true);
     }
 }

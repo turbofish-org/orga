@@ -1,14 +1,15 @@
 use std::borrow::Borrow;
 use std::marker::PhantomData;
 
-use crate::{Result, Store};
+use crate::Result;
 use crate::encoding::{Encode, Decode};
 use crate::state::State;
+use crate::store::{Read, Store};
 
 /// A map data structure.
 pub struct Map<S, K, V>
 where
-    S: Store,
+    S: Read,
     K: Encode + Decode,
     V: Encode + Decode,
 {
@@ -19,7 +20,7 @@ where
 
 impl<S, K, V> State<S> for Map<S, K, V>
 where
-    S: Store,
+    S: Read,
     K: Encode + Decode,
     V: Encode + Decode,
 {
@@ -29,6 +30,21 @@ where
             key_type: PhantomData,
             value_type: PhantomData,
         })
+    }
+}
+
+impl<S, K, V> Map<S, K, V>
+where
+    S: Read,
+    K: Encode + Decode,
+    V: Encode + Decode,
+{
+    pub fn get<B: Borrow<K>>(&self, key: B) -> Result<Option<V>> {
+        let (key_bytes, key_length) = encode_key_array(key.borrow())?;
+        self.store
+            .get(&key_bytes[..key_length])?
+            .map(|value_bytes| V::decode(value_bytes.as_slice()))
+            .transpose()
     }
 }
 
@@ -47,14 +63,6 @@ where
     pub fn delete<B: Borrow<K>>(&mut self, key: B) -> Result<()> {
         let (key_bytes, key_length) = encode_key_array(key.borrow())?;
         self.store.delete(&key_bytes[..key_length])
-    }
-
-    pub fn get<B: Borrow<K>>(&self, key: B) -> Result<Option<V>> {
-        let (key_bytes, key_length) = encode_key_array(key.borrow())?;
-        self.store
-            .get(&key_bytes[..key_length])?
-            .map(|value_bytes| V::decode(value_bytes.as_slice()))
-            .transpose()
     }
 }
 
@@ -157,5 +165,21 @@ mod tests {
         assert_eq!(iter.next(), Some((123, 456)));
         assert_eq!(iter.next(), Some((400, 100)));
         assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn read_only() {
+        let mut store = MapStore::new();
+        let mut map: Map<_, u32, u32> = (&mut store).wrap().unwrap();
+        map.insert(12, 34).unwrap();
+        map.insert(56, 78).unwrap();
+
+        let store = store;
+        let map: Map<_, u32, u32> = store.wrap().unwrap();
+        assert_eq!(map.get(12).unwrap(), Some(34));
+        assert_eq!(map.get(56).unwrap(), Some(78));
+
+        let collected = map.iter().collect::<Vec<(u32, u32)>>();
+        assert_eq!(collected, vec![(12, 34), (56, 78)]); 
     }
 }
