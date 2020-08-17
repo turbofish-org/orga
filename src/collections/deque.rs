@@ -1,51 +1,28 @@
-use std::io::{Read, Write};
 use std::marker::PhantomData;
 
 use failure::bail;
 
-use crate::{Result, Store};
+use crate::Result;
 use crate::encoding::{Encode, Decode};
 use crate::state::{State, Value};
+use crate::store::{Read, Store};
 
 /// A double-ended queue data structure.
-pub struct Deque<S: Store, T: Encode + Decode> {
-    // TODO: make a type that holds the store reference
+pub struct Deque<S: Read, T: Encode + Decode> {
     store: S,
     state: Meta,
     item_type: PhantomData<T>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Encode, Decode)]
 struct Meta {
     head: u64,
     tail: u64,
 }
 
-// TODO: use a derive macro
-impl Encode for Meta {
-    fn encode_into<W: Write>(&self, dest: &mut W) -> Result<()> {
-        self.head.encode_into(dest)?;
-        self.tail.encode_into(dest)
-    }
-
-    fn encoding_length(&self) -> Result<usize> {
-        Ok(self.head.encoding_length()? + self.tail.encoding_length()?)
-    }
-}
-
-// TODO: use a derive macro
-impl Decode for Meta {
-    fn decode<R: Read>(mut input: R) -> Result<Self> {
-        Ok(Self {
-            head: u64::decode(&mut input)?,
-            tail: u64::decode(&mut input)?,
-        })
-    }
-}
-
-impl<S: Store, T: Encode + Decode> State<S> for Deque<S, T> {
-    fn wrap_store(mut store: S) -> Result<Self> {
-        let state: Meta = Value::wrap_store(&mut store)?.get_or_default()?;
+impl<S: Read, T: Encode + Decode> State<S> for Deque<S, T> {
+    fn wrap_store(store: S) -> Result<Self> {
+        let state: Meta = Value::wrap_store(&store)?.get_or_default()?;
 
         Ok(Self {
             store,
@@ -55,11 +32,53 @@ impl<S: Store, T: Encode + Decode> State<S> for Deque<S, T> {
     }
 }
 
-impl<S: Store, T: Encode + Decode> Deque<S, T> {
+impl<S: Read, T: Encode + Decode> Deque<S, T> {
     pub fn len(&self) -> u64 {
         self.state.tail - self.state.head
     }
 
+    pub fn get(&self, index: u64) -> Result<T> {
+        self.get_fixed(self.fixed_index(index))
+    }
+
+    pub fn fixed_index(&self, index: u64) -> u64 {
+        if self.len() < index {
+            panic!("Index out of bounds");
+        }
+
+        index + self.state.head
+    }
+
+    pub fn get_fixed(&self, index: u64) -> Result<T> {
+        if index < self.state.head || index >= self.state.tail {
+            bail!("Index out of bounds");
+        }
+        let bytes = self.store.get(&store_key(index)[..])?;
+        // TODO: don't unwrap, since in an untrusted context we might not have this value
+        T::decode(bytes.unwrap().as_slice())
+    }
+
+    pub fn iter<'a>(&'a self) -> Iter<'a, S, T> {
+        Iter {
+            deque: self,
+            index: 0,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn back(&self) -> Result<Option<T>> {
+        if self.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(self.get(self.len() - 1)?))
+        }
+    }
+}
+
+impl<S: Store, T: Encode + Decode> Deque<S, T> {
     pub fn push_back(&mut self, value: T) -> Result<()> {
         let index = self.state.tail;
 
@@ -105,45 +124,6 @@ impl<S: Store, T: Encode + Decode> Deque<S, T> {
             };
         }
     }
-
-    pub fn get(&self, index: u64) -> Result<T> {
-        self.get_fixed(self.fixed_index(index))
-    }
-
-    pub fn fixed_index(&self, index: u64) -> u64 {
-        if self.len() < index {
-            panic!("Index out of bounds");
-        }
-
-        index + self.state.head
-    }
-
-    pub fn get_fixed(&self, index: u64) -> Result<T> {
-        if index < self.state.head || index >= self.state.tail {
-            bail!("Index out of bounds");
-        }
-        let bytes = self.store.get(&store_key(index)[..])?;
-        T::decode(bytes.unwrap().as_slice())
-    }
-
-    pub fn iter<'a>(&'a self) -> Iter<'a, S, T> {
-        Iter {
-            deque: self,
-            index: 0,
-        }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    pub fn back(&self) -> Result<Option<T>> {
-        if self.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(self.get(self.len() - 1)?))
-        }
-    }
 }
 
 fn store_key(index: u64) -> [u8; 8] {
@@ -151,12 +131,12 @@ fn store_key(index: u64) -> [u8; 8] {
 }
 
 /// An iterator over the entries of a `Deque`.
-pub struct Iter<'a, S: Store, T: Encode + Decode> {
+pub struct Iter<'a, S: Read, T: Encode + Decode> {
     deque: &'a Deque<S, T>,
     index: u64,
 }
 
-impl<'a, S: Store, T: Encode + Decode> Iterator for Iter<'a, S, T> {
+impl<'a, S: Read, T: Encode + Decode> Iterator for Iter<'a, S, T> {
     type Item = Result<T>;
 
     fn next(&mut self) -> Option<Result<T>> {
@@ -167,7 +147,7 @@ impl<'a, S: Store, T: Encode + Decode> Iterator for Iter<'a, S, T> {
     }
 }
 
-impl<'a, S: Store, T: Encode + Decode> Iter<'a, S, T> {
+impl<'a, S: Read, T: Encode + Decode> Iter<'a, S, T> {
     fn next_unchecked(&mut self) -> Result<T> {
         let value = self.deque.get(self.index)?;
         // TODO: invalidate iterator after first Err?
@@ -250,5 +230,22 @@ mod tests {
 
         let collected = deque.iter().collect::<Result<Vec<u64>>>().unwrap();
         assert_eq!(collected, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn read_only() {
+        let mut store = MapStore::new();
+        let mut deque: Deque<_, u64> = (&mut store).wrap().unwrap();
+        deque.push_back(10).unwrap();
+        deque.push_back(20).unwrap();
+
+        let store = store;
+        let deque: Deque<_, u64> = store.wrap().unwrap();
+        assert_eq!(deque.len(), 2);
+        assert_eq!(deque.get(0).unwrap(), 10);
+        assert_eq!(deque.get(1).unwrap(), 20);
+
+        let collected = deque.iter().collect::<Result<Vec<u64>>>().unwrap();
+        assert_eq!(collected, vec![10, 20]); 
     }
 }
