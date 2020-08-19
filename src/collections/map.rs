@@ -1,10 +1,10 @@
 use std::borrow::Borrow;
 use std::marker::PhantomData;
 
-use crate::Result;
-use crate::encoding::{Encode, Decode};
+use crate::encoding::{Decode, Encode};
 use crate::state::State;
 use crate::store::{Read, Store};
+use crate::Result;
 
 /// A map data structure.
 pub struct Map<S, K, V>
@@ -24,6 +24,7 @@ where
     K: Encode + Decode,
     V: Encode + Decode,
 {
+    /// Constructs a `Map` which is backed by the given store.
     fn wrap_store(store: S) -> Result<Self> {
         Ok(Self {
             store,
@@ -39,6 +40,11 @@ where
     K: Encode + Decode,
     V: Encode + Decode,
 {
+    /// Gets the value with the given key from the map.
+    ///
+    /// If there is no entry with the given key, `None` will be returned. If
+    /// there is an error when getting from the store or decoding the value, the
+    /// error will be returned.
     pub fn get<B: Borrow<K>>(&self, key: B) -> Result<Option<V>> {
         let (key_bytes, key_length) = encode_key_array(key.borrow())?;
         self.store
@@ -54,12 +60,21 @@ where
     K: Encode + Decode,
     V: Encode + Decode,
 {
+    /// Inserts the given key/value entry into the map. If an entry already
+    /// exists with this key, it will be overwritten.
+    ///
+    /// If there is an error encoding the key or value, or when writing to the
+    /// store, the error will be returned.
     pub fn insert(&mut self, key: K, value: V) -> Result<()> {
         let key_bytes = key.encode()?;
         let value_bytes = value.encode()?;
         self.store.put(key_bytes, value_bytes)
     }
 
+    /// Deleted the entry with the given key.
+    ///
+    /// If there is an error encoding the key, or when deleting from the store,
+    /// the error will be returned.
     pub fn delete<B: Borrow<K>>(&mut self, key: B) -> Result<()> {
         let (key_bytes, key_length) = encode_key_array(key.borrow())?;
         self.store.delete(&key_bytes[..key_length])
@@ -72,12 +87,19 @@ where
     K: Encode + Decode,
     V: Encode + Decode,
 {
+    /// Creates an iterator over the entries in the map, starting at the given
+    /// key (inclusive).
+    ///
+    /// Iteration happens in bytewise order of encoded keys.
     pub fn iter_from(&'a self, start: &K) -> Result<Iter<'a, 'b, S::Iter, K, V>> {
         let start_bytes = start.encode()?;
         let iter = self.store.iter_from(start_bytes.as_slice());
         Ok(Iter::new(iter))
     }
 
+    /// Creates an iterator over all the entries in the map.
+    ///
+    /// Iteration happens in bytewise order of encoded keys.
     pub fn iter(&'a self) -> Iter<'a, 'b, S::Iter, K, V> {
         let iter = self.store.iter();
         Iter::new(iter)
@@ -102,6 +124,7 @@ where
     K: Decode,
     V: Decode,
 {
+    /// Constructs an `Iter` for the given store.
     fn new(iter: I) -> Self {
         Iter {
             iter,
@@ -120,6 +143,9 @@ where
 {
     type Item = (K, V);
 
+    /// Gets the next entry from the map.
+    ///
+    /// This method will panic if decoding the entry fails.
     fn next(&mut self) -> Option<Self::Item> {
         self.iter
             .next()
@@ -127,6 +153,10 @@ where
     }
 }
 
+/// Encodes the given key value into a fixed-size array. Returns the array and
+/// the length of the encoded value.
+///
+/// This method will panic if the encoded key is longer than 256 bytes.
 fn encode_key_array<K: Encode>(key: &K) -> Result<([u8; 256], usize)> {
     let mut bytes = [0; 256];
     key.encode_into(&mut &mut bytes[..])?;
@@ -180,6 +210,6 @@ mod tests {
         assert_eq!(map.get(56).unwrap(), Some(78));
 
         let collected = map.iter().collect::<Vec<(u32, u32)>>();
-        assert_eq!(collected, vec![(12, 34), (56, 78)]); 
+        assert_eq!(collected, vec![(12, 34), (56, 78)]);
     }
 }

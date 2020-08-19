@@ -7,12 +7,12 @@ use failure::bail;
 use log::info;
 
 use crate::state_machine::step_atomic;
-use crate::store::{Flush, MapStore, Read, Store, Write, BufStore, BufStoreMap};
+use crate::store::{BufStore, BufStoreMap, Flush, MapStore, Read, Store, Write};
 use crate::Result;
 
+pub use abci2::messages::abci as messages;
 use abci2::messages::abci::Request_oneof_value::*;
 use abci2::messages::abci::*;
-pub use abci2::messages::abci as messages;
 pub use abci2::messages::abci::{Request, Response};
 
 mod tendermint_client;
@@ -31,6 +31,9 @@ pub struct ABCIStateMachine<A: Application, S: ABCIStore> {
 }
 
 impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
+    /// Constructs an `ABCIStateMachine` from the given app (a set of handlers
+    /// for transactions and blocks), and store (a key/value store to persist
+    /// the state data).
     pub fn new(app: A, store: S) -> Self {
         let (sender, receiver) = sync_channel(0);
         ABCIStateMachine {
@@ -44,6 +47,11 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
         }
     }
 
+    /// Handles a single incoming ABCI request.
+    ///
+    /// Some messages, such as `info`, `flush`, and `echo` are automatically
+    /// handled by the `ABCIStateMachine`, while others are passed to the
+    /// [`Application`](trait.Application.html).
     pub fn run(&mut self, req: Request) -> Result<Response> {
         let value = match req.value {
             None => bail!("Received empty request"),
@@ -106,15 +114,11 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
             }
             init_chain(req) => {
                 let app = self.app.take().unwrap();
-                let mut store = BufStore::wrap_with_map(
-                    &mut self.store,
-                    self.consensus_state.take().unwrap(),
-                );
+                let mut store =
+                    BufStore::wrap_with_map(&mut self.store, self.consensus_state.take().unwrap());
 
                 let res_init_chain =
-                    match step_atomic(|store, req| {
-                        app.init_chain(store, req)
-                    }, &mut store, req) {
+                    match step_atomic(|store, req| app.init_chain(store, req), &mut store, req) {
                         Ok(res) => res,
                         Err(_) => Default::default(),
                     };
@@ -131,18 +135,17 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
             }
             begin_block(req) => {
                 let app = self.app.take().unwrap();
-                let mut store = BufStore::wrap_with_map(
-                    &mut self.store,
-                    self.consensus_state.take().unwrap(),
-                );
+                let mut store =
+                    BufStore::wrap_with_map(&mut self.store, self.consensus_state.take().unwrap());
 
-                let res_begin_block =
-                    match step_atomic(|store: &mut BufStore<&mut BufStore<&mut S>>, req| {
-                        app.begin_block(store, req)
-                    }, &mut store, req) {
-                        Ok(res) => res,
-                        Err(_) => Default::default(),
-                    };
+                let res_begin_block = match step_atomic(
+                    |store: &mut BufStore<&mut BufStore<&mut S>>, req| app.begin_block(store, req),
+                    &mut store,
+                    req,
+                ) {
+                    Ok(res) => res,
+                    Err(_) => Default::default(),
+                };
 
                 self.app.replace(app);
                 self.consensus_state.replace(store.into_map());
@@ -153,21 +156,22 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
             }
             deliver_tx(req) => {
                 let app = self.app.take().unwrap();
-                let mut store = BufStore::wrap_with_map(
-                    &mut self.store,
-                    self.consensus_state.take().unwrap(),
-                );
+                let mut store =
+                    BufStore::wrap_with_map(&mut self.store, self.consensus_state.take().unwrap());
 
-                let res_deliver_tx =
-                    match step_atomic(|store: &mut BufStore<&mut BufStore<&mut S>>, req| app.deliver_tx(store, req), &mut store, req) {
-                        Ok(res) => res,
-                        Err(err) => {
-                            let mut res: ResponseDeliverTx = Default::default();
-                            res.set_code(1);
-                            res.set_info(format!("{}", err));
-                            res
-                        }
-                    };
+                let res_deliver_tx = match step_atomic(
+                    |store: &mut BufStore<&mut BufStore<&mut S>>, req| app.deliver_tx(store, req),
+                    &mut store,
+                    req,
+                ) {
+                    Ok(res) => res,
+                    Err(err) => {
+                        let mut res: ResponseDeliverTx = Default::default();
+                        res.set_code(1);
+                        res.set_info(format!("{}", err));
+                        res
+                    }
+                };
 
                 self.app.replace(app);
                 self.consensus_state.replace(store.into_map());
@@ -180,16 +184,17 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                 self.height = req.get_height() as u64;
 
                 let app = self.app.take().unwrap();
-                let mut store = BufStore::wrap_with_map(
-                    &mut self.store,
-                    self.consensus_state.take().unwrap(),
-                );
+                let mut store =
+                    BufStore::wrap_with_map(&mut self.store, self.consensus_state.take().unwrap());
 
-                let res_end_block =
-                    match step_atomic(|store: &mut BufStore<&mut BufStore<&mut S>>, req| app.end_block(store, req), &mut store, req) {
-                        Ok(res) => res,
-                        Err(_) => Default::default(),
-                    };
+                let res_end_block = match step_atomic(
+                    |store: &mut BufStore<&mut BufStore<&mut S>>, req| app.end_block(store, req),
+                    &mut store,
+                    req,
+                ) {
+                    Ok(res) => res,
+                    Err(_) => Default::default(),
+                };
 
                 self.app.replace(app);
                 self.consensus_state.replace(store.into_map());
@@ -199,10 +204,8 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                 Ok(res)
             }
             commit(_) => {
-                let mut store = BufStore::wrap_with_map(
-                    &mut self.store,
-                    self.consensus_state.take().unwrap(),
-                );
+                let mut store =
+                    BufStore::wrap_with_map(&mut self.store, self.consensus_state.take().unwrap());
                 store.flush()?;
                 self.store.commit(self.height)?;
 
@@ -231,16 +234,19 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                 let mut store =
                     BufStore::wrap_with_map(&mut self.store, self.mempool_state.take().unwrap());
 
-                let res_check_tx =
-                    match step_atomic(|store: &mut BufStore<&mut BufStore<&mut S>>, req| app.check_tx(store, req), &mut store, req) {
-                        Ok(res) => res,
-                        Err(err) => {
-                            let mut res: ResponseCheckTx = Default::default();
-                            res.set_code(1);
-                            res.set_info(format!("{}", err));
-                            res
-                        }
-                    };
+                let res_check_tx = match step_atomic(
+                    |store: &mut BufStore<&mut BufStore<&mut S>>, req| app.check_tx(store, req),
+                    &mut store,
+                    req,
+                ) {
+                    Ok(res) => res,
+                    Err(err) => {
+                        let mut res: ResponseCheckTx = Default::default();
+                        res.set_code(1);
+                        res.set_info(format!("{}", err));
+                        res
+                    }
+                };
 
                 self.app.replace(app);
                 self.mempool_state.replace(store.into_map());
@@ -252,10 +258,13 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
         }
     }
 
+    /// Creates a TCP server for the ABCI protocol and begins handling the
+    /// incoming connections.
     pub fn listen<SA: ToSocketAddrs>(mut self, addr: SA) -> Result<()> {
         let server = abci2::Server::listen(addr)?;
 
         // TODO: keep workers in struct
+        // TODO: more intelligently handle connections, e.g. handle tendermint dying/reconnecting?
         self.create_worker(server.accept()?)?;
         self.create_worker(server.accept()?)?;
         self.create_worker(server.accept()?)?;
@@ -267,6 +276,8 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
         }
     }
 
+    /// Creates a new worker to handle the incoming ABCI requests for `conn`
+    /// within its own threads.
     fn create_worker(&self, conn: abci2::Connection) -> Result<Worker> {
         Ok(Worker::new(self.sender.clone(), conn))
     }

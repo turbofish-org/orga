@@ -14,6 +14,13 @@ pub struct TendermintClient {
 }
 
 impl TendermintClient {
+    /// Constructs a `TendermintClient` to make RPC requests to the given
+    /// address (for example, "localhost:26657").
+    ///
+    /// This will only fail for incorrectly formatted addresses, but will still
+    /// succeed even if the address is not a valid Tendermint RPC server.
+    /// Instead, if the address is not a valid server, requests made through the
+    /// client will fail.
     pub fn new(addr: &str) -> Result<TendermintClient> {
         Ok(TendermintClient {
             client: Client::new(
@@ -25,6 +32,10 @@ impl TendermintClient {
 }
 
 impl Read for TendermintClient {
+    /// Gets a value from the store by making a raw key query to the Tendermint
+    /// RPC server. The raw response bytes will be returned, which may include
+    /// unverified proof bytes depending on the node's
+    /// [`ABCIStore`](../trait.ABCIStore.html) implementation.
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         Ok(Some(
             block_on(self.client.abci_query(None, key, None, false))?.value,
