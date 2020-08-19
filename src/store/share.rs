@@ -1,16 +1,21 @@
-use std::rc::Rc;
-use std::cell::RefCell;
 use super::{Read, Write};
 use crate::Result;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 // TODO: we can probably use UnsafeCell instead of RefCell since operations are
 // guaranteed not to interfere with each other.
 
 /// A shared reference to a store, allowing the store to be cloned and read from
 /// or written to by multiple consumers.
+///
+/// `Shared` has the `Clone` trait - it is safe to clone references to the store
+/// since `get`, `put`, and `delete` all operate atomically so there will never
+/// be more than one reference borrowing the underlying store at a time.
 pub struct Shared<T>(Rc<RefCell<T>>);
 
 impl<T> Shared<T> {
+    /// Constructs a `Shared` by wrapping the given store.
     pub fn new(inner: T) -> Self {
         Shared(Rc::new(RefCell::new(inner)))
     }

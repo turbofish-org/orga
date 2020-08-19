@@ -8,16 +8,20 @@ use crate::Result;
 /// effectively namespacing the keys to prevent key conflicts.
 pub struct Prefixed<S> {
     store: S,
-    prefix: u8
+    prefix: u8,
 }
 
 impl<S> Prefixed<S> {
+    /// Constructs a `Prefixed` by wrapping the given store and prepending keys
+    /// with the given prefix for all operations.
     pub fn new(store: S, prefix: u8) -> Self {
         Prefixed { store, prefix }
     }
 }
 
 // TODO: make a Key type which doesn't need copying
+/// Prepends a key with a prefix byte by copying into inline stack memory and
+/// returning a fixed-size array.
 #[inline]
 fn prefix(prefix: u8, suffix: &[u8]) -> ([u8; 256], usize) {
     let mut prefixed = [0; 256];
@@ -57,7 +61,7 @@ mod tests {
         let mut prefixed = (&mut store).prefix(123);
         prefixed.put(vec![5], vec![5]).unwrap();
         assert_eq!(prefixed.get(&[5]).unwrap(), Some(vec![5]));
-        
+
         assert_eq!(store.get(&[123, 5]).unwrap(), Some(vec![5]));
     }
 }

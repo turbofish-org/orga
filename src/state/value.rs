@@ -3,9 +3,9 @@ use std::marker::PhantomData;
 
 use failure::Fail;
 
-use crate::store::{Store, Read};
-use crate::encoding::{Encode, Decode};
+use crate::encoding::{Decode, Encode};
 use crate::state::State;
+use crate::store::{Read, Store};
 
 const EMPTY_KEY: &[u8] = &[];
 
@@ -34,6 +34,7 @@ pub struct Value<S: Read, T: Encode + Decode> {
 }
 
 impl<S: Read, T: Encode + Decode> State<S> for Value<S, T> {
+    /// Constructs a `Value` by wrapping a store instance.
     fn wrap_store(store: S) -> std::result::Result<Value<S, T>, failure::Error> {
         Ok(Value {
             store,
@@ -43,6 +44,7 @@ impl<S: Read, T: Encode + Decode> State<S> for Value<S, T> {
 }
 
 impl<S: Read, T: Encode + Decode> Value<S, T> {
+    /// Gets the stored value, erroring if it does not yet exist.
     pub fn get(&self) -> Result<T> {
         match self.maybe_get()? {
             Some(value) => Ok(value),
@@ -50,6 +52,7 @@ impl<S: Read, T: Encode + Decode> Value<S, T> {
         }
     }
 
+    /// Gets the stored value, returning `None` if it does not yet exist.
     pub fn maybe_get(&self) -> Result<Option<T>> {
         match self.store.get(EMPTY_KEY)? {
             Some(bytes) => Ok(Some(T::decode(bytes.as_slice())?)),
@@ -59,6 +62,7 @@ impl<S: Read, T: Encode + Decode> Value<S, T> {
 }
 
 impl<S: Read, T: Encode + Decode + Default> Value<S, T> {
+    /// Gets the stored value, returning the default if it does not yet exist.
     pub fn get_or_default(&self) -> Result<T> {
         match self.get() {
             Ok(value) => Ok(value),
@@ -73,6 +77,8 @@ impl<S: Read, T: Encode + Decode + Default> Value<S, T> {
 }
 
 impl<S: Store, T: Encode + Decode> Value<S, T> {
+    /// Sets the value and writes it to the store, replacing it if it already
+    /// exists.
     pub fn set<B: Borrow<T>>(&mut self, value: B) -> Result<()> {
         let bytes = value.borrow().encode()?;
         Ok(self.store.put(EMPTY_KEY.to_vec(), bytes)?)
@@ -84,7 +90,7 @@ mod tests {
     use super::Value;
     use crate::{
         state::State,
-        store::{MapStore, Read}
+        store::{MapStore, Read},
     };
 
     #[test]

@@ -18,6 +18,7 @@ pub struct BufStore<S: Store> {
 }
 
 impl BufStore<NullStore> {
+    /// Constructs a `BufStore` with no underlying store.
     pub fn new() -> Self {
         BufStore::wrap(NullStore)
     }
@@ -30,6 +31,10 @@ impl Default for BufStore<NullStore> {
 }
 
 impl<S: Store> BufStore<S> {
+    /// Constructs a `BufStore` by wrapping the given store.
+    ///
+    /// Calls to get will first check the `BufStore` map, and if no entry is
+    /// found will be passed to the underlying store.
     pub fn wrap(store: S) -> Self {
         BufStore {
             store,
@@ -37,10 +42,14 @@ impl<S: Store> BufStore<S> {
         }
     }
 
+    /// Creates a `BufStore` by wrapping the given store, using a pre-populated
+    /// in-memory buffer of key/value entries.
     pub fn wrap_with_map(store: S, map: Map) -> Self {
         BufStore { store, map }
     }
 
+    /// Consumes the `BufStore` and returns its in-memory buffer of key/value
+    /// entries.
     pub fn into_map(self) -> Map {
         self.map
     }
@@ -69,6 +78,11 @@ impl<S: Store> Write for BufStore<S> {
 }
 
 impl<S: Store> Flush for BufStore<S> {
+    /// Consumes the `BufStore`'s in-memory buffer and writes all of its values
+    /// to the underlying store.
+    ///
+    /// After calling `flush`, the `BufStore` will still be valid and wrap the
+    /// underlying store, but its in-memory buffer will be empty.
     fn flush(&mut self) -> Result<()> {
         while let Some((key, value)) = self.map.pop_first() {
             match value {

@@ -1,8 +1,8 @@
-use std::collections::BTreeMap;
-use merk::{Merk, Op, BatchEntry};
+use crate::abci::ABCIStore;
 use crate::error::Result;
 use crate::store::*;
-use crate::abci::ABCIStore;
+use merk::{BatchEntry, Merk, Op};
+use std::collections::BTreeMap;
 
 type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
@@ -10,17 +10,24 @@ type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 /// Merkle key/value store.
 pub struct MerkStore<'a> {
     merk: &'a mut Merk,
-    map: Option<Map>
+    map: Option<Map>,
 }
 
 impl<'a> MerkStore<'a> {
+    /// Constructs a `MerkStore` which references the given
+    /// [`Merk`](https://docs.rs/merk/latest/merk/struct.Merk.html) instance.
     pub fn new(merk: &'a mut Merk) -> Self {
         MerkStore {
             map: Some(Default::default()),
-            merk
+            merk,
         }
     }
 
+    /// Flushes writes to the underlying `Merk` store.
+    ///
+    /// `aux` may contain auxilary keys and values to be written to the
+    /// underlying store, which will not affect the Merkle tree but will still
+    /// be persisted in the database.
     fn write(&mut self, aux: Vec<(Vec<u8>, Option<Vec<u8>>)>) -> Result<()> {
         let map = self.map.take().unwrap();
         self.map = Some(Map::new());
@@ -32,40 +39,45 @@ impl<'a> MerkStore<'a> {
     }
 }
 
+/// Collects an iterator of key/value entries into a `Vec`.
 fn to_batch<I: IntoIterator<Item = (Vec<u8>, Option<Vec<u8>>)>>(i: I) -> Vec<BatchEntry> {
     let mut batch = Vec::new();
     for (key, val) in i {
         match val {
             Some(val) => batch.push((key, Op::Put(val))),
-            None => batch.push((key, Op::Delete))
+            None => batch.push((key, Op::Delete)),
         }
     }
     batch
 }
 
 impl<'a> Read for MerkStore<'a> {
+    /// Gets a value from the underlying `Merk` store.
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         match self.map.as_ref().unwrap().get(key) {
             Some(Some(value)) => Ok(Some(value.clone())),
             Some(None) => Ok(None),
-            None => Ok(self.merk.get(key)?)
+            None => Ok(self.merk.get(key)?),
         }
     }
 }
 
 impl<'a> Write for MerkStore<'a> {
+    /// Writes a value to the underlying `Merk` store.
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         self.map.as_mut().unwrap().insert(key, Some(value));
         Ok(())
     }
 
-    fn delete(&mut self, key:  &[u8]) -> Result<()> {
+    /// Deletes a value from the underlying `Merk` store.
+    fn delete(&mut self, key: &[u8]) -> Result<()> {
         self.map.as_mut().unwrap().insert(key.to_vec(), None);
         Ok(())
     }
 }
 
 impl<'a> Flush for MerkStore<'a> {
+    /// Flush is a no-op for `MerkStore`.
     fn flush(&mut self) -> Result<()> {
         self.write(vec![])
     }
@@ -76,7 +88,7 @@ impl<'a> ABCIStore for MerkStore<'a> {
         let maybe_bytes = self.merk.get_aux(b"height")?;
         match maybe_bytes {
             None => Ok(0),
-            Some(bytes) => Ok(read_u64(&bytes))
+            Some(bytes) => Ok(read_u64(&bytes)),
         }
     }
 
@@ -84,7 +96,8 @@ impl<'a> ABCIStore for MerkStore<'a> {
         Ok(self.merk.root_hash().to_vec())
     }
 
-    // TODO: we don't need the hash 
+    // TODO: we don't need the hash
+    /// Resolves a query by generating a merk proof.
     fn query(&self, key: &[u8]) -> Result<Vec<u8>> {
         let val = &[key.to_vec()];
         let mut hash = self.root_hash()?;
@@ -96,9 +109,7 @@ impl<'a> ABCIStore for MerkStore<'a> {
     fn commit(&mut self, height: u64) -> Result<()> {
         let height_bytes = height.to_be_bytes();
 
-        let metadata = vec![
-            (b"height".to_vec(), Some(height_bytes.to_vec()))
-        ];
+        let metadata = vec![(b"height".to_vec(), Some(height_bytes.to_vec()))];
 
         self.write(metadata)?;
         self.merk.flush()?;

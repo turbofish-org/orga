@@ -10,37 +10,52 @@ mod rwlog;
 mod share;
 mod split;
 
+pub use bufstore::Map as BufStoreMap;
+pub use bufstore::{BufStore, MapStore};
 pub use iter::{Entry, Iter};
 pub use nullstore::NullStore;
 pub use prefix::Prefixed;
 pub use rwlog::RWLog;
 pub use share::Shared;
 pub use split::Splitter;
-pub use bufstore::Map as BufStoreMap;
-pub use bufstore::{MapStore, BufStore};
 
 // TODO: Key type (for cheaper concat, enum over ref or owned slice, etc)
 
 /// Trait for read access to key/value stores.
 pub trait Read: Sized {
+    /// Gets a value by key.
+    ///
+    /// Implementations of `get` should return `None` when there is no value for
+    /// the key rather than erroring.
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>>;
 
+    /// Wraps self with a given [`state::State`](../state/trait.State.html)
+    /// implementation, provided for convenience.
     fn wrap<T: State<Self>>(self) -> Result<T> {
         T::wrap_store(self)
     }
 
+    /// Wraps self with [`Shared`](struct.Shared.html), allowing it to be cloned
+    /// so that multiple callers can share the reference to the underlying
+    /// store.
     fn into_shared(self) -> Shared<Self> {
         Shared::new(self)
     }
 
+    /// Wraps self with [`Prefixed`](struct.Prefixed.html) using the given
+    /// prefix byte, so that all operations have the prefix prepended to their
+    /// keys.
     fn prefix(self, prefix: u8) -> Prefixed<Self> {
         Prefixed::new(self, prefix)
     }
 
+    /// Wraps self with [`Splitter`](struct.Splitter.html) so that prefixed
+    /// substores may be created by calling `.split()`.
     fn into_splitter(self) -> Splitter<Self> {
         Splitter::new(self)
     }
 
+    /// Returns an immutable reference to the store.
     fn as_ref<'a>(&'a self) -> &'a Self {
         self
     }
@@ -48,10 +63,20 @@ pub trait Read: Sized {
 
 /// Trait for write access to key/value stores.
 pub trait Write {
+    /// Writes a key and value to the store.
+    ///
+    /// If a value already exists for the given key, implementations should
+    /// overwrite the value.
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()>;
 
+    /// Deletes the value with the given key.
+    ///
+    /// If no value exists for the given key, implementations should treat the
+    /// operation as a no-op (but may still issue a call to `delete` to an
+    /// underlying store).
     fn delete(&mut self, key: &[u8]) -> Result<()>;
 
+    /// Returns a mutable reference to the store.
     fn as_mut<'a>(&'a mut self) -> &'a mut Self {
         self
     }

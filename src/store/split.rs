@@ -15,6 +15,7 @@ pub struct Splitter<S: Read> {
 }
 
 impl<S: Read> Splitter<S> {
+    /// Constructs a `Splitter` for the given store.
     pub fn new(store: S) -> Self {
         Splitter {
             store: store.into_shared(),
@@ -22,6 +23,12 @@ impl<S: Read> Splitter<S> {
         }
     }
 
+    /// Creates and returns a new substore, which is a prefixed store that
+    /// shares a reference to the `Splitter`'s inner store. Each call to `split`
+    /// will increment the internal index and create a substore with the next
+    /// value, in order from 0 to 255 (inclusive).
+    ///
+    /// `split` can not be called more than 255 times on one splitter instance.
     pub fn split(&mut self) -> Prefixed<Shared<S>> {
         if self.index == 255 {
             panic!("Reached split limit");
