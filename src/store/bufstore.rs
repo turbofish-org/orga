@@ -96,9 +96,11 @@ impl<S: Store> Flush for BufStore<S> {
 
 type MapIter<'a> = btree_map::Range<'a, Vec<u8>, Option<Vec<u8>>>;
 
-// TODO: implement generically for all backing stores
-impl<'a> super::Iter<'a, 'a> for BufStore<NullStore> {
-    type Iter = Iter<'a, 'a, super::nullstore::NullIter<'a>>;
+impl<'a, S> super::Iter<'a> for BufStore<S>
+where
+    S: Store + super::Iter<'a> + 'a,
+{
+    type Iter = Iter<'a, S::Iter>;
 
     fn iter_from(&'a self, start: &[u8]) -> Self::Iter {
         let map_iter = self.map.range(start.to_vec()..);
@@ -114,17 +116,17 @@ impl<'a> super::Iter<'a, 'a> for BufStore<NullStore> {
 ///
 /// Entries will be emitted for values in the underlying store, reflecting the
 /// modifications stored in the in-memory map.
-pub struct Iter<'a, 'b: 'a, B>
+pub struct Iter<'a, B: 'a>
 where
-    B: Iterator<Item = (&'b [u8], &'b [u8])>,
+    B: Iterator<Item = (&'a [u8], &'a [u8])>,
 {
     map_iter: Peekable<MapIter<'a>>,
     backing_iter: Peekable<B>,
 }
 
-impl<'a, 'b: 'a, B> Iterator for Iter<'a, 'b, B>
+impl<'a, B> Iterator for Iter<'a, B>
 where
-    B: Iterator<Item = (&'b [u8], &'b [u8])>,
+    B: Iterator<Item = (&'a [u8], &'a [u8])>,
 {
     type Item = (&'a [u8], &'a [u8]);
 
