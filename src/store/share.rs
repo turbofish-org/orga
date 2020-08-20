@@ -84,7 +84,7 @@ impl<'a, R> Iterator for Iter<'a, R>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::*;
+    use crate::store::{*, iter::Iter};
 
     #[test]
     fn share() {
@@ -120,7 +120,7 @@ mod tests {
 
     #[test]
     fn read_while_iter_exists() {
-        let mut store = MapStore::new().noshared();
+        let mut store = MapStore::new().into_shared();
         let store2 = store.clone();
 
         store.put(vec![1], vec![10]).unwrap();

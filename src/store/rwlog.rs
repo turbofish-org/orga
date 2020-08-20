@@ -58,7 +58,7 @@ mod tests {
     fn satisfies_store_trait() {
         // (this is a compile-time assertion)
         fn assert_store<S: Store>(_: S) {}
-        assert_store(RWLog::wrap(NullStore));
+        assert_store(RWLog::wrap(MapStore::new()));
     }
 
     #[test]
