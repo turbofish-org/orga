@@ -30,14 +30,14 @@ fn prefix(prefix: u8, suffix: &[u8]) -> ([u8; 256], usize) {
     (prefixed, suffix.len() + 1)
 }
 
-impl<R: Read> Read for Prefixed<R> {
+impl<S: Read> Read for Prefixed<S> {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         let (key, len) = prefix(self.prefix, key);
         self.store.get(&key[..len])
     }
 }
 
-impl<W: Write> Write for Prefixed<W> {
+impl<S: Write> Write for Prefixed<S> {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         let (key, len) = prefix(self.prefix, key.as_slice());
         self.store.put(key[..len].to_vec(), value)
@@ -49,10 +49,51 @@ impl<W: Write> Write for Prefixed<W> {
     }
 }
 
+impl<'a, S> super::Iter<'a> for Prefixed<S>
+    where S: Read + super::Iter<'a> + 'a
+{
+    type Iter = Iter<'a, S::Iter>;
+
+    fn iter_from(&'a self, start: &[u8]) -> Self::Iter {
+        let (start, start_len) = prefix(self.prefix, start);
+        let store_iter = self.store.iter_from(&start[..start_len]);
+        Iter {
+            inner: store_iter,
+            prefix: self.prefix
+        }
+    }
+}
+
+pub struct Iter<'a, I>
+    where I: Iterator<Item = (&'a [u8], &'a [u8])>
+{
+    inner: I,
+    prefix: u8
+}
+
+impl<'a, I> Iterator for Iter<'a, I>
+    where I: Iterator<Item = (&'a [u8], &'a [u8])>
+{
+    type Item = (&'a [u8], &'a [u8]);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.inner.next() {
+            None => None,
+            Some((key, value)) => {
+                if key[0] != self.prefix {
+                    None
+                } else {
+                    Some((&key[1..], value))
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::*;
+    use crate::store::{*, iter::Iter};
 
     #[test]
     fn share() {
@@ -63,5 +104,23 @@ mod tests {
         assert_eq!(prefixed.get(&[5]).unwrap(), Some(vec![5]));
 
         assert_eq!(store.get(&[123, 5]).unwrap(), Some(vec![5]));
+    }
+
+    #[test]
+    fn iter() {
+        let mut store = MapStore::new();
+        store.put(vec![99], vec![123]).unwrap();
+        store.put(vec![100], vec![1]).unwrap();
+        store.put(vec![100, 1], vec![2]).unwrap();
+        store.put(vec![100, 2], vec![3]).unwrap();
+        store.put(vec![101, 1, 2, 3], vec![123]).unwrap();
+
+        let store = store.prefix(100);
+        let mut iter = store.iter();
+
+        assert_eq!(iter.next(), Some((&[][..], &[1][..])));
+        assert_eq!(iter.next(), Some((&[1][..], &[2][..])));
+        assert_eq!(iter.next(), Some((&[2][..], &[3][..])));
+        assert_eq!(iter.next(), None);
     }
 }

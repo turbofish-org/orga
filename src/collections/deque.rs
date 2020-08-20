@@ -182,7 +182,7 @@ impl<S: Store, T: Encode + Decode> Deque<S, T> {
 
 /// Derives the key for the given index.
 fn store_key(index: u64) -> [u8; 8] {
-    /// TODO: 0 should be (u64::MAX / 2) so elements can be prepended
+    // TODO: 0 should be (u64::MAX / 2) so elements can be prepended
     index.to_be_bytes()
 }
 
