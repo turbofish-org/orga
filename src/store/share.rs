@@ -46,6 +46,41 @@ impl<W: Write> Write for Shared<W> {
     }
 }
 
+impl<'a, R> super::Iter<'a> for Shared<R>
+    where R: Read + super::Iter<'a> + 'a
+{
+    type Iter = Iter<'a, R>;
+
+    fn iter_from(&'a self, start: &[u8]) -> Self::Iter {
+        let iter = unsafe {
+            // erase lifetime information
+            self.0.as_ptr().as_ref().unwrap().iter_from(start)
+        };
+        Iter {
+            // we store an unused Ref to still get runtime borrow safety
+            _ref: self.0.borrow(),
+            iter
+        }
+    }
+}
+
+pub struct Iter<'a, R>
+    where R: Read + super::Iter<'a> + 'a
+{
+    _ref: std::cell::Ref<'a, R>,
+    iter: R::Iter
+}
+
+impl<'a, R> Iterator for Iter<'a, R>
+    where R: Read + super::Iter<'a> + 'a
+{
+    type Item = (&'a [u8], &'a [u8]);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -66,5 +101,55 @@ mod tests {
         assert_eq!(store.get(&[123]).unwrap(), Some(vec![6]));
         assert_eq!(share0.get(&[123]).unwrap(), Some(vec![6]));
         assert_eq!(share1.get(&[123]).unwrap(), Some(vec![6]));
+    }
+
+    #[test]
+    fn iter() {
+        let mut store = MapStore::new().into_shared();
+
+        store.put(vec![1], vec![10]).unwrap();
+        store.put(vec![2], vec![20]).unwrap();
+        store.put(vec![3], vec![30]).unwrap();
+
+        let mut iter = store.iter();
+        assert_eq!(iter.next(), Some((&[1][..], &[10][..])));
+        assert_eq!(iter.next(), Some((&[2][..], &[20][..])));
+        assert_eq!(iter.next(), Some((&[3][..], &[30][..])));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn read_while_iter_exists() {
+        let mut store = MapStore::new().noshared();
+        let store2 = store.clone();
+
+        store.put(vec![1], vec![10]).unwrap();
+        store.put(vec![2], vec![20]).unwrap();
+        store.put(vec![3], vec![30]).unwrap();
+
+        let mut iter = store.iter();
+        assert_eq!(iter.next(), Some((&[1][..], &[10][..])));
+        assert_eq!(store2.get(&[2]).unwrap(), Some(vec![20]));
+        assert_eq!(iter.next(), Some((&[2][..], &[20][..])));
+        assert_eq!(iter.next(), Some((&[3][..], &[30][..])));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    #[should_panic(expected = "already borrowed: BorrowMutError")]
+    fn write_while_iter_exists() {
+        let mut store = MapStore::new().into_shared();
+        let mut store2 = store.clone();
+
+        store.put(vec![1], vec![10]).unwrap();
+        store.put(vec![2], vec![20]).unwrap();
+        store.put(vec![3], vec![30]).unwrap();
+
+        let mut iter = store.iter();
+        assert_eq!(iter.next(), Some((&[1][..], &[10][..])));
+        store2.put(vec![2], vec![21]).unwrap();
+        assert_eq!(iter.next(), Some((&[2][..], &[20][..])));
+        assert_eq!(iter.next(), Some((&[3][..], &[30][..])));
+        assert_eq!(iter.next(), None);
     }
 }
