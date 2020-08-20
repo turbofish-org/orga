@@ -12,7 +12,7 @@ pub type MapStore = BufStore<NullStore>;
 
 /// Wraps a `Store` and records mutations in an in-memory map, so that
 /// modifications do not affect the underlying `Store` until `flush` is called.
-pub struct BufStore<S: Store> {
+pub struct BufStore<S: Read> {
     map: Map,
     store: S,
 }
@@ -30,7 +30,7 @@ impl Default for BufStore<NullStore> {
     }
 }
 
-impl<S: Store> BufStore<S> {
+impl<S: Read> BufStore<S> {
     /// Constructs a `BufStore` by wrapping the given store.
     ///
     /// Calls to get will first check the `BufStore` map, and if no entry is
@@ -55,7 +55,7 @@ impl<S: Store> BufStore<S> {
     }
 }
 
-impl<S: Store> Read for BufStore<S> {
+impl<S: Read> Read for BufStore<S> {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         match self.map.get(key.as_ref()) {
             Some(Some(value)) => Ok(Some(value.clone())),
@@ -65,7 +65,7 @@ impl<S: Store> Read for BufStore<S> {
     }
 }
 
-impl<S: Store> Write for BufStore<S> {
+impl<S: Read> Write for BufStore<S> {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         self.map.insert(key, Some(value));
         Ok(())
@@ -98,7 +98,7 @@ type MapIter<'a> = btree_map::Range<'a, Vec<u8>, Option<Vec<u8>>>;
 
 impl<'a, S> super::Iter<'a> for BufStore<S>
 where
-    S: Store + super::Iter<'a> + 'a,
+    S: Read + super::Iter<'a> + 'a,
 {
     type Iter = Iter<'a, S::Iter>;
 
