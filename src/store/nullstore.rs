@@ -20,7 +20,7 @@ impl Write for NullStore {
     }
 }
 
-impl<'a> Iter<'a, 'a> for NullStore {
+impl<'a> Iter<'a> for NullStore {
     type Iter = NullIter<'a>;
 
     fn iter_from(&'a self, _start: &[u8]) -> NullIter {

@@ -81,9 +81,9 @@ where
     }
 }
 
-impl<'a, 'b: 'a, S, K, V> Map<S, K, V>
+impl<'a, S, K, V> Map<S, K, V>
 where
-    S: Store + crate::store::Iter<'a, 'b>,
+    S: Store + crate::store::Iter<'a>,
     K: Encode + Decode,
     V: Encode + Decode,
 {
@@ -91,7 +91,7 @@ where
     /// key (inclusive).
     ///
     /// Iteration happens in bytewise order of encoded keys.
-    pub fn iter_from(&'a self, start: &K) -> Result<Iter<'a, 'b, S::Iter, K, V>> {
+    pub fn iter_from(&'a self, start: &K) -> Result<Iter<'a, S::Iter, K, V>> {
         let start_bytes = start.encode()?;
         let iter = self.store.iter_from(start_bytes.as_slice());
         Ok(Iter::new(iter))
@@ -100,15 +100,15 @@ where
     /// Creates an iterator over all the entries in the map.
     ///
     /// Iteration happens in bytewise order of encoded keys.
-    pub fn iter(&'a self) -> Iter<'a, 'b, S::Iter, K, V> {
+    pub fn iter(&'a self) -> Iter<'a, S::Iter, K, V> {
         let iter = self.store.iter();
         Iter::new(iter)
     }
 }
 
-pub struct Iter<'a, 'b: 'a, I, K, V>
+pub struct Iter<'a, I, K, V>
 where
-    I: Iterator<Item = (&'b [u8], &'b [u8])>,
+    I: Iterator<Item = (&'a [u8], &'a [u8])>,
     K: Decode,
     V: Decode,
 {
@@ -118,9 +118,9 @@ where
     phantom_v: PhantomData<V>,
 }
 
-impl<'a, 'b: 'a, I, K, V> Iter<'a, 'b, I, K, V>
+impl<'a, I, K, V> Iter<'a, I, K, V>
 where
-    I: Iterator<Item = (&'b [u8], &'b [u8])>,
+    I: Iterator<Item = (&'a [u8], &'a [u8])>,
     K: Decode,
     V: Decode,
 {
@@ -135,9 +135,9 @@ where
     }
 }
 
-impl<'a, 'b: 'a, I, K, V> Iterator for Iter<'a, 'b, I, K, V>
+impl<'a, I, K, V> Iterator for Iter<'a, I, K, V>
 where
-    I: Iterator<Item = (&'b [u8], &'b [u8])>,
+    I: Iterator<Item = (&'a [u8], &'a [u8])>,
     K: Decode,
     V: Decode,
 {
