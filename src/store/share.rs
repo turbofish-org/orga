@@ -2,6 +2,7 @@ use super::{Read, Write, Entry};
 use crate::Result;
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::mem::transmute;
 
 // TODO: we can probably use UnsafeCell instead of RefCell since operations are
 // guaranteed not to interfere with each other.
@@ -59,7 +60,7 @@ impl<R> super::Iter for Shared<R>
 
         // borrow store so we still get runtime borrow checks
         let _ref = unsafe {
-            std::mem::transmute::<
+            transmute::<
                 std::cell::Ref<'_, R>,
                 std::cell::Ref<'static, ()>
             >(self.0.borrow())

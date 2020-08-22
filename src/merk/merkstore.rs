@@ -1,8 +1,9 @@
 use crate::abci::ABCIStore;
 use crate::error::Result;
 use crate::store::*;
-use merk::{BatchEntry, Merk, Op};
+use merk::{BatchEntry, Merk, Op, rocksdb};
 use std::collections::BTreeMap;
+use std::mem::transmute;
 
 type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
@@ -59,6 +60,43 @@ impl<'a> Read for MerkStore<'a> {
             Some(None) => Ok(None),
             None => Ok(self.merk.get(key)?),
         }
+    }
+}
+
+impl crate::store::Iter for MerkStore<'_> {
+    type Iter<'a> = Iter<'a>;
+
+    fn iter_from(&self, start: &[u8]) -> Self::Iter<'_> {
+        let mut iter = self.merk.raw_iter();
+        iter.seek(start);
+        Iter { iter }
+    }
+}
+
+pub struct Iter<'a> {
+    iter: rocksdb::DBRawIterator<'a>
+}
+
+impl<'a> Iterator for Iter<'a> {
+    type Item = (&'a [u8], &'a [u8]);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.iter.valid() {
+            return None;
+        }
+
+        // here we use unsafe code to add lifetimes, since rust-rocksdb just
+        // returns the data with no lifetimes. the transmute calls convert from
+        // `&[u8]` to `&'a [u8]`, so there is no way this can make things *less*
+        // correct.
+        let entry = unsafe {
+            (
+                transmute(self.iter.key().unwrap()),
+                transmute(self.iter.value().unwrap())
+            )
+        };
+        self.iter.next();
+        Some(entry)
     }
 }
 
