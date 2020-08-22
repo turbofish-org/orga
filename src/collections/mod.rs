@@ -1,8 +1,8 @@
 use crate::encoding::{Decode, Encode};
 
-mod deque;
-mod map;
-mod set;
+pub mod deque;
+pub mod map;
+pub mod set;
 
 pub use deque::Deque;
 pub use map::Map;

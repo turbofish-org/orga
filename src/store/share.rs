@@ -1,4 +1,4 @@
-use super::{Read, Write};
+use super::{Read, Write, Entry};
 use crate::Result;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -46,35 +46,41 @@ impl<W: Write> Write for Shared<W> {
     }
 }
 
-impl<'a, R> super::Iter<'a> for Shared<R>
-    where R: Read + super::Iter<'a> + 'a
+impl<R> super::Iter for Shared<R>
+    where R: Read + super::Iter
 {
-    type Iter = Iter<'a, R>;
+    type Iter<'a> = Iter<'a, R::Iter<'a>>;
 
-    fn iter_from(&'a self, start: &[u8]) -> Self::Iter {
+    fn iter_from(&self, start: &[u8]) -> Self::Iter<'_> {
+        // erase lifetime information
         let iter = unsafe {
-            // erase lifetime information
             self.0.as_ptr().as_ref().unwrap().iter_from(start)
         };
-        Iter {
-            // we store an unused Ref to still get runtime borrow safety
-            _ref: self.0.borrow(),
-            iter
-        }
+
+        // borrow store so we still get runtime borrow checks
+        let _ref = unsafe {
+            std::mem::transmute::<
+                std::cell::Ref<'_, R>,
+                std::cell::Ref<'static, ()>
+            >(self.0.borrow())
+        };
+
+        Iter { _ref, iter }
     }
 }
 
-pub struct Iter<'a, R>
-    where R: Read + super::Iter<'a> + 'a
+pub struct Iter<'a, I>
+    where
+        I: Iterator<Item = Entry<'a>>
 {
-    _ref: std::cell::Ref<'a, R>,
-    iter: R::Iter
+    _ref: std::cell::Ref<'static, ()>,
+    iter: I
 }
 
-impl<'a, R> Iterator for Iter<'a, R>
-    where R: Read + super::Iter<'a> + 'a
+impl<'a, I> Iterator for Iter<'a, I>
+    where I: Iterator<Item = Entry<'a>>
 {
-    type Item = (&'a [u8], &'a [u8]);
+    type Item = Entry<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()

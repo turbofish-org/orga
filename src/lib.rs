@@ -3,6 +3,7 @@
 #![feature(proc_macro_hygiene)]
 #![feature(optin_builtin_traits)]
 #![feature(map_first_last)]
+#![feature(generic_associated_types)]
 
 /// Integration with ABCI (gated by `abci` feature).
 #[cfg(feature = "abci")]

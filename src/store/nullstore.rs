@@ -9,10 +9,10 @@ impl Read for NullStore {
     }
 }
 
-impl<'a> Iter<'a> for NullStore {
-    type Iter = NullIter<'a>;
+impl Iter for NullStore {
+    type Iter<'a> = NullIter<'a>;
 
-    fn iter_from(&'a self, _start: &[u8]) -> NullIter {
+    fn iter_from(&self, _start: &[u8]) -> NullIter {
         NullIter(std::marker::PhantomData)
     }
 }
@@ -20,7 +20,7 @@ impl<'a> Iter<'a> for NullStore {
 pub struct NullIter<'a>(std::marker::PhantomData<&'a ()>);
 
 impl<'a> Iterator for NullIter<'a> {
-    type Item = (&'a [u8], &'a [u8]);
+    type Item = Entry<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         None

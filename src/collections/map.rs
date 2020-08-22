@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 
 use crate::encoding::{Decode, Encode};
 use crate::state::State;
-use crate::store::{Read, Store};
+use crate::store::{Read, Store, Entry};
 use crate::Result;
 
 /// A map data structure.
@@ -81,9 +81,9 @@ where
     }
 }
 
-impl<'a, S, K, V> Map<S, K, V>
+impl<S, K, V> Map<S, K, V>
 where
-    S: Store + crate::store::Iter<'a>,
+    S: Store + crate::store::Iter,
     K: Encode + Decode,
     V: Encode + Decode,
 {
@@ -91,7 +91,7 @@ where
     /// key (inclusive).
     ///
     /// Iteration happens in bytewise order of encoded keys.
-    pub fn iter_from(&'a self, start: &K) -> Result<Iter<'a, S::Iter, K, V>> {
+    pub fn iter_from(&self, start: &K) -> Result<Iter<'_, S::Iter<'_>, K, V>> {
         let start_bytes = start.encode()?;
         let iter = self.store.iter_from(start_bytes.as_slice());
         Ok(Iter::new(iter))
@@ -100,7 +100,7 @@ where
     /// Creates an iterator over all the entries in the map.
     ///
     /// Iteration happens in bytewise order of encoded keys.
-    pub fn iter(&'a self) -> Iter<'a, S::Iter, K, V> {
+    pub fn iter(&self) -> Iter<'_, S::Iter<'_>, K, V> {
         let iter = self.store.iter();
         Iter::new(iter)
     }
@@ -108,19 +108,18 @@ where
 
 pub struct Iter<'a, I, K, V>
 where
-    I: Iterator<Item = (&'a [u8], &'a [u8])>,
+    I: Iterator<Item = Entry<'a>>,
     K: Decode,
     V: Decode,
 {
     iter: I,
-    phantom_a: PhantomData<&'a u8>,
     phantom_k: PhantomData<K>,
     phantom_v: PhantomData<V>,
 }
 
 impl<'a, I, K, V> Iter<'a, I, K, V>
 where
-    I: Iterator<Item = (&'a [u8], &'a [u8])>,
+    I: Iterator<Item = Entry<'a>>,
     K: Decode,
     V: Decode,
 {
@@ -128,7 +127,6 @@ where
     fn new(iter: I) -> Self {
         Iter {
             iter,
-            phantom_a: PhantomData,
             phantom_k: PhantomData,
             phantom_v: PhantomData,
         }
@@ -137,7 +135,7 @@ where
 
 impl<'a, I, K, V> Iterator for Iter<'a, I, K, V>
 where
-    I: Iterator<Item = (&'a [u8], &'a [u8])>,
+    I: Iterator<Item = Entry<'a>>,
     K: Decode,
     V: Decode,
 {

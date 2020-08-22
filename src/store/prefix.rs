@@ -1,4 +1,4 @@
-use super::{Read, Write};
+use super::{Read, Write, Entry};
 use crate::Result;
 
 /// A `Store` which wraps another `Store` and appends a prefix byte to the key
@@ -49,12 +49,12 @@ impl<S: Write> Write for Prefixed<S> {
     }
 }
 
-impl<'a, S> super::Iter<'a> for Prefixed<S>
-    where S: Read + super::Iter<'a> + 'a
+impl<S> super::Iter for Prefixed<S>
+    where S: Read + super::Iter
 {
-    type Iter = Iter<'a, S::Iter>;
+    type Iter<'a> = Iter<'a, S::Iter<'a>>;
 
-    fn iter_from(&'a self, start: &[u8]) -> Self::Iter {
+    fn iter_from(&self, start: &[u8]) -> Self::Iter<'_> {
         let (start, start_len) = prefix(self.prefix, start);
         let store_iter = self.store.iter_from(&start[..start_len]);
         Iter {
@@ -65,16 +65,16 @@ impl<'a, S> super::Iter<'a> for Prefixed<S>
 }
 
 pub struct Iter<'a, I>
-    where I: Iterator<Item = (&'a [u8], &'a [u8])>
+    where I: Iterator<Item = Entry<'a>>
 {
     inner: I,
     prefix: u8
 }
 
 impl<'a, I> Iterator for Iter<'a, I>
-    where I: Iterator<Item = (&'a [u8], &'a [u8])>
+    where I: Iterator<Item = Entry<'a>>
 {
-    type Item = (&'a [u8], &'a [u8]);
+    type Item = Entry<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.inner.next() {
