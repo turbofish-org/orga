@@ -183,6 +183,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::Iter;
 
     #[test]
     fn satisfies_store_trait() {
@@ -210,5 +211,26 @@ mod tests {
     #[test]
     fn mapstore_new() {
         let _store: MapStore = MapStore::new();
+    }
+
+    #[test]
+    fn iter() {
+        let mut store = MapStore::new();
+        store.put(vec![0], vec![0]).unwrap();
+        store.put(vec![1], vec![0]).unwrap();
+        store.put(vec![2], vec![0]).unwrap();
+        store.put(vec![4], vec![0]).unwrap();
+
+        let mut buf = BufStore::wrap(store);
+        buf.put(vec![1], vec![1]).unwrap();
+        buf.delete(&[2]).unwrap();
+        buf.put(vec![3], vec![1]).unwrap();
+
+        let mut iter = buf.iter();
+        assert_eq!(iter.next(), Some((&[0][..], &[0][..])));
+        assert_eq!(iter.next(), Some((&[1][..], &[1][..])));
+        assert_eq!(iter.next(), Some((&[3][..], &[1][..])));
+        assert_eq!(iter.next(), Some((&[4][..], &[0][..])));
+        assert_eq!(iter.next(), None);
     }
 }
