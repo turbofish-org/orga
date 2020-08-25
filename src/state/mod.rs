@@ -12,3 +12,15 @@ pub use wrapper::WrapperStore;
 pub trait State<S: Read>: Sized {
     fn wrap_store(store: S) -> Result<Self>;
 }
+
+pub trait Query {
+    type Request;
+    type Response;
+
+    fn query(&self, req: Self::Request) -> Result<Self::Response>;
+
+    fn resolve(&self, req: Self::Request) -> Result<()> {
+        self.query(req)?;
+        Ok(())
+    }
+}
