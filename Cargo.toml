@@ -9,7 +9,7 @@ license = "MIT"
 [dependencies]
 failure = "0.1.8"
 abci2 = { git = "https://github.com/nomic-io/abci2", rev = "f134b52f4d4a5b1704f0d1813cb901252cc3ed02", version = "0.1.2", optional = true }
-merk = { git = " https://github.com/nomic-io/merk", rev = "114f5a2415bb2ce5e51501d4eb2a56e5726708a6", version = "1.0.0", optional = true }
+merk = { git = " https://github.com/nomic-io/merk", rev = "104535c681610bb1a7d687de45ea1040aab590fd", version = "1.0.0", optional = true }
 tendermint-rpc = { version = "0.15.0", features = ["client"], optional = true }
 tendermint = { version = "0.15.0", optional = true }
 orga-macros = { path = "macros", version = "0.1.0" }
