@@ -2,13 +2,13 @@ use crate::error::Result;
 use crate::state::State;
 use std::ops::{Deref, DerefMut};
 
-mod bufstore;
-mod iter;
-mod nullstore;
-mod prefix;
-mod rwlog;
-mod share;
-mod split;
+pub mod bufstore;
+pub mod iter;
+pub mod nullstore;
+pub mod prefix;
+pub mod rwlog;
+pub mod share;
+pub mod split;
 
 pub use bufstore::Map as BufStoreMap;
 pub use bufstore::{BufStore, MapStore};

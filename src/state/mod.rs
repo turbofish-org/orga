@@ -1,8 +1,8 @@
 use crate::Result;
 use crate::store::Read;
 
-mod value;
-mod wrapper;
+pub mod value;
+pub mod wrapper;
 
 pub use value::Value;
 pub use wrapper::WrapperStore;
