@@ -1,10 +1,10 @@
 use super::*;
 
-/// A dummy implementation of `Read` which is always empty.
+#[derive(Default)]
 pub struct NullStore;
 
 impl Read for NullStore {
-    fn get(&self, _key: &[u8]) -> Result<Option<Vec<u8>>> {
+    fn get(&self, _: &[u8]) -> Result<Option<Vec<u8>>> {
         Ok(None)
     }
 }

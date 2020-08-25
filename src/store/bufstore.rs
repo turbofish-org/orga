@@ -17,16 +17,20 @@ pub struct BufStore<S: Read> {
     store: S,
 }
 
-impl BufStore<NullStore> {
-    /// Constructs a `BufStore` with no underlying store.
+impl<S: Read + Default> BufStore<S> {
+    /// Constructs a `BufStore` which wraps the default value of the inner
+    /// store.
     pub fn new() -> Self {
-        BufStore::wrap(NullStore)
+        Default::default()
     }
 }
 
-impl Default for BufStore<NullStore> {
+impl<S: Read + Default> Default for BufStore<S> {
     fn default() -> Self {
-        Self::new()
+        Self {
+            map: Default::default(),
+            store: Default::default()
+        }
     }
 }
 
@@ -189,12 +193,12 @@ mod tests {
     fn satisfies_store_trait() {
         // (this is a compile-time assertion)
         fn assert_store<S: Store>(_: S) {}
-        assert_store(BufStore::new());
+        assert_store(MapStore::new());
     }
 
     #[test]
     fn get_slice() {
-        let mut store = BufStore::new();
+        let mut store = MapStore::new();
         store.put(vec![1, 2, 3], vec![4, 5, 6]).unwrap();
         let value = store.get(&[1, 2, 3]).unwrap();
         assert_eq!(value, Some(vec![4, 5, 6]));
@@ -202,7 +206,7 @@ mod tests {
 
     #[test]
     fn delete() {
-        let mut store = BufStore::new();
+        let mut store = MapStore::new();
         store.put(vec![1, 2, 3], vec![4, 5, 6]).unwrap();
         store.delete(&[1, 2, 3]).unwrap();
         assert_eq!(store.get(&[1, 2, 3]).unwrap(), None);

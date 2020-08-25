@@ -17,7 +17,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::{Read, Write, BufStore};
+    use crate::store::{Read, Write, MapStore};
     use failure::bail;
 
     fn get_u8<R: Read>(key: &[u8], store: R) -> Result<u8> {
@@ -47,7 +47,7 @@ mod tests {
 
     #[test]
     fn step_counter_error() {
-        let mut store = BufStore::new();
+        let mut store = MapStore::new();
         // invalid `n`, should error
         assert!(counter(&mut store, 100).is_err());
         // count should not have been mutated
@@ -58,7 +58,7 @@ mod tests {
 
     #[test]
     fn step_counter_atomic_error() {
-        let mut store = BufStore::new();
+        let mut store = MapStore::new();
         // invalid `n`, should error
         assert!(step_atomic(|s, i| counter(s, i), &mut store, 100).is_err());
         // count should not have been mutated
@@ -69,7 +69,7 @@ mod tests {
 
     #[test]
     fn step_counter() {
-        let mut store = BufStore::new();
+        let mut store = MapStore::new();
         assert_eq!(step_atomic(|s, i| counter(s, i), &mut store, 0).unwrap(), 1);
         assert!(step_atomic(|s, i| counter(s, i), &mut store, 0).is_err());
         assert_eq!(step_atomic(|s, i| counter(s, i), &mut store, 1).unwrap(), 2);
@@ -80,7 +80,7 @@ mod tests {
 
     #[test]
     fn closure_sm() {
-        let mut store = BufStore::new();
+        let mut store = MapStore::new();
         assert_eq!(
             step_atomic(|_, input| Ok(input + 1), &mut store, 100).unwrap(),
             101
