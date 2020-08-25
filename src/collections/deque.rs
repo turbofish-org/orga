@@ -62,6 +62,19 @@ impl<S: Read, T: Encode + Decode> Deque<S, T> {
         self.get_fixed(self.fixed_index(index))
     }
 
+    /// Gets the element with the given index, or None if the index is out of
+    /// bounds.
+    ///
+    /// If getting from the store or decoding the store value returns an error,
+    /// this method will return the error.
+    pub fn maybe_get(&self, index: u64) -> Result<Option<T>> {
+        Ok(if self.is_oob(index) {
+            None
+        } else {
+            Some(self.get(index)?)
+        })
+    }
+
     /// Calculates the current fixed index of the given index.
     ///
     /// An element's fixed index remains constant even as elements are pushed or
@@ -73,7 +86,7 @@ impl<S: Read, T: Encode + Decode> Deque<S, T> {
     /// 0 will be "foo" and index 1 will be "bar". But if we pop "foo", now
     /// index 0 will be "bar", but its fixed index will still be 1.
     pub fn fixed_index(&self, index: u64) -> u64 {
-        if self.len() < index {
+        if self.is_oob(index) {
             panic!("Index out of bounds");
         }
 
@@ -88,8 +101,13 @@ impl<S: Read, T: Encode + Decode> Deque<S, T> {
             bail!("Index out of bounds");
         }
         let bytes = self.store.get(&store_key(index)[..])?;
-        // TODO: don't unwrap, since in an untrusted context we might not have this value
         T::decode(bytes.unwrap().as_slice())
+    }
+
+    /// Returns true if the index is out of bounds, or false if the index is
+    /// valid.
+    pub fn is_oob(&self, index: u64) -> bool {
+        index >= self.len()
     }
 
     /// Creates an iterator over the deque's elements.
