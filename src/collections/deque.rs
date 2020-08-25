@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use failure::bail;
 
 use crate::encoding::{Decode, Encode};
-use crate::state::{State, Value};
+use crate::state::{State, Value, Query};
 use crate::store::{Read, Store};
 use crate::Result;
 
@@ -135,6 +135,23 @@ impl<S: Read, T: Encode + Decode> Deque<S, T> {
         } else {
             Ok(Some(self.get(self.len() - 1)?))
         }
+    }
+}
+
+impl<S: Read, T: Encode + Decode> Query for Deque<S, T> {
+    type Request = u64;
+    type Response = Option<T>;
+
+    fn query(&self, index: u64) -> Result<Option<T>> {
+        self.maybe_get(index)
+    }
+
+    fn resolve(&self, index: u64) -> Result<()> {
+        if index >= self.state.head && index < self.state.tail {
+            self.store.get(&store_key(index)[..])?;
+        }
+
+        Ok(())
     }
 }
 
@@ -327,5 +344,52 @@ mod tests {
 
         let collected = deque.iter().collect::<Result<Vec<u64>>>().unwrap();
         assert_eq!(collected, vec![10, 20]);
+    }
+
+    #[test]
+    fn query_resolve_oob() {
+        let mut store = RWLog::wrap(MapStore::new());
+        let mut deque: Deque<_, u64> = (&mut store).wrap().unwrap();
+        deque.push_back(10).unwrap();
+        deque.push_back(20).unwrap();
+
+        deque.resolve(2).unwrap();
+
+        let (reads, _, _) = store.finish();
+        assert_eq!(reads.len(), 1);
+        assert!(reads.contains(&[][..]));
+    }
+
+    #[test]
+    fn query_resolve_ok() {
+        let mut store = RWLog::wrap(MapStore::new());
+        let mut deque: Deque<_, u64> = (&mut store).wrap().unwrap();
+        deque.push_back(10).unwrap();
+        deque.push_back(20).unwrap();
+
+        deque.resolve(1).unwrap();
+
+        let (reads, _, _) = store.finish();
+        assert_eq!(reads.len(), 2);
+        assert!(reads.contains(&[][..]));
+        assert!(reads.contains(&[0, 0, 0, 0, 0, 0, 0, 1][..]));
+    }
+
+    #[test]
+    fn query_oob() {
+        let mut store = MapStore::new();
+        let mut deque: Deque<_, u64> = (&mut store).wrap().unwrap();
+        deque.push_back(10).unwrap();
+        deque.push_back(20).unwrap();
+        assert_eq!(deque.query(2).unwrap(), None);
+    }
+
+    #[test]
+    fn query_ok() {
+        let mut store = MapStore::new();
+        let mut deque: Deque<_, u64> = (&mut store).wrap().unwrap();
+        deque.push_back(10).unwrap();
+        deque.push_back(20).unwrap();
+        assert_eq!(deque.query(1).unwrap(), Some(20));
     }
 }
