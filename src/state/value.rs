@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use failure::Fail;
 
 use crate::encoding::{Decode, Encode};
-use crate::state::State;
+use crate::state::{State, Query};
 use crate::store::{Read, Store};
 
 const EMPTY_KEY: &[u8] = &[];
@@ -58,6 +58,20 @@ impl<S: Read, T: Encode + Decode> Value<S, T> {
             Some(bytes) => Ok(Some(T::decode(bytes.as_slice())?)),
             None => Ok(None),
         }
+    }
+}
+
+impl<S: Read, T: Encode + Decode> Query for Value<S, T> {
+    type Request = ();
+    type Response = Option<T>;
+
+    fn query(&self, _: ()) -> crate::Result<Option<T>> {
+        Ok(self.maybe_get()?)
+    }
+
+    fn resolve(&self, _: ()) -> crate::Result<()> {
+        self.store.get(&[])?;
+        Ok(())
     }
 }
 
