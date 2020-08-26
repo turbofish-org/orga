@@ -147,7 +147,7 @@ impl<S: Read, T: Encode + Decode> Query for Deque<S, T> {
     }
 
     fn resolve(&self, index: u64) -> Result<()> {
-        if index >= self.state.head && index < self.state.tail {
+        if !self.is_oob(index) {
             self.store.get(&store_key(index)[..])?;
         }
 
