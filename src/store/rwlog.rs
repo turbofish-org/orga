@@ -4,6 +4,8 @@ use super::*;
 
 type Set = HashSet<Vec<u8>>;
 
+// TODO: split into ReadLog and WriteLog
+
 /// A `Store` wrapper which records the keys of all reads and writes made
 /// through it.
 pub struct RWLog<S: Store> {

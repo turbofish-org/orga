@@ -29,7 +29,7 @@ impl<'a> MerkStore<'a> {
     /// `aux` may contain auxilary keys and values to be written to the
     /// underlying store, which will not affect the Merkle tree but will still
     /// be persisted in the database.
-    fn write(&mut self, aux: Vec<(Vec<u8>, Option<Vec<u8>>)>) -> Result<()> {
+    pub(super) fn write(&mut self, aux: Vec<(Vec<u8>, Option<Vec<u8>>)>) -> Result<()> {
         let map = self.map.take().unwrap();
         self.map = Some(Map::new());
 
@@ -37,6 +37,10 @@ impl<'a> MerkStore<'a> {
         let aux_batch = to_batch(aux);
 
         Ok(self.merk.apply(batch.as_ref(), aux_batch.as_ref())?)
+    }
+
+    pub(super) fn merk(&self) -> &Merk {
+        self.merk
     }
 }
 
