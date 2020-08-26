@@ -5,12 +5,16 @@ use crate::Result;
 use crate::store::Read;
 use super::MerkStore;
 
+/// Records reads to a `MerkStore` and uses them to build a proof including all
+/// accessed keys.
 pub struct ProofBuilder<'a> {
     store: &'a MerkStore<'a>,
     keys: Cell<BTreeSet<Vec<u8>>>
 }
 
 impl<'a> ProofBuilder<'a> {
+    /// Constructs a `ProofBuilder` which provides read access to data in the
+    /// given `MerkStore`.
     pub fn new(store: &'a MerkStore<'a>) -> Self {
         ProofBuilder {
             store,
@@ -18,6 +22,8 @@ impl<'a> ProofBuilder<'a> {
         }
     }
 
+    /// Builds a Merk proof including all the data accessed during the life of
+    /// the `ProofBuilder`.
     pub fn build(self) -> Result<Vec<u8>> {
         let keys = self.keys.take();
         let keys: Vec<Vec<u8>> = keys.into_iter().collect();
@@ -26,6 +32,8 @@ impl<'a> ProofBuilder<'a> {
 }
 
 impl<'a> Read for ProofBuilder<'a> {
+    /// Gets the value from the underlying store, recording the key to be
+    /// included in the proof when `build` is called.
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         let mut keys = self.keys.take();
         keys.insert(key.to_vec());
