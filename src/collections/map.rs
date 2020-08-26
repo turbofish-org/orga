@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 use std::marker::PhantomData;
 
 use crate::encoding::{Decode, Encode};
-use crate::state::State;
+use crate::state::{State, Query};
 use crate::store::{Read, Store, Entry};
 use crate::Result;
 
@@ -40,17 +40,39 @@ where
     K: Encode + Decode,
     V: Encode + Decode,
 {
-    /// Gets the value with the given key from the map.
+    /// Gets the value with the given key from the map, or `None` if there is no
+    /// entry with the given key.
     ///
-    /// If there is no entry with the given key, `None` will be returned. If
-    /// there is an error when getting from the store or decoding the value, the
-    /// error will be returned.
+    /// If there is an error when getting from the store or decoding the value,
+    /// the error will be returned.
     pub fn get<B: Borrow<K>>(&self, key: B) -> Result<Option<V>> {
         let (key_bytes, key_length) = encode_key_array(key.borrow())?;
         self.store
             .get(&key_bytes[..key_length])?
             .map(|value_bytes| V::decode(value_bytes.as_slice()))
             .transpose()
+    }
+}
+
+
+impl<S, K, V> Query for Map<S, K, V>
+where
+    S: Read,
+    K: Encode + Decode,
+    V: Encode + Decode,
+{
+    type Request = K;
+    type Response = Option<V>;
+
+    fn query(&self, key: K) -> Result<Option<V>> {
+        self.get(key)
+    }
+
+    fn resolve(&self, key: K) -> Result<()> {
+        // TODO: make a get_raw method and use that instead
+        let (key_bytes, key_length) = encode_key_array(key.borrow())?;
+        self.store.get(&key_bytes[..key_length])?;
+        Ok(())
     }
 }
 
@@ -209,5 +231,32 @@ mod tests {
 
         let collected = map.iter().collect::<Vec<(u32, u32)>>();
         assert_eq!(collected, vec![(12, 34), (56, 78)]);
+    }
+
+    #[test]
+    fn query_resolve() {
+        let mut store = RWLog::wrap(MapStore::new());
+        let mut map: Map<_, u32, u32> = (&mut store).wrap().unwrap();
+        map.insert(1, 2).unwrap();
+        map.insert(3, 4).unwrap();
+
+        map.resolve(1).unwrap(); // exists
+        map.resolve(10).unwrap(); // doesn't exist
+        
+        let (reads, _, _) = store.finish();
+        assert_eq!(reads.len(), 2);
+        assert!(reads.contains(&[0, 0, 0, 1][..]));
+        assert!(reads.contains(&[0, 0, 0, 10][..]));
+    }
+
+    #[test]
+    fn query() {
+        let mut store = MapStore::new();
+        let mut map: Map<_, u32, u32> = (&mut store).wrap().unwrap();
+        map.insert(1, 2).unwrap();
+        map.insert(3, 4).unwrap();
+
+        assert_eq!(map.query(1).unwrap(), Some(2));
+        assert_eq!(map.query(10).unwrap(), None);
     }
 }

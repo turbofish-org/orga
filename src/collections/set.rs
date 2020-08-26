@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use super::Map;
 use crate::encoding::{Decode, Encode};
-use crate::state::State;
+use crate::state::{State, Query};
 use crate::store::{Read, Store};
 use crate::Result;
 
@@ -17,6 +17,15 @@ impl<S: Read, T: Encode + Decode> State<S> for Set<S, T> {
         Ok(Self {
             map: Map::wrap_store(store)?,
         })
+    }
+}
+
+impl<S: Read, T: Encode + Decode> Query for Set<S, T> {
+    type Request = T;
+    type Response = bool;
+
+    fn query(&self, req: T) -> Result<bool> {
+        Ok(self.map.query(req)?.is_some())
     }
 }
 
@@ -87,5 +96,32 @@ mod tests {
         assert_eq!(set.contains(0).unwrap(), false);
         assert_eq!(set.contains(1234).unwrap(), true);
         assert_eq!(set.contains(5678).unwrap(), true);
+    }
+
+    #[test]
+    fn query_resolve() {
+        let mut store = RWLog::wrap(MapStore::new());
+        let mut map: Set<_, u32> = (&mut store).wrap().unwrap();
+        map.insert(1).unwrap();
+        map.insert(3).unwrap();
+
+        map.resolve(1).unwrap(); // exists
+        map.resolve(10).unwrap(); // doesn't exist
+        
+        let (reads, _, _) = store.finish();
+        assert_eq!(reads.len(), 2);
+        assert!(reads.contains(&[0, 0, 0, 1][..]));
+        assert!(reads.contains(&[0, 0, 0, 10][..]));
+    }
+
+    #[test]
+    fn query() {
+        let mut store = MapStore::new();
+        let mut map: Set<_, u32> = (&mut store).wrap().unwrap();
+        map.insert(1).unwrap();
+        map.insert(3).unwrap();
+
+        assert_eq!(map.query(1).unwrap(), true);
+        assert_eq!(map.query(10).unwrap(), false);
     }
 }
