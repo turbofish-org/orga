@@ -61,7 +61,7 @@ mod tests {
 
         let builder = ProofBuilder::new(&store);
         let key = [1, 2, 3];
-        builder.get(&key[..]).unwrap();
+        assert_eq!(builder.get(&key[..]).unwrap(), Some(vec![2]));
     
         let proof = builder.build().unwrap();
         let root_hash = merk.root_hash();
@@ -80,7 +80,7 @@ mod tests {
 
         let builder = ProofBuilder::new(&store);
         let key = [5];
-        builder.get(&key[..]).unwrap();
+        assert_eq!(builder.get(&key[..]).unwrap(), None);
     
         let proof = builder.build().unwrap();
         let root_hash = merk.root_hash();
