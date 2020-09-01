@@ -104,6 +104,14 @@ impl<S: Write, T: DerefMut<Target = S>> Write for T {
     }
 }
 
+impl<'a, S: Iter + 'a> Iter for &mut S {
+    type Iter<'b> = <S as Iter>::Iter<'b>;
+
+    fn iter_from(&self, start: &[u8]) -> Self::Iter<'_> {
+        self.deref().iter_from(start)
+    }
+}
+
 /// A trait for types which contain data that can be flushed to an underlying
 /// store.
 pub trait Flush {
