@@ -7,7 +7,7 @@ use failure::bail;
 use log::info;
 
 use crate::state_machine::step_atomic;
-use crate::store::{BufStore, BufStoreMap, Flush, MapStore, Read, Store, Write};
+use crate::store::{BufStore, BufStoreMap, Flush, Iter, MapStore, NullStore, Read, Store, Write};
 use crate::Result;
 
 pub use abci2::messages::abci as messages;
@@ -317,11 +317,15 @@ impl Worker {
 /// Info are automatically handled within
 /// [`ABCIStateMachine`](struct.ABCIStateMachine.html).
 pub trait Application {
-    fn init_chain<S: Store>(&self, _store: S, _req: RequestInitChain) -> Result<ResponseInitChain> {
+    fn init_chain<S: Store + Iter>(
+        &self,
+        _store: S,
+        _req: RequestInitChain,
+    ) -> Result<ResponseInitChain> {
         Ok(Default::default())
     }
 
-    fn begin_block<S: Store>(
+    fn begin_block<S: Store + Iter>(
         &self,
         _store: S,
         _req: RequestBeginBlock,
@@ -329,21 +333,33 @@ pub trait Application {
         Ok(Default::default())
     }
 
-    fn deliver_tx<S: Store>(&self, _store: S, _req: RequestDeliverTx) -> Result<ResponseDeliverTx> {
+    fn deliver_tx<S: Store + Iter>(
+        &self,
+        _store: S,
+        _req: RequestDeliverTx,
+    ) -> Result<ResponseDeliverTx> {
         Ok(Default::default())
     }
 
-    fn end_block<S: Store>(&self, _store: S, _req: RequestEndBlock) -> Result<ResponseEndBlock> {
+    fn end_block<S: Store + Iter>(
+        &self,
+        _store: S,
+        _req: RequestEndBlock,
+    ) -> Result<ResponseEndBlock> {
         Ok(Default::default())
     }
 
-    fn check_tx<S: Store>(&self, _store: S, _req: RequestCheckTx) -> Result<ResponseCheckTx> {
+    fn check_tx<S: Store + Iter>(
+        &self,
+        _store: S,
+        _req: RequestCheckTx,
+    ) -> Result<ResponseCheckTx> {
         Ok(Default::default())
     }
 }
 
 /// Interface for persisting ABCI app state, as a supertrait of [`store::Store`](../store/trait.Store.html).
-pub trait ABCIStore: Store {
+pub trait ABCIStore: Store + Iter {
     fn height(&self) -> Result<u64>;
 
     fn root_hash(&self) -> Result<Vec<u8>>;
