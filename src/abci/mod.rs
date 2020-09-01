@@ -391,6 +391,14 @@ impl Read for MemStore {
     }
 }
 
+impl Iter for MemStore {
+    type Iter<'a> = <MapStore as Iter>::Iter<'a>;
+
+    fn iter_from(&self, start: &[u8]) -> Self::Iter<'_> {
+        self.store.iter_from(start)
+    }
+}
+
 impl Write for MemStore {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         self.store.put(key, value)
