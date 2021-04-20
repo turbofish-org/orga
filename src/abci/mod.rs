@@ -63,10 +63,10 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
 
         match value {
             Req::Info(_) => {
-                let mut message = ResponseInfo::default();
-                message.data = "Rust ABCI State Machine".into();
-                message.version = "X".into();
-                message.app_version = 0;
+                let mut res_info = ResponseInfo::default();
+                res_info.data = "Rust ABCI State Machine".into();
+                res_info.version = "X".into();
+                res_info.app_version = 0;
 
                 let start_height = self.store.height()?;
                 info!("State is at height {}", start_height);
@@ -77,10 +77,10 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                     self.store.root_hash()?
                 };
 
-                message.last_block_height = start_height as i64;
-                message.last_block_app_hash = app_hash;
+                res_info.last_block_height = start_height as i64;
+                res_info.last_block_app_hash = app_hash;
 
-                Ok(Res::Info(message))
+                Ok(Res::Info(res_info))
             }
             Req::Flush(_) => Ok(Res::Flush(Default::default())),
             Req::Echo(_) => Ok(Res::Echo(Default::default())),
@@ -103,7 +103,7 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                 let mut store =
                     BufStore::wrap_with_map(&mut self.store, self.consensus_state.take().unwrap());
 
-                let message =
+                let res_init_chain =
                     match step_atomic(|store, req| app.init_chain(store, req), &mut store, req) {
                         Ok(res) => res,
                         Err(_) => Default::default(),
@@ -115,7 +115,7 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                 self.app.replace(app);
                 self.consensus_state.replace(Default::default());
 
-                Ok(Res::InitChain(message))
+                Ok(Res::InitChain(res_init_chain))
             }
             Req::BeginBlock(req) => {
                 let app = self.app.take().unwrap();
@@ -201,9 +201,9 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                 self.mempool_state.replace(Default::default());
                 self.consensus_state.replace(Default::default());
 
-                let mut message = ResponseCommit::default();
-                message.data = self.store.root_hash()?;
-                Ok(Res::Commit(message))
+                let mut res_commit = ResponseCommit::default();
+                res_commit.data = self.store.root_hash()?;
+                Ok(Res::Commit(res_commit))
             }
             Req::CheckTx(req) => {
                 let app = self.app.take().unwrap();
