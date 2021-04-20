@@ -1,7 +1,6 @@
 #![feature(trait_alias)]
 #![feature(fn_traits)]
 #![feature(proc_macro_hygiene)]
-#![feature(optin_builtin_traits)]
 #![feature(map_first_last)]
 #![feature(generic_associated_types)]
 
@@ -36,5 +35,5 @@ mod error;
 
 // re-exports
 pub use error::*;
-pub use store::Store;
 pub use orga_macros as macros;
+pub use store::Store;

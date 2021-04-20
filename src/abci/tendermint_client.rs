@@ -1,7 +1,6 @@
 use crate::{store::Read, Result};
 use blocking::block_on;
-use failure::format_err;
-use tendermint_rpc::Client;
+use tendermint_rpc::{Client, HttpClient};
 
 /// A [`store::Read`](../store/trait.Read.html) implementation which queries a
 /// Tendermint node's state via RPC.
@@ -10,7 +9,7 @@ use tendermint_rpc::Client;
 /// query response is a merkle proof then another layer must be used to verify,
 /// for example [`MerkClient`](../merkstore/struct.Client.html).
 pub struct TendermintClient {
-    client: Client,
+    client: HttpClient,
 }
 
 impl TendermintClient {
@@ -23,10 +22,7 @@ impl TendermintClient {
     /// client will fail.
     pub fn new(addr: &str) -> Result<TendermintClient> {
         Ok(TendermintClient {
-            client: Client::new(
-                addr.parse()
-                    .map_err(|_| format_err!("Invalid Tendermint RPC address"))?,
-            ),
+            client: HttpClient::new(addr)?,
         })
     }
 }

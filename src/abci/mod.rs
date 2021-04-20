@@ -7,13 +7,13 @@ use failure::bail;
 use log::info;
 
 use crate::state_machine::step_atomic;
-use crate::store::{BufStore, BufStoreMap, Flush, Iter, MapStore, NullStore, Read, Store, Write};
+use crate::store::{BufStore, BufStoreMap, Flush, Iter, MapStore, Read, Store, Write};
 use crate::Result;
 
-pub use abci2::messages::abci as messages;
-use abci2::messages::abci::Request_oneof_value::*;
-use abci2::messages::abci::*;
-pub use abci2::messages::abci::{Request, Response};
+use messages::*;
+pub use tendermint_proto::abci as messages;
+use tendermint_proto::abci::request::Value as Req;
+use tendermint_proto::abci::response::Value as Res;
 
 mod tendermint_client;
 pub use tendermint_client::TendermintClient;
@@ -35,7 +35,10 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
     /// for transactions and blocks), and store (a key/value store to persist
     /// the state data).
     pub fn new(app: A, store: S) -> Self {
-        let (sender, receiver) = sync_channel(0);
+        let (sender, receiver): (
+            SyncSender<(Request, SyncSender<Response>)>,
+            Receiver<(Request, SyncSender<Response>)>,
+        ) = sync_channel(0);
         ABCIStateMachine {
             app: Some(app),
             store,
@@ -52,19 +55,18 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
     /// Some messages, such as `info`, `flush`, and `echo` are automatically
     /// handled by the `ABCIStateMachine`, while others are passed to the
     /// [`Application`](trait.Application.html).
-    pub fn run(&mut self, req: Request) -> Result<Response> {
+    pub fn run(&mut self, req: Request) -> Result<Res> {
         let value = match req.value {
             None => bail!("Received empty request"),
             Some(value) => value,
         };
 
         match value {
-            info(_) => {
-                let mut res = Response::new();
-                let mut message = ResponseInfo::new();
-                message.set_data("Rust ABCI State Machine".to_string());
-                message.set_version("X".to_string());
-                message.set_app_version(0);
+            Req::Info(_) => {
+                let mut message = ResponseInfo::default();
+                message.data = "Rust ABCI State Machine".into();
+                message.version = "X".into();
+                message.app_version = 0;
 
                 let start_height = self.store.height()?;
                 info!("State is at height {}", start_height);
@@ -75,49 +77,33 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                     self.store.root_hash()?
                 };
 
-                message.set_last_block_height(start_height as i64);
-                message.set_last_block_app_hash(app_hash);
+                message.last_block_height = start_height as i64;
+                message.last_block_app_hash = app_hash;
 
-                res.set_info(message);
-                Ok(res)
+                Ok(Res::Info(message))
             }
-            flush(_) => {
-                let mut res = Response::new();
-                res.set_flush(ResponseFlush::new());
-                Ok(res)
-            }
-            echo(_) => {
-                let mut res = Response::new();
-                res.set_echo(ResponseEcho::new());
-                Ok(res)
-            }
-            set_option(_) => {
-                let mut res = Response::new();
-                res.set_set_option(ResponseSetOption::new());
-                Ok(res)
-            }
-            query(req) => {
+            Req::Flush(_) => Ok(Res::Flush(Default::default())),
+            Req::Echo(_) => Ok(Res::Echo(Default::default())),
+            Req::SetOption(_) => Ok(Res::SetOption(Default::default())),
+            Req::Query(req) => {
                 // TODO: handle multiple keys (or should this be handled by store impl?)
-                let key = req.get_data();
-                let data = self.store.query(key)?;
+                let key = req.data;
+                let data = self.store.query(&key)?;
 
                 // TODO: indicate if key doesn't exist vs just being empty
-                let mut res = Response::new();
-                let mut res_query = ResponseQuery::new();
-                res_query.set_code(0);
-                res_query.set_index(0);
-                res_query.set_log("".to_string());
-                res_query.set_value(data);
-                res_query.set_height(self.height as i64);
-                res.set_query(res_query);
-                Ok(res)
+                let mut res = ResponseQuery::default();
+                res.code = 0;
+                res.index = 0;
+                res.value = data;
+                res.height = self.height as i64;
+                Ok(Res::Query(res))
             }
-            init_chain(req) => {
+            Req::InitChain(req) => {
                 let app = self.app.take().unwrap();
                 let mut store =
                     BufStore::wrap_with_map(&mut self.store, self.consensus_state.take().unwrap());
 
-                let res_init_chain =
+                let message =
                     match step_atomic(|store, req| app.init_chain(store, req), &mut store, req) {
                         Ok(res) => res,
                         Err(_) => Default::default(),
@@ -129,11 +115,9 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                 self.app.replace(app);
                 self.consensus_state.replace(Default::default());
 
-                let mut res = Response::new();
-                res.set_init_chain(res_init_chain);
-                Ok(res)
+                Ok(Res::InitChain(message))
             }
-            begin_block(req) => {
+            Req::BeginBlock(req) => {
                 let app = self.app.take().unwrap();
                 let mut store =
                     BufStore::wrap_with_map(&mut self.store, self.consensus_state.take().unwrap());
@@ -150,11 +134,9 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                 self.app.replace(app);
                 self.consensus_state.replace(store.into_map());
 
-                let mut res = Response::new();
-                res.set_begin_block(res_begin_block);
-                Ok(res)
+                Ok(Res::BeginBlock(res_begin_block))
             }
-            deliver_tx(req) => {
+            Req::DeliverTx(req) => {
                 let app = self.app.take().unwrap();
                 let mut store =
                     BufStore::wrap_with_map(&mut self.store, self.consensus_state.take().unwrap());
@@ -167,8 +149,8 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                     Ok(res) => res,
                     Err(err) => {
                         let mut res: ResponseDeliverTx = Default::default();
-                        res.set_code(1);
-                        res.set_info(format!("{}", err));
+                        res.code = 1;
+                        res.log = format!("{}", err);
                         res
                     }
                 };
@@ -176,12 +158,10 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                 self.app.replace(app);
                 self.consensus_state.replace(store.into_map());
 
-                let mut res = Response::new();
-                res.set_deliver_tx(res_deliver_tx);
-                Ok(res)
+                Ok(Res::DeliverTx(res_deliver_tx))
             }
-            end_block(req) => {
-                self.height = req.get_height() as u64;
+            Req::EndBlock(req) => {
+                self.height = req.height as u64;
 
                 let app = self.app.take().unwrap();
                 let mut store =
@@ -199,11 +179,9 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                 self.app.replace(app);
                 self.consensus_state.replace(store.into_map());
 
-                let mut res = Response::new();
-                res.set_end_block(res_end_block);
-                Ok(res)
+                Ok(Res::EndBlock(res_end_block))
             }
-            commit(_) => {
+            Req::Commit(_) => {
                 let mut store =
                     BufStore::wrap_with_map(&mut self.store, self.consensus_state.take().unwrap());
                 store.flush()?;
@@ -223,13 +201,11 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                 self.mempool_state.replace(Default::default());
                 self.consensus_state.replace(Default::default());
 
-                let mut res = Response::new();
-                let mut message = ResponseCommit::new();
-                message.set_data(self.store.root_hash()?);
-                res.set_commit(message);
-                Ok(res)
+                let mut message = ResponseCommit::default();
+                message.data = self.store.root_hash()?;
+                Ok(Res::Commit(message))
             }
-            check_tx(req) => {
+            Req::CheckTx(req) => {
                 let app = self.app.take().unwrap();
                 let mut store =
                     BufStore::wrap_with_map(&mut self.store, self.mempool_state.take().unwrap());
@@ -242,8 +218,8 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                     Ok(res) => res,
                     Err(err) => {
                         let mut res: ResponseCheckTx = Default::default();
-                        res.set_code(1);
-                        res.set_info(format!("{}", err));
+                        res.code = 1;
+                        res.log = format!("{}", err);
                         res
                     }
                 };
@@ -251,10 +227,13 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                 self.app.replace(app);
                 self.mempool_state.replace(store.into_map());
 
-                let mut res = Response::new();
-                res.set_check_tx(res_check_tx);
-                Ok(res)
+                Ok(Res::CheckTx(res_check_tx))
             }
+            // TODO: state sync
+            Req::ListSnapshots(_) => Ok(Res::ListSnapshots(Default::default())),
+            Req::OfferSnapshot(_) => Ok(Res::OfferSnapshot(Default::default())),
+            Req::LoadSnapshotChunk(_) => Ok(Res::LoadSnapshotChunk(Default::default())),
+            Req::ApplySnapshotChunk(_) => Ok(Res::ApplySnapshotChunk(Default::default())),
         }
     }
 
@@ -268,10 +247,13 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
         self.create_worker(server.accept()?)?;
         self.create_worker(server.accept()?)?;
         self.create_worker(server.accept()?)?;
+        self.create_worker(server.accept()?)?;
 
         loop {
             let (req, cb) = self.receiver.recv().unwrap();
-            let res = self.run(req)?;
+            let res = Response {
+                value: Some(self.run(req)?),
+            };
             cb.send(res).unwrap();
         }
     }
