@@ -1,17 +1,17 @@
-use orga::abci::{Application, ABCIStateMachine, MemStore};
+use failure::bail;
+use orga::abci::{ABCIStateMachine, Application, MemStore};
 use orga::encoding::Decode;
+use orga::macros::state;
 use orga::state::Value;
 use orga::store::Store;
 use orga::Result;
-use orga::macros::state;
-use abci2::messages::abci::*;
-use failure::bail;
+use tendermint_proto::abci::*;
 
 struct CounterApp;
 
 #[state]
 struct CounterState<S: Store> {
-    count: Value<u32>
+    count: Value<u32>,
 }
 
 impl CounterApp {
@@ -36,14 +36,14 @@ impl CounterApp {
 
 impl Application for CounterApp {
     fn deliver_tx<S: Store>(&self, store: S, req: RequestDeliverTx) -> Result<ResponseDeliverTx> {
-        let bytes = req.get_tx();
-        self.run(store, bytes)?;
+        let bytes = req.tx;
+        self.run(store, &bytes)?;
         Ok(Default::default())
     }
 
     fn check_tx<S: Store>(&self, store: S, req: RequestCheckTx) -> Result<ResponseCheckTx> {
-        let bytes = req.get_tx();
-        self.run(store, bytes)?;
+        let bytes = req.tx;
+        self.run(store, &bytes)?;
         Ok(Default::default())
     }
 }
@@ -51,6 +51,6 @@ impl Application for CounterApp {
 pub fn main() {
     let store = MemStore::new();
     ABCIStateMachine::new(CounterApp, store)
-        .listen("localhost:26658")
+        .listen("127.0.0.1:26658")
         .unwrap();
 }
