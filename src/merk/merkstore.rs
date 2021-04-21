@@ -141,9 +141,9 @@ impl<'a> ABCIStore for MerkStore<'a> {
     // TODO: we don't need the hash
     /// Resolves a query by generating a merk proof.
     fn query(&self, key: &[u8]) -> Result<Vec<u8>> {
-        let val = &[key.to_vec()];
+        let val = vec![key.to_vec()];
         let mut hash = self.root_hash()?;
-        let data = self.merk.prove(val)?;
+        let data = self.merk.prove_unchecked(val)?;
         hash.extend(data);
         Ok(hash)
     }

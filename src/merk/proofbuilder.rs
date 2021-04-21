@@ -1,15 +1,18 @@
-use std::cell::Cell;
+use std::cell::RefCell;
 use std::collections::BTreeSet;
+use std::ops::{RangeInclusive, Bound};
+use std::rc::Rc;
 
 use crate::Result;
-use crate::store::Read;
+use crate::store;
 use super::MerkStore;
+use merk::proofs::Query;
 
 /// Records reads to a `MerkStore` and uses them to build a proof including all
 /// accessed keys.
 pub struct ProofBuilder<'a> {
     store: &'a MerkStore<'a>,
-    keys: Cell<BTreeSet<Vec<u8>>>
+    query: Rc<RefCell<Query>>,
 }
 
 impl<'a> ProofBuilder<'a> {
@@ -18,28 +21,69 @@ impl<'a> ProofBuilder<'a> {
     pub fn new(store: &'a MerkStore<'a>) -> Self {
         ProofBuilder {
             store,
-            keys: Cell::new(BTreeSet::new())
+            query: Rc::new(RefCell::new(Query::new()))
         }
     }
-
+ 
     /// Builds a Merk proof including all the data accessed during the life of
     /// the `ProofBuilder`.
     pub fn build(self) -> Result<Vec<u8>> {
-        let keys = self.keys.take();
-        let keys: Vec<Vec<u8>> = keys.into_iter().collect();
-        self.store.merk().prove(keys.as_slice())
+        let query = self.query.take();
+        self.store.merk().prove(query)
     }
 }
 
-impl<'a> Read for ProofBuilder<'a> {
+impl<'a> store::Read for ProofBuilder<'a> {
     /// Gets the value from the underlying store, recording the key to be
     /// included in the proof when `build` is called.
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        let mut keys = self.keys.take();
-        keys.insert(key.to_vec());
-        self.keys.set(keys);
+        self.query
+            .borrow_mut()
+            .insert_key(key.to_vec());
 
         self.store.get(key)
+    }
+}
+
+impl<'a> store::Iter for ProofBuilder<'a> {
+    type Iter<'b> = Iter<'b>;
+
+    fn iter_from(&self, start: &[u8]) -> Iter {
+        Iter {
+            bounds: (start.to_vec(), start.to_vec()),
+            inner: self.store.iter_from(start),
+            query: self.query.clone(),
+        }
+    }
+}
+
+pub struct Iter<'a> {
+    bounds: (Vec<u8>, Vec<u8>),
+    inner: <MerkStore<'a> as store::Iter>::Iter<'a>,
+    query: Rc<RefCell<Query>>,
+}
+
+impl<'a> Iterator for Iter<'a> {
+    type Item = store::Entry<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let entry = self.inner.next();
+
+        if let Some((key, _)) = entry {
+            self.bounds.1 = key.to_vec();
+        }
+
+        entry
+    }
+}
+
+impl<'a> Drop for Iter<'a> {
+    fn drop(&mut self) {
+        // TODO: support inserting `(Bound, Bound)` into query
+        let range = self.bounds.0.clone()..=self.bounds.1.clone();
+        self.query
+            .borrow_mut()
+            .insert_range_inclusive(range);
     }
 }
 

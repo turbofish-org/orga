@@ -22,7 +22,8 @@ impl<R: Read> Read for Client<R> {
         let mut hash = [0; 20];
         hash.copy_from_slice(&data[0..20]);
         let proof = &data[20..];
-        Ok(merk::verify_query(proof, &[key.to_vec()], hash)?[0].clone())
+        let res = merk::verify_query(proof, &vec![key.to_vec()].into(), hash)?;
+        Ok(if res.is_empty() { None } else { Some(res[0].1.clone()) })
     }
 }
 
