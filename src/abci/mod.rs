@@ -346,8 +346,6 @@ pub trait ABCIStore: Store + Iter {
 
     fn root_hash(&self) -> Result<Vec<u8>>;
 
-    fn query(&self, key: &[u8]) -> Result<Vec<u8>>;
-
     fn commit(&mut self, height: u64) -> Result<()>;
 }
 
@@ -399,14 +397,6 @@ impl ABCIStore for MemStore {
     fn root_hash(&self) -> Result<Vec<u8>> {
         // TODO: real hashing based on writes
         Ok(vec![])
-    }
-
-    fn query(&self, key: &[u8]) -> Result<Vec<u8>> {
-        match self.get(key) {
-            Ok(Some(val)) => Ok(val),
-            Ok(None) => Ok(Vec::new()),
-            Err(e) => Err(e),
-        }
     }
 
     fn commit(&mut self, height: u64) -> Result<()> {

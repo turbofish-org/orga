@@ -138,16 +138,6 @@ impl<'a> ABCIStore for MerkStore<'a> {
         Ok(self.merk.root_hash().to_vec())
     }
 
-    // TODO: we don't need the hash
-    /// Resolves a query by generating a merk proof.
-    fn query(&self, key: &[u8]) -> Result<Vec<u8>> {
-        let val = vec![key.to_vec()];
-        let mut hash = self.root_hash()?;
-        let data = self.merk.prove_unchecked(val)?;
-        hash.extend(data);
-        Ok(hash)
-    }
-
     fn commit(&mut self, height: u64) -> Result<()> {
         let height_bytes = height.to_be_bytes();
 
