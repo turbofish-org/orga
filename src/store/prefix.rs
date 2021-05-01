@@ -1,20 +1,15 @@
-use super::{Read, Write, Entry};
+use super::{Read, Read2, Write, Write2, Entry};
 use crate::Result;
 
-/// A `Store` which wraps another `Store` and appends a prefix byte to the key
-/// for every read or write.
-///
-/// This can be useful to create a hierarchy of data within a single store -
-/// effectively namespacing the keys to prevent key conflicts.
 pub struct Prefixed<S> {
     store: S,
-    prefix: u8,
+    prefix: Vec<u8>,
 }
 
 impl<S> Prefixed<S> {
     /// Constructs a `Prefixed` by wrapping the given store and prepending keys
     /// with the given prefix for all operations.
-    pub fn new(store: S, prefix: u8) -> Self {
+    pub fn new(store: S, prefix: Vec<u8>) -> Self {
         Prefixed { store, prefix }
     }
 }
@@ -23,28 +18,35 @@ impl<S> Prefixed<S> {
 /// Prepends a key with a prefix byte by copying into inline stack memory and
 /// returning a fixed-size array.
 #[inline]
-fn prefix(prefix: u8, suffix: &[u8]) -> ([u8; 256], usize) {
+fn prefix(prefix: &[u8], suffix: &[u8]) -> ([u8; 256], usize) {
     let mut prefixed = [0; 256];
-    prefixed[0] = prefix;
-    prefixed[1..suffix.len() + 1].copy_from_slice(suffix);
-    (prefixed, suffix.len() + 1)
+    prefixed[0..prefix.len()].copy_from_slice(prefix);
+    prefixed[prefix.len()..prefix.len() + suffix.len()].copy_from_slice(suffix);
+    (prefixed, prefix.len() + suffix.len())
 }
 
 impl<S: Read> Read for Prefixed<S> {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        let (key, len) = prefix(self.prefix, key);
+        let (key, len) = prefix(self.prefix.as_slice(), key);
+        self.store.get(&key[..len])
+    }
+}
+
+impl<S: Read2> Read2 for Prefixed<S> {
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        let (key, len) = prefix(self.prefix.as_slice(), key);
         self.store.get(&key[..len])
     }
 }
 
 impl<S: Write> Write for Prefixed<S> {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
-        let (key, len) = prefix(self.prefix, key.as_slice());
+        let (key, len) = prefix(self.prefix.as_slice(), key.as_slice());
         self.store.put(key[..len].to_vec(), value)
     }
 
     fn delete(&mut self, key: &[u8]) -> Result<()> {
-        let (key, len) = prefix(self.prefix, key);
+        let (key, len) = prefix(self.prefix.as_slice(), key);
         self.store.delete(&key[..len])
     }
 }
@@ -55,11 +57,11 @@ impl<S> super::Iter for Prefixed<S>
     type Iter<'a> = Iter<'a, S::Iter<'a>>;
 
     fn iter_from(&self, start: &[u8]) -> Self::Iter<'_> {
-        let (start, start_len) = prefix(self.prefix, start);
+        let (start, start_len) = prefix(self.prefix.as_slice(), start);
         let store_iter = self.store.iter_from(&start[..start_len]);
         Iter {
             inner: store_iter,
-            prefix: self.prefix
+            prefix: self.prefix.clone()
         }
     }
 }
@@ -68,10 +70,118 @@ pub struct Iter<'a, I>
     where I: Iterator<Item = Entry<'a>>
 {
     inner: I,
-    prefix: u8
+    prefix: Vec<u8>
 }
 
 impl<'a, I> Iterator for Iter<'a, I>
+    where I: Iterator<Item = Entry<'a>>
+{
+    type Item = Entry<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.inner.next() {
+            None => None,
+            Some((key, value)) => {
+                if &key[..self.prefix.len()] > self.prefix.as_slice() {
+                    None
+                } else {
+                    Some((&key[1..], value))
+                }
+            }
+        }
+    }
+}
+
+/// A `Store` which wraps another `Store` and appends a prefix byte to the key
+/// for every read or write.
+///
+/// This can be useful to create a hierarchy of data within a single store -
+/// effectively namespacing the keys to prevent key conflicts.
+pub struct BytePrefixed<S> {
+    store: S,
+    prefix: u8,
+}
+
+impl<S> BytePrefixed<S> {
+    /// Constructs a `Prefixed` by wrapping the given store and prepending keys
+    /// with the given prefix for all operations.
+    pub fn new(store: S, prefix: u8) -> Self {
+        BytePrefixed { store, prefix }
+    }
+}
+
+// TODO: make a Key type which doesn't need copying
+/// Prepends a key with a prefix byte by copying into inline stack memory and
+/// returning a fixed-size array.
+#[inline]
+fn prefix_byte(prefix: u8, suffix: &[u8]) -> ([u8; 256], usize) {
+    let mut prefixed = [0; 256];
+    prefixed[0] = prefix;
+    prefixed[1..suffix.len() + 1].copy_from_slice(suffix);
+    (prefixed, suffix.len() + 1)
+}
+
+impl<S: Read> Read for BytePrefixed<S> {
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        let (key, len) = prefix_byte(self.prefix, key);
+        self.store.get(&key[..len])
+    }
+}
+
+impl<S: Read2> Read2 for BytePrefixed<S> {
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        let (key, len) = prefix_byte(self.prefix, key);
+        self.store.get(&key[..len])
+    }
+}
+
+impl<S: Write> Write for BytePrefixed<S> {
+    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
+        let (key, len) = prefix_byte(self.prefix, key.as_slice());
+        self.store.put(key[..len].to_vec(), value)
+    }
+
+    fn delete(&mut self, key: &[u8]) -> Result<()> {
+        let (key, len) = prefix_byte(self.prefix, key);
+        self.store.delete(&key[..len])
+    }
+}
+
+impl<S: Write2> Write2 for Prefixed<S> {
+    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
+        let (key, len) = prefix(self.prefix.as_slice(), key.as_slice());
+        self.store.put(key[..len].to_vec(), value)
+    }
+
+    fn delete(&mut self, key: &[u8]) -> Result<()> {
+        let (key, len) = prefix(self.prefix.as_slice(), key);
+        self.store.delete(&key[..len])
+    }
+}
+
+impl<S> super::Iter for BytePrefixed<S>
+    where S: Read + super::Iter
+{
+    type Iter<'a> = IterByte<'a, S::Iter<'a>>;
+
+    fn iter_from(&self, start: &[u8]) -> Self::Iter<'_> {
+        let (start, start_len) = prefix_byte(self.prefix, start);
+        let store_iter = self.store.iter_from(&start[..start_len]);
+        IterByte {
+            inner: store_iter,
+            prefix: self.prefix
+        }
+    }
+}
+
+pub struct IterByte<'a, I>
+    where I: Iterator<Item = Entry<'a>>
+{
+    inner: I,
+    prefix: u8
+}
+
+impl<'a, I> Iterator for IterByte<'a, I>
     where I: Iterator<Item = Entry<'a>>
 {
     type Item = Entry<'a>;

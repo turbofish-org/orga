@@ -1,4 +1,4 @@
-use super::prefix::Prefixed;
+use super::prefix::BytePrefixed;
 use super::share::Shared;
 use super::Read;
 
@@ -29,7 +29,7 @@ impl<S: Read> Splitter<S> {
     /// value, in order from 0 to 255 (inclusive).
     ///
     /// `split` can not be called more than 255 times on one splitter instance.
-    pub fn split(&mut self) -> Prefixed<Shared<S>> {
+    pub fn split(&mut self) -> BytePrefixed<Shared<S>> {
         if self.index == 255 {
             panic!("Reached split limit");
         }
@@ -37,9 +37,47 @@ impl<S: Read> Splitter<S> {
         let index = self.index;
         self.index += 1;
 
-        self.store.clone().prefix(index)
+        BytePrefixed::new(self.store.clone(), index)
     }
 }
+
+
+/// A store wrapper which can be used to create multiple substores, which all
+/// read from and write to the same underlying store with a unique prefix per
+/// substore.
+use super::Read2;
+pub struct Splitter2<S: Read2> {
+    store: Shared<S>,
+    index: u8,
+}
+
+impl<S: Read2> Splitter2<S> {
+    /// Constructs a `Splitter` for the given store.
+    pub fn new(store: S) -> Self {
+        Splitter2 {
+            store: Shared::new(store),
+            index: 0,
+        }
+    }
+
+    /// Creates and returns a new substore, which is a prefixed store that
+    /// shares a reference to the `Splitter`'s inner store. Each call to `split`
+    /// will increment the internal index and create a substore with the next
+    /// value, in order from 0 to 255 (inclusive).
+    ///
+    /// `split` can not be called more than 255 times on one splitter instance.
+    pub fn split(&mut self) -> BytePrefixed<Shared<S>> {
+        if self.index == 255 {
+            panic!("Reached split limit");
+        }
+
+        let index = self.index;
+        self.index += 1;
+
+        BytePrefixed::new(self.store.clone(), index)
+    }
+}
+
 
 #[cfg(test)]
 mod tests {

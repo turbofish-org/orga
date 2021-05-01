@@ -1,6 +1,7 @@
-use super::{Read, Write, Entry};
+use super::{Read, Read2, Write, Entry};
 use crate::Result;
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
+use std::ops::Deref;
 use std::rc::Rc;
 use std::mem::transmute;
 
@@ -28,10 +29,15 @@ impl<T> Clone for Shared<T> {
     }
 }
 
-impl<R: Read> Read for Shared<R> {
+impl<T: Read2> Read2 for Shared<T> {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        let store = self.0.borrow();
-        store.get(key)
+        self.0.borrow().get(key)
+    }
+}
+
+impl<T: Read> Read for Shared<T> {
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        self.0.borrow().get(key)
     }
 }
 
