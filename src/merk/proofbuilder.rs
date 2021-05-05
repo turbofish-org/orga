@@ -11,14 +11,14 @@ use merk::proofs::query::Query;
 /// Records reads to a `MerkStore` and uses them to build a proof including all
 /// accessed keys.
 pub struct ProofBuilder<'a> {
-    store: &'a MerkStore<'a>,
+    store: &'a MerkStore,
     query: Rc<RefCell<Query>>,
 }
 
 impl<'a> ProofBuilder<'a> {
     /// Constructs a `ProofBuilder` which provides read access to data in the
     /// given `MerkStore`.
-    pub fn new(store: &'a MerkStore<'a>) -> Self {
+    pub fn new(store: &'a MerkStore) -> Self {
         ProofBuilder {
             store,
             query: Rc::new(RefCell::new(Query::new())),
