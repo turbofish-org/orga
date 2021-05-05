@@ -112,6 +112,46 @@ pub trait Write2: Read2 {
     fn delete(&mut self, key: &[u8]) -> Result<()>;
 }
 
+pub trait ReadWrite {
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>>;
+   
+    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()>;
+
+    fn delete(&mut self, key: &[u8]) -> Result<()>;
+}
+
+impl<T: Read2 + Write2> ReadWrite for T {
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        Read2::get(self, key)
+    }
+   
+    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
+        Write2::put(self, key, value)
+    }
+
+    fn delete(&mut self, key: &[u8]) -> Result<()> {
+        Write2::delete(self, key)
+    }
+}
+
+pub struct ReadWriter<'a>(pub &'a mut dyn ReadWrite);
+
+impl<'a> Read2 for ReadWriter<'a> {
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        ReadWrite::get(self.0, key)
+    }
+}
+
+impl<'a> Write2 for ReadWriter<'a> {
+    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
+        ReadWrite::put(self.0, key, value)
+    }
+
+    fn delete(&mut self, key: &[u8]) -> Result<()> {
+        ReadWrite::delete(self.0, key)
+    }
+}
+
 impl<W: Write2, T: std::ops::DerefMut<Target = W>> Write2 for T {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         self.deref_mut().put(key, value)

@@ -30,30 +30,30 @@ impl<S: Store> DerefMut for WrapperStore<S> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::store::*;
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use crate::store::*;
 
-    #[test]
-    fn simple() {
-        let mut store = MapStore::new();
-        let mut wrapper: WrapperStore<_> = (&mut store).wrap().unwrap();
+//     #[test]
+//     fn simple() {
+//         let mut store = MapStore::new();
+//         let mut wrapper: WrapperStore<_> = (&mut store).wrap().unwrap();
 
-        assert_eq!(wrapper.get(&[0]).unwrap(), None);
-        wrapper.put(vec![0], vec![1]).unwrap();
-        assert_eq!(wrapper.get(&[0]).unwrap(), Some(vec![1]));
-        assert_eq!(store.get(&[0]).unwrap(), Some(vec![1]));
-    }
+//         assert_eq!(wrapper.get(&[0]).unwrap(), None);
+//         wrapper.put(vec![0], vec![1]).unwrap();
+//         assert_eq!(wrapper.get(&[0]).unwrap(), Some(vec![1]));
+//         assert_eq!(store.get(&[0]).unwrap(), Some(vec![1]));
+//     }
 
-    #[test]
-    fn read_only() {
-        let mut store = MapStore::new();
-        let mut wrapper: WrapperStore<_> = (&mut store).wrap().unwrap();
-        wrapper.put(vec![0], vec![1]).unwrap();
+//     #[test]
+//     fn read_only() {
+//         let mut store = MapStore::new();
+//         let mut wrapper: WrapperStore<_> = (&mut store).wrap().unwrap();
+//         wrapper.put(vec![0], vec![1]).unwrap();
 
-        let store = store;
-        let wrapper: WrapperStore<_> = store.wrap().unwrap();
-        assert_eq!(wrapper.get(&[0]).unwrap(), Some(vec![1]));
-    }
-}
+//         let store = store;
+//         let wrapper: WrapperStore<_> = store.wrap().unwrap();
+//         assert_eq!(wrapper.get(&[0]).unwrap(), Some(vec![1]));
+//     }
+// }
