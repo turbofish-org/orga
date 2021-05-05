@@ -134,21 +134,21 @@ impl<T: Read2 + Write2> ReadWrite for T {
     }
 }
 
-pub struct ReadWriter<'a>(pub &'a mut dyn ReadWrite);
+pub struct ReadWriter(pub Box<dyn ReadWrite>);
 
-impl<'a> Read2 for ReadWriter<'a> {
+impl<'a> Read2 for ReadWriter {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        ReadWrite::get(self.0, key)
+        ReadWrite::get(self.0.deref(), key)
     }
 }
 
-impl<'a> Write2 for ReadWriter<'a> {
+impl<'a> Write2 for ReadWriter {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
-        ReadWrite::put(self.0, key, value)
+        ReadWrite::put(self.0.deref_mut(), key, value)
     }
 
     fn delete(&mut self, key: &[u8]) -> Result<()> {
-        ReadWrite::delete(self.0, key)
+        ReadWrite::delete(self.0.deref_mut(), key)
     }
 }
 
