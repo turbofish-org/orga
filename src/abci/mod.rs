@@ -230,10 +230,22 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                 Ok(Res::CheckTx(res_check_tx))
             }
             // TODO: state sync
-            Req::ListSnapshots(_) => Ok(Res::ListSnapshots(Default::default())),
-            Req::OfferSnapshot(_) => Ok(Res::OfferSnapshot(Default::default())),
-            Req::LoadSnapshotChunk(_) => Ok(Res::LoadSnapshotChunk(Default::default())),
-            Req::ApplySnapshotChunk(_) => Ok(Res::ApplySnapshotChunk(Default::default())),
+            Req::ListSnapshots(_req) => {
+                let snapshots = self.store.list_snapshots()?;
+                let mut res = ResponseListSnapshots::default();
+                res.snapshots = snapshots;
+                Ok(Res::ListSnapshots(res))
+            }
+            Req::OfferSnapshot(req) => Ok(Res::OfferSnapshot(self.store.offer_snapshot(req)?)),
+            Req::LoadSnapshotChunk(req) => {
+                let chunk = self.store.load_snapshot_chunk(req)?;
+                let mut res = ResponseLoadSnapshotChunk::default();
+                res.chunk = chunk;
+                Ok(Res::LoadSnapshotChunk(res))
+            }
+            Req::ApplySnapshotChunk(req) => Ok(Res::ApplySnapshotChunk(
+                self.store.apply_snapshot_chunk(req)?,
+            )),
         }
     }
 
@@ -349,6 +361,17 @@ pub trait ABCIStore: Store + Iter {
     fn query(&self, key: &[u8]) -> Result<Vec<u8>>;
 
     fn commit(&mut self, height: u64) -> Result<()>;
+
+    fn list_snapshots(&self) -> Result<Vec<Snapshot>>;
+
+    fn load_snapshot_chunk(&self, req: RequestLoadSnapshotChunk) -> Result<Vec<u8>>;
+
+    fn offer_snapshot(&mut self, req: RequestOfferSnapshot) -> Result<ResponseOfferSnapshot>;
+
+    fn apply_snapshot_chunk(
+        &mut self,
+        req: RequestApplySnapshotChunk,
+    ) -> Result<ResponseApplySnapshotChunk>;
 }
 
 /// A basic implementation of [`ABCIStore`](trait.ABCIStore.html) which persists
@@ -412,5 +435,24 @@ impl ABCIStore for MemStore {
     fn commit(&mut self, height: u64) -> Result<()> {
         self.height = height;
         Ok(())
+    }
+
+    fn list_snapshots(&self) -> Result<Vec<Snapshot>> {
+        Ok(Default::default())
+    }
+
+    fn load_snapshot_chunk(&self, _req: RequestLoadSnapshotChunk) -> Result<Vec<u8>> {
+        unimplemented!()
+    }
+
+    fn apply_snapshot_chunk(
+        &mut self,
+        _req: RequestApplySnapshotChunk,
+    ) -> Result<ResponseApplySnapshotChunk> {
+        unimplemented!()
+    }
+
+    fn offer_snapshot(&mut self, _req: RequestOfferSnapshot) -> Result<ResponseOfferSnapshot> {
+        Ok(Default::default())
     }
 }
