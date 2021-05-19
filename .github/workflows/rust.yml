@@ -36,6 +36,7 @@ jobs:
       with:
           toolchain: nightly
           override: true
+          args: --all-features
     - name: Test
       uses: actions-rs/cargo@v1
       with:
