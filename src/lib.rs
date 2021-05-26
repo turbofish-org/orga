@@ -3,6 +3,7 @@
 #![feature(proc_macro_hygiene)]
 #![feature(map_first_last)]
 #![feature(generic_associated_types)]
+#![feature(entry_insert)]
 
 #![allow(incomplete_features)]
 
@@ -38,4 +39,3 @@ mod error;
 // re-exports
 pub use error::*;
 pub use orga_macros as macros;
-pub use store::Store;

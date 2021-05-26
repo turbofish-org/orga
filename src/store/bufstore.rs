@@ -12,7 +12,7 @@ pub type MapStore = BufStore<NullStore>;
 
 /// Wraps a `Store` and records mutations in an in-memory map, so that
 /// modifications do not affect the underlying `Store` until `flush` is called.
-pub struct BufStore<S: Read> {
+pub struct BufStore<S> {
     map: Map,
     store: S,
 }
@@ -34,7 +34,7 @@ impl<S: Read + Default> Default for BufStore<S> {
     }
 }
 
-impl<S: Read> BufStore<S> {
+impl<S> BufStore<S> {
     /// Constructs a `BufStore` by wrapping the given store.
     ///
     /// Calls to get will first check the `BufStore` map, and if no entry is
@@ -81,30 +81,7 @@ impl<S: Read> Write for BufStore<S> {
     }
 }
 
-
-impl<S: Read> Read2 for BufStore<S> {
-    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        match self.map.get(key.as_ref()) {
-            Some(Some(value)) => Ok(Some(value.clone())),
-            Some(None) => Ok(None),
-            None => self.store.get(key),
-        }
-    }
-}
-
-impl<S: Read> Write2 for BufStore<S> {
-    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
-        self.map.insert(key, Some(value));
-        Ok(())
-    }
-
-    fn delete(&mut self, key: &[u8]) -> Result<()> {
-        self.map.insert(key.as_ref().to_vec(), None);
-        Ok(())
-    }
-}
-
-impl<S: Store> Flush for BufStore<S> {
+impl<S: ReadWrite> Flush for BufStore<S> {
     /// Consumes the `BufStore`'s in-memory buffer and writes all of its values
     /// to the underlying store.
     ///

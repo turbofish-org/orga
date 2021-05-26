@@ -1,6 +1,6 @@
 use super::State;
 use crate::error::Result;
-use crate::store::{Read, Store};
+use crate::store::{Read, Write};
 use std::ops::{Deref, DerefMut};
 
 /// A `State` implementation which exposes the underlying raw store (itself
@@ -9,11 +9,30 @@ use std::ops::{Deref, DerefMut};
 ///
 /// This can be useful when composing `State` types into a hierarchy, when
 /// access to the raw `Store` API is still necessary.
-pub struct WrapperStore<S: Read>(S);
+pub struct WrapperStore<S>(S);
 
 impl<S: Read> State<S> for WrapperStore<S> {
-    fn wrap_store(store: S) -> Result<WrapperStore<S>> {
+    type Encoding = ();
+
+    fn create(store: S, _: ()) -> Result<Self>
+    where
+        S: Read
+    {
         Ok(WrapperStore(store))
+    }
+
+    fn flush(self) -> Result<Self::Encoding>
+    where
+        S: Write
+    {
+        Ok(())
+    }
+}
+
+
+impl<S> From<WrapperStore<S>> for () {
+    fn from(_: WrapperStore<S>) -> Self {
+        ()
     }
 }
 
@@ -24,7 +43,7 @@ impl<S: Read> Deref for WrapperStore<S> {
     }
 }
 
-impl<S: Store> DerefMut for WrapperStore<S> {
+impl<S: Write> DerefMut for WrapperStore<S> {
     fn deref_mut(&mut self) -> &mut S {
         &mut self.0
     }

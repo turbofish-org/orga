@@ -8,7 +8,7 @@ type Set = HashSet<Vec<u8>>;
 
 /// A `Store` wrapper which records the keys of all reads and writes made
 /// through it.
-pub struct RWLog<S: Store> {
+pub struct RWLog<S> {
     // TODO: since most keys are in both sets, we can dedupe and use a hash of
     // slices
     read_keys: Cell<Set>,
@@ -16,7 +16,7 @@ pub struct RWLog<S: Store> {
     store: S
 }
 
-impl<S: Store> RWLog<S> {
+impl<S> RWLog<S> {
     pub fn wrap(store: S) -> Self {
         RWLog {
             read_keys: Cell::new(Default::default()),
@@ -30,7 +30,7 @@ impl<S: Store> RWLog<S> {
     }
 }
 
-impl<S: Store> Read for RWLog<S> {
+impl<S: Read> Read for RWLog<S> {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         let mut read_keys = self.read_keys.take();
         read_keys.insert(key.as_ref().to_vec());
@@ -40,7 +40,7 @@ impl<S: Store> Read for RWLog<S> {
     }
 }
 
-impl<S: Store> Write for RWLog<S> {
+impl<S: Write> Write for RWLog<S> {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         self.write_keys.insert(key.clone());
         self.store.put(key, value)

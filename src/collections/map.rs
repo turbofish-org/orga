@@ -1,262 +1,208 @@
 use std::borrow::Borrow;
-use std::marker::PhantomData;
+use std::collections::{hash_map, HashMap};
+use std::hash::Hash;
+use std::ops::{Deref, DerefMut};
 
-use crate::encoding::{Decode, Encode};
-use crate::state::{State, Query};
-use crate::store::{Read, Store, Entry};
+use crate::state::*;
+use crate::store::*;
 use crate::Result;
+use ed::*;
 
-/// A map data structure.
-pub struct Map<S, K, V>
-where
-    S: Read,
-    K: Encode + Decode,
-    V: Encode + Decode,
-{
+pub struct Map<K, V, S = Store> {
     store: S,
-    key_type: PhantomData<K>,
-    value_type: PhantomData<V>,
+    children: HashMap<K, V>,
 }
 
-impl<S, K, V> State<S> for Map<S, K, V>
+impl<K, V, S> State<S> for Map<K, V, S>
 where
-    S: Read,
-    K: Encode + Decode,
-    V: Encode + Decode,
+    K: Encode + Eq + Hash,
+    V: State<S>,
+    S: Write + Sub,
 {
-    /// Constructs a `Map` which is backed by the given store.
-    fn wrap_store(store: S) -> Result<Self> {
-        Ok(Self {
+    type Encoding = ();
+
+    fn create(store: S, _: ()) -> Result<Self>
+    where
+        S: Read,
+    {
+        Ok(Map {
             store,
-            key_type: PhantomData,
-            value_type: PhantomData,
+            children: Default::default(),
         })
     }
-}
 
-impl<S, K, V> Map<S, K, V>
-where
-    S: Read,
-    K: Encode + Decode,
-    V: Encode + Decode,
-{
-    /// Gets the value with the given key from the map, or `None` if there is no
-    /// entry with the given key.
-    ///
-    /// If there is an error when getting from the store or decoding the value,
-    /// the error will be returned.
-    pub fn get<B: Borrow<K>>(&self, key: B) -> Result<Option<V>> {
-        let (key_bytes, key_length) = encode_key_array(key.borrow())?;
-        self.store
-            .get(&key_bytes[..key_length])?
-            .map(|value_bytes| V::decode(value_bytes.as_slice()))
-            .transpose()
-    }
-}
+    fn flush(mut self) -> Result<()>
+    where
+        S: Write,
+    {
+        for (key, value) in self.children.drain() {
+            let key_bytes = key.encode()?;
+            let value_bytes = value.flush()?.encode()?;
+            self.store.put(key_bytes, value_bytes)?;
+        }
 
-
-impl<S, K, V> Query for Map<S, K, V>
-where
-    S: Read,
-    K: Encode + Decode,
-    V: Encode + Decode,
-{
-    type Request = K;
-    type Response = Option<V>;
-
-    fn query(&self, key: K) -> Result<Option<V>> {
-        self.get(key)
-    }
-
-    fn resolve(&self, key: K) -> Result<()> {
-        // TODO: make a get_raw method and use that instead
-        let (key_bytes, key_length) = encode_key_array(key.borrow())?;
-        self.store.get(&key_bytes[..key_length])?;
         Ok(())
     }
 }
 
-impl<S, K, V> Map<S, K, V>
-where
-    S: Store,
-    K: Encode + Decode,
-    V: Encode + Decode,
-{
-    /// Inserts the given key/value entry into the map. If an entry already
-    /// exists with this key, it will be overwritten.
-    ///
-    /// If there is an error encoding the key or value, or when writing to the
-    /// store, the error will be returned.
-    pub fn insert(&mut self, key: K, value: V) -> Result<()> {
-        let key_bytes = key.encode()?;
-        let value_bytes = value.encode()?;
-        self.store.put(key_bytes, value_bytes)
-    }
-
-    /// Deleted the entry with the given key.
-    ///
-    /// If there is an error encoding the key, or when deleting from the store,
-    /// the error will be returned.
-    pub fn delete<B: Borrow<K>>(&mut self, key: B) -> Result<()> {
-        let (key_bytes, key_length) = encode_key_array(key.borrow())?;
-        self.store.delete(&key_bytes[..key_length])
+impl<K, V, S> From<Map<K, V, S>> for () {
+    fn from(_: Map<K, V, S>) -> Self {
+        ()
     }
 }
 
-impl<S, K, V> Map<S, K, V>
+impl<K, V, S> Map<K, V, S>
 where
-    S: Store + crate::store::Iter,
-    K: Encode + Decode,
-    V: Encode + Decode,
+    K: Encode + Eq + Hash,
+    V: State<S>,
+    S: Read + Sub,
 {
-    /// Creates an iterator over the entries in the map, starting at the given
-    /// key (inclusive).
-    ///
-    /// Iteration happens in bytewise order of encoded keys.
-    pub fn iter_from(&self, start: &K) -> Result<Iter<'_, S::Iter<'_>, K, V>> {
-        let start_bytes = start.encode()?;
-        let iter = self.store.iter_from(start_bytes.as_slice());
-        Ok(Iter::new(iter))
-    }
+    pub fn entry(&mut self, key: K) -> Result<Entry<K, V, S>> {
+        Ok(if self.children.contains_key(&key) {
+            // value is already loaded
+            let entry = self.children.entry(key);
+            let entry = match entry {
+                hash_map::Entry::Occupied(entry) => entry,
+                _ => unreachable!(),
+            };
+            Entry::Occupied { entry }
+        } else {
+            // value is not loaded
+            let key_bytes = key.encode()?;
+            if let Some(value_bytes) = self.store.get(key_bytes.as_slice())? {
+                // value exists in store, create instance and put it in map of
+                // children
+                let substore = self.store.sub(key_bytes);
+                let decoded = V::Encoding::decode(value_bytes.as_slice())?;
+                let value = V::create(substore, decoded)?;
 
-    /// Creates an iterator over all the entries in the map.
-    ///
-    /// Iteration happens in bytewise order of encoded keys.
-    pub fn iter(&self) -> Iter<'_, S::Iter<'_>, K, V> {
-        let iter = self.store.iter();
-        Iter::new(iter)
+                let entry = self.children
+                    .entry(key)
+                    .insert(value);
+
+                Entry::Occupied { entry }
+            } else {
+                // value doesn't exist in store
+                Entry::Vacant { key, parent: self }
+            }
+        })
     }
 }
 
-pub struct Iter<'a, I, K, V>
-where
-    I: Iterator<Item = Entry<'a>>,
-    K: Decode,
-    V: Decode,
-{
-    iter: I,
-    phantom_k: PhantomData<K>,
-    phantom_v: PhantomData<V>,
+pub enum Entry<'a, K, V, S> {
+    Vacant {
+        key: K,
+        parent: &'a mut Map<K, V, S>,
+    },
+    Occupied {
+        entry: hash_map::OccupiedEntry<'a, K, V>,
+    },
 }
 
-impl<'a, I, K, V> Iter<'a, I, K, V>
+impl<'a, K, V, S> Entry<'a, K, V, S>
 where
-    I: Iterator<Item = Entry<'a>>,
-    K: Decode,
-    V: Decode,
+    K: Encode + Eq + Hash,
+    V: State<S>,
+    S: Read + Sub,
 {
-    /// Constructs an `Iter` for the given store.
-    fn new(iter: I) -> Self {
-        Iter {
-            iter,
-            phantom_k: PhantomData,
-            phantom_v: PhantomData,
+    pub fn or_create(self, value: V::Encoding) -> Result<Child<'a, K, V, S>> {
+        Ok(match self {
+            Entry::Vacant { key, parent } => {
+                let key_bytes = key.encode()?;
+                let substore = parent.store.sub(key_bytes);
+                let value = V::create(substore, value)?;
+                Child::Unmodified(Some((key, value, parent)))
+            }
+            Entry::Occupied { entry } => Child::Modified(entry),
+        })
+    }
+
+    pub fn or_insert(self, value: V::Encoding) -> Result<Child<'a, K, V, S>> {
+        let mut child = self.or_create(value)?;
+        child.deref_mut();
+        Ok(child)
+    }
+}
+
+impl<'a, K, V, S, D> Entry<'a, K, V, S>
+where
+    K: Encode + Eq + Hash,
+    V: State<S, Encoding = D>,
+    S: Read + Sub,
+    D: Default,
+{
+    pub fn or_default(self) -> Result<Child<'a, K, V, S>> {
+        self.or_create(D::default())
+    }
+
+    pub fn or_insert_default(self) -> Result<Child<'a, K, V, S>> {
+        self.or_insert(D::default())
+    }
+}
+
+pub enum Child<'a, K, V, S> {
+    Unmodified(Option<(K, V, &'a mut Map<K, V, S>)>),
+    Modified(hash_map::OccupiedEntry<'a, K, V>),
+}
+
+impl<'a, K, V, S> Deref for Child<'a, K, V, S> {
+    type Target = V;
+
+    fn deref(&self) -> &V {
+        match self {
+            Child::Unmodified(inner) => &inner.as_ref().unwrap().1,
+            Child::Modified(entry) => entry.get(),
         }
     }
 }
 
-impl<'a, I, K, V> Iterator for Iter<'a, I, K, V>
+impl<'a, K, V, S> DerefMut for Child<'a, K, V, S>
 where
-    I: Iterator<Item = Entry<'a>>,
-    K: Decode,
-    V: Decode,
+    K: Eq + Hash
 {
-    type Item = (K, V);
-
-    /// Gets the next entry from the map.
-    ///
-    /// This method will panic if decoding the entry fails.
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter
-            .next()
-            .map(|(key, value)| (K::decode(key).unwrap(), V::decode(value).unwrap()))
+    fn deref_mut(&mut self) -> &mut V {
+        match self {
+            Child::Unmodified(inner) => {
+                // insert into parent's children map and upgrade child to
+                // Child::Modified
+                let (key, value, parent) = inner.take().unwrap();
+                let entry = parent.children
+                    .entry(key)
+                    .insert(value);
+                *self = Child::Modified(entry);
+                self.deref_mut()
+            },
+            Child::Modified(entry) => entry.get_mut(),
+        }
     }
-}
-
-/// Encodes the given key value into a fixed-size array. Returns the array and
-/// the length of the encoded value.
-///
-/// This method will panic if the encoded key is longer than 256 bytes.
-fn encode_key_array<K: Encode>(key: &K) -> Result<([u8; 256], usize)> {
-    let mut bytes = [0; 256];
-    key.encode_into(&mut &mut bytes[..])?;
-    Ok((bytes, key.encoding_length()?))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::*;
+    use crate::state::Store;
+    use crate::store::MapStore;
 
-    #[test]
-    fn simple() {
-        let mut store = MapStore::new();
-        let mut map: Map<_, u64, u64> = Map::wrap_store(&mut store).unwrap();
-
-        assert_eq!(map.get(1234).unwrap(), None);
-
-        map.insert(1234, 5678).unwrap();
-        assert_eq!(map.get(1234).unwrap(), Some(5678));
-
-        map.delete(1234).unwrap();
-        assert_eq!(map.get(1234).unwrap(), None);
+    fn increment_entry(map: &mut Map<u64, u64>, n: u64) -> Result<()> {
+        *map.entry(n)?.or_default()? += 1;
+        Ok(())
     }
 
     #[test]
-    fn iter() {
-        let store = MapStore::new();
-        let mut map: Map<_, u64, u64> = Map::wrap_store(store).unwrap();
+    fn submap() {
+        let mapstore = Shared::new(MapStore::new());
+        let store = Store::new(Box::new(mapstore.clone()));
+        let mut map: Map<u64, Map<u64, u64>, _> = Map::create(store, ()).unwrap();
 
-        map.insert(123, 456).unwrap();
-        map.insert(100, 100).unwrap();
-        map.insert(400, 100).unwrap();
+        let mut submap = map
+            .entry(123).unwrap()
+            .or_default().unwrap();
+        increment_entry(&mut submap, 456).unwrap();
 
-        let mut iter = map.iter_from(&101).unwrap();
-        assert_eq!(iter.next(), Some((123, 456)));
-        assert_eq!(iter.next(), Some((400, 100)));
-        assert_eq!(iter.next(), None);
-    }
+        map.flush().unwrap();
 
-    #[test]
-    fn read_only() {
-        let mut store = MapStore::new();
-        let mut map: Map<_, u32, u32> = (&mut store).wrap().unwrap();
-        map.insert(12, 34).unwrap();
-        map.insert(56, 78).unwrap();
-
-        let store = store;
-        let map: Map<_, u32, u32> = store.wrap().unwrap();
-        assert_eq!(map.get(12).unwrap(), Some(34));
-        assert_eq!(map.get(56).unwrap(), Some(78));
-
-        let collected = map.iter().collect::<Vec<(u32, u32)>>();
-        assert_eq!(collected, vec![(12, 34), (56, 78)]);
-    }
-
-    #[test]
-    fn query_resolve() {
-        let mut store = RWLog::wrap(MapStore::new());
-        let mut map: Map<_, u32, u32> = (&mut store).wrap().unwrap();
-        map.insert(1, 2).unwrap();
-        map.insert(3, 4).unwrap();
-
-        map.resolve(1).unwrap(); // exists
-        map.resolve(10).unwrap(); // doesn't exist
-        
-        let (reads, _, _) = store.finish();
-        assert_eq!(reads.len(), 2);
-        assert!(reads.contains(&[0, 0, 0, 1][..]));
-        assert!(reads.contains(&[0, 0, 0, 10][..]));
-    }
-
-    #[test]
-    fn query() {
-        let mut store = MapStore::new();
-        let mut map: Map<_, u32, u32> = (&mut store).wrap().unwrap();
-        map.insert(1, 2).unwrap();
-        map.insert(3, 4).unwrap();
-
-        assert_eq!(map.query(1).unwrap(), Some(2));
-        assert_eq!(map.query(10).unwrap(), None);
+        for (key, value) in mapstore.iter() {
+            println!("{:?}: {:?}", key, value);
+        }
     }
 }

@@ -1,4 +1,4 @@
-use super::{Read, Read2, Write, Write2, Entry};
+use super::{Read, Write, Entry};
 use crate::Result;
 use std::cell::{Ref, RefCell};
 use std::ops::Deref;
@@ -29,12 +29,6 @@ impl<T> Clone for Shared<T> {
     }
 }
 
-impl<T: Read2> Read2 for Shared<T> {
-    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        self.0.borrow().get(key)
-    }
-}
-
 impl<T: Read> Read for Shared<T> {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         self.0.borrow().get(key)
@@ -42,18 +36,6 @@ impl<T: Read> Read for Shared<T> {
 }
 
 impl<W: Write> Write for Shared<W> {
-    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
-        let mut store = self.0.borrow_mut();
-        store.put(key, value)
-    }
-
-    fn delete(&mut self, key: &[u8]) -> Result<()> {
-        let mut store = self.0.borrow_mut();
-        store.delete(key)
-    }
-}
-
-impl<W: Write2> Write2 for Shared<W> {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         let mut store = self.0.borrow_mut();
         store.put(key, value)

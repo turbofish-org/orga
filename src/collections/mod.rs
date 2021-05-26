@@ -4,9 +4,9 @@ pub mod deque;
 pub mod map;
 pub mod set;
 
-pub use deque::Deque;
+// pub use deque::Deque;
 pub use map::Map;
-pub use set::Set;
+// pub use set::Set;
 
 /// A trait for types which can be converted to or from a key/value pair.
 ///
