@@ -14,17 +14,11 @@ pub struct WrapperStore<S>(S);
 impl<S: Read> State<S> for WrapperStore<S> {
     type Encoding = ();
 
-    fn create(store: S, _: ()) -> Result<Self>
-    where
-        S: Read
-    {
+    fn create(store: S, _: ()) -> Result<Self> {
         Ok(WrapperStore(store))
     }
 
-    fn flush(self) -> Result<Self::Encoding>
-    where
-        S: Write
-    {
+    fn flush(self) -> Result<Self::Encoding> {
         Ok(())
     }
 }

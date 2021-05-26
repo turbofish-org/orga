@@ -1,4 +1,4 @@
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
 
 use crate::store::*;
@@ -7,7 +7,6 @@ use crate::Result;
 pub mod value;
 pub mod wrapper;
 
-use ed::Encode;
 // pub use value::Value;
 pub use wrapper::WrapperStore;
 
@@ -61,45 +60,40 @@ pub trait State<S = Store>: Sized {
         S: Write;
 }
 
-// TODO: implement State for primitives (probably everything in ed)
-
-impl<S> State<S> for u64 {
+impl<S, T: ed::Encode + ed::Decode> State<S> for T {
     type Encoding = Self;
 
     fn create(_: S, value: Self) -> Result<Self> {
         Ok(value)
     }
 
-    fn flush(self) -> Result<Self::Encoding>
-    where
-            S: Write {
+    fn flush(self) -> Result<Self::Encoding> {
         Ok(self)
     }
 }
 
 mod tests2 {
-   
-    // #[state]
-    // struct CounterState {
-    //     counts: Map<u64, u64>,
-    // }
+    #[derive(State, Query)]
+    struct CounterState {
+        counts: Map<u64, u64>,
+    }
 
-    // impl CounterState {
-    //     fn count(&self, id: u64) -> Result<u64> {
-    //         self.counts.get_or_default(id)
-    //     }
-
-    //     fn set_count(&mut self, id: u64, count: u64) -> Result<()> {
-    //         self.counts.insert(id, count)
-    //     }
-    // }
+    impl CounterState {
+        pub fn get(&self, id: u64) -> Result<u64> {
+            Ok(*self.counts.get(id)?.or_default()?)
+        }
+    
+        pub fn compare_and_increment(&mut self, id: u64, n: u64) -> Result<()> {
+            let mut count = self.counts
+                .entry(id)?
+                .or_default()?;
+            ensure!(count == tx.count, "Wrong count, gtfo");
+            count += 1;
+        }
+    }
 
     // fn my_state_machine(state: &mut CounterState, tx: Tx) -> Result<()> {
-    //     let mut count = state.counts.get_or_default(0)?;
-
-    //     ensure!(count == tx.count, "Wrong count, gtfo");
-
-    //     count += 1;
+    //     state.compare_and_increment(tx.id, tx.count)?;
     // }
 
     // fn main() -> App {
