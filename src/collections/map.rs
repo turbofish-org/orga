@@ -10,14 +10,14 @@ use ed::*;
 
 pub struct Map<K, V, S = Store> {
     store: S,
-    children: HashMap<K, V>,
+    children: HashMap<K, Option<V>>,
 }
 
 impl<K, V, S> State<S> for Map<K, V, S>
 where
-    K: Encode + Eq + Hash,
+    K: Encode + Terminated + Eq + Hash,
     V: State<S>,
-    S: Write + Sub,
+    S: Write + Sub + Iter,
 {
     type Encoding = ();
 
@@ -29,10 +29,8 @@ where
     }
 
     fn flush(mut self) -> Result<()> {
-        for (key, value) in self.children.drain() {
-            let key_bytes = key.encode()?;
-            let value_bytes = value.flush()?.encode()?;
-            self.store.put(key_bytes, value_bytes)?;
+        for (key, maybe_value) in self.children.drain() {
+            self.apply_change(&key, maybe_value)?;
         }
 
         Ok(())
@@ -55,9 +53,11 @@ where
         let key = key.borrow();
         Ok(if self.children.contains_key(key) {
             // value is already retained in memory (was modified)
-            let child = self.children.get(key).unwrap();
-            let child = Child::Modified(child);
-            Some(child)
+            self.children
+                .get(key)
+                .unwrap()
+                .as_ref()
+                .map(Child::Modified)
         } else {
             // value is not in memory, try to get from store
             self.get_from_store(key)?
@@ -101,6 +101,54 @@ where
                 V::create(substore, decoded)
             })
             .transpose()
+    }
+}
+
+impl<K: Hash + Eq, V, S> Map<K, V, S> {
+    pub fn remove(&mut self, key: K) {
+        self.children.insert(key, None);
+    }
+}
+
+impl<K, V, S> Map<K, V, S>
+where
+    K: Encode + Terminated,
+    V: State<S>,
+    S: Write + Iter,
+{
+    fn remove_from_store(&mut self, prefix: &[u8]) -> Result<bool> {
+        let mut entries = self.store.iter_from(prefix);
+        // TODO: create store entry API so we don't have to collect (should be
+        // able to delete while iterating)
+        let to_delete: Vec<Vec<u8>> = entries
+            .take_while(|(key, _)| key.starts_with(prefix))
+            .map(|(key, _)| key.to_vec())
+            .collect();
+
+        let exists = !to_delete.is_empty();
+        for key in to_delete {
+            self.store.delete(key.as_slice())?;
+        }
+
+        Ok(exists)
+    }
+
+    fn apply_change(&mut self, key: &K, maybe_value: Option<V>) -> Result<()> {
+        let key_bytes = key.encode()?;
+            
+        match maybe_value {
+            Some(value) => {
+                // insert/update
+                let value_bytes = value.flush()?.encode()?;
+                self.store.put(key_bytes, value_bytes)?;
+            },
+            None => {
+                // delete
+                self.remove_from_store(key_bytes.as_slice())?;
+            },
+        }
+
+        Ok(())
     }
 }
 
@@ -161,6 +209,22 @@ where
     }
 }
 
+impl<'a, K, V, S> Entry<'a, K, V, S>
+where
+    K: Encode + Terminated + Eq + Hash,
+    S: Write + Iter,
+{
+    pub fn remove(self) -> Result<bool> {
+        Ok(match self {
+            Entry::Occupied { child } => {
+                child.remove();
+                true
+            },
+            Entry::Vacant { .. } => false,
+        })
+    }
+}
+
 impl<'a, K, V, S, D> Entry<'a, K, V, S>
 where
     K: Encode + Terminated + Eq + Hash,
@@ -188,7 +252,21 @@ impl<'a, K, V, S> From<Entry<'a, K, V, S>> for Option<ChildMut<'a, K, V, S>> {
 
 pub enum ChildMut<'a, K, V, S> {
     Unmodified(Option<(K, V, &'a mut Map<K, V, S>)>),
-    Modified(hash_map::OccupiedEntry<'a, K, V>),
+    Modified(hash_map::OccupiedEntry<'a, K, Option<V>>),
+}
+
+impl<'a, K: Hash + Eq, V, S> ChildMut<'a, K, V, S> {
+    pub fn remove(self) {
+        match self {
+            ChildMut::Unmodified(mut inner) => {
+                let (key, _, parent) = inner.take().unwrap();
+                parent.remove(key);
+            },
+            ChildMut::Modified(mut entry) => {
+                entry.insert(None);
+            },
+        }
+    }
 }
 
 impl<'a, K, V, S> Deref for ChildMut<'a, K, V, S> {
@@ -197,7 +275,7 @@ impl<'a, K, V, S> Deref for ChildMut<'a, K, V, S> {
     fn deref(&self) -> &V {
         match self {
             ChildMut::Unmodified(inner) => &inner.as_ref().unwrap().1,
-            ChildMut::Modified(entry) => entry.get(),
+            ChildMut::Modified(entry) => entry.get().as_ref().unwrap(),
         }
     }
 }
@@ -214,11 +292,11 @@ where
                 let (key, value, parent) = inner.take().unwrap();
                 let entry = parent.children
                     .entry(key)
-                    .insert(value);
+                    .insert(Some(value));
                 *self = ChildMut::Modified(entry);
                 self.deref_mut()
             },
-            ChildMut::Modified(entry) => entry.get_mut(),
+            ChildMut::Modified(entry) => entry.get_mut().as_mut().unwrap(),
         }
     }
 }
