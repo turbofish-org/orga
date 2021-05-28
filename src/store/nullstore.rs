@@ -10,17 +10,15 @@ impl Read for NullStore {
 }
 
 impl Iter for NullStore {
-    type Iter<'a> = NullIter<'a>;
-
-    fn iter_from(&self, _start: &[u8]) -> NullIter {
-        NullIter(std::marker::PhantomData)
+    fn iter_from(&self, _: &[u8]) -> EntryIter {
+        Box::new(NullIter)
     }
 }
 
-pub struct NullIter<'a>(std::marker::PhantomData<&'a ()>);
+pub struct NullIter;
 
-impl<'a> Iterator for NullIter<'a> {
-    type Item = Entry<'a>;
+impl Iterator for NullIter {
+    type Item = Entry;
 
     fn next(&mut self) -> Option<Self::Item> {
         None

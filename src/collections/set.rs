@@ -1,23 +1,15 @@
 // use std::borrow::Borrow;
 
-// use super::Map;
+use super::Map;
 // use crate::encoding::{Decode, Encode};
-// use crate::state::{State, Query};
+use crate::state::{State, Store};
 // use crate::store::{Read, Store};
-// use crate::Result;
+use crate::Result;
 
 // /// A set data structure.
-// pub struct Set<S: Read, T: Encode + Decode> {
-//     map: Map<S, T, ()>,
-// }
-
-// impl<S: Read, T: Encode + Decode> State<S> for Set<S, T> {
-//     /// Constructs a `Set` which is backed by the given store.
-//     fn wrap_store(store: S) -> Result<Self> {
-//         Ok(Self {
-//             map: Map::wrap_store(store)?,
-//         })
-//     }
+// #[derive(State)]
+// pub struct Set<K, S = Store> {
+//     map: Map<K, (), S>,
 // }
 
 // impl<S: Read, T: Encode + Decode> Query for Set<S, T> {

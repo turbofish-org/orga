@@ -1,4 +1,4 @@
-use super::{Read, Write, Entry};
+use super::{Read, Write, Entry, EntryIter};
 use crate::Result;
 use std::cell::{Ref, RefCell};
 use std::ops::Deref;
@@ -50,9 +50,7 @@ impl<W: Write> Write for Shared<W> {
 impl<R> super::Iter for Shared<R>
     where R: Read + super::Iter
 {
-    type Iter<'a> = Iter<'a, R::Iter<'a>>;
-
-    fn iter_from(&self, start: &[u8]) -> Self::Iter<'_> {
+    fn iter_from(&self, start: &[u8]) -> EntryIter {
         // erase lifetime information
         let iter = unsafe {
             self.0.as_ptr().as_ref().unwrap().iter_from(start)
@@ -66,22 +64,19 @@ impl<R> super::Iter for Shared<R>
             >(self.0.borrow())
         };
 
-        Iter { _ref, iter }
+        Box::new(Iter { _ref, iter })
     }
 }
 
-pub struct Iter<'a, I>
-    where
-        I: Iterator<Item = Entry<'a>>
-{
+pub struct Iter<I: Iterator<Item = Entry>> {
     _ref: std::cell::Ref<'static, ()>,
-    iter: I
+    iter: I,
 }
 
-impl<'a, I> Iterator for Iter<'a, I>
-    where I: Iterator<Item = Entry<'a>>
+impl<I> Iterator for Iter<I>
+    where I: Iterator<Item = Entry>
 {
-    type Item = Entry<'a>;
+    type Item = Entry;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()

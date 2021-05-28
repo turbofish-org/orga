@@ -3,7 +3,6 @@ use crate::state::State;
 use std::ops::{Deref, DerefMut};
 
 pub mod bufstore;
-pub mod iter;
 pub mod nullstore;
 pub mod prefix;
 pub mod rwlog;
@@ -12,7 +11,6 @@ pub mod split;
 
 pub use bufstore::Map as BufStoreMap;
 pub use bufstore::{BufStore, MapStore};
-pub use iter::{Entry, Iter};
 pub use nullstore::NullStore;
 // pub use prefix::BytePrefixed;
 pub use rwlog::RWLog;
@@ -62,15 +60,37 @@ impl<S: Write, T: DerefMut<Target = S>> Write for T {
     }
 }
 
-pub trait ReadWrite {
+/// A key/value pair emitted from an [`Iter`](trait.Iter.html).
+pub type Entry = (Vec<u8>, Vec<u8>);
+
+pub type EntryIter<'a> = Box<dyn Iterator<Item = Entry> + 'a>;
+
+/// An interface for `Store` implementations which can create iterators over
+/// their key/value pairs.
+pub trait Iter {
+    // TODO: use ranges rather than just start key
+    fn iter_from(&self, start: &[u8]) -> EntryIter;
+
+    fn iter(&self) -> EntryIter {
+        self.iter_from(&[])
+    }
+}
+
+pub trait ReadWriteIter {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>>;
    
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()>;
 
     fn delete(&mut self, key: &[u8]) -> Result<()>;
+
+    fn iter_from(&self, start: &[u8]) -> EntryIter;
+
+    fn iter(&self) -> EntryIter {
+        self.iter_from(&[])
+    }
 }
 
-impl<T: Read + Write> ReadWrite for T {
+impl<T: Read + Write + Iter> ReadWriteIter for T {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         Read::get(self, key)
     }
@@ -82,23 +102,35 @@ impl<T: Read + Write> ReadWrite for T {
     fn delete(&mut self, key: &[u8]) -> Result<()> {
         Write::delete(self, key)
     }
+
+    fn iter_from(&self, key: &[u8]) -> EntryIter {
+        Iter::iter_from(self, key)
+    }
 }
 
-pub struct ReadWriter(pub Box<dyn ReadWrite>);
+pub struct ReadWriter(
+    pub Box<dyn ReadWriteIter>,
+);
 
 impl<'a> Read for ReadWriter {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        ReadWrite::get(self.0.deref(), key)
+        ReadWriteIter::get(self.0.deref(), key)
     }
 }
 
 impl<'a> Write for ReadWriter {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
-        ReadWrite::put(self.0.deref_mut(), key, value)
+        ReadWriteIter::put(self.0.deref_mut(), key, value)
     }
 
     fn delete(&mut self, key: &[u8]) -> Result<()> {
-        ReadWrite::delete(self.0.deref_mut(), key)
+        ReadWriteIter::delete(self.0.deref_mut(), key)
+    }
+}
+
+impl<'a> Iter for ReadWriter {
+    fn iter_from(&self, start: &[u8]) -> EntryIter {
+        ReadWriteIter::iter_from(self.0.deref(), start)
     }
 }
 
@@ -108,10 +140,8 @@ pub trait Sub {
 }
 
 
-impl<'a, S: Iter + 'a> Iter for &mut S {
-    type Iter<'b> = <S as Iter>::Iter<'b>;
-
-    fn iter_from(&self, start: &[u8]) -> Self::Iter<'_> {
+impl<S: Iter> Iter for &mut S {
+    fn iter_from(&self, start: &[u8]) -> EntryIter {
         self.deref().iter_from(start)
     }
 }

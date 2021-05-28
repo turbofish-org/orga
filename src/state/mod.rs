@@ -13,7 +13,7 @@ pub use wrapper::WrapperStore;
 pub struct Store(Vec<u8>, Shared<ReadWriter>);
 
 impl Store {
-    pub fn new(r: Box<dyn ReadWrite>) -> Self {
+    pub fn new<'a>(r: Box<dyn ReadWriteIter>) -> Self {
         Store(vec![], Shared::new(ReadWriter(r)))
     }
 }
@@ -46,6 +46,14 @@ impl Write for Store {
     }
 }
 
+impl Iter for Store {
+    fn iter_from(&self, start: &[u8]) -> EntryIter {
+        let subiter = Iter::iter_from(&self.1, self.0.as_slice());
+        // TODO: terminate iterator
+        Box::new(subiter)
+    }
+}
+
 /// A trait for types which provide a higher-level API for data stored within a
 /// [`store::Store`](../store/trait.Store.html).
 pub trait State<S = Store>: Sized {
@@ -73,24 +81,24 @@ impl<S, T: ed::Encode + ed::Decode> State<S> for T {
 }
 
 mod tests2 {
-    #[derive(State, Query)]
-    struct CounterState {
-        counts: Map<u64, u64>,
-    }
+    // #[derive(State, Query)]
+    // struct CounterState {
+    //     counts: Map<u64, u64>,
+    // }
 
-    impl CounterState {
-        pub fn get(&self, id: u64) -> Result<u64> {
-            Ok(*self.counts.get(id)?.or_default()?)
-        }
+    // impl CounterState {
+    //     pub fn get(&self, id: u64) -> Result<u64> {
+    //         Ok(*self.counts.get(id)?.or_default()?)
+    //     }
     
-        pub fn compare_and_increment(&mut self, id: u64, n: u64) -> Result<()> {
-            let mut count = self.counts
-                .entry(id)?
-                .or_default()?;
-            ensure!(count == tx.count, "Wrong count, gtfo");
-            count += 1;
-        }
-    }
+    //     pub fn compare_and_increment(&mut self, id: u64, n: u64) -> Result<()> {
+    //         let mut count = self.counts
+    //             .entry(id)?
+    //             .or_default()?;
+    //         ensure!(count == tx.count, "Wrong count, gtfo");
+    //         count += 1;
+    //     }
+    // }
 
     // fn my_state_machine(state: &mut CounterState, tx: Tx) -> Result<()> {
     //     state.compare_and_increment(tx.id, tx.count)?;

@@ -30,7 +30,7 @@ where
 
     fn flush(mut self) -> Result<()> {
         for (key, maybe_value) in self.children.drain() {
-            self.apply_change(&key, maybe_value)?;
+            Self::apply_change(&mut self.store, &key, maybe_value)?;
         }
 
         Ok(())
@@ -116,8 +116,8 @@ where
     V: State<S>,
     S: Write + Iter,
 {
-    fn remove_from_store(&mut self, prefix: &[u8]) -> Result<bool> {
-        let mut entries = self.store.iter_from(prefix);
+    fn remove_from_store(store: &mut S, prefix: &[u8]) -> Result<bool> {
+        let entries = Iter::iter_from(store, prefix);
         // TODO: create store entry API so we don't have to collect (should be
         // able to delete while iterating)
         let to_delete: Vec<Vec<u8>> = entries
@@ -127,24 +127,24 @@ where
 
         let exists = !to_delete.is_empty();
         for key in to_delete {
-            self.store.delete(key.as_slice())?;
+            store.delete(key.as_slice())?;
         }
 
         Ok(exists)
     }
 
-    fn apply_change(&mut self, key: &K, maybe_value: Option<V>) -> Result<()> {
+    fn apply_change(store: &mut S, key: &K, maybe_value: Option<V>) -> Result<()> {
         let key_bytes = key.encode()?;
             
         match maybe_value {
             Some(value) => {
                 // insert/update
                 let value_bytes = value.flush()?.encode()?;
-                self.store.put(key_bytes, value_bytes)?;
+                store.put(key_bytes, value_bytes)?;
             },
             None => {
                 // delete
-                self.remove_from_store(key_bytes.as_slice())?;
+                Self::remove_from_store(store, key_bytes.as_slice())?;
             },
         }
 
@@ -333,7 +333,7 @@ mod tests {
 
         map.flush().unwrap();
 
-        for (key, value) in mapstore.iter() {
+        for (key, value) in Iter::iter(&mapstore) {
             println!("{:?}: {:?}", key, value);
         }
     }

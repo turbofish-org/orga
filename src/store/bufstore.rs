@@ -81,7 +81,7 @@ impl<S: Read> Write for BufStore<S> {
     }
 }
 
-impl<S: ReadWrite> Flush for BufStore<S> {
+impl<S: Read + Write> Flush for BufStore<S> {
     /// Consumes the `BufStore`'s in-memory buffer and writes all of its values
     /// to the underlying store.
     ///
@@ -104,15 +104,13 @@ impl<S> super::Iter for BufStore<S>
 where
     S: Read + super::Iter
 {
-    type Iter<'a> = Iter<'a, S::Iter<'a>>;
-
-    fn iter_from(&self, start: &[u8]) -> Self::Iter<'_> {
+    fn iter_from(&self, start: &[u8]) -> EntryIter {
         let map_iter = self.map.range(start.to_vec()..);
         let backing_iter = self.store.iter_from(start);
-        Iter {
+        Box::new(Iter {
             map_iter: map_iter.peekable(),
-            backing_iter: backing_iter.peekable()
-        }
+            backing_iter: backing_iter.peekable(),
+        })
     }
 }
 
@@ -120,19 +118,16 @@ where
 ///
 /// Entries will be emitted for values in the underlying store, reflecting the
 /// modifications stored in the in-memory map.
-pub struct Iter<'a, B>
-where
-    B: Iterator<Item = Entry<'a>>,
-{
+pub struct Iter<'a, B: Iterator> {
     map_iter: Peekable<MapIter<'a>>,
-    backing_iter: Peekable<B>
+    backing_iter: Peekable<B>,
 }
 
 impl<'a, B> Iterator for Iter<'a, B>
 where
-    B: Iterator<Item = Entry<'a>>,
+    B: Iterator<Item = Entry>,
 {
-    type Item = Entry<'a>;
+    type Item = Entry;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -147,7 +142,7 @@ where
                 (true, false) => {
                     match self.map_iter.next().unwrap() {
                         // map value is not a delete, emit value
-                        (key, Some(value)) => Some((key.as_slice(), value.as_slice())),
+                        (key, Some(value)) => Some((key.clone(), value.clone())),
                         // map value is a delete, go to next entry
                         (_, None) => continue,
                     }
@@ -159,8 +154,8 @@ where
                 // merge values from both iterators
                 (true, true) => {
                     let map_key = self.map_iter.peek().unwrap().0;
-                    let backing_key = self.backing_iter.peek().unwrap().0;
-                    let key_cmp = map_key.as_slice().cmp(backing_key);
+                    let backing_key = &self.backing_iter.peek().unwrap().0;
+                    let key_cmp = map_key.cmp(backing_key);
 
                     // map key > backing key, emit backing entry
                     if key_cmp == Ordering::Greater {
@@ -175,7 +170,7 @@ where
 
                     // map key <= backing key, emit map entry (or skip if delete)
                     match self.map_iter.next().unwrap() {
-                        (key, Some(value)) => Some((key.as_slice(), value.as_slice())),
+                        (key, Some(value)) => Some((key.clone(), value.clone())),
                         (_, None) => continue,
                     }
                 }
