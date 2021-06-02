@@ -1,6 +1,4 @@
-use std::cmp::Ordering;
-use std::collections::{btree_map, BTreeMap};
-use std::iter::Peekable;
+use std::collections::BTreeMap;
 
 use super::*;
 
@@ -20,16 +18,18 @@ pub struct BufStore<S> {
 impl<S: Read + Default> BufStore<S> {
     /// Constructs a `BufStore` which wraps the default value of the inner
     /// store.
+    #[inline]
     pub fn new() -> Self {
         Default::default()
     }
 }
 
 impl<S: Read + Default> Default for BufStore<S> {
+    #[inline]
     fn default() -> Self {
         Self {
             map: Default::default(),
-            store: Default::default()
+            store: Default::default(),
         }
     }
 }
@@ -39,6 +39,7 @@ impl<S> BufStore<S> {
     ///
     /// Calls to get will first check the `BufStore` map, and if no entry is
     /// found will be passed to the underlying store.
+    #[inline]
     pub fn wrap(store: S) -> Self {
         BufStore {
             store,
@@ -48,46 +49,28 @@ impl<S> BufStore<S> {
 
     /// Creates a `BufStore` by wrapping the given store, using a pre-populated
     /// in-memory buffer of key/value entries.
+    #[inline]
     pub fn wrap_with_map(store: S, map: Map) -> Self {
         BufStore { store, map }
     }
 
     /// Consumes the `BufStore` and returns its in-memory buffer of key/value
     /// entries.
+    #[inline]
     pub fn into_map(self) -> Map {
         self.map
     }
-}
-
-impl<S: Read> Read for BufStore<S> {
-    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        match self.map.get(key.as_ref()) {
-            Some(Some(value)) => Ok(Some(value.clone())),
-            Some(None) => Ok(None),
-            None => self.store.get(key),
-        }
-    }
-}
-
-impl<S: Read> Write for BufStore<S> {
-    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
-        self.map.insert(key, Some(value));
-        Ok(())
-    }
-
-    fn delete(&mut self, key: &[u8]) -> Result<()> {
-        self.map.insert(key.as_ref().to_vec(), None);
-        Ok(())
-    }
-}
-
-impl<S: Read + Write> Flush for BufStore<S> {
+    
     /// Consumes the `BufStore`'s in-memory buffer and writes all of its values
     /// to the underlying store.
     ///
     /// After calling `flush`, the `BufStore` will still be valid and wrap the
     /// underlying store, but its in-memory buffer will be empty.
-    fn flush(&mut self) -> Result<()> {
+    #[inline]
+    fn flush(&mut self) -> Result<()>
+        where S: Write
+    {
+        // TODO: use drain instead of pop?
         while let Some((key, value)) = self.map.pop_first() {
             match value {
                 Some(value) => self.store.put(key, value)?,
@@ -98,86 +81,96 @@ impl<S: Read + Write> Flush for BufStore<S> {
     }
 }
 
-type MapIter<'a> = btree_map::Range<'a, Vec<u8>, Option<Vec<u8>>>;
-
-impl<S> super::Iter for BufStore<S>
-where
-    S: Read + super::Iter
-{
-    fn iter_from(&self, start: &[u8]) -> EntryIter {
-        let map_iter = self.map.range(start.to_vec()..);
-        let backing_iter = self.store.iter_from(start);
-        Box::new(Iter {
-            map_iter: map_iter.peekable(),
-            backing_iter: backing_iter.peekable(),
-        })
-    }
-}
-
-/// An iterator implementation over entries in a `BufStore`.
-///
-/// Entries will be emitted for values in the underlying store, reflecting the
-/// modifications stored in the in-memory map.
-pub struct Iter<'a, B: Iterator> {
-    map_iter: Peekable<MapIter<'a>>,
-    backing_iter: Peekable<B>,
-}
-
-impl<'a, B> Iterator for Iter<'a, B>
-where
-    B: Iterator<Item = Entry>,
-{
-    type Item = Entry;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            let has_map_entry = self.map_iter.peek().is_some();
-            let has_backing_entry = self.backing_iter.peek().is_some();
-
-            return match (has_map_entry, has_backing_entry) {
-                // consumed both iterators, end here
-                (false, false) => None,
-
-                // consumed backing iterator, still have map values
-                (true, false) => {
-                    match self.map_iter.next().unwrap() {
-                        // map value is not a delete, emit value
-                        (key, Some(value)) => Some((key.clone(), value.clone())),
-                        // map value is a delete, go to next entry
-                        (_, None) => continue,
-                    }
-                }
-
-                // consumed map iterator, still have backing values
-                (false, true) => self.backing_iter.next(),
-
-                // merge values from both iterators
-                (true, true) => {
-                    let map_key = self.map_iter.peek().unwrap().0;
-                    let backing_key = &self.backing_iter.peek().unwrap().0;
-                    let key_cmp = map_key.cmp(backing_key);
-
-                    // map key > backing key, emit backing entry
-                    if key_cmp == Ordering::Greater {
-                        let entry = self.backing_iter.next().unwrap();
-                        return Some(entry);
-                    }
-
-                    // map key == backing key, map entry shadows backing entry
-                    if key_cmp == Ordering::Equal {
-                        self.backing_iter.next();
-                    }
-
-                    // map key <= backing key, emit map entry (or skip if delete)
-                    match self.map_iter.next().unwrap() {
-                        (key, Some(value)) => Some((key.clone(), value.clone())),
-                        (_, None) => continue,
-                    }
-                }
-            };
+impl<S: Read> Read for BufStore<S> {
+    #[inline]
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        match self.map.get(key.as_ref()) {
+            Some(Some(value)) => Ok(Some(value.clone())),
+            Some(None) => Ok(None),
+            None => self.store.get(key),
         }
     }
+
+    #[inline]
+    fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
+        todo!()
+    }
+
+    #[inline]
+    fn get_prev(&self, key: &[u8]) -> Result<Option<KV>> {
+        todo!()
+    }
 }
+
+impl<S: Read> Write for BufStore<S> {
+    #[inline]
+    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
+        self.map.insert(key, Some(value));
+        Ok(())
+    }
+
+    #[inline]
+    fn delete(&mut self, key: &[u8]) -> Result<()> {
+        self.map.insert(key.as_ref().to_vec(), None);
+        Ok(())
+    }
+}
+
+// impl<'a, B> Iterator for Iter<'a, B>
+// where
+//     B: Iterator<Item = Entry>,
+// {
+//     type Item = Entry;
+
+//     fn next(&mut self) -> Option<Self::Item> {
+//         loop {
+//             let has_map_entry = self.map_iter.peek().is_some();
+//             let has_backing_entry = self.backing_iter.peek().is_some();
+
+//             return match (has_map_entry, has_backing_entry) {
+//                 // consumed both iterators, end here
+//                 (false, false) => None,
+
+//                 // consumed backing iterator, still have map values
+//                 (true, false) => {
+//                     match self.map_iter.next().unwrap() {
+//                         // map value is not a delete, emit value
+//                         (key, Some(value)) => Some((key.clone(), value.clone())),
+//                         // map value is a delete, go to next entry
+//                         (_, None) => continue,
+//                     }
+//                 }
+
+//                 // consumed map iterator, still have backing values
+//                 (false, true) => self.backing_iter.next(),
+
+//                 // merge values from both iterators
+//                 (true, true) => {
+//                     let map_key = self.map_iter.peek().unwrap().0;
+//                     let backing_key = &self.backing_iter.peek().unwrap().0;
+//                     let key_cmp = map_key.cmp(backing_key);
+
+//                     // map key > backing key, emit backing entry
+//                     if key_cmp == Ordering::Greater {
+//                         let entry = self.backing_iter.next().unwrap();
+//                         return Some(entry);
+//                     }
+
+//                     // map key == backing key, map entry shadows backing entry
+//                     if key_cmp == Ordering::Equal {
+//                         self.backing_iter.next();
+//                     }
+
+//                     // map key <= backing key, emit map entry (or skip if delete)
+//                     match self.map_iter.next().unwrap() {
+//                         (key, Some(value)) => Some((key.clone(), value.clone())),
+//                         (_, None) => continue,
+//                     }
+//                 }
+//             };
+//         }
+//     }
+// }
 
 // #[cfg(test)]
 // mod tests {

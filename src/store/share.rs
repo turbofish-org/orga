@@ -1,12 +1,11 @@
-use super::{Read, Write, Entry, EntryIter};
+use super::{Read, Write, KV};
 use crate::Result;
-use std::cell::{Ref, RefCell};
-use std::ops::Deref;
+use std::cell::RefCell;
 use std::rc::Rc;
-use std::mem::transmute;
 
 // TODO: we can probably use UnsafeCell instead of RefCell since operations are
-// guaranteed not to interfere with each other.
+// guaranteed not to interfere with each other (the borrows only last until the
+// end of each call).
 
 /// A shared reference to a store, allowing the store to be cloned and read from
 /// or written to by multiple consumers.
@@ -18,68 +17,49 @@ pub struct Shared<T>(Rc<RefCell<T>>);
 
 impl<T> Shared<T> {
     /// Constructs a `Shared` by wrapping the given store.
+    #[inline]
     pub fn new(inner: T) -> Self {
         Shared(Rc::new(RefCell::new(inner)))
     }
 }
 
 impl<T> Clone for Shared<T> {
-    fn clone(&self) -> Shared<T> {
-        Self(self.0.clone())
+    #[inline]
+    fn clone(&self) -> Self {
+        // we need this implementation rather than just deriving clone because
+        // we don't need T to have Clone, we just clone the Rc
+        Shared(self.0.clone())
     }
 }
 
 impl<T: Read> Read for Shared<T> {
+    #[inline]
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         self.0.borrow().get(key)
+    }
+
+    #[inline]
+    fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
+        self.0.borrow().get_next(key)
+    }
+
+    #[inline]
+    fn get_prev(&self, key: &[u8]) -> Result<Option<KV>> {
+        self.0.borrow().get_prev(key)
     }
 }
 
 impl<W: Write> Write for Shared<W> {
+    #[inline]
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         let mut store = self.0.borrow_mut();
         store.put(key, value)
     }
 
+    #[inline]
     fn delete(&mut self, key: &[u8]) -> Result<()> {
         let mut store = self.0.borrow_mut();
         store.delete(key)
-    }
-}
-
-impl<R> super::Iter for Shared<R>
-    where R: Read + super::Iter
-{
-    fn iter_from(&self, start: &[u8]) -> EntryIter {
-        // erase lifetime information
-        let iter = unsafe {
-            self.0.as_ptr().as_ref().unwrap().iter_from(start)
-        };
-
-        // borrow store so we still get runtime borrow checks
-        let _ref = unsafe {
-            transmute::<
-                std::cell::Ref<'_, R>,
-                std::cell::Ref<'static, ()>
-            >(self.0.borrow())
-        };
-
-        Box::new(Iter { _ref, iter })
-    }
-}
-
-pub struct Iter<I: Iterator<Item = Entry>> {
-    _ref: std::cell::Ref<'static, ()>,
-    iter: I,
-}
-
-impl<I> Iterator for Iter<I>
-    where I: Iterator<Item = Entry>
-{
-    type Item = Entry;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next()
     }
 }
 

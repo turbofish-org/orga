@@ -4,23 +4,18 @@ use super::*;
 pub struct NullStore;
 
 impl Read for NullStore {
+    #[inline]
     fn get(&self, _: &[u8]) -> Result<Option<Vec<u8>>> {
         Ok(None)
     }
-}
 
-impl Iter for NullStore {
-    fn iter_from(&self, _: &[u8]) -> EntryIter {
-        Box::new(NullIter)
+    #[inline]
+    fn get_next(&self, _: &[u8]) -> Result<Option<KV>> {
+        Ok(None)
     }
-}
 
-pub struct NullIter;
-
-impl Iterator for NullIter {
-    type Item = Entry;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        None
+    #[inline]
+    fn get_prev(&self, _: &[u8]) -> Result<Option<KV>> {
+        Ok(None)
     }
 }

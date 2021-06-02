@@ -1,23 +1,21 @@
 use crate::error::Result;
-use crate::state::State;
-use std::ops::{Deref, DerefMut};
+use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
 pub mod bufstore;
 pub mod nullstore;
-pub mod prefix;
 pub mod rwlog;
 pub mod share;
-pub mod split;
+pub mod store;
 
-pub use bufstore::Map as BufStoreMap;
-pub use bufstore::{BufStore, MapStore};
+pub use bufstore::{Map as BufStoreMap, BufStore, MapStore};
 pub use nullstore::NullStore;
-// pub use prefix::BytePrefixed;
 pub use rwlog::RWLog;
 pub use share::Shared;
-// pub use split::Splitter;
+pub use store::{Store, DefaultBackingStore};
 
 // TODO: Key type (for cheaper concat, enum over ref or owned slice, etc)
+
+pub type KV = (Vec<u8>, Vec<u8>);
 
 /// Trait for read access to key/value stores.
 pub trait Read {
@@ -26,11 +24,31 @@ pub trait Read {
     /// Implementations of `get` should return `None` when there is no value for
     /// the key rather than erroring.
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>>;
+
+    fn get_next(&self, key: &[u8]) -> Result<Option<KV>>;
+
+    fn get_prev(&self, key: &[u8]) -> Result<Option<KV>>;
+
+    #[inline]
+    fn range<B: RangeBounds<Vec<u8>>>(&self, bounds: B) -> Iter<Self> {
+        todo!()
+    }
 }
 
 impl<R: Read, T: Deref<Target = R>> Read for T {
+    #[inline]
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         self.deref().get(key)
+    }
+
+    #[inline]
+    fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
+        self.deref().get_next(key)
+    }
+
+    #[inline]
+    fn get_prev(&self, key: &[u8]) -> Result<Option<KV>> {
+        self.deref().get_prev(key)
     }
 }
 
@@ -51,107 +69,30 @@ pub trait Write: Read {
 }
 
 impl<S: Write, T: DerefMut<Target = S>> Write for T {
+    #[inline]
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         self.deref_mut().put(key, value)
     }
 
+    #[inline]
     fn delete(&mut self, key: &[u8]) -> Result<()> {
         self.deref_mut().delete(key)
     }
 }
 
-/// A key/value pair emitted from an [`Iter`](trait.Iter.html).
-pub type Entry = (Vec<u8>, Vec<u8>);
-
-pub type EntryIter<'a> = Box<dyn Iterator<Item = Entry> + 'a>;
-
-/// An interface for `Store` implementations which can create iterators over
-/// their key/value pairs.
-pub trait Iter {
-    // TODO: use ranges rather than just start key
-    fn iter_from(&self, start: &[u8]) -> EntryIter;
-
-    fn iter(&self) -> EntryIter {
-        self.iter_from(&[])
-    }
+// TODO: make reversible
+pub struct Iter<'a, S: ?Sized> {
+    parent: &'a S,
+    key: Vec<u8>,
+    end: Bound<Vec<u8>>,
 }
 
-pub trait ReadWriteIter {
-    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>>;
-   
-    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()>;
-
-    fn delete(&mut self, key: &[u8]) -> Result<()>;
-
-    fn iter_from(&self, start: &[u8]) -> EntryIter;
-
-    fn iter(&self) -> EntryIter {
-        self.iter_from(&[])
+impl<'a, S: Read> Iterator for Iter<'a, S> {
+    type Item = KV;
+    
+    fn next(&mut self) -> Option<Self::Item> {
+        todo!()
     }
-}
-
-impl<T: Read + Write + Iter> ReadWriteIter for T {
-    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        Read::get(self, key)
-    }
-   
-    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
-        Write::put(self, key, value)
-    }
-
-    fn delete(&mut self, key: &[u8]) -> Result<()> {
-        Write::delete(self, key)
-    }
-
-    fn iter_from(&self, key: &[u8]) -> EntryIter {
-        Iter::iter_from(self, key)
-    }
-}
-
-pub struct ReadWriter(
-    pub Box<dyn ReadWriteIter>,
-);
-
-impl<'a> Read for ReadWriter {
-    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        ReadWriteIter::get(self.0.deref(), key)
-    }
-}
-
-impl<'a> Write for ReadWriter {
-    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
-        ReadWriteIter::put(self.0.deref_mut(), key, value)
-    }
-
-    fn delete(&mut self, key: &[u8]) -> Result<()> {
-        ReadWriteIter::delete(self.0.deref_mut(), key)
-    }
-}
-
-impl<'a> Iter for ReadWriter {
-    fn iter_from(&self, start: &[u8]) -> EntryIter {
-        ReadWriteIter::iter_from(self.0.deref(), start)
-    }
-}
-
-pub trait Sub {
-    // TODO: support substores that aren't type Self
-    fn sub(&self, prefix: Vec<u8>) -> Self;
-}
-
-
-impl<S: Iter> Iter for &mut S {
-    fn iter_from(&self, start: &[u8]) -> EntryIter {
-        self.deref().iter_from(start)
-    }
-}
-
-/// A trait for types which contain data that can be flushed to an underlying
-/// store.
-pub trait Flush {
-    // TODO: should this consume the store? or will we want it like this so we
-    // can persist the same wrapper store and flush it multiple times?
-    fn flush(&mut self) -> Result<()>;
 }
 
 // #[cfg(test)]

@@ -8,8 +8,8 @@ use crate::store::*;
 use crate::Result;
 use ed::*;
 
-pub struct Map<K, V, S = Store> {
-    store: S,
+pub struct Map<K, V, S = DefaultBackingStore> {
+    store: Store<S>,
     children: HashMap<K, Option<V>>,
 }
 
@@ -17,13 +17,13 @@ impl<K, V, S> State<S> for Map<K, V, S>
 where
     K: Encode + Terminated + Eq + Hash,
     V: State<S>,
-    S: Write + Sub + Iter,
+    S: Write,
 {
     type Encoding = ();
 
-    fn create(store: S, _: ()) -> Result<Self> {
+    fn create(store: Store<S>, _: ()) -> Result<Self> {
         Ok(Map {
-            store,
+            store: store,
             children: Default::default(),
         })
     }
@@ -47,7 +47,7 @@ impl<K, V, S> Map<K, V, S>
 where
     K: Encode + Terminated + Eq + Hash,
     V: State<S>,
-    S: Read + Sub,
+    S: Read,
 {
     pub fn get<B: Borrow<K>>(&self, key: B) -> Result<Option<Child<V>>> {
         let key = key.borrow();
@@ -96,7 +96,7 @@ where
         self.store
             .get(key_bytes.as_slice())?
             .map(|value_bytes| {
-                let substore = self.store.sub(key_bytes);
+                let substore = self.store.sub(key_bytes.as_slice());
                 let decoded = V::Encoding::decode(value_bytes.as_slice())?;
                 V::create(substore, decoded)
             })
@@ -114,12 +114,13 @@ impl<K, V, S> Map<K, V, S>
 where
     K: Encode + Terminated,
     V: State<S>,
-    S: Write + Iter,
+    S: Write,
 {
-    fn remove_from_store(store: &mut S, prefix: &[u8]) -> Result<bool> {
-        let entries = Iter::iter_from(store, prefix);
-        // TODO: create store entry API so we don't have to collect (should be
-        // able to delete while iterating)
+    fn remove_from_store(store: &mut Store<S>, prefix: &[u8]) -> Result<bool> {
+        let entries = store.range(..);
+        // TODO: make so we don't have to collect (should be able to delete
+        // while iterating, either a .drain() iterator or an entry type with a
+        // delete method)
         let to_delete: Vec<Vec<u8>> = entries
             .take_while(|(key, _)| key.starts_with(prefix))
             .map(|(key, _)| key.to_vec())
@@ -133,7 +134,7 @@ where
         Ok(exists)
     }
 
-    fn apply_change(store: &mut S, key: &K, maybe_value: Option<V>) -> Result<()> {
+    fn apply_change(store: &mut Store<S>, key: &K, maybe_value: Option<V>) -> Result<()> {
         let key_bytes = key.encode()?;
             
         match maybe_value {
@@ -188,13 +189,13 @@ impl<'a, K, V, S> Entry<'a, K, V, S>
 where
     K: Encode + Terminated + Eq + Hash,
     V: State<S>,
-    S: Read + Sub,
+    S: Read,
 {
     pub fn or_create(self, value: V::Encoding) -> Result<ChildMut<'a, K, V, S>> {
         Ok(match self {
             Entry::Vacant { key, parent } => {
                 let key_bytes = key.encode()?;
-                let substore = parent.store.sub(key_bytes);
+                let substore = parent.store.sub(key_bytes.as_slice());
                 let value = V::create(substore, value)?;
                 ChildMut::Unmodified(Some((key, value, parent)))
             }
@@ -212,7 +213,7 @@ where
 impl<'a, K, V, S> Entry<'a, K, V, S>
 where
     K: Encode + Terminated + Eq + Hash,
-    S: Write + Iter,
+    S: Write,
 {
     pub fn remove(self) -> Result<bool> {
         Ok(match self {
@@ -229,7 +230,7 @@ impl<'a, K, V, S, D> Entry<'a, K, V, S>
 where
     K: Encode + Terminated + Eq + Hash,
     V: State<S, Encoding = D>,
-    S: Read + Sub,
+    S: Read,
     D: Default,
 {
     pub fn or_default(self) -> Result<ChildMut<'a, K, V, S>> {
@@ -304,8 +305,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::Store;
-    use crate::store::MapStore;
+    use crate::store::{MapStore, Store};
 
     fn increment_entry(map: &mut Map<u64, u64>, n: u64) -> Result<()> {
         *map.entry(n)?.or_default()? += 1;
@@ -314,26 +314,42 @@ mod tests {
 
     #[test]
     fn submap() {
-        let mapstore = Shared::new(MapStore::new());
-        let store = Store::new(Box::new(mapstore.clone()));
-        let mut map: Map<u64, Map<u64, u64>> = Map::create(store, ()).unwrap();
+        let store = Store::new(MapStore::new());
+        let mut map = Map::create(store.clone(), ()).unwrap();
 
         let mut submap = map
-            .entry(123).unwrap()
+            .entry(12).unwrap()
             .or_default().unwrap();
-        increment_entry(&mut submap, 456).unwrap();
+        increment_entry(&mut submap, 34).unwrap();
+
+        let mut submap = map
+            .entry(56).unwrap()
+            .or_default().unwrap();
+        increment_entry(&mut submap, 78).unwrap();
+        increment_entry(&mut submap, 78).unwrap();
+        increment_entry(&mut submap, 79).unwrap();
 
         let map_ref = &map;
         assert_eq!(
             *map_ref
-                .get(123).unwrap().unwrap()
-                .get(456).unwrap().unwrap(),
-            1
+                .get(12).unwrap().unwrap()
+                .get(34).unwrap().unwrap(),
+            1,
         );
+        assert_eq!(
+            *map_ref
+                .get(56).unwrap().unwrap()
+                .get(78).unwrap().unwrap(),
+            2,
+        );
+
+        map
+            .entry(56).unwrap()
+            .remove().unwrap();
 
         map.flush().unwrap();
 
-        for (key, value) in Iter::iter(&mapstore) {
+        for (key, value) in store.range(..) {
             println!("{:?}: {:?}", key, value);
         }
     }

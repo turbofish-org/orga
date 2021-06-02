@@ -5,6 +5,8 @@ use super::*;
 type Set = HashSet<Vec<u8>>;
 
 // TODO: split into ReadLog and WriteLog
+// TODO: use UnsafeCell instead of Cell since borrows can't last beyond the
+// method calls so are guaranteed to be safe
 
 /// A `Store` wrapper which records the keys of all reads and writes made
 /// through it.
@@ -37,6 +39,17 @@ impl<S: Read> Read for RWLog<S> {
         self.read_keys.set(read_keys);
 
         self.store.get(key)
+    }
+
+    fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
+        // XXX: we will have to think about our concurrency rules wrt ranges of
+        // keys, e.g. for a store with keys 1 and 3, get_next(1) should "lock"
+        // for the range 1..3, and conflict with a write to 2
+        todo!()
+    }
+
+    fn get_prev(&self, key: &[u8]) -> Result<Option<KV>> {
+        todo!()
     }
 }
 

@@ -1,6 +1,3 @@
-use std::collections::{HashMap, HashSet};
-use std::ops::{Deref, DerefMut};
-
 use crate::store::*;
 use crate::Result;
 
@@ -10,56 +7,12 @@ pub mod wrapper;
 // pub use value::Value;
 pub use wrapper::WrapperStore;
 
-pub struct Store(Vec<u8>, Shared<ReadWriter>);
-
-impl Store {
-    pub fn new<'a>(r: Box<dyn ReadWriteIter>) -> Self {
-        Store(vec![], Shared::new(ReadWriter(r)))
-    }
-}
-
-impl Sub for Store {
-    fn sub(&self, prefix: Vec<u8>) -> Self {
-        Store(prefix, self.1.clone())
-    }
-}
-
-impl Read for Store {
-    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        let mut prefixed = self.0.clone();
-        prefixed.extend_from_slice(key);
-        Read::get(&self.1, prefixed.as_slice())
-    }
-}
-
-impl Write for Store {
-    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
-        let mut prefixed = self.0.clone();
-        prefixed.extend(key);
-        Write::put(&mut self.1, prefixed, value)
-    }
-
-    fn delete(&mut self, key: &[u8]) -> Result<()> {
-        let mut prefixed = self.0.clone();
-        prefixed.extend_from_slice(key);
-        Write::delete(&mut self.1, prefixed.as_slice())
-    }
-}
-
-impl Iter for Store {
-    fn iter_from(&self, start: &[u8]) -> EntryIter {
-        let subiter = Iter::iter_from(&self.1, self.0.as_slice());
-        // TODO: terminate iterator
-        Box::new(subiter)
-    }
-}
-
 /// A trait for types which provide a higher-level API for data stored within a
 /// [`store::Store`](../store/trait.Store.html).
-pub trait State<S = Store>: Sized {
+pub trait State<S>: Sized {
     type Encoding: ed::Encode + ed::Decode + From<Self>;
 
-    fn create(store: S, decoded: Self::Encoding) -> Result<Self>
+    fn create(store: Store<S>, decoded: Self::Encoding) -> Result<Self>
     where
         S: Read;
 
@@ -71,10 +24,12 @@ pub trait State<S = Store>: Sized {
 impl<S, T: ed::Encode + ed::Decode> State<S> for T {
     type Encoding = Self;
 
-    fn create(_: S, value: Self) -> Result<Self> {
+    #[inline]
+    fn create(_: Store<S>, value: Self) -> Result<Self> {
         Ok(value)
     }
 
+    #[inline]
     fn flush(self) -> Result<Self::Encoding> {
         Ok(self)
     }
