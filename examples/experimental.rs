@@ -44,7 +44,7 @@ fn main() {
 
   map.flush().unwrap();
   
-  for (key, value) in store.range(..) {
-    println!("{:?}: {:?}", key, value);
+  for item in store.range(..) {
+    println!("{:?}", item);
   }
 }

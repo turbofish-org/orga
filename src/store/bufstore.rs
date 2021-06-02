@@ -1,4 +1,5 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, btree_map};
+use std::cmp::Ordering;
 
 use super::*;
 
@@ -67,7 +68,7 @@ impl<S> BufStore<S> {
     /// After calling `flush`, the `BufStore` will still be valid and wrap the
     /// underlying store, but its in-memory buffer will be empty.
     #[inline]
-    fn flush(&mut self) -> Result<()>
+    pub fn flush(&mut self) -> Result<()>
         where S: Write
     {
         // TODO: use drain instead of pop?
@@ -93,12 +94,84 @@ impl<S: Read> Read for BufStore<S> {
 
     #[inline]
     fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
-        todo!()
+        // TODO: optimize by retaining previously used iterator(s) so we don't
+        // have to recreate them each iteration (if it makes a difference)
+        let mut map_iter = self.map.range(exclusive_range_from(key));
+        let mut store_iter = self.store.range(exclusive_range_from(key));
+        iter_merge_next(&mut map_iter, &mut store_iter)
     }
 
     #[inline]
     fn get_prev(&self, key: &[u8]) -> Result<Option<KV>> {
         todo!()
+        // let mut map_iter = self.map.range(key.to_vec()..).rev();
+        // let mut store_iter = self.store.range(key.to_vec()..).rev();
+        // iter_merge_next(&mut map_iter, &mut store_iter)
+    }
+}
+
+fn exclusive_range_from(start: &[u8]) -> (Bound<Vec<u8>>, Bound<Vec<u8>>) {
+    (
+        Bound::Excluded(start.to_vec()),
+        Bound::Unbounded,
+    )
+}
+
+fn iter_merge_next<S: Read>(
+    map_iter: &mut btree_map::Range<Vec<u8>, Option<Vec<u8>>>,
+    store_iter: &mut Iter<S>,
+) -> Result<Option<KV>> {
+    let mut map_iter = map_iter.peekable();
+    let mut store_iter = store_iter.peekable();
+
+    loop {
+        let has_map_entry = map_iter.peek().is_some();
+        let has_backing_entry = store_iter.peek().is_some();
+
+        return Ok(match (has_map_entry, has_backing_entry) {
+            // consumed both iterators, end here
+            (false, false) => None,
+
+            // consumed backing iterator, still have map values
+            (true, false) => {
+                match map_iter.next().unwrap() {
+                    // map value is not a delete, emit value
+                    (key, Some(value)) => Some((key.clone(), value.clone())),
+                    // map value is a delete, go to next entry
+                    (_, None) => continue,
+                }
+            }
+
+            // consumed map iterator, still have backing values
+            (false, true) => store_iter.next().transpose()?,
+
+            // merge values from both iterators
+            (true, true) => {
+                let map_key = map_iter.peek().unwrap().0;
+                let backing_key = match store_iter.peek().unwrap() {
+                    Err(err) => failure::bail!("{}", err),
+                    Ok((ref key, _)) => key,
+                };
+                let key_cmp = map_key.cmp(backing_key);
+
+                // map key > backing key, emit backing entry
+                if key_cmp == Ordering::Greater {
+                    let entry = store_iter.next().unwrap()?;
+                    return Ok(Some(entry));
+                }
+
+                // map key == backing key, map entry shadows backing entry
+                if key_cmp == Ordering::Equal {
+                    store_iter.next();
+                }
+
+                // map key <= backing key, emit map entry (or skip if delete)
+                match map_iter.next().unwrap() {
+                    (key, Some(value)) => Some((key.clone(), value.clone())),
+                    (_, None) => continue,
+                }
+            }
+        });
     }
 }
 
@@ -123,52 +196,7 @@ impl<S: Read> Write for BufStore<S> {
 //     type Item = Entry;
 
 //     fn next(&mut self) -> Option<Self::Item> {
-//         loop {
-//             let has_map_entry = self.map_iter.peek().is_some();
-//             let has_backing_entry = self.backing_iter.peek().is_some();
-
-//             return match (has_map_entry, has_backing_entry) {
-//                 // consumed both iterators, end here
-//                 (false, false) => None,
-
-//                 // consumed backing iterator, still have map values
-//                 (true, false) => {
-//                     match self.map_iter.next().unwrap() {
-//                         // map value is not a delete, emit value
-//                         (key, Some(value)) => Some((key.clone(), value.clone())),
-//                         // map value is a delete, go to next entry
-//                         (_, None) => continue,
-//                     }
-//                 }
-
-//                 // consumed map iterator, still have backing values
-//                 (false, true) => self.backing_iter.next(),
-
-//                 // merge values from both iterators
-//                 (true, true) => {
-//                     let map_key = self.map_iter.peek().unwrap().0;
-//                     let backing_key = &self.backing_iter.peek().unwrap().0;
-//                     let key_cmp = map_key.cmp(backing_key);
-
-//                     // map key > backing key, emit backing entry
-//                     if key_cmp == Ordering::Greater {
-//                         let entry = self.backing_iter.next().unwrap();
-//                         return Some(entry);
-//                     }
-
-//                     // map key == backing key, map entry shadows backing entry
-//                     if key_cmp == Ordering::Equal {
-//                         self.backing_iter.next();
-//                     }
-
-//                     // map key <= backing key, emit map entry (or skip if delete)
-//                     match self.map_iter.next().unwrap() {
-//                         (key, Some(value)) => Some((key.clone(), value.clone())),
-//                         (_, None) => continue,
-//                     }
-//                 }
-//             };
-//         }
+//         
 //     }
 // }
 

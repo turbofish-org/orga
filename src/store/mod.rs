@@ -7,11 +7,11 @@ pub mod rwlog;
 pub mod share;
 pub mod store;
 
-pub use bufstore::{Map as BufStoreMap, BufStore, MapStore};
+pub use bufstore::{BufStore, Map as BufStoreMap, MapStore};
 pub use nullstore::NullStore;
 pub use rwlog::RWLog;
 pub use share::Shared;
-pub use store::{Store, DefaultBackingStore};
+pub use store::{DefaultBackingStore, Store};
 
 // TODO: Key type (for cheaper concat, enum over ref or owned slice, etc)
 
@@ -31,7 +31,22 @@ pub trait Read {
 
     #[inline]
     fn range<B: RangeBounds<Vec<u8>>>(&self, bounds: B) -> Iter<Self> {
-        todo!()
+        Iter {
+            parent: self,
+            bounds: (
+                clone_bound(bounds.start_bound()),
+                clone_bound(bounds.end_bound()),
+            ),
+            done: false,
+        }
+    }
+}
+
+fn clone_bound<T: Clone>(bound: Bound<&T>) -> Bound<T> {
+    match bound {
+        Bound::Unbounded => Bound::Unbounded,
+        Bound::Included(key) => Bound::Included(key.clone()),
+        Bound::Excluded(key) => Bound::Excluded(key.clone()),
     }
 }
 
@@ -83,15 +98,62 @@ impl<S: Write, T: DerefMut<Target = S>> Write for T {
 // TODO: make reversible
 pub struct Iter<'a, S: ?Sized> {
     parent: &'a S,
-    key: Vec<u8>,
-    end: Bound<Vec<u8>>,
+    bounds: (Bound<Vec<u8>>, Bound<Vec<u8>>),
+    done: bool,
+}
+
+impl<'a, S: Read> Iter<'a, S> {
+    fn get_next_inclusive(&self, key: &[u8]) -> Result<Option<KV>> {
+        if let Some(value) = self.parent.get(key)? {
+            return Ok(Some((key.to_vec(), value)));
+        }
+
+        self.parent.get_next(key)
+    }
 }
 
 impl<'a, S: Read> Iterator for Iter<'a, S> {
-    type Item = KV;
-    
-    fn next(&mut self) -> Option<Self::Item> {
-        todo!()
+    type Item = Result<KV>;
+
+    fn next(&mut self) -> Option<Result<KV>> {
+        if self.done {
+            return None;
+        }
+
+        let maybe_entry = match self.bounds.0 {
+            // if entry exists at empty key, emit that. if not, get next entry
+            Bound::Unbounded => self.get_next_inclusive(&[]).transpose(),
+
+            // if entry exists at given key, emit that. if not, get next entry
+            Bound::Included(ref key) => self.get_next_inclusive(key).transpose(),
+
+            // get next entry
+            Bound::Excluded(ref key) => self.parent.get_next(key).transpose(),
+        };
+
+        match maybe_entry {
+            // bubble up errors
+            Some(Err(err)) => Some(Err(err)),
+            
+            // got entry
+            Some(Ok((key, value))) => {
+                // entry is past end of range, mark iterator as done
+                if !self.bounds.contains(&key) {
+                    self.done = true;
+                    return None;
+                }
+
+                // advance internal state to next key
+                self.bounds.0 = Bound::Excluded(key.clone());
+                Some(Ok((key, value)))
+            },
+
+            // reached end of iteration, mark iterator as done
+            None => {
+                self.done = true;
+                None
+            },
+        }
     }
 }
 

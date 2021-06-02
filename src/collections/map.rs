@@ -122,6 +122,8 @@ where
         // while iterating, either a .drain() iterator or an entry type with a
         // delete method)
         let to_delete: Vec<Vec<u8>> = entries
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
             .take_while(|(key, _)| key.starts_with(prefix))
             .map(|(key, _)| key.to_vec())
             .collect();
@@ -349,8 +351,8 @@ mod tests {
 
         map.flush().unwrap();
 
-        for (key, value) in store.range(..) {
-            println!("{:?}: {:?}", key, value);
+        for item in store.range(..) {
+            println!("{:?}", item);
         }
     }
 }
