@@ -2,12 +2,14 @@ use crate::error::Result;
 use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
 pub mod bufstore;
+pub mod iter;
 pub mod nullstore;
 pub mod rwlog;
 pub mod share;
 pub mod store;
 
 pub use bufstore::{BufStore, Map as BufStoreMap, MapStore};
+pub use iter::Iter;
 pub use nullstore::NullStore;
 pub use rwlog::RWLog;
 pub use share::Shared;
@@ -31,14 +33,13 @@ pub trait Read {
 
     #[inline]
     fn range<B: RangeBounds<Vec<u8>>>(&self, bounds: B) -> Iter<Self> {
-        Iter {
-            parent: self,
-            bounds: (
+        Iter::new(
+            self,
+            (
                 clone_bound(bounds.start_bound()),
                 clone_bound(bounds.end_bound()),
             ),
-            done: false,
-        }
+        )
     }
 }
 
@@ -92,68 +93,6 @@ impl<S: Write, T: DerefMut<Target = S>> Write for T {
     #[inline]
     fn delete(&mut self, key: &[u8]) -> Result<()> {
         self.deref_mut().delete(key)
-    }
-}
-
-// TODO: make reversible
-pub struct Iter<'a, S: ?Sized> {
-    parent: &'a S,
-    bounds: (Bound<Vec<u8>>, Bound<Vec<u8>>),
-    done: bool,
-}
-
-impl<'a, S: Read> Iter<'a, S> {
-    fn get_next_inclusive(&self, key: &[u8]) -> Result<Option<KV>> {
-        if let Some(value) = self.parent.get(key)? {
-            return Ok(Some((key.to_vec(), value)));
-        }
-
-        self.parent.get_next(key)
-    }
-}
-
-impl<'a, S: Read> Iterator for Iter<'a, S> {
-    type Item = Result<KV>;
-
-    fn next(&mut self) -> Option<Result<KV>> {
-        if self.done {
-            return None;
-        }
-
-        let maybe_entry = match self.bounds.0 {
-            // if entry exists at empty key, emit that. if not, get next entry
-            Bound::Unbounded => self.get_next_inclusive(&[]).transpose(),
-
-            // if entry exists at given key, emit that. if not, get next entry
-            Bound::Included(ref key) => self.get_next_inclusive(key).transpose(),
-
-            // get next entry
-            Bound::Excluded(ref key) => self.parent.get_next(key).transpose(),
-        };
-
-        match maybe_entry {
-            // bubble up errors
-            Some(Err(err)) => Some(Err(err)),
-            
-            // got entry
-            Some(Ok((key, value))) => {
-                // entry is past end of range, mark iterator as done
-                if !self.bounds.contains(&key) {
-                    self.done = true;
-                    return None;
-                }
-
-                // advance internal state to next key
-                self.bounds.0 = Bound::Excluded(key.clone());
-                Some(Ok((key, value)))
-            },
-
-            // reached end of iteration, mark iterator as done
-            None => {
-                self.done = true;
-                None
-            },
-        }
     }
 }
 
