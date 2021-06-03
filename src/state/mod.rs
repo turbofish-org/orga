@@ -1,10 +1,8 @@
 use crate::store::*;
 use crate::Result;
 
-pub mod value;
 pub mod wrapper;
 
-// pub use value::Value;
 pub use wrapper::WrapperStore;
 
 /// A trait for types which provide a higher-level API for data stored within a
@@ -33,71 +31,6 @@ impl<S, T: ed::Encode + ed::Decode> State<S> for T {
     fn flush(self) -> Result<Self::Encoding> {
         Ok(self)
     }
-}
-
-mod tests2 {
-    // #[derive(State, Query)]
-    // struct CounterState {
-    //     counts: Map<u64, u64>,
-    // }
-
-    // impl CounterState {
-    //     pub fn get(&self, id: u64) -> Result<u64> {
-    //         Ok(*self.counts.get(id)?.or_default()?)
-    //     }
-    
-    //     pub fn compare_and_increment(&mut self, id: u64, n: u64) -> Result<()> {
-    //         let mut count = self.counts
-    //             .entry(id)?
-    //             .or_default()?;
-    //         ensure!(count == tx.count, "Wrong count, gtfo");
-    //         count += 1;
-    //     }
-    // }
-
-    // fn my_state_machine(state: &mut CounterState, tx: Tx) -> Result<()> {
-    //     state.compare_and_increment(tx.id, tx.count)?;
-    // }
-
-    // fn main() -> App {
-    //     App::new("counter", my_state_machine)
-    // }
-
-    // type CountedMapEncoding<'a, K: State2<S>, V: State2<S>, S: Read2 + Sub> = (
-    //     <u64 as State2<S>>::Encoding,
-    //     <Map<'a, K, V, S> as State2<S>>::Encoding,
-    // );
-
-    // impl<'a, K, V, S> State2<S> for CountedMap<'a, K, V, S>
-    // where
-    //     K: State2<S>,
-    //     V: State2<S>,
-    //     S: Read2 + Sub,
-    // {
-    //     type Encoding = CountedMapEncoding<'a, K, V, S>;
-
-    //     fn create(store: S, decoded: Self::Encoding) -> crate::Result<Self> {
-    //         Ok(Self {
-    //             count: State2::create(store.sub(vec![0]), decoded.0)?,
-    //             map: State2::create(store.sub(vec![1]), decoded.1)?,
-    //         })
-    //     }
-
-    //     fn flush(&mut self) -> crate::Result<()>
-    //     where
-    //         S: Write2,
-    //     {
-    //         todo!()
-    //     }
-    // }
-
-    // impl<'a, K: State2<S>, V: State2<S>, S: Read2> From<CountedMap<'a, K, V, S>>
-    //     for CountedMapEncoding<'a, K, V, S>
-    // {
-    //     fn from(state: CountedMap<'a, K, V, S>) -> Self {
-    //         (state.count.into(), state.map.into())
-    //     }
-    // }
 }
 
 /// A trait for state types that can have their data queried by a client.

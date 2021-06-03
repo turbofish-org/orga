@@ -189,17 +189,6 @@ impl<S: Read> Write for BufStore<S> {
     }
 }
 
-// impl<'a, B> Iterator for Iter<'a, B>
-// where
-//     B: Iterator<Item = Entry>,
-// {
-//     type Item = Entry;
-
-//     fn next(&mut self) -> Option<Self::Item> {
-//         
-//     }
-// }
-
 // #[cfg(test)]
 // mod tests {
 //     use super::*;
