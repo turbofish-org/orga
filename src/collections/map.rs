@@ -117,11 +117,11 @@ where
     S: Write,
 {
     fn remove_from_store(store: &mut Store<S>, prefix: &[u8]) -> Result<bool> {
-        let entries = store.range(..);
+        let entries = store.range(prefix.to_vec()..);
         // TODO: make so we don't have to collect (should be able to delete
         // while iterating, either a .drain() iterator or an entry type with a
         // delete method)
-        let to_delete: Vec<Vec<u8>> = entries
+        let to_delete: Vec<_> = entries
             .collect::<Result<Vec<_>>>()?
             .into_iter()
             .take_while(|(key, _)| key.starts_with(prefix))
@@ -138,7 +138,7 @@ where
 
     fn apply_change(store: &mut Store<S>, key: &K, maybe_value: Option<V>) -> Result<()> {
         let key_bytes = key.encode()?;
-            
+        
         match maybe_value {
             Some(value) => {
                 // insert/update
@@ -309,7 +309,7 @@ mod tests {
     use super::*;
     use crate::store::{MapStore, Store};
 
-    fn increment_entry(map: &mut Map<u64, u64>, n: u64) -> Result<()> {
+    fn increment_entry(map: &mut Map<u32, u32>, n: u32) -> Result<()> {
         *map.entry(n)?.or_default()? += 1;
         Ok(())
     }
@@ -345,12 +345,18 @@ mod tests {
             2,
         );
 
+        map.flush().unwrap();
+        for item in store.range(..) {
+            println!("{:?}", item);
+        };
+        println!("---");
+
+        let mut map: Map<u32, Map<u32, u32>> = Map::create(store.clone(), ()).unwrap();
         map
             .entry(56).unwrap()
             .remove().unwrap();
 
         map.flush().unwrap();
-
         for item in store.range(..) {
             println!("{:?}", item);
         }
