@@ -47,13 +47,13 @@ impl<S: Read> Read for Store<S> {
     #[inline]
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         let prefixed = concat(self.prefix.as_slice(), key);
-        Read::get(&self.store, prefixed.as_slice())
+        self.store.get(prefixed.as_slice())
     }
 
     #[inline]
     fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
         let prefixed = concat(self.prefix.as_slice(), key);
-        Read::get_next(&self.store, prefixed.as_slice())
+        self.store.get_next(prefixed.as_slice())
     }
 }
 
@@ -61,16 +61,17 @@ impl<S: Write> Write for Store<S> {
     #[inline]
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         let prefixed = concat(self.prefix.as_slice(), key.as_slice());
-        Write::put(&mut self.store, prefixed, value)
+        self.store.put(prefixed, value)
     }
 
     #[inline]
     fn delete(&mut self, key: &[u8]) -> Result<()> {
         let prefixed = concat(self.prefix.as_slice(), key);
-        Write::delete(&mut self.store, prefixed.as_slice())
+        self.store.delete(prefixed.as_slice())
     }
 }
 
+#[inline]
 fn concat(a: &[u8], b: &[u8]) -> Vec<u8> {
     let mut value = Vec::with_capacity(a.len() + b.len());
     value.extend_from_slice(a);

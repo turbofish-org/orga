@@ -1,4 +1,4 @@
-use crate::{store::Read, Result};
+use crate::{store::{Read, KV}, Result};
 
 /// A client which decodes and verifies Merk proofs when accessing data from an
 /// underlying [`Read`](../store/trait.Read.html).
@@ -18,12 +18,11 @@ impl<R: Read> Read for Client<R> {
     /// Gets a value for the given key, then decodes the response as a Merk
     /// proof and verifies it, returning the extracted value.
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        let data = self.read.get(key)?.unwrap();
-        let mut hash = [0; 20];
-        hash.copy_from_slice(&data[0..20]);
-        let proof = &data[20..];
-        let res = merk::verify_query(proof, &vec![key.to_vec()].into(), hash)?;
-        Ok(if res.is_empty() { None } else { Some(res[0].1.clone()) })
+        todo!()
+    }
+
+    fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
+        todo!()
     }
 }
 

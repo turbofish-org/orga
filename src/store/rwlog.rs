@@ -41,7 +41,7 @@ impl<S: Read> Read for RWLog<S> {
         self.store.get(key)
     }
 
-    fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
+    fn get_next(&self, _key: &[u8]) -> Result<Option<KV>> {
         // XXX: we will have to think about our concurrency rules wrt ranges of
         // keys, e.g. for a store with keys 1 and 3, get_next(1) should "lock"
         // for the range 1..3, and conflict with a write to 2

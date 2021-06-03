@@ -1,18 +1,18 @@
-// use crate::error::Result;
-// use crate::store::{Flush, ReadWriteIter, BufStore};
+use crate::error::Result;
+use crate::store::{Read, Write, BufStore};
 
-// /// A helper which runs state machine logic, discarding the writes to the store
-// /// for error results and flushing to the underlying store on success.
-// pub fn step_atomic<F, S, I, O>(f: F, store: S, input: I) -> Result<O>
-// where
-//     S: ReadWriteIter,
-//     F: Fn(&mut BufStore<S>, I) -> Result<O>,
-// {
-//     let mut flush_store = BufStore::wrap(store);
-//     let res = f(&mut flush_store, input)?;
-//     flush_store.flush()?;
-//     Ok(res)
-// }
+/// A helper which runs state machine logic, discarding the writes to the store
+/// for error results and flushing to the underlying store on success.
+pub fn step_atomic<F, S, I, O>(f: F, store: S, input: I) -> Result<O>
+where
+    S: Read + Write,
+    F: Fn(&mut BufStore<S>, I) -> Result<O>,
+{
+    let mut flush_store = BufStore::wrap(store);
+    let res = f(&mut flush_store, input)?;
+    flush_store.flush()?;
+    Ok(res)
+}
 
 // // #[cfg(test)]
 // // mod tests {

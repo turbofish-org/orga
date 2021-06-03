@@ -65,15 +65,22 @@ impl<'a> Read for MerkStore<'a> {
             None => Ok(self.merk.get(key)?),
         }
     }
-}
 
-impl crate::store::Iter for MerkStore<'_> {
-    type Iter<'a> = Iter<'a>;
-
-    fn iter_from(&self, start: &[u8]) -> Self::Iter<'_> {
+    fn get_next(&self, start: &[u8]) -> Result<Option<KV>> {
+        // TODO: use an iterator in merk which steps through in-memory nodes
+        // (loading if necessary)
         let mut iter = self.merk.raw_iter();
         iter.seek(start);
-        Iter { iter }
+        iter.next();
+
+        if !iter.valid() {
+            iter.status()?;
+            return Ok(None);
+        }
+
+        let key = iter.key().unwrap();
+        let value = iter.value().unwrap();
+        Ok(Some((key.to_vec(), value.to_vec())))
     }
 }
 
@@ -115,13 +122,6 @@ impl<'a> Write for MerkStore<'a> {
     fn delete(&mut self, key: &[u8]) -> Result<()> {
         self.map.as_mut().unwrap().insert(key.to_vec(), None);
         Ok(())
-    }
-}
-
-impl<'a> Flush for MerkStore<'a> {
-    /// Flush is a no-op for `MerkStore`.
-    fn flush(&mut self) -> Result<()> {
-        self.write(vec![])
     }
 }
 
