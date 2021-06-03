@@ -47,10 +47,6 @@ impl<S: Read> Read for RWLog<S> {
         // for the range 1..3, and conflict with a write to 2
         todo!()
     }
-
-    fn get_prev(&self, key: &[u8]) -> Result<Option<KV>> {
-        todo!()
-    }
 }
 
 impl<S: Write> Write for RWLog<S> {

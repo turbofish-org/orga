@@ -100,14 +100,6 @@ impl<S: Read> Read for BufStore<S> {
         let mut store_iter = self.store.range(exclusive_range_from(key));
         iter_merge_next(&mut map_iter, &mut store_iter)
     }
-
-    #[inline]
-    fn get_prev(&self, key: &[u8]) -> Result<Option<KV>> {
-        todo!()
-        // let mut map_iter = self.map.range(key.to_vec()..).rev();
-        // let mut store_iter = self.store.range(key.to_vec()..).rev();
-        // iter_merge_next(&mut map_iter, &mut store_iter)
-    }
 }
 
 fn exclusive_range_from(start: &[u8]) -> (Bound<Vec<u8>>, Bound<Vec<u8>>) {

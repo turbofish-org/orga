@@ -42,11 +42,6 @@ impl<T: Read> Read for Shared<T> {
     fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
         self.0.borrow().get_next(key)
     }
-
-    #[inline]
-    fn get_prev(&self, key: &[u8]) -> Result<Option<KV>> {
-        self.0.borrow().get_prev(key)
-    }
 }
 
 impl<W: Write> Write for Shared<W> {

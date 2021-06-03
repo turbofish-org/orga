@@ -55,12 +55,6 @@ impl<S: Read> Read for Store<S> {
         let prefixed = concat(self.prefix.as_slice(), key);
         Read::get_next(&self.store, prefixed.as_slice())
     }
-
-    #[inline]
-    fn get_prev(&self, key: &[u8]) -> Result<Option<KV>> {
-        let prefixed = concat(self.prefix.as_slice(), key);
-        Read::get_prev(&self.store, prefixed.as_slice())
-    }
 }
 
 impl<S: Write> Write for Store<S> {

@@ -13,9 +13,4 @@ impl Read for NullStore {
     fn get_next(&self, _: &[u8]) -> Result<Option<KV>> {
         Ok(None)
     }
-
-    #[inline]
-    fn get_prev(&self, _: &[u8]) -> Result<Option<KV>> {
-        Ok(None)
-    }
 }

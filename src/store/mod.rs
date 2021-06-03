@@ -29,7 +29,7 @@ pub trait Read {
 
     fn get_next(&self, key: &[u8]) -> Result<Option<KV>>;
 
-    fn get_prev(&self, key: &[u8]) -> Result<Option<KV>>;
+    // fn get_prev(&self, key: &[u8]) -> Result<Option<KV>>;
 
     #[inline]
     fn range<B: RangeBounds<Vec<u8>>>(&self, bounds: B) -> Iter<Self> {
@@ -62,10 +62,10 @@ impl<R: Read, T: Deref<Target = R>> Read for T {
         self.deref().get_next(key)
     }
 
-    #[inline]
-    fn get_prev(&self, key: &[u8]) -> Result<Option<KV>> {
-        self.deref().get_prev(key)
-    }
+    // #[inline]
+    // fn get_prev(&self, key: &[u8]) -> Result<Option<KV>> {
+    //     self.deref().get_prev(key)
+    // }
 }
 
 /// Trait for write access to key/value stores.
