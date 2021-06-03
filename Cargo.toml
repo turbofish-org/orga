@@ -33,3 +33,6 @@ required-features = ["abci"]
 name = "merk_counter"
 required-features = ["abci", "merk"]
 
+[profile.release]
+lto = true
+
