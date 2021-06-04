@@ -181,7 +181,6 @@ impl<S: Read> Write for BufStore<S> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::Iter;
     use super::*;
 
     #[test]
