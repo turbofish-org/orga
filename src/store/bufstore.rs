@@ -224,4 +224,31 @@ mod tests {
         assert_eq!(iter.next().unwrap().unwrap(), (vec![4], vec![0]));
         assert!(iter.next().is_none());
     }
+
+    #[test]
+    fn wrap_with_map_and_flush() {
+        let mut store = Shared::new(MapStore::new());
+        store.put(vec![0], vec![100]).unwrap();
+        store.put(vec![1], vec![101]).unwrap();
+
+        let mut wrapped = BufStore::wrap_with_map(store.clone(), Default::default());
+        assert_eq!(wrapped.get(&vec![0]).unwrap().unwrap(), vec![100]);
+
+        wrapped.put(vec![0], vec![102]).unwrap();
+        wrapped.delete(&vec![1]).unwrap();
+        wrapped.put(vec![2], vec![103]).unwrap();
+
+        assert_eq!(wrapped.get(&vec![0]).unwrap().unwrap(), vec![102]);
+        assert!(wrapped.get(&vec![1]).unwrap().is_none());
+        assert_eq!(wrapped.get(&vec![2]).unwrap().unwrap(), vec![103]);
+        assert_eq!(store.get(&vec![0]).unwrap().unwrap(), vec![100]);
+        assert_eq!(store.get(&vec![1]).unwrap().unwrap(), vec![101]);
+        assert!(store.get(&vec![2]).unwrap().is_none());
+
+        wrapped.flush().unwrap();
+
+        assert_eq!(store.get(&vec![0]).unwrap().unwrap(), vec![102]);
+        assert!(store.get(&vec![1]).unwrap().is_none());
+        assert_eq!(store.get(&vec![2]).unwrap().unwrap(), vec![103]);
+    }
 }
