@@ -25,14 +25,6 @@ features = ["abci", "merk"]
 [features]
 abci = ["abci2", "tendermint", "tendermint-rpc"]
 
-[[example]]
-name = "counter"
-required-features = ["abci"]
-
-[[example]]
-name = "merk_counter"
-required-features = ["abci", "merk"]
-
 [profile.release]
 lto = true
 
