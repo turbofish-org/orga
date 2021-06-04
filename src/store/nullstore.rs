@@ -14,3 +14,19 @@ impl Read for NullStore {
         Ok(None)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn get() {
+        let store = NullStore;
+        assert_eq!(store.get(&[1]).unwrap(), None)
+    }
+
+    #[test]
+    fn get_next() {
+        let store = NullStore;
+        assert_eq!(store.get_next(&[1]).unwrap(), None)
+    }
+}
