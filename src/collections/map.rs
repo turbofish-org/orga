@@ -37,12 +37,6 @@ where
     }
 }
 
-impl<K, V, S> From<Map<K, V, S>> for () {
-    fn from(_: Map<K, V, S>) -> Self {
-        ()
-    }
-}
-
 impl<K, V, S> Map<K, V, S>
 where
     K: Encode + Terminated + Eq + Hash,

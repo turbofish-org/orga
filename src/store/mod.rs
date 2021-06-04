@@ -61,11 +61,6 @@ impl<R: Read, T: Deref<Target = R>> Read for T {
     fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
         self.deref().get_next(key)
     }
-
-    // #[inline]
-    // fn get_prev(&self, key: &[u8]) -> Result<Option<KV>> {
-    //     self.deref().get_prev(key)
-    // }
 }
 
 /// Trait for write access to key/value stores.

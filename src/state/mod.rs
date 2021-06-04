@@ -8,7 +8,7 @@ pub use wrapper::WrapperStore;
 /// A trait for types which provide a higher-level API for data stored within a
 /// [`store::Store`](../store/trait.Store.html).
 pub trait State<S>: Sized {
-    type Encoding: ed::Encode + ed::Decode + From<Self>;
+    type Encoding: ed::Encode + ed::Decode;
 
     fn create(store: Store<S>, decoded: Self::Encoding) -> Result<Self>
     where
