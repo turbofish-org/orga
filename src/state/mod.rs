@@ -1,10 +1,6 @@
 use crate::store::*;
 use crate::Result;
 
-pub mod wrapper;
-
-pub use wrapper::WrapperStore;
-
 /// A trait for types which provide a higher-level API for data stored within a
 /// [`store::Store`](../store/trait.Store.html).
 pub trait State<S>: Sized {
