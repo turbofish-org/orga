@@ -90,26 +90,3 @@ impl<S: Write, T: DerefMut<Target = S>> Write for T {
         self.deref_mut().delete(key)
     }
 }
-
-// #[cfg(test)]
-// mod tests {
-//     use super::{NullStore, Read};
-//     use crate::state::Value;
-
-//     #[test]
-//     fn fixed_length_slice_key() {
-//         let key = b"0123";
-//         NullStore.get(key).unwrap();
-//     }
-
-//     #[test]
-//     fn slice_key() {
-//         let key = vec![1, 2, 3, 4];
-//         NullStore.get(key.as_slice()).unwrap();
-//     }
-
-//     #[test]
-//     fn wrap() {
-//         let _: Value<_, u64> = NullStore.wrap().unwrap();
-//     }
-// }
