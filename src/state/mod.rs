@@ -66,3 +66,38 @@ pub trait Query {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct QueryResponder(Result<u64>);
+    
+    impl Query for QueryResponder {
+        type Request = ();
+        type Response = u64;
+
+        fn query(&self, _req: ()) -> Result<u64> {
+            match &self.0 {
+                Ok(value) => Ok(*value),
+                Err(err) => Err(failure::err_msg(err.to_string()))
+            }
+        }
+    }
+
+    #[test]
+    fn default_query_resolve_ok() {
+        QueryResponder(Ok(42)).resolve(()).unwrap();
+    }
+
+    #[test]
+    fn default_query_resolve_err() {
+        assert_eq!(
+            QueryResponder(Err(failure::format_err!("err")))
+                .resolve(())
+                .unwrap_err()
+                .to_string(),
+            "err",
+        );
+    }
+}
