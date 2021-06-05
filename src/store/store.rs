@@ -53,7 +53,12 @@ impl<S: Read> Read for Store<S> {
     #[inline]
     fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
         let prefixed = concat(self.prefix.as_slice(), key);
-        self.store.get_next(prefixed.as_slice())
+        let maybe_kv = self
+            .store
+            .get_next(prefixed.as_slice())?
+            .filter(|(k, _)| k.starts_with(self.prefix.as_slice()))
+            .map(|(k, v)| (k[self.prefix.len()..].into(), v));
+        Ok(maybe_kv)
     }
 }
 
