@@ -1,4 +1,4 @@
-use super::{Shared, Read, Write, KV};
+use super::{Read, Shared, Write, KV};
 use crate::Result;
 
 // TODO: figure out how to let users set DefaultBackingStore, similar to setting
@@ -76,5 +76,43 @@ fn concat(a: &[u8], b: &[u8]) -> Vec<u8> {
     let mut value = Vec::with_capacity(a.len() + b.len());
     value.extend_from_slice(a);
     value.extend_from_slice(b);
-    value 
+    value
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::store::MapStore;
+
+    #[test]
+    fn sub() {
+        let mut backing = MapStore::new();
+        backing.put(vec![0, 0], vec![0]).unwrap();
+        backing.put(vec![1, 0], vec![1]).unwrap();
+        backing.put(vec![1, 1], vec![2]).unwrap();
+        backing.put(vec![2, 0], vec![3]).unwrap();
+
+        // substore
+        let mut store = Store::new(&mut backing).sub(&[1]);
+        assert_eq!(store.get(&[0]).unwrap().unwrap(), vec![1]);
+        assert_eq!(store.get_next(&[0]).unwrap().unwrap(), (vec![1], vec![2]));
+        assert!(store.get_next(&[1]).unwrap().is_none());
+        store.put(vec![2], vec![2, 0]).unwrap();
+        store.delete(&[1]).unwrap();
+        assert!(backing.get(&[1, 1]).unwrap().is_none());
+        assert_eq!(backing.get(&[1, 2]).unwrap().unwrap(), vec![2, 0]);
+
+        backing.put(vec![1, 3, 0], vec![4]).unwrap();
+        backing.put(vec![1, 3, 1], vec![5]).unwrap();
+
+        // recursive substore
+        let mut store = Store::new(&mut backing).sub(&[1]).sub(&[3]);
+        assert_eq!(store.get(&[0]).unwrap().unwrap(), vec![4]);
+        assert_eq!(store.get_next(&[0]).unwrap().unwrap(), (vec![1], vec![5]));
+        assert!(store.get_next(&[1]).unwrap().is_none());
+        store.put(vec![2], vec![5, 0]).unwrap();
+        store.delete(&[1]).unwrap();
+        assert!(backing.get(&[1, 3, 1]).unwrap().is_none());
+        assert_eq!(backing.get(&[1, 3, 2]).unwrap().unwrap(), vec![5, 0]);
+    }
 }
