@@ -58,75 +58,57 @@ impl<W: Write> Write for Shared<W> {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use crate::store::{*, iter::Iter};
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::store::*;
 
-//     #[test]
-//     fn share() {
-//         let mut store = MapStore::new().into_shared();
-//         let mut share0 = store.clone();
-//         let share1 = store.clone();
+    #[test]
+    fn share() {
+        let mut store = Shared::new(MapStore::new());
+        let mut share0 = store.clone();
+        let share1 = store.clone();
 
-//         share0.put(vec![123], vec![5]).unwrap();
-//         assert_eq!(store.get(&[123]).unwrap(), Some(vec![5]));
-//         assert_eq!(share0.get(&[123]).unwrap(), Some(vec![5]));
-//         assert_eq!(share1.get(&[123]).unwrap(), Some(vec![5]));
+        share0.put(vec![123], vec![5]).unwrap();
+        assert_eq!(store.get(&[123]).unwrap(), Some(vec![5]));
+        assert_eq!(share0.get(&[123]).unwrap(), Some(vec![5]));
+        assert_eq!(share1.get(&[123]).unwrap(), Some(vec![5]));
 
-//         store.put(vec![123], vec![6]).unwrap();
-//         assert_eq!(store.get(&[123]).unwrap(), Some(vec![6]));
-//         assert_eq!(share0.get(&[123]).unwrap(), Some(vec![6]));
-//         assert_eq!(share1.get(&[123]).unwrap(), Some(vec![6]));
-//     }
+        store.put(vec![123], vec![6]).unwrap();
+        assert_eq!(store.get(&[123]).unwrap(), Some(vec![6]));
+        assert_eq!(share0.get(&[123]).unwrap(), Some(vec![6]));
+        assert_eq!(share1.get(&[123]).unwrap(), Some(vec![6]));
+    }
 
-//     #[test]
-//     fn iter() {
-//         let mut store = MapStore::new().into_shared();
+    #[test]
+    fn iter() {
+        let mut store = Shared::new(MapStore::new());
 
-//         store.put(vec![1], vec![10]).unwrap();
-//         store.put(vec![2], vec![20]).unwrap();
-//         store.put(vec![3], vec![30]).unwrap();
+        store.put(vec![1], vec![10]).unwrap();
+        store.put(vec![2], vec![20]).unwrap();
+        store.put(vec![3], vec![30]).unwrap();
 
-//         let mut iter = store.iter();
-//         assert_eq!(iter.next(), Some((&[1][..], &[10][..])));
-//         assert_eq!(iter.next(), Some((&[2][..], &[20][..])));
-//         assert_eq!(iter.next(), Some((&[3][..], &[30][..])));
-//         assert_eq!(iter.next(), None);
-//     }
+        let mut iter = store.range(..);
+        assert_eq!(iter.next().unwrap().unwrap(), (vec![1], vec![10]));
+        assert_eq!(iter.next().unwrap().unwrap(), (vec![2], vec![20]));
+        assert_eq!(iter.next().unwrap().unwrap(), (vec![3], vec![30]));
+        assert!(iter.next().is_none());
+    }
 
-//     #[test]
-//     fn read_while_iter_exists() {
-//         let mut store = MapStore::new().into_shared();
-//         let store2 = store.clone();
+    #[test]
+    fn read_while_iter_exists() {
+        let mut store = Shared::new(MapStore::new());
+        let store2 = store.clone();
 
-//         store.put(vec![1], vec![10]).unwrap();
-//         store.put(vec![2], vec![20]).unwrap();
-//         store.put(vec![3], vec![30]).unwrap();
+        store.put(vec![1], vec![10]).unwrap();
+        store.put(vec![2], vec![20]).unwrap();
+        store.put(vec![3], vec![30]).unwrap();
 
-//         let mut iter = store.iter();
-//         assert_eq!(iter.next(), Some((&[1][..], &[10][..])));
-//         assert_eq!(store2.get(&[2]).unwrap(), Some(vec![20]));
-//         assert_eq!(iter.next(), Some((&[2][..], &[20][..])));
-//         assert_eq!(iter.next(), Some((&[3][..], &[30][..])));
-//         assert_eq!(iter.next(), None);
-//     }
-
-//     #[test]
-//     #[should_panic(expected = "already borrowed: BorrowMutError")]
-//     fn write_while_iter_exists() {
-//         let mut store = MapStore::new().into_shared();
-//         let mut store2 = store.clone();
-
-//         store.put(vec![1], vec![10]).unwrap();
-//         store.put(vec![2], vec![20]).unwrap();
-//         store.put(vec![3], vec![30]).unwrap();
-
-//         let mut iter = store.iter();
-//         assert_eq!(iter.next(), Some((&[1][..], &[10][..])));
-//         store2.put(vec![2], vec![21]).unwrap();
-//         assert_eq!(iter.next(), Some((&[2][..], &[20][..])));
-//         assert_eq!(iter.next(), Some((&[3][..], &[30][..])));
-//         assert_eq!(iter.next(), None);
-//     }
-// }
+        let mut iter = store.range(..);
+        assert_eq!(iter.next().unwrap().unwrap(), (vec![1], vec![10]));
+        assert_eq!(store2.get(&[2]).unwrap(), Some(vec![20]));
+        assert_eq!(iter.next().unwrap().unwrap(), (vec![2], vec![20]));
+        assert_eq!(iter.next().unwrap().unwrap(), (vec![3], vec![30]));
+        assert!(iter.next().is_none());
+    }
+}
