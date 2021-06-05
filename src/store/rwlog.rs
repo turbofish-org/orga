@@ -1,6 +1,6 @@
+use super::*;
 use std::cell::Cell;
 use std::collections::HashSet;
-use super::*;
 
 type Set = HashSet<Vec<u8>>;
 
@@ -15,7 +15,7 @@ pub struct RWLog<S> {
     // slices
     read_keys: Cell<Set>,
     write_keys: Set,
-    store: S
+    store: S,
 }
 
 impl<S> RWLog<S> {
@@ -23,7 +23,7 @@ impl<S> RWLog<S> {
         RWLog {
             read_keys: Cell::new(Default::default()),
             write_keys: Default::default(),
-            store
+            store,
         }
     }
 
@@ -61,65 +61,58 @@ impl<S: Write> Write for RWLog<S> {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-//     #[test]
-//     fn satisfies_store_trait() {
-//         // (this is a compile-time assertion)
-//         fn assert_store<S: Store>(_: S) {}
-//         assert_store(RWLog::wrap(MapStore::new()));
-//     }
+    #[test]
+    fn get() {
+        let mut store = MapStore::new();
+        store.put(vec![1, 2, 3], vec![4, 5, 6]).unwrap();
 
-//     #[test]
-//     fn get() {
-//         let mut store = MapStore::new();
-//         store.put(vec![1, 2, 3], vec![4, 5, 6]).unwrap();
+        let log = RWLog::wrap(store);
+        assert_eq!(log.get(&[1, 2, 3]).unwrap(), Some(vec![4, 5, 6]));
 
-//         let log = RWLog::wrap(store);
-//         assert_eq!(log.get(&[1, 2, 3]).unwrap(), Some(vec![4, 5, 6]));
+        let (read_keys, write_keys, _store) = log.finish();
+        assert_eq!(read_keys.len(), 1);
+        assert_eq!(write_keys.len(), 0);
+        assert!(read_keys.contains(&vec![1, 2, 3]));
+    }
 
-//         let (read_keys, write_keys, _store) = log.finish();
-//         assert_eq!(read_keys.len(), 1);
-//         assert_eq!(write_keys.len(), 0);
-//         assert!(read_keys.contains(&vec![1, 2, 3]));
-//     }
+    #[test]
+    fn get_missing() {
+        let store = MapStore::new();
 
-//     #[test]
-//     fn get_missing() {
-//         let store = MapStore::new();
+        let log = RWLog::wrap(store);
+        assert_eq!(log.get(&[1, 2, 3]).unwrap(), None);
 
-//         let log = RWLog::wrap(store);
-//         assert_eq!(log.get(&[1, 2, 3]).unwrap(), None);
+        let (read_keys, write_keys, _store) = log.finish();
+        assert_eq!(read_keys.len(), 1);
+        assert_eq!(write_keys.len(), 0);
+        assert!(read_keys.contains(&vec![1, 2, 3]));
+    }
 
-//         let (read_keys, write_keys, _store) = log.finish();
-//         assert_eq!(read_keys.len(), 1);
-//         assert_eq!(write_keys.len(), 0);
-//         assert!(read_keys.contains(&vec![1, 2, 3]));
-//     }
+    #[test]
+    fn put() {
+        let store = MapStore::new();
+        let mut log = RWLog::wrap(store);
+        log.put(vec![1, 2, 3], vec![4, 5, 6]).unwrap();
 
-//     #[test]
-//     fn put() {
-//         let store = MapStore::new();
-//         let mut log = RWLog::wrap(store);
-//         log.put(vec![1, 2, 3], vec![4, 5, 6]).unwrap();
+        let (read_keys, write_keys, _store) = log.finish();
+        assert_eq!(read_keys.len(), 0);
+        assert_eq!(write_keys.len(), 1);
+        assert!(write_keys.contains(&vec![1, 2, 3]));
+    }
 
-//         let (read_keys, write_keys, _store) = log.finish();
-//         assert_eq!(read_keys.len(), 0);
-//         assert_eq!(write_keys.len(), 1);
-//         assert!(write_keys.contains(&vec![1, 2, 3]));
-//     }
+    #[test]
+    fn delete() {
+        let store = MapStore::new();
+        let mut log = RWLog::wrap(store);
+        log.delete(&[1, 2, 3]).unwrap();
 
-//     #[test]
-//     fn delete() {
-//         let store = MapStore::new();
-//         let mut log = RWLog::wrap(store);
-//         log.delete(&[1, 2, 3]).unwrap();
-
-//         let (read_keys, write_keys, _store) = log.finish();
-//         assert_eq!(read_keys.len(), 0);
-//         assert_eq!(write_keys.len(), 1);
-//         assert!(write_keys.contains(&vec![1, 2, 3]));
-//     }
-// }
+        let (read_keys, write_keys, _store) = log.finish();
+        assert_eq!(read_keys.len(), 0);
+        assert_eq!(write_keys.len(), 1);
+        assert!(write_keys.contains(&vec![1, 2, 3]));
+    }
+}
