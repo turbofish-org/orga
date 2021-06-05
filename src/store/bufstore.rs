@@ -251,4 +251,13 @@ mod tests {
         assert!(store.get(&vec![1]).unwrap().is_none());
         assert_eq!(store.get(&vec![2]).unwrap().unwrap(), vec![103]);
     }
+
+    #[test]
+    fn into_map() {
+        let mut buf = BufStore::wrap(MapStore::new());
+        buf.put(vec![0], vec![100]).unwrap();
+        let mut map = buf.into_map();
+
+        assert_eq!(map.remove(&vec![0]), Some(Some(vec![100])));
+    }
 }
