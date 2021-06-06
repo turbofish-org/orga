@@ -4,14 +4,12 @@ use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 pub mod bufstore;
 pub mod iter;
 pub mod nullstore;
-pub mod rwlog;
 pub mod share;
 pub mod store;
 
 pub use bufstore::{BufStore, Map as BufStoreMap, MapStore};
 pub use iter::Iter;
 pub use nullstore::NullStore;
-pub use rwlog::RWLog;
 pub use share::Shared;
 pub use store::{DefaultBackingStore, Store};
 
