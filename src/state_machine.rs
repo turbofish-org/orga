@@ -1,11 +1,11 @@
 use crate::error::Result;
-use crate::store::{Flush, Store, BufStore};
+use crate::store::{BufStore, Read, Write};
 
 /// A helper which runs state machine logic, discarding the writes to the store
 /// for error results and flushing to the underlying store on success.
 pub fn step_atomic<F, S, I, O>(f: F, store: S, input: I) -> Result<O>
 where
-    S: Store,
+    S: Read + Write,
     F: Fn(&mut BufStore<S>, I) -> Result<O>,
 {
     let mut flush_store = BufStore::wrap(store);
@@ -17,7 +17,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::{Read, Write, BufStore};
+    use crate::store::{MapStore, Read, Write};
     use failure::bail;
 
     fn get_u8<R: Read>(key: &[u8], store: R) -> Result<u8> {
@@ -32,7 +32,7 @@ mod tests {
         store.put(key.to_vec(), vec![value])
     }
 
-    fn counter<S: Store>(mut store: S, n: u8) -> Result<u8> {
+    fn counter<S: Read + Write>(mut store: S, n: u8) -> Result<u8> {
         // put to n before checking count (to test atomicity)
         put_u8(b"n", n, &mut store)?;
 
@@ -47,7 +47,7 @@ mod tests {
 
     #[test]
     fn step_counter_error() {
-        let mut store = BufStore::new();
+        let mut store = MapStore::new();
         // invalid `n`, should error
         assert!(counter(&mut store, 100).is_err());
         // count should not have been mutated
@@ -58,7 +58,7 @@ mod tests {
 
     #[test]
     fn step_counter_atomic_error() {
-        let mut store = BufStore::new();
+        let mut store = MapStore::new();
         // invalid `n`, should error
         assert!(step_atomic(|s, i| counter(s, i), &mut store, 100).is_err());
         // count should not have been mutated
@@ -69,7 +69,7 @@ mod tests {
 
     #[test]
     fn step_counter() {
-        let mut store = BufStore::new();
+        let mut store = MapStore::new();
         assert_eq!(step_atomic(|s, i| counter(s, i), &mut store, 0).unwrap(), 1);
         assert!(step_atomic(|s, i| counter(s, i), &mut store, 0).is_err());
         assert_eq!(step_atomic(|s, i| counter(s, i), &mut store, 1).unwrap(), 2);
@@ -80,7 +80,7 @@ mod tests {
 
     #[test]
     fn closure_sm() {
-        let mut store = BufStore::new();
+        let mut store = MapStore::new();
         assert_eq!(
             step_atomic(|_, input| Ok(input + 1), &mut store, 100).unwrap(),
             101

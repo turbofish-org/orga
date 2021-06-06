@@ -7,7 +7,7 @@ use failure::bail;
 use log::info;
 
 use crate::state_machine::step_atomic;
-use crate::store::{BufStore, BufStoreMap, Flush, Iter, MapStore, Read, Store, Write};
+use crate::store::{BufStore, BufStoreMap, Iter, MapStore, Read, Store, Write, KV};
 use crate::Result;
 
 use messages::*;
@@ -86,17 +86,18 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
             Req::Echo(_) => Ok(Res::Echo(Default::default())),
             Req::SetOption(_) => Ok(Res::SetOption(Default::default())),
             Req::Query(req) => {
-                // TODO: handle multiple keys (or should this be handled by store impl?)
-                let key = req.data;
-                let data = self.store.query(&key)?;
+                todo!()
+                // // TODO: handle multiple keys (or should this be handled by store impl?)
+                // let key = req.data;
+                // let data = self.store.query(&key)?;
 
-                // TODO: indicate if key doesn't exist vs just being empty
-                let mut res = ResponseQuery::default();
-                res.code = 0;
-                res.index = 0;
-                res.value = data;
-                res.height = self.height as i64;
-                Ok(Res::Query(res))
+                // // TODO: indicate if key doesn't exist vs just being empty
+                // let mut res = ResponseQuery::default();
+                // res.code = 0;
+                // res.index = 0;
+                // res.value = data;
+                // res.height = self.height as i64;
+                // Ok(Res::Query(res))
             }
             Req::InitChain(req) => {
                 let app = self.app.take().unwrap();
@@ -299,7 +300,7 @@ impl Worker {
 /// Info are automatically handled within
 /// [`ABCIStateMachine`](struct.ABCIStateMachine.html).
 pub trait Application {
-    fn init_chain<S: Store + Iter>(
+    fn init_chain<S>(
         &self,
         _store: S,
         _req: RequestInitChain,
@@ -307,7 +308,7 @@ pub trait Application {
         Ok(Default::default())
     }
 
-    fn begin_block<S: Store + Iter>(
+    fn begin_block<S>(
         &self,
         _store: S,
         _req: RequestBeginBlock,
@@ -315,7 +316,7 @@ pub trait Application {
         Ok(Default::default())
     }
 
-    fn deliver_tx<S: Store + Iter>(
+    fn deliver_tx<S>(
         &self,
         _store: S,
         _req: RequestDeliverTx,
@@ -323,7 +324,7 @@ pub trait Application {
         Ok(Default::default())
     }
 
-    fn end_block<S: Store + Iter>(
+    fn end_block<S>(
         &self,
         _store: S,
         _req: RequestEndBlock,
@@ -331,7 +332,7 @@ pub trait Application {
         Ok(Default::default())
     }
 
-    fn check_tx<S: Store + Iter>(
+    fn check_tx<S>(
         &self,
         _store: S,
         _req: RequestCheckTx,
@@ -341,12 +342,10 @@ pub trait Application {
 }
 
 /// Interface for persisting ABCI app state, as a supertrait of [`store::Store`](../store/trait.Store.html).
-pub trait ABCIStore: Store + Iter {
+pub trait ABCIStore: Read + Write {
     fn height(&self) -> Result<u64>;
 
     fn root_hash(&self) -> Result<Vec<u8>>;
-
-    fn query(&self, key: &[u8]) -> Result<Vec<u8>>;
 
     fn commit(&mut self, height: u64) -> Result<()>;
 }
@@ -371,13 +370,9 @@ impl Read for MemStore {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         self.store.get(key)
     }
-}
 
-impl Iter for MemStore {
-    type Iter<'a> = <MapStore as Iter>::Iter<'a>;
-
-    fn iter_from(&self, start: &[u8]) -> Self::Iter<'_> {
-        self.store.iter_from(start)
+    fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
+        self.store.get_next(key)
     }
 }
 
@@ -399,14 +394,6 @@ impl ABCIStore for MemStore {
     fn root_hash(&self) -> Result<Vec<u8>> {
         // TODO: real hashing based on writes
         Ok(vec![])
-    }
-
-    fn query(&self, key: &[u8]) -> Result<Vec<u8>> {
-        match self.get(key) {
-            Ok(Some(val)) => Ok(val),
-            Ok(None) => Ok(Vec::new()),
-            Err(e) => Err(e),
-        }
     }
 
     fn commit(&mut self, height: u64) -> Result<()> {

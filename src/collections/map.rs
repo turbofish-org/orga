@@ -1,213 +1,454 @@
 use std::borrow::Borrow;
-use std::marker::PhantomData;
+use std::collections::{hash_map, HashMap};
+use std::hash::Hash;
+use std::ops::{Deref, DerefMut};
 
-use crate::encoding::{Decode, Encode};
-use crate::state::State;
-use crate::store::{Read, Store, Entry};
+use crate::state::*;
+use crate::store::*;
 use crate::Result;
+use ed::*;
 
-/// A map data structure.
-pub struct Map<S, K, V>
-where
-    S: Read,
-    K: Encode + Decode,
-    V: Encode + Decode,
-{
-    store: S,
-    key_type: PhantomData<K>,
-    value_type: PhantomData<V>,
+/// A map collection which stores data in a backing key/value store.
+///
+/// Keys are encoded into bytes and values are stored at the resulting key, with
+/// child key/value entries (if any) stored with the encoded key as their
+/// prefix.
+///
+/// When values in the map are mutated, inserted, or deleted, they are retained
+/// in an in-memory map until the call to `State::flush` which writes the
+/// changes to the backing store.
+pub struct Map<K, V, S = DefaultBackingStore> {
+    store: Store<S>,
+    children: HashMap<K, Option<V>>,
 }
 
-impl<S, K, V> State<S> for Map<S, K, V>
+impl<K, V, S> State<S> for Map<K, V, S>
 where
-    S: Read,
-    K: Encode + Decode,
-    V: Encode + Decode,
+    K: Encode + Terminated + Eq + Hash,
+    V: State<S>,
+    S: Write,
 {
-    /// Constructs a `Map` which is backed by the given store.
-    fn wrap_store(store: S) -> Result<Self> {
-        Ok(Self {
-            store,
-            key_type: PhantomData,
-            value_type: PhantomData,
+    type Encoding = ();
+
+    fn create(store: Store<S>, _: ()) -> Result<Self> {
+        Ok(Map {
+            store: store,
+            children: Default::default(),
         })
+    }
+
+    fn flush(mut self) -> Result<()> {
+        for (key, maybe_value) in self.children.drain() {
+            Self::apply_change(&mut self.store, &key, maybe_value)?;
+        }
+
+        Ok(())
     }
 }
 
-impl<S, K, V> Map<S, K, V>
+impl<K, V, S> Map<K, V, S>
 where
+    K: Encode + Terminated + Eq + Hash,
+    V: State<S>,
     S: Read,
-    K: Encode + Decode,
-    V: Encode + Decode,
 {
-    /// Gets the value with the given key from the map.
+    /// Gets a reference to the value in the map for the given key, or `None` if
+    /// the key has no value.
     ///
-    /// If there is no entry with the given key, `None` will be returned. If
-    /// there is an error when getting from the store or decoding the value, the
-    /// error will be returned.
-    pub fn get<B: Borrow<K>>(&self, key: B) -> Result<Option<V>> {
-        let (key_bytes, key_length) = encode_key_array(key.borrow())?;
+    /// The returned value will reference the latest changes to the data even if
+    /// the value was inserted, modified, or deleted since the last time the map
+    /// was flushed.
+    pub fn get<B: Borrow<K>>(&self, key: B) -> Result<Option<Child<V>>> {
+        let key = key.borrow();
+        Ok(if self.children.contains_key(key) {
+            // value is already retained in memory (was modified)
+            self.children
+                .get(key)
+                .unwrap()
+                .as_ref()
+                .map(Child::Modified)
+        } else {
+            // value is not in memory, try to get from store
+            self.get_from_store(key)?
+                .map(Child::Unmodified)
+        }) 
+    }
+
+    /// Gets a mutable reference to the value in the map for the given key, or
+    /// `None` if the key has no value.
+    ///
+    /// If the value is mutated, it will be retained in memory until the map is
+    /// flushed.
+    ///
+    /// The returned value will reference the latest changes to the data even if
+    /// the value was inserted, modified, or deleted since the last time the map
+    /// was flushed.
+    pub fn get_mut(&mut self, key: K) -> Result<Option<ChildMut<K, V, S>>> {
+        Ok(self.entry(key)?.into())
+    }
+
+    /// Returns a mutable reference to the key/value entry for the given key.
+    pub fn entry(&mut self, key: K) -> Result<Entry<K, V, S>> {
+        Ok(if self.children.contains_key(&key) {
+            // value is already retained in memory (was modified)
+            let entry = match self.children.entry(key) {
+                hash_map::Entry::Occupied(entry) => entry,
+                _ => unreachable!(),
+            };
+            let child = ChildMut::Modified(entry);
+            Entry::Occupied { child }
+        } else {
+            // value is not in memory, try to get from store
+            match self.get_from_store(&key)? {
+                Some(value) => {
+                    let kvs = (key, value, self);
+                    let child = ChildMut::Unmodified(Some(kvs));
+                    Entry::Occupied { child }
+                },
+                None => Entry::Vacant { key, parent: self },
+            }
+        })
+    }
+
+    /// Gets the value from the key/value store by reading and decoding from raw
+    /// bytes, then constructing a `State` instance for the value by creating a
+    /// substore which uses the key as a prefix.
+    fn get_from_store(&self, key: &K) -> Result<Option<V>> {
+        let key_bytes = key.encode()?;
         self.store
-            .get(&key_bytes[..key_length])?
-            .map(|value_bytes| V::decode(value_bytes.as_slice()))
+            .get(key_bytes.as_slice())?
+            .map(|value_bytes| {
+                let substore = self.store.sub(key_bytes.as_slice());
+                let decoded = V::Encoding::decode(value_bytes.as_slice())?;
+                V::create(substore, decoded)
+            })
             .transpose()
     }
 }
 
-impl<S, K, V> Map<S, K, V>
+impl<K: Hash + Eq, V, S> Map<K, V, S> {
+    /// Removes the value at the given key, if any.
+    pub fn remove(&mut self, key: K) {
+        self.children.insert(key, None);
+    }
+}
+
+impl<K, V, S> Map<K, V, S>
 where
-    S: Store,
-    K: Encode + Decode,
-    V: Encode + Decode,
+    K: Encode + Terminated,
+    V: State<S>,
+    S: Write,
 {
-    /// Inserts the given key/value entry into the map. If an entry already
-    /// exists with this key, it will be overwritten.
+    /// Removes all values with the given prefix from the key/value store.
+    /// Iterates until reaching the first key that does not have the given
+    /// prefix, or the end of the store.
     ///
-    /// If there is an error encoding the key or value, or when writing to the
-    /// store, the error will be returned.
-    pub fn insert(&mut self, key: K, value: V) -> Result<()> {
+    /// This method is used to delete a child value and all of its child entries
+    /// (if any).
+    fn remove_from_store(store: &mut Store<S>, prefix: &[u8]) -> Result<bool> {
+        let entries = store.range(prefix.to_vec()..);
+        // TODO: make so we don't have to collect (should be able to delete
+        // while iterating, either a .drain() iterator or an entry type with a
+        // delete method)
+        let to_delete: Vec<_> = entries
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .take_while(|(key, _)| key.starts_with(prefix))
+            .map(|(key, _)| key.to_vec())
+            .collect();
+
+        let exists = !to_delete.is_empty();
+        for key in to_delete {
+            store.delete(key.as_slice())?;
+        }
+
+        Ok(exists)
+    }
+
+    /// Writes a change to the key/value store for the given key. If
+    /// `maybe_value` is `Some`, the value's `State::flush` implementation is
+    /// called then its binary encoding is written to `key`. If `maybe_value` is
+    /// `None`, the value is removed by deleting all entries which start with
+    /// `key`.
+    fn apply_change(store: &mut Store<S>, key: &K, maybe_value: Option<V>) -> Result<()> {
         let key_bytes = key.encode()?;
-        let value_bytes = value.encode()?;
-        self.store.put(key_bytes, value_bytes)
-    }
+        
+        match maybe_value {
+            Some(value) => {
+                // insert/update
+                let value_bytes = value.flush()?.encode()?;
+                store.put(key_bytes, value_bytes)?;
+            },
+            None => {
+                // delete
+                Self::remove_from_store(store, key_bytes.as_slice())?;
+            },
+        }
 
-    /// Deleted the entry with the given key.
-    ///
-    /// If there is an error encoding the key, or when deleting from the store,
-    /// the error will be returned.
-    pub fn delete<B: Borrow<K>>(&mut self, key: B) -> Result<()> {
-        let (key_bytes, key_length) = encode_key_array(key.borrow())?;
-        self.store.delete(&key_bytes[..key_length])
-    }
-}
-
-impl<S, K, V> Map<S, K, V>
-where
-    S: Store + crate::store::Iter,
-    K: Encode + Decode,
-    V: Encode + Decode,
-{
-    /// Creates an iterator over the entries in the map, starting at the given
-    /// key (inclusive).
-    ///
-    /// Iteration happens in bytewise order of encoded keys.
-    pub fn iter_from(&self, start: &K) -> Result<Iter<'_, S::Iter<'_>, K, V>> {
-        let start_bytes = start.encode()?;
-        let iter = self.store.iter_from(start_bytes.as_slice());
-        Ok(Iter::new(iter))
-    }
-
-    /// Creates an iterator over all the entries in the map.
-    ///
-    /// Iteration happens in bytewise order of encoded keys.
-    pub fn iter(&self) -> Iter<'_, S::Iter<'_>, K, V> {
-        let iter = self.store.iter();
-        Iter::new(iter)
+        Ok(())
     }
 }
 
-pub struct Iter<'a, I, K, V>
-where
-    I: Iterator<Item = Entry<'a>>,
-    K: Decode,
-    V: Decode,
-{
-    iter: I,
-    phantom_k: PhantomData<K>,
-    phantom_v: PhantomData<V>,
+/// An immutable reference to an existing value in a collection.
+pub enum Child<'a, V> {
+    /// An existing value which was loaded from the store.
+    Unmodified(V),
+
+    /// A reference to an existing value which is being retained in memory
+    /// because it was modified.
+    Modified(&'a V),
 }
 
-impl<'a, I, K, V> Iter<'a, I, K, V>
-where
-    I: Iterator<Item = Entry<'a>>,
-    K: Decode,
-    V: Decode,
-{
-    /// Constructs an `Iter` for the given store.
-    fn new(iter: I) -> Self {
-        Iter {
-            iter,
-            phantom_k: PhantomData,
-            phantom_v: PhantomData,
+impl<'a, V> Deref for Child<'a, V> {
+    type Target = V;
+
+    fn deref(&self) -> &V {
+        match self {
+            Child::Unmodified(inner) => inner,
+            Child::Modified(value) => value,
         }
     }
 }
 
-impl<'a, I, K, V> Iterator for Iter<'a, I, K, V>
-where
-    I: Iterator<Item = Entry<'a>>,
-    K: Decode,
-    V: Decode,
-{
-    type Item = (K, V);
-
-    /// Gets the next entry from the map.
-    ///
-    /// This method will panic if decoding the entry fails.
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter
-            .next()
-            .map(|(key, value)| (K::decode(key).unwrap(), V::decode(value).unwrap()))
+impl<'a, V: Default> Default for Child<'a, V> {
+    fn default() -> Self {
+        Child::Unmodified(V::default())
     }
 }
 
-/// Encodes the given key value into a fixed-size array. Returns the array and
-/// the length of the encoded value.
+/// A mutable reference to an existing value in a collection.
 ///
-/// This method will panic if the encoded key is longer than 256 bytes.
-fn encode_key_array<K: Encode>(key: &K) -> Result<([u8; 256], usize)> {
-    let mut bytes = [0; 256];
-    key.encode_into(&mut &mut bytes[..])?;
-    Ok((bytes, key.encoding_length()?))
+/// If the value is mutated, it will be retained in memory until the parent
+/// collection is flushed.
+pub enum ChildMut<'a, K, V, S> {
+    /// An existing value which was loaded from the store.
+    Unmodified(Option<(K, V, &'a mut Map<K, V, S>)>),
+
+    /// A mutable reference to an existing value which is being retained in
+    /// memory because it was modified.
+    Modified(hash_map::OccupiedEntry<'a, K, Option<V>>),
 }
+
+impl<'a, K: Hash + Eq, V, S> ChildMut<'a, K, V, S> {
+    /// Removes the value and all of its child key/value entries (if any) from
+    /// the parent collection.
+    pub fn remove(self) {
+        match self {
+            ChildMut::Unmodified(mut inner) => {
+                let (key, _, parent) = inner.take().unwrap();
+                parent.remove(key);
+            },
+            ChildMut::Modified(mut entry) => {
+                entry.insert(None);
+            },
+        }
+    }
+}
+
+impl<'a, K, V, S> Deref for ChildMut<'a, K, V, S> {
+    type Target = V;
+
+    fn deref(&self) -> &V {
+        match self {
+            ChildMut::Unmodified(inner) => &inner.as_ref().unwrap().1,
+            ChildMut::Modified(entry) => entry.get().as_ref().unwrap(),
+        }
+    }
+}
+
+impl<'a, K, V, S> DerefMut for ChildMut<'a, K, V, S>
+where
+    K: Eq + Hash
+{
+    fn deref_mut(&mut self) -> &mut V {
+        match self {
+            ChildMut::Unmodified(inner) => {
+                // insert into parent's children map and upgrade child to
+                // Child::ModifiedMut
+                let (key, value, parent) = inner.take().unwrap();
+                let entry = parent.children
+                    .entry(key)
+                    .insert(Some(value));
+                *self = ChildMut::Modified(entry);
+                self.deref_mut()
+            },
+            ChildMut::Modified(entry) => entry.get_mut().as_mut().unwrap(),
+        }
+    }
+}
+
+/// A mutable reference to a key/value entry in a collection, which may be
+/// empty.
+pub enum Entry<'a, K, V, S> {
+    /// References an entry in the collection which does not have a value.
+    Vacant {
+        key: K,
+        parent: &'a mut Map<K, V, S>,
+    },
+
+    /// Referendes an entry in the collection which has a value.
+    Occupied {
+        child: ChildMut<'a, K, V, S>,
+    },
+}
+
+impl<'a, K, V, S> Entry<'a, K, V, S>
+where
+    K: Encode + Terminated + Eq + Hash,
+    V: State<S>,
+    S: Read,
+{
+    /// If the `Entry` is empty, this method creates a new instance based on the
+    /// given data. If not empty, this method returns a mutable reference to the
+    /// existing data.
+    ///
+    /// Note that if a new instance is created, it will not be written to the
+    /// store during the flush step unless the value gets modified. See
+    /// `or_insert` for a variation which will always write the newly created
+    /// value.
+    pub fn or_create(self, data: V::Encoding) -> Result<ChildMut<'a, K, V, S>> {
+        Ok(match self {
+            Entry::Vacant { key, parent } => {
+                let key_bytes = key.encode()?;
+                let substore = parent.store.sub(key_bytes.as_slice());
+                let value = V::create(substore, data)?;
+                ChildMut::Unmodified(Some((key, value, parent)))
+            }
+            Entry::Occupied { child } => child,
+        })
+    }
+
+    /// If the `Entry` is empty, this method creates a new instance based on the
+    /// given data. If not empty, this method returns a mutable reference to the
+    /// existing data.
+    ///
+    /// Note that if a new instance is created, it will always be written to the
+    /// store during the flush step even if the value never gets modified. See
+    /// `or_create` for a variation which will only write the newly created
+    /// value if it gets modified.
+    pub fn or_insert(self, data: V::Encoding) -> Result<ChildMut<'a, K, V, S>> {
+        let mut child = self.or_create(data)?;
+        child.deref_mut();
+        Ok(child)
+    }
+}
+
+impl<'a, K, V, S> Entry<'a, K, V, S>
+where
+    K: Encode + Terminated + Eq + Hash,
+    S: Write,
+{
+    /// Removes the value for the `Entry` if it exists. Returns a boolean which
+    /// is `true` if a value previously existed for the entry, `false`
+    /// otherwise.
+    pub fn remove(self) -> Result<bool> {
+        Ok(match self {
+            Entry::Occupied { child } => {
+                child.remove();
+                true
+            },
+            Entry::Vacant { .. } => false,
+        })
+    }
+}
+
+impl<'a, K, V, S, D> Entry<'a, K, V, S>
+where
+    K: Encode + Terminated + Eq + Hash,
+    V: State<S, Encoding = D>,
+    S: Read,
+    D: Default,
+{
+    /// If the `Entry` is empty, this method creates a new instance based on the
+    /// default for the value's data encoding. If not empty, this method returns
+    /// a mutable reference to the existing data.
+    ///
+    /// Note that if a new instance is created, it will not be written to the
+    /// store during the flush step unless the value gets modified. See
+    /// `or_insert_default` for a variation which will always write the newly
+    /// created value. 
+    pub fn or_default(self) -> Result<ChildMut<'a, K, V, S>> {
+        self.or_create(D::default())
+    }
+
+    /// If the `Entry` is empty, this method creates a new instance based on the
+    /// default for the value's data encoding. If not empty, this method returns
+    /// a mutable reference to the existing data.
+    ///
+    /// Note that if a new instance is created, it will always be written to the
+    /// store during the flush step even if the value never gets modified. See
+    /// `or_default` for a variation which will only write the newly created
+    /// value if it gets modified.
+    pub fn or_insert_default(self) -> Result<ChildMut<'a, K, V, S>> {
+        self.or_insert(D::default())
+    }
+}
+
+impl<'a, K, V, S> From<Entry<'a, K, V, S>> for Option<ChildMut<'a, K, V, S>> {
+    fn from(entry: Entry<'a, K, V, S>) -> Self {
+        match entry {
+            Entry::Vacant { .. } => None,
+            Entry::Occupied { child } => Some(child),
+        }
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::*;
+    use crate::store::{MapStore, Store};
 
-    #[test]
-    fn simple() {
-        let mut store = MapStore::new();
-        let mut map: Map<_, u64, u64> = Map::wrap_store(&mut store).unwrap();
-
-        assert_eq!(map.get(1234).unwrap(), None);
-
-        map.insert(1234, 5678).unwrap();
-        assert_eq!(map.get(1234).unwrap(), Some(5678));
-
-        map.delete(1234).unwrap();
-        assert_eq!(map.get(1234).unwrap(), None);
+    fn increment_entry(map: &mut Map<u32, u32>, n: u32) -> Result<()> {
+        *map.entry(n)?.or_default()? += 1;
+        Ok(())
     }
 
     #[test]
-    fn iter() {
-        let store = MapStore::new();
-        let mut map: Map<_, u64, u64> = Map::wrap_store(store).unwrap();
+    fn submap() {
+        let store = Store::new(MapStore::new());
+        let mut map = Map::create(store.clone(), ()).unwrap();
 
-        map.insert(123, 456).unwrap();
-        map.insert(100, 100).unwrap();
-        map.insert(400, 100).unwrap();
+        let mut submap = map
+            .entry(12).unwrap()
+            .or_default().unwrap();
+        increment_entry(&mut submap, 34).unwrap();
 
-        let mut iter = map.iter_from(&101).unwrap();
-        assert_eq!(iter.next(), Some((123, 456)));
-        assert_eq!(iter.next(), Some((400, 100)));
-        assert_eq!(iter.next(), None);
-    }
+        let mut submap = map
+            .entry(56).unwrap()
+            .or_default().unwrap();
+        increment_entry(&mut submap, 78).unwrap();
+        increment_entry(&mut submap, 78).unwrap();
+        increment_entry(&mut submap, 79).unwrap();
 
-    #[test]
-    fn read_only() {
-        let mut store = MapStore::new();
-        let mut map: Map<_, u32, u32> = (&mut store).wrap().unwrap();
-        map.insert(12, 34).unwrap();
-        map.insert(56, 78).unwrap();
+        let map_ref = &map;
+        assert_eq!(
+            *map_ref
+                .get(12).unwrap().unwrap()
+                .get(34).unwrap().unwrap(),
+            1,
+        );
+        assert_eq!(
+            *map_ref
+                .get(56).unwrap().unwrap()
+                .get(78).unwrap().unwrap(),
+            2,
+        );
 
-        let store = store;
-        let map: Map<_, u32, u32> = store.wrap().unwrap();
-        assert_eq!(map.get(12).unwrap(), Some(34));
-        assert_eq!(map.get(56).unwrap(), Some(78));
+        map.flush().unwrap();
+        for item in store.range(..) {
+            println!("{:?}", item);
+        };
+        println!("---");
 
-        let collected = map.iter().collect::<Vec<(u32, u32)>>();
-        assert_eq!(collected, vec![(12, 34), (56, 78)]);
+        let mut map: Map<u32, Map<u32, u32>> = Map::create(store.clone(), ()).unwrap();
+        map
+            .entry(56).unwrap()
+            .remove().unwrap();
+
+        map.flush().unwrap();
+        for item in store.range(..) {
+            println!("{:?}", item);
+        }
     }
 }

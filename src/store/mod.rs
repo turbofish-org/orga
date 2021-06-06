@@ -1,68 +1,72 @@
 use crate::error::Result;
-use crate::state::State;
-use std::ops::{Deref, DerefMut};
+use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
-mod bufstore;
-mod iter;
-mod nullstore;
-mod prefix;
-mod rwlog;
-mod share;
-mod split;
+pub mod bufstore;
+pub mod iter;
+pub mod nullstore;
+pub mod share;
+pub mod store;
 
-pub use bufstore::Map as BufStoreMap;
-pub use bufstore::{BufStore, MapStore};
-pub use iter::{Entry, Iter};
+pub use bufstore::{BufStore, Map as BufStoreMap, MapStore};
+pub use iter::Iter;
 pub use nullstore::NullStore;
-pub use prefix::Prefixed;
-pub use rwlog::RWLog;
 pub use share::Shared;
-pub use split::Splitter;
+pub use store::{DefaultBackingStore, Store};
 
 // TODO: Key type (for cheaper concat, enum over ref or owned slice, etc)
 
+/// A key/value entry - the first element is the key and the second element is
+/// the value.
+pub type KV = (Vec<u8>, Vec<u8>);
+
 /// Trait for read access to key/value stores.
-pub trait Read: Sized {
+pub trait Read {
     /// Gets a value by key.
     ///
     /// Implementations of `get` should return `None` when there is no value for
     /// the key rather than erroring.
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>>;
 
-    /// Wraps self with a given [`state::State`](../state/trait.State.html)
-    /// implementation, provided for convenience.
-    fn wrap<T: State<Self>>(self) -> Result<T> {
-        T::wrap_store(self)
+    /// Gets the key/value entry which comes directly after `key` in ascending
+    /// key order, or `None` if there are no entries which follow.
+    fn get_next(&self, key: &[u8]) -> Result<Option<KV>>;
+
+    /// Returns an iterator over the key/value entries in the given range.
+    #[inline]
+    fn range<B: RangeBounds<Vec<u8>>>(&self, bounds: B) -> Iter<Self> {
+        Iter::new(
+            self,
+            (
+                clone_bound(bounds.start_bound()),
+                clone_bound(bounds.end_bound()),
+            ),
+        )
+    }
+}
+
+/// Returns the same variant of bound but with an owned copy of its inner value.
+fn clone_bound<T: Clone>(bound: Bound<&T>) -> Bound<T> {
+    match bound {
+        Bound::Unbounded => Bound::Unbounded,
+        Bound::Included(key) => Bound::Included(key.clone()),
+        Bound::Excluded(key) => Bound::Excluded(key.clone()),
+    }
+}
+
+impl<R: Read, T: Deref<Target = R>> Read for T {
+    #[inline]
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        self.deref().get(key)
     }
 
-    /// Wraps self with [`Shared`](struct.Shared.html), allowing it to be cloned
-    /// so that multiple callers can share the reference to the underlying
-    /// store.
-    fn into_shared(self) -> Shared<Self> {
-        Shared::new(self)
-    }
-
-    /// Wraps self with [`Prefixed`](struct.Prefixed.html) using the given
-    /// prefix byte, so that all operations have the prefix prepended to their
-    /// keys.
-    fn prefix(self, prefix: u8) -> Prefixed<Self> {
-        Prefixed::new(self, prefix)
-    }
-
-    /// Wraps self with [`Splitter`](struct.Splitter.html) so that prefixed
-    /// substores may be created by calling `.split()`.
-    fn into_splitter(self) -> Splitter<Self> {
-        Splitter::new(self)
-    }
-
-    /// Returns an immutable reference to the store.
-    fn as_ref<'a>(&'a self) -> &'a Self {
-        self
+    #[inline]
+    fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
+        self.deref().get_next(key)
     }
 }
 
 /// Trait for write access to key/value stores.
-pub trait Write {
+pub trait Write: Read {
     /// Writes a key and value to the store.
     ///
     /// If a value already exists for the given key, implementations should
@@ -75,70 +79,16 @@ pub trait Write {
     /// operation as a no-op (but may still issue a call to `delete` to an
     /// underlying store).
     fn delete(&mut self, key: &[u8]) -> Result<()>;
-
-    /// Returns a mutable reference to the store.
-    fn as_mut<'a>(&'a mut self) -> &'a mut Self {
-        self
-    }
-}
-
-/// Trait for key/value stores, automatically implemented for any type which has
-/// both `Read` and `Write`.
-pub trait Store: Read + Write {}
-
-impl<S: Read + Write + Sized> Store for S {}
-
-impl<S: Read, T: Deref<Target = S>> Read for T {
-    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        self.deref().get(key)
-    }
 }
 
 impl<S: Write, T: DerefMut<Target = S>> Write for T {
+    #[inline]
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         self.deref_mut().put(key, value)
     }
 
+    #[inline]
     fn delete(&mut self, key: &[u8]) -> Result<()> {
         self.deref_mut().delete(key)
-    }
-}
-
-impl<'a, S: Iter + 'a> Iter for &mut S {
-    type Iter<'b> = <S as Iter>::Iter<'b>;
-
-    fn iter_from(&self, start: &[u8]) -> Self::Iter<'_> {
-        self.deref().iter_from(start)
-    }
-}
-
-/// A trait for types which contain data that can be flushed to an underlying
-/// store.
-pub trait Flush {
-    // TODO: should this consume the store? or will we want it like this so we
-    // can persist the same wrapper store and flush it multiple times?
-    fn flush(&mut self) -> Result<()>;
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{NullStore, Read};
-    use crate::state::Value;
-
-    #[test]
-    fn fixed_length_slice_key() {
-        let key = b"0123";
-        NullStore.get(key).unwrap();
-    }
-
-    #[test]
-    fn slice_key() {
-        let key = vec![1, 2, 3, 4];
-        NullStore.get(key.as_slice()).unwrap();
-    }
-
-    #[test]
-    fn wrap() {
-        let _: Value<_, u64> = NullStore.wrap().unwrap();
     }
 }

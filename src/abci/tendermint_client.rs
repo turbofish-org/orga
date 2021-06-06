@@ -1,4 +1,4 @@
-use crate::{store::Read, Result};
+use crate::{store::{Read, KV}, Result};
 use blocking::block_on;
 use tendermint_rpc::{Client, HttpClient};
 
@@ -36,6 +36,10 @@ impl Read for TendermintClient {
         Ok(Some(
             block_on(self.client.abci_query(None, key, None, false))?.value,
         ))
+    }
+
+    fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
+        todo!()
     }
 }
 

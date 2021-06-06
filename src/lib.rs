@@ -1,8 +1,5 @@
-#![feature(trait_alias)]
-#![feature(fn_traits)]
-#![feature(proc_macro_hygiene)]
 #![feature(map_first_last)]
-#![feature(generic_associated_types)]
+#![feature(entry_insert)]
 
 /// Integration with ABCI (gated by `abci` feature).
 #[cfg(feature = "abci")]
@@ -36,4 +33,3 @@ mod error;
 // re-exports
 pub use error::*;
 pub use orga_macros as macros;
-pub use store::Store;

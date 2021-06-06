@@ -29,7 +29,7 @@ impl<'a> MerkStore<'a> {
     /// `aux` may contain auxilary keys and values to be written to the
     /// underlying store, which will not affect the Merkle tree but will still
     /// be persisted in the database.
-    fn write(&mut self, aux: Vec<(Vec<u8>, Option<Vec<u8>>)>) -> Result<()> {
+    pub(super) fn write(&mut self, aux: Vec<(Vec<u8>, Option<Vec<u8>>)>) -> Result<()> {
         let map = self.map.take().unwrap();
         self.map = Some(Map::new());
 
@@ -37,6 +37,10 @@ impl<'a> MerkStore<'a> {
         let aux_batch = to_batch(aux);
 
         Ok(self.merk.apply(batch.as_ref(), aux_batch.as_ref())?)
+    }
+
+    pub(super) fn merk(&self) -> &Merk {
+        self.merk
     }
 }
 
@@ -61,15 +65,22 @@ impl<'a> Read for MerkStore<'a> {
             None => Ok(self.merk.get(key)?),
         }
     }
-}
 
-impl crate::store::Iter for MerkStore<'_> {
-    type Iter<'a> = Iter<'a>;
-
-    fn iter_from(&self, start: &[u8]) -> Self::Iter<'_> {
+    fn get_next(&self, start: &[u8]) -> Result<Option<KV>> {
+        // TODO: use an iterator in merk which steps through in-memory nodes
+        // (loading if necessary)
         let mut iter = self.merk.raw_iter();
         iter.seek(start);
-        Iter { iter }
+        iter.next();
+
+        if !iter.valid() {
+            iter.status()?;
+            return Ok(None);
+        }
+
+        let key = iter.key().unwrap();
+        let value = iter.value().unwrap();
+        Ok(Some((key.to_vec(), value.to_vec())))
     }
 }
 
@@ -114,13 +125,6 @@ impl<'a> Write for MerkStore<'a> {
     }
 }
 
-impl<'a> Flush for MerkStore<'a> {
-    /// Flush is a no-op for `MerkStore`.
-    fn flush(&mut self) -> Result<()> {
-        self.write(vec![])
-    }
-}
-
 impl<'a> ABCIStore for MerkStore<'a> {
     fn height(&self) -> Result<u64> {
         let maybe_bytes = self.merk.get_aux(b"height")?;
@@ -132,16 +136,6 @@ impl<'a> ABCIStore for MerkStore<'a> {
 
     fn root_hash(&self) -> Result<Vec<u8>> {
         Ok(self.merk.root_hash().to_vec())
-    }
-
-    // TODO: we don't need the hash
-    /// Resolves a query by generating a merk proof.
-    fn query(&self, key: &[u8]) -> Result<Vec<u8>> {
-        let val = &[key.to_vec()];
-        let mut hash = self.root_hash()?;
-        let data = self.merk.prove(val)?;
-        hash.extend(data);
-        Ok(hash)
     }
 
     fn commit(&mut self, height: u64) -> Result<()> {
