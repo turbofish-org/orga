@@ -10,6 +10,12 @@ use std::ops::{Bound, RangeBounds};
 // the shared reference to parent exists, unless a store uses interior
 // mutability
 
+/// An iterator over key/value entries in a `Read` type.
+///
+/// `Iter` is typically created by calling `read.range(some_range)`.
+///
+/// Under the hood, the iterator calls `Read::get_next` and keeps track of its
+/// current position.
 pub struct Iter<'a, S: ?Sized> {
     parent: &'a S,
     bounds: (Bound<Vec<u8>>, Bound<Vec<u8>>),
@@ -17,6 +23,8 @@ pub struct Iter<'a, S: ?Sized> {
 }
 
 impl<'a, S: Read + ?Sized> Iter<'a, S> {
+    /// Creates a new iterator over entries in `parent` in the given range
+    /// bounds.
     pub fn new(parent: &'a S, bounds: (Bound<Vec<u8>>, Bound<Vec<u8>>)) -> Self {
         Iter {
             parent,
@@ -25,6 +33,8 @@ impl<'a, S: Read + ?Sized> Iter<'a, S> {
         }
     }
 
+    /// Returns the entry at `key` if it exists, otherwise returns the next
+    /// entry by ascending key ordering.
     fn get_next_inclusive(&self, key: &[u8]) -> Result<Option<KV>> {
         if let Some(value) = self.parent.get(key)? {
             return Ok(Some((key.to_vec(), value)));

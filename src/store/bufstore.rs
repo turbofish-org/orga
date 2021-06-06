@@ -103,10 +103,16 @@ impl<S: Read> Read for BufStore<S> {
     }
 }
 
+/// Return range bounds which start from the given key (exclusive), with an
+/// unbounded end.
 fn exclusive_range_from(start: &[u8]) -> (Bound<Vec<u8>>, Bound<Vec<u8>>) {
     (Bound::Excluded(start.to_vec()), Bound::Unbounded)
 }
 
+/// Takes an iterator over entries in the in-memory map and an iterator over
+/// entries in the backing store, and yields the next entry. Entries in the map
+/// shadow entries in the backing store with the same key, including skipping
+/// entries marked as deleted (a `None` value in the map).
 fn iter_merge_next<S: Read>(
     map_iter: &mut btree_map::Range<Vec<u8>, Option<Vec<u8>>>,
     store_iter: &mut Iter<S>,

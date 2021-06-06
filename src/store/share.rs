@@ -11,8 +11,9 @@ use std::rc::Rc;
 /// or written to by multiple consumers.
 ///
 /// `Shared` has the `Clone` trait - it is safe to clone references to the store
-/// since `get`, `put`, and `delete` all operate atomically so there will never
-/// be more than one reference borrowing the underlying store at a time.
+/// since `get`, `get_next`, `put`, and `delete` all operate atomically so there
+/// will never be more than one reference borrowing the underlying store at a
+/// time.
 pub struct Shared<T>(Rc<RefCell<T>>);
 
 impl<T> Shared<T> {

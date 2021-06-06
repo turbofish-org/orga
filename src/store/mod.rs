@@ -15,6 +15,8 @@ pub use store::{DefaultBackingStore, Store};
 
 // TODO: Key type (for cheaper concat, enum over ref or owned slice, etc)
 
+/// A key/value entry - the first element is the key and the second element is
+/// the value.
 pub type KV = (Vec<u8>, Vec<u8>);
 
 /// Trait for read access to key/value stores.
@@ -25,10 +27,11 @@ pub trait Read {
     /// the key rather than erroring.
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>>;
 
+    /// Gets the key/value entry which comes directly after `key` in ascending
+    /// key order, or `None` if there are no entries which follow.
     fn get_next(&self, key: &[u8]) -> Result<Option<KV>>;
 
-    // fn get_prev(&self, key: &[u8]) -> Result<Option<KV>>;
-
+    /// Returns an iterator over the key/value entries in the given range.
     #[inline]
     fn range<B: RangeBounds<Vec<u8>>>(&self, bounds: B) -> Iter<Self> {
         Iter::new(
@@ -41,6 +44,7 @@ pub trait Read {
     }
 }
 
+/// Returns the same variant of bound but with an owned copy of its inner value.
 fn clone_bound<T: Clone>(bound: Bound<&T>) -> Bound<T> {
     match bound {
         Bound::Unbounded => Bound::Unbounded,

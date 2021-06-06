@@ -4,13 +4,22 @@ use crate::Result;
 // TODO: figure out how to let users set DefaultBackingStore, similar to setting
 // the global allocator in the standard library
 
+/// The default backing store used as the type parameter given to `Store`. This
+/// is used to prevent generic parameters bubbling up to the application level
+/// for state types when they often all use the same backing store.
 #[cfg(merk)]
 pub type DefaultBackingStore = crate::merk::MerkStore;
-
 #[cfg(any(test, not(merk)))]
 // TODO: default to a dynamic store for non-production builds
 pub type DefaultBackingStore = super::MapStore;
 
+/// Wraps a "backing store" (an implementation of `Read` and possibly `Write`),
+/// and applies all operations to a certain part of the backing store's keyspace
+/// by adding a prefix.
+///
+/// This type is how high-level state types interact with the store, since they
+/// will often need to create substores (through the `store.sub(prefix)`
+/// method).
 pub struct Store<S = DefaultBackingStore> {
     prefix: Vec<u8>,
     store: Shared<S>,
@@ -26,18 +35,22 @@ impl<S> Clone for Store<S> {
 }
 
 impl<S> Store<S> {
+    /// Creates a new `Store` with no prefix, with `backing` as its backing
+    /// store.
     #[inline]
-    pub fn new<'a>(inner: S) -> Self {
+    pub fn new<'a>(backing: S) -> Self {
         Store {
             prefix: vec![],
-            store: Shared::new(inner),
+            store: Shared::new(backing),
         }
     }
 
+    /// Creates a substore of this store by concatenating `prefix` to this
+    /// store's own prefix, and pointing to the same backing store.
     #[inline]
-    pub fn sub(&self, key: &[u8]) -> Self {
+    pub fn sub(&self, prefix: &[u8]) -> Self {
         Store {
-            prefix: concat(self.prefix.as_slice(), key),
+            prefix: concat(self.prefix.as_slice(), prefix),
             store: self.store.clone(),
         }
     }

@@ -1,5 +1,8 @@
 use super::*;
 
+/// An implementation of `Read` which is always empty. Useful for tests, or as
+/// the "backing store" for a `BufStore` in order to create a temporary store
+/// which does not persist data (`MapStore`).
 #[derive(Default)]
 pub struct NullStore;
 
