@@ -1,3 +1,4 @@
+pub use orga_macros::*;
 use crate::store::*;
 use crate::Result;
 
@@ -6,7 +7,7 @@ use crate::Result;
 ///
 /// These types can be complex types like collections (e.g. maps), or simple
 /// data types (e.g. account structs).
-pub trait State<S>: Sized {
+pub trait State<S = DefaultBackingStore>: Sized {
     /// A type which provides the binary encoding of data stored in the type's
     /// root key/value entry. When being written to a store, `State` values will
     /// be converted to this type and then encoded into bytes. When being
@@ -48,11 +49,11 @@ pub trait State<S>: Sized {
         S: Write;
 }
 
-impl<S, T: ed::Encode + ed::Decode> State<S> for T {
+impl<T: ed::Encode + ed::Decode> State for T {
     type Encoding = Self;
 
     #[inline]
-    fn create(_: Store<S>, value: Self) -> Result<Self> {
+    fn create(_: Store, value: Self) -> Result<Self> {
         Ok(value)
     }
 
