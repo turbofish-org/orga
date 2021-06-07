@@ -7,6 +7,15 @@ use syn::*;
 pub fn derive(item: TokenStream) -> TokenStream {
     let item = parse_macro_input!(item as DeriveInput);
 
+    let mut is_tuple_struct = false;
+    match &item.data {
+        Data::Struct(data) => match data.fields {
+            Fields::Unnamed(_) => is_tuple_struct = true,
+            _ => {},
+        },
+        _ => {},
+    }
+
     let field_names = || struct_fields(&item).map(|field| &field.ident);
     let field_types = || struct_fields(&item).map(|field| &field.ty);
     let seq = || {
@@ -16,38 +25,68 @@ pub fn derive(item: TokenStream) -> TokenStream {
 
     let name = &item.ident;
     let field_types_encoding = field_types();
-    let field_names_create = field_names();
     let seq_substore = seq();
     let seq_data = seq();
     let field_names_flush = field_names();
+
+    let create_body = if is_tuple_struct {
+        quote!(
+            Ok(Self(
+                #(
+                    ::orga::state::State::create(
+                        store.sub(&[#seq_substore]),
+                        data.#seq_data,
+                    )?,
+                )*
+            ))
+        )
+    } else {
+        let names = field_names();
+        quote!(
+            Ok(Self {
+                #(
+                    #names: ::orga::state::State::create(
+                        store.sub(&[#seq_substore]),
+                        data.#seq_data,
+                    )?,
+                )*
+            })
+        ) 
+    };
+
+    let flush_body = if is_tuple_struct {
+        let indexes = seq();
+        quote!(
+            Ok((
+                #(self.#indexes.flush()?,)*
+            ))
+        )
+    } else {
+        let names = field_names();
+        quote!(
+            Ok((
+                #(self.#names.flush()?,)*
+            ))
+        )
+    };
 
     let output = quote! {
         impl ::orga::state::State for #name {
             type Encoding = (
                 #(
-                    <#field_types_encoding as ::orga::state::State>
-                        ::Encoding,
-                )* 
+                    <#field_types_encoding as ::orga::state::State>::Encoding,
+                )*
             );
 
             fn create(
                 store: ::orga::store::Store,
                 data: Self::Encoding,
             ) -> ::orga::Result<Self> {
-                Ok(Self {
-                    #(
-                        #field_names_create: ::orga::state::State::create(
-                            store.sub(&[#seq_substore]),
-                            data.#seq_data,
-                        )?,
-                    )*
-                })
+                #create_body
             }
 
             fn flush(self) -> ::orga::Result<Self::Encoding> {
-                Ok((
-                    #(self.#field_names_flush.flush()?,)*
-                ))
+                #flush_body
             }
         }
     };
