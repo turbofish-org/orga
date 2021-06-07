@@ -27,4 +27,3 @@ abci = ["abci2", "tendermint", "tendermint-rpc"]
 
 [profile.release]
 lto = true
-
