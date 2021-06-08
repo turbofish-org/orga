@@ -27,7 +27,6 @@ pub fn derive(item: TokenStream) -> TokenStream {
     let field_types_encoding = field_types();
     let seq_substore = seq();
     let seq_data = seq();
-    let field_names_flush = field_names();
 
     let create_body = if is_tuple_struct {
         quote!(

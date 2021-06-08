@@ -2,7 +2,6 @@ use orga::state::*;
 use orga::store::{MapStore, Read, Write, Store};
 use orga::collections::Map;
 use orga::Result;
-use orga_macros::*;
 use ed::Encode;
 
 #[derive(State)]
@@ -18,7 +17,7 @@ fn increment_entry(map: &mut Map<u32, u32>, n: u32) -> Result<()> {
 
 fn main() {
   let mut store = Store::new(MapStore::new());
-  let mut foo = Foo::create(store.clone(), (0, ())).unwrap();
+  let mut foo = Foo::create(store.clone(), Default::default()).unwrap();
 
   foo.count += 42;
 
