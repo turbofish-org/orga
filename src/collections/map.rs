@@ -437,55 +437,84 @@ mod tests {
     }
 
     #[test]
-    fn basic_ops() {
-        let mut store = Store::new(MapStore::new());
-        let enc = |n: u32| n.encode().unwrap();
-        store.put(enc(1), enc(2)).unwrap();
+    fn nonexistent() {
+        let store = Store::new(MapStore::new());
         let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
-
-        assert_eq!(map.get_from_store(&1).unwrap().unwrap(), 2);
-        // Non-existent
         assert!(map.get(3).unwrap().is_none());
         assert!(map.get_mut(3).unwrap().is_none());
         assert!(store.get(&enc(3)).unwrap().is_none());
+    }
 
-        // In store, not in memory
+    #[test]
+    fn store_only() {
+        let mut store = Store::new(MapStore::new());
+        store.put(enc(1), enc(2)).unwrap();
+        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
         assert_eq!(*map.get(1).unwrap().unwrap(), 2);
         let mut v = map.get_mut(1).unwrap().unwrap();
         *v = 3;
         assert_eq!(store.get(&enc(1)).unwrap().unwrap(), enc(2));
 
-        // In memory, unmodified, not written
+        map.flush().unwrap();
+        assert_eq!(store.get(&enc(1)).unwrap().unwrap(), enc(3));
+    }
+
+    #[test]
+    fn mem_unmodified() {
+        let store = Store::new(MapStore::new());
+        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
         map.entry(4).unwrap().or_create(5).unwrap();
         assert!(map.get(4).unwrap().is_none());
         assert_eq!(map.children.contains_key(&4), false);
         assert!(store.get(&enc(4)).unwrap().is_none());
+    }
 
-        // In memory, modified, not written
+    #[test]
+    fn mem_modified() {
+        let store = Store::new(MapStore::new());
+        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
         let mut v = map.entry(6).unwrap().or_create(7).unwrap();
         *v = 8;
         assert_eq!(*map.get(6).unwrap().unwrap(), 8);
         assert!(map.children.contains_key(&6));
         assert!(store.get(&enc(6)).unwrap().is_none());
 
-        // In memory, not written, with or_insert
+        map.flush().unwrap();
+        assert_eq!(store.get(&enc(6)).unwrap().unwrap(), enc(8));
+    }
+
+    #[test]
+    fn or_insert() {
+        let store = Store::new(MapStore::new());
+        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
         map.entry(9).unwrap().or_insert(10).unwrap();
         assert_eq!(*map.get(9).unwrap().unwrap(), 10);
         assert!(map.children.contains_key(&9));
         assert!(store.get(&enc(9)).unwrap().is_none());
 
-        // In memory, not written, with or_insert_default
+        map.flush().unwrap();
+        assert_eq!(store.get(&enc(9)).unwrap().unwrap(), enc(10));
+    }
+
+    #[test]
+    fn or_insert_default() {
+        let store = Store::new(MapStore::new());
+        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
         map.entry(11).unwrap().or_insert_default().unwrap();
         assert_eq!(*map.get(11).unwrap().unwrap(), u32::default());
         assert!(map.children.contains_key(&11));
         assert!(store.get(&enc(11)).unwrap().is_none());
 
         map.flush().unwrap();
-
-        // Check flushed values
-        assert_eq!(store.get(&enc(1)).unwrap().unwrap(), enc(3));
-        assert_eq!(store.get(&enc(6)).unwrap().unwrap(), enc(8));
-        assert_eq!(store.get(&enc(9)).unwrap().unwrap(), enc(10));
         assert_eq!(store.get(&enc(11)).unwrap().unwrap(), enc(u32::default()));
+    }
+
+    fn enc(n: u32) -> Vec<u8> {
+        n.encode().unwrap()
     }
 }
