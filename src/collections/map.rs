@@ -393,49 +393,6 @@ mod tests {
     use super::*;
     use crate::store::{MapStore, Store};
 
-    fn increment_entry(map: &mut Map<u32, u32>, n: u32) -> Result<()> {
-        *map.entry(n)?.or_default()? += 1;
-        Ok(())
-    }
-
-    #[test]
-    fn submap() {
-        let store = Store::new(MapStore::new());
-        let mut map = Map::create(store.clone(), ()).unwrap();
-
-        let mut submap = map.entry(12).unwrap().or_default().unwrap();
-        increment_entry(&mut submap, 34).unwrap();
-
-        let mut submap = map.entry(56).unwrap().or_default().unwrap();
-        increment_entry(&mut submap, 78).unwrap();
-        increment_entry(&mut submap, 78).unwrap();
-        increment_entry(&mut submap, 79).unwrap();
-
-        let map_ref = &map;
-        assert_eq!(
-            *map_ref.get(12).unwrap().unwrap().get(34).unwrap().unwrap(),
-            1,
-        );
-        assert_eq!(
-            *map_ref.get(56).unwrap().unwrap().get(78).unwrap().unwrap(),
-            2,
-        );
-
-        map.flush().unwrap();
-        for item in store.range(..) {
-            println!("{:?}", item);
-        }
-        println!("---");
-
-        let mut map: Map<u32, Map<u32, u32>> = Map::create(store.clone(), ()).unwrap();
-        map.entry(56).unwrap().remove().unwrap();
-
-        map.flush().unwrap();
-        for item in store.range(..) {
-            println!("{:?}", item);
-        }
-    }
-
     #[test]
     fn nonexistent() {
         let store = Store::new(MapStore::new());
