@@ -69,9 +69,8 @@ where
                 .map(Child::Modified)
         } else {
             // value is not in memory, try to get from store
-            self.get_from_store(key)?
-                .map(Child::Unmodified)
-        }) 
+            self.get_from_store(key)?.map(Child::Unmodified)
+        })
     }
 
     /// Gets a mutable reference to the value in the map for the given key, or
@@ -104,7 +103,7 @@ where
                     let kvs = (key, value, self);
                     let child = ChildMut::Unmodified(Some(kvs));
                     Entry::Occupied { child }
-                },
+                }
                 None => Entry::Vacant { key, parent: self },
             }
         })
@@ -172,17 +171,17 @@ where
     /// `key`.
     fn apply_change(store: &mut Store<S>, key: &K, maybe_value: Option<V>) -> Result<()> {
         let key_bytes = key.encode()?;
-        
+
         match maybe_value {
             Some(value) => {
                 // insert/update
                 let value_bytes = value.flush()?.encode()?;
                 store.put(key_bytes, value_bytes)?;
-            },
+            }
             None => {
                 // delete
                 Self::remove_from_store(store, key_bytes.as_slice())?;
-            },
+            }
         }
 
         Ok(())
@@ -237,10 +236,10 @@ impl<'a, K: Hash + Eq, V, S> ChildMut<'a, K, V, S> {
             ChildMut::Unmodified(mut inner) => {
                 let (key, _, parent) = inner.take().unwrap();
                 parent.remove(key);
-            },
+            }
             ChildMut::Modified(mut entry) => {
                 entry.insert(None);
-            },
+            }
         }
     }
 }
@@ -258,7 +257,7 @@ impl<'a, K, V, S> Deref for ChildMut<'a, K, V, S> {
 
 impl<'a, K, V, S> DerefMut for ChildMut<'a, K, V, S>
 where
-    K: Eq + Hash
+    K: Eq + Hash,
 {
     fn deref_mut(&mut self) -> &mut V {
         match self {
@@ -266,12 +265,10 @@ where
                 // insert into parent's children map and upgrade child to
                 // Child::ModifiedMut
                 let (key, value, parent) = inner.take().unwrap();
-                let entry = parent.children
-                    .entry(key)
-                    .insert(Some(value));
+                let entry = parent.children.entry(key).insert(Some(value));
                 *self = ChildMut::Modified(entry);
                 self.deref_mut()
-            },
+            }
             ChildMut::Modified(entry) => entry.get_mut().as_mut().unwrap(),
         }
     }
@@ -287,9 +284,7 @@ pub enum Entry<'a, K, V, S> {
     },
 
     /// Referendes an entry in the collection which has a value.
-    Occupied {
-        child: ChildMut<'a, K, V, S>,
-    },
+    Occupied { child: ChildMut<'a, K, V, S> },
 }
 
 impl<'a, K, V, S> Entry<'a, K, V, S>
@@ -346,7 +341,7 @@ where
             Entry::Occupied { child } => {
                 child.remove();
                 true
-            },
+            }
             Entry::Vacant { .. } => false,
         })
     }
@@ -366,7 +361,7 @@ where
     /// Note that if a new instance is created, it will not be written to the
     /// store during the flush step unless the value gets modified. See
     /// `or_insert_default` for a variation which will always write the newly
-    /// created value. 
+    /// created value.
     pub fn or_default(self) -> Result<ChildMut<'a, K, V, S>> {
         self.or_create(D::default())
     }
@@ -393,7 +388,6 @@ impl<'a, K, V, S> From<Entry<'a, K, V, S>> for Option<ChildMut<'a, K, V, S>> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -409,46 +403,89 @@ mod tests {
         let store = Store::new(MapStore::new());
         let mut map = Map::create(store.clone(), ()).unwrap();
 
-        let mut submap = map
-            .entry(12).unwrap()
-            .or_default().unwrap();
+        let mut submap = map.entry(12).unwrap().or_default().unwrap();
         increment_entry(&mut submap, 34).unwrap();
 
-        let mut submap = map
-            .entry(56).unwrap()
-            .or_default().unwrap();
+        let mut submap = map.entry(56).unwrap().or_default().unwrap();
         increment_entry(&mut submap, 78).unwrap();
         increment_entry(&mut submap, 78).unwrap();
         increment_entry(&mut submap, 79).unwrap();
 
         let map_ref = &map;
         assert_eq!(
-            *map_ref
-                .get(12).unwrap().unwrap()
-                .get(34).unwrap().unwrap(),
+            *map_ref.get(12).unwrap().unwrap().get(34).unwrap().unwrap(),
             1,
         );
         assert_eq!(
-            *map_ref
-                .get(56).unwrap().unwrap()
-                .get(78).unwrap().unwrap(),
+            *map_ref.get(56).unwrap().unwrap().get(78).unwrap().unwrap(),
             2,
         );
 
         map.flush().unwrap();
         for item in store.range(..) {
             println!("{:?}", item);
-        };
+        }
         println!("---");
 
         let mut map: Map<u32, Map<u32, u32>> = Map::create(store.clone(), ()).unwrap();
-        map
-            .entry(56).unwrap()
-            .remove().unwrap();
+        map.entry(56).unwrap().remove().unwrap();
 
         map.flush().unwrap();
         for item in store.range(..) {
             println!("{:?}", item);
         }
+    }
+
+    #[test]
+    fn basic_ops() {
+        let mut store = Store::new(MapStore::new());
+        let enc = |n: u32| n.encode().unwrap();
+        store.put(enc(1), enc(2)).unwrap();
+        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
+        assert_eq!(map.get_from_store(&1).unwrap().unwrap(), 2);
+        // Non-existent
+        assert!(map.get(3).unwrap().is_none());
+        assert!(map.get_mut(3).unwrap().is_none());
+        assert!(store.get(&enc(3)).unwrap().is_none());
+
+        // In store, not in memory
+        assert_eq!(*map.get(1).unwrap().unwrap(), 2);
+        let mut v = map.get_mut(1).unwrap().unwrap();
+        *v = 3;
+        assert_eq!(store.get(&enc(1)).unwrap().unwrap(), enc(2));
+
+        // In memory, unmodified, not written
+        map.entry(4).unwrap().or_create(5).unwrap();
+        assert!(map.get(4).unwrap().is_none());
+        assert_eq!(map.children.contains_key(&4), false);
+        assert!(store.get(&enc(4)).unwrap().is_none());
+
+        // In memory, modified, not written
+        let mut v = map.entry(6).unwrap().or_create(7).unwrap();
+        *v = 8;
+        assert_eq!(*map.get(6).unwrap().unwrap(), 8);
+        assert!(map.children.contains_key(&6));
+        assert!(store.get(&enc(6)).unwrap().is_none());
+
+        // In memory, not written, with or_insert
+        map.entry(9).unwrap().or_insert(10).unwrap();
+        assert_eq!(*map.get(9).unwrap().unwrap(), 10);
+        assert!(map.children.contains_key(&9));
+        assert!(store.get(&enc(9)).unwrap().is_none());
+
+        // In memory, not written, with or_insert_default
+        map.entry(11).unwrap().or_insert_default().unwrap();
+        assert_eq!(*map.get(11).unwrap().unwrap(), u32::default());
+        assert!(map.children.contains_key(&11));
+        assert!(store.get(&enc(11)).unwrap().is_none());
+
+        map.flush().unwrap();
+
+        // Check flushed values
+        assert_eq!(store.get(&enc(1)).unwrap().unwrap(), enc(3));
+        assert_eq!(store.get(&enc(6)).unwrap().unwrap(), enc(8));
+        assert_eq!(store.get(&enc(9)).unwrap().unwrap(), enc(10));
+        assert_eq!(store.get(&enc(11)).unwrap().unwrap(), enc(u32::default()));
     }
 }
