@@ -471,6 +471,33 @@ mod tests {
         assert_eq!(store.get(&enc(11)).unwrap().unwrap(), enc(u32::default()));
     }
 
+    #[test]
+    fn remove() {
+        let store = Store::new(MapStore::new());
+        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
+        map.entry(12).unwrap().or_insert(13).unwrap();
+        map.entry(14).unwrap().or_insert(15).unwrap();
+        map.entry(16).unwrap().or_insert(17).unwrap();
+        assert!(map.children.get(&12).unwrap().is_some());
+        map.remove(12);
+        assert!(map.children.get(&12).unwrap().is_none());
+        map.flush().unwrap();
+        assert!(store.get(&enc(12)).unwrap().is_none());
+
+        // Remove a value that was in the store before map's creation
+        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        assert_eq!(*map.get(14).unwrap().unwrap(), 15);
+        assert_eq!(*map.get(16).unwrap().unwrap(), 17);
+        map.remove(14);
+        // Also remove a value by entry
+        let entry = map.entry(16).unwrap();
+        assert!(entry.remove().unwrap());
+        map.flush().unwrap();
+        assert!(store.get(&enc(14)).unwrap().is_none());
+        assert!(store.get(&enc(16)).unwrap().is_none());
+    }
+
     fn enc(n: u32) -> Vec<u8> {
         n.encode().unwrap()
     }
