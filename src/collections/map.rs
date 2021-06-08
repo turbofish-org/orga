@@ -26,7 +26,6 @@ impl<K, V, S> State<S> for Map<K, V, S>
 where
     K: Encode + Terminated + Eq + Hash,
     V: State<S>,
-    S: Write,
 {
     type Encoding = ();
 
@@ -37,7 +36,9 @@ where
         })
     }
 
-    fn flush(mut self) -> Result<()> {
+    fn flush(mut self) -> Result<()>
+        where S: Write
+    {
         for (key, maybe_value) in self.children.drain() {
             Self::apply_change(&mut self.store, &key, maybe_value)?;
         }
@@ -283,8 +284,10 @@ pub enum Entry<'a, K, V, S> {
         parent: &'a mut Map<K, V, S>,
     },
 
-    /// Referendes an entry in the collection which has a value.
-    Occupied { child: ChildMut<'a, K, V, S> },
+    /// References an entry in the collection which has a value.
+    Occupied {
+        child: ChildMut<'a, K, V, S>,
+    },
 }
 
 impl<'a, K, V, S> Entry<'a, K, V, S>
