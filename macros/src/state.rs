@@ -13,7 +13,7 @@ pub fn derive(item: TokenStream) -> TokenStream {
             Fields::Unnamed(_) => is_tuple_struct = true,
             _ => {},
         },
-        _ => {},
+        _ => todo!("Currently only structs are supported"),
     }
 
     let field_names = || struct_fields(&item).map(|field| &field.ident);
