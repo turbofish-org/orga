@@ -1,4 +1,4 @@
-pub use orga_macros::*;
+pub use orga_macros::State;
 use crate::store::*;
 use crate::Result;
 
