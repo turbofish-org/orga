@@ -106,4 +106,29 @@ mod tests {
 
        assert_eq!(res, None);
    }
+
+   #[test]
+   fn simple_get_next() {
+       let mut merk = TempMerk::new().unwrap();
+       let mut store = MerkStore::new(&mut merk);
+       store.put(vec![1, 2, 3], vec![2]).unwrap();
+       store.put(vec![3, 4, 5], vec![4]).unwrap();
+       store.write(vec![]).unwrap();
+
+       let builder = ProofBuilder::new(&store);
+       let key = [3, 4, 4];
+       assert_eq!(builder.get_next(&key[..]).unwrap(), Some((vec![3, 4, 5], vec![4])));
+
+       let proof = builder.build().unwrap();
+       let root_hash = merk.root_hash();
+       let map = verify(proof.as_slice(), root_hash).unwrap();
+       let mut iter = map.range(&[3, 4, 4][..]..=&[3, 4, 5][..]);
+       let test = map.get(&[3, 4, 5]).unwrap();
+       println!("{:?}", test);
+       assert_ne!(test, None);
+
+       let res = iter.next().unwrap().unwrap();
+
+       assert_eq!(res, (&[3, 4, 5][..], &[4][..]));
+   }
 }
