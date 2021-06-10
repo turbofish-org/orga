@@ -4,6 +4,7 @@ use crate::store::*;
 use merk::{BatchEntry, Merk, Op, rocksdb};
 use std::collections::BTreeMap;
 use std::mem::transmute;
+use merk::tree::Tree;
 
 type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
@@ -71,15 +72,25 @@ impl<'a> Read for MerkStore<'a> {
         // (loading if necessary)
         let mut iter = self.merk.raw_iter();
         iter.seek(start);
-        iter.next();
 
         if !iter.valid() {
             iter.status()?;
             return Ok(None);
         }
 
+        if iter.key().unwrap() == start {
+            iter.next();
+
+            if !iter.valid() {
+                iter.status()?;
+                return Ok(None);
+            }
+        }
+
         let key = iter.key().unwrap();
-        let value = iter.value().unwrap();
+        let tree_bytes = iter.value().unwrap();
+        let tree = Tree::decode(vec![], tree_bytes); 
+        let value = tree.value();
         Ok(Some((key.to_vec(), value.to_vec())))
     }
 }
