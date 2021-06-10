@@ -54,49 +54,56 @@ impl<'a> store::Read for ProofBuilder<'a> {
                     .borrow_mut()
                     .insert_range_inclusive(range);
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use super::super::*;
-//     use crate::store::*;
-//     use merk::test_utils::TempMerk;
-//     use merk::verify_proof;
+                (next_key.to_vec(), value.to_vec())
+            });
+        Ok(maybe_entry)
+    }
+}
 
-//     #[test]
-//     fn simple() {
-//         let mut merk = TempMerk::new().unwrap();
-//         let mut store = MerkStore::new(&mut merk);
-//         store.put(vec![1, 2, 3], vec![2]).unwrap();
-//         store.put(vec![3, 4, 5], vec![4]).unwrap();
-//         store.write(vec![]).unwrap();
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use super::super::*;
+    use crate::store::*;
+    use merk::test_utils::TempMerk;
+    use merk::proofs::query::verify;
 
-//         let builder = ProofBuilder::new(&store);
-//         let key = [1, 2, 3];
-//         assert_eq!(builder.get(&key[..]).unwrap(), Some(vec![2]));
-    
-//         let proof = builder.build().unwrap();
-//         let root_hash = merk.root_hash();
-//         let res = verify_proof(proof.as_slice(), &[vec![1, 2, 3]], root_hash).unwrap();
+    #[test]
+    fn simple() {
+        let mut merk = TempMerk::new().unwrap();
+        let mut store = MerkStore::new(&mut merk);
+        store.put(vec![1, 2, 3], vec![2]).unwrap();
+        store.put(vec![3, 4, 5], vec![4]).unwrap();
+        store.write(vec![]).unwrap();
 
-//         assert_eq!(res[0], Some(vec![2]));
-//     }
+        let builder = ProofBuilder::new(&store);
+        let key = [1, 2, 3];
+        assert_eq!(builder.get(&key[..]).unwrap(), Some(vec![2]));
+ 
+        let proof = builder.build().unwrap();
+        let root_hash = merk.root_hash();
+        let map = verify(proof.as_slice(), root_hash).unwrap();
+        let res = map.get(&[1, 2, 3]).unwrap();
+        assert_eq!(res, Some(&[2][..]));
+    }
 
-//     #[test]
-//     fn absence() {
-//         let mut merk = TempMerk::new().unwrap();
-//         let mut store = MerkStore::new(&mut merk);
-//         store.put(vec![1, 2, 3], vec![2]).unwrap();
-//         store.put(vec![3, 4, 5], vec![4]).unwrap();
-//         store.write(vec![]).unwrap();
+   #[test]
+   fn absence() {
+       let mut merk = TempMerk::new().unwrap();
+       let mut store = MerkStore::new(&mut merk);
+       store.put(vec![1, 2, 3], vec![2]).unwrap();
+       store.put(vec![3, 4, 5], vec![4]).unwrap();
+       store.write(vec![]).unwrap();
 
-//         let builder = ProofBuilder::new(&store);
-//         let key = [5];
-//         assert_eq!(builder.get(&key[..]).unwrap(), None);
-    
-//         let proof = builder.build().unwrap();
-//         let root_hash = merk.root_hash();
-//         let res = verify_proof(proof.as_slice(), &[vec![5]], root_hash).unwrap();
+       let builder = ProofBuilder::new(&store);
+       let key = [5];
+       assert_eq!(builder.get(&key[..]).unwrap(), None);
+ 
+       let proof = builder.build().unwrap();
+       let root_hash = merk.root_hash();
+       let map = verify(proof.as_slice(), root_hash).unwrap();
+       let res = map.get(&[5]).unwrap();
 
-//         assert_eq!(res[0], None);
-//     }
-// }
+       assert_eq!(res, None);
+   }
+}
