@@ -43,19 +43,25 @@ impl<'a> store::Read for ProofBuilder<'a> {
 
         self.store.get(key)
     }
-
+    
     fn get_next(&self, key: &[u8]) -> Result<Option<store::KV>> {
+        let mut maybe_next_key = None;
         let maybe_entry = self.store
             .get_next(key)?
             .map(|(next_key, value)| {
                 // TODO: support inserting `(Bound, Bound)` into query
-                let range = key.to_vec()..=next_key.to_vec();
-                self.query
-                    .borrow_mut()
-                    .insert_range_inclusive(range);
+                maybe_next_key = Some(next_key.clone());
 
                 (next_key.to_vec(), value.to_vec())
             });
+        let range = match maybe_next_key {
+            Some(next_key) => key.to_vec()..=next_key.to_vec(),
+            None => key.to_vec()..=key.to_vec(),
+        };
+
+        self.query
+            .borrow_mut()
+            .insert_range_inclusive(range);
         Ok(maybe_entry)
     }
 }
@@ -130,5 +136,27 @@ mod tests {
        let res = iter.next().unwrap().unwrap();
 
        assert_eq!(res, (&[3, 4, 5][..], &[4][..]));
+   }
+
+   #[test]
+   fn none_get_next() {
+        let mut merk = TempMerk::new().unwrap();
+        let mut store = MerkStore::new(&mut merk);
+        store.put(vec![1, 2, 3], vec![2]).unwrap();
+        store.put(vec![3, 4, 5], vec![4]).unwrap();
+        store.write(vec![]).unwrap();
+
+        let builder = ProofBuilder::new(&store);
+        let key = [3, 4, 5];
+        assert_eq!(builder.get_next(&key[..]).unwrap(), None);
+
+        let proof = builder.build().unwrap();
+        let root_hash = merk.root_hash();
+        let map = verify(proof.as_slice(), root_hash).unwrap();
+        assert!(map.get(&[3, 4, 5]).unwrap().is_some());
+        let mut iter = map.range(&[3, 4, 5][..]..=&[3, 4, 7][..]);
+
+        let res = iter.next().unwrap().unwrap();
+        //assert!(res.is_none());
    }
 }
