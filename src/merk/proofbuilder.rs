@@ -129,9 +129,6 @@ mod tests {
        let root_hash = merk.root_hash();
        let map = verify(proof.as_slice(), root_hash).unwrap();
        let mut iter = map.range(&[3, 4, 4][..]..=&[3, 4, 5][..]);
-       let test = map.get(&[3, 4, 5]).unwrap();
-       println!("{:?}", test);
-       assert_ne!(test, None);
 
        let res = iter.next().unwrap().unwrap();
 
