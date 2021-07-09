@@ -22,6 +22,12 @@ pub struct Map<K, V, S = DefaultBackingStore> {
     children: HashMap<K, Option<V>>,
 }
 
+impl<K, V, S> From<Map<K, V, S>> for () {
+    fn from(_map: Map<K, V, S>) -> () {
+        ()
+    }
+}
+
 impl<K, V, S> State<S> for Map<K, V, S>
 where
     K: Encode + Terminated + Eq + Hash,
@@ -124,12 +130,19 @@ where
             })
             .transpose()
     }
-}
 
-impl<K: Hash + Eq, V, S> Map<K, V, S> {
     /// Removes the value at the given key, if any.
-    pub fn remove(&mut self, key: K) {
-        self.children.insert(key, None);
+    pub fn remove(&mut self, key: K) -> Result<Option<V::Encoding>> {
+        if self.children.contains_key(&key) {
+            let result = self.children.remove(&key).unwrap().map(Into::into);
+            self.children.insert(key, None);
+            Ok(result)
+        } else {
+            Ok(self.get_from_store(&key)?.map(|val| {
+                self.children.insert(key, None);
+                val.into()
+            }))
+        }
     }
 }
 
