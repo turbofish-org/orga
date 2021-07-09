@@ -133,4 +133,12 @@ mod test {
 
         deque.push_back(42).unwrap();
     }
+
+    #[test]
+    fn deque_u32_pop_front_empty() {
+        let store = Store::new(MapStore::new());
+        let mut deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
+
+        assert_eq!(deque.pop_front().unwrap(), None);
+    }
 }
