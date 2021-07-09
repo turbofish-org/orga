@@ -304,9 +304,7 @@ pub enum Entry<'a, K, V, S> {
     },
 
     /// References an entry in the collection which has a value.
-    Occupied {
-        child: ChildMut<'a, K, V, S>,
-    },
+    Occupied { child: ChildMut<'a, K, V, S> },
 }
 
 impl<'a, K, V, S> Entry<'a, K, V, S>
