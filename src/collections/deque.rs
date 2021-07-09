@@ -122,7 +122,7 @@ mod test {
     #[test]
     fn deque_u32_create() {
         let store = Store::new(MapStore::new());
-        let mut deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
+        let deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
     }
 
     #[test]
@@ -145,6 +145,11 @@ mod test {
     fn deque_u32_pop_front_empty() {
         let store = Store::new(MapStore::new());
         let mut deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
+
+        match deque.pop_front().unwrap() {
+            Some(_) => assert!(false),
+            None => ()
+        }
     }
 
     #[test]
@@ -152,7 +157,8 @@ mod test {
         let store = Store::new(MapStore::new());
         let mut deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
 
-        deque.push_front(42);
+        deque.push_front(42).unwrap();
+        assert_eq!(deque.pop_front().unwrap().unwrap(), 42);
 
         match deque.pop_front().unwrap() {
             Some(v) => assert_eq!(v, 42),
@@ -173,7 +179,7 @@ mod test {
         let store = Store::new(MapStore::new());
         let mut deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
 
-        deque.push_back(42);
+        deque.push_back(42).unwrap();
         assert_eq!(deque.pop_back().unwrap(), ())
     }
 
