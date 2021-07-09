@@ -60,7 +60,7 @@ impl<T: State<S>, S: Read> Deque<T, S> {
     }
 
     pub fn back(&self) -> Result<Option<Child<T>>> {
-        self.map.get(self.meta.tail)
+        self.map.get(self.meta.tail - 1)
     }
 }
 
@@ -204,5 +204,14 @@ mod test {
 
         deque.push_front(42);
         assert_eq!(*deque.front().unwrap().unwrap(), 42)
+    }
+
+    #[test]
+    fn deque_u32_back() {
+        let store = Store::new(MapStore::new());
+        let mut deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
+
+        deque.push_back(42);
+        assert_eq!(*deque.back().unwrap().unwrap(), 42)
     }
 }
