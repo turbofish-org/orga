@@ -1,4 +1,7 @@
-use crate::{store::{Read, KV}, Result};
+use crate::{
+    store::{Read, KV},
+    Result,
+};
 use blocking::block_on;
 use tendermint_rpc::{Client, HttpClient};
 

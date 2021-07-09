@@ -1,11 +1,11 @@
-use orga::encoding::{Encode, Decode};
+use orga::encoding::{Decode, Encode};
 use orga::state::State;
 use orga::store::{MapStore, Store};
 
 #[derive(Encode, Decode, PartialEq, Debug)]
 struct Foo {
     a: u8,
-    b: Option<u8>
+    b: Option<u8>,
 }
 
 #[test]
@@ -38,10 +38,7 @@ fn struct_state() {
     let mapstore = MapStore::new();
     let store = Store::new(mapstore);
 
-    let mut state = MyStruct::create(
-        store.clone(),
-        Default::default(),
-    ).unwrap();
+    let mut state = MyStruct::create(store.clone(), Default::default()).unwrap();
 
     assert_eq!(state.a, 0);
     assert_eq!(state.c.0, 0);
