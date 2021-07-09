@@ -181,4 +181,19 @@ mod test {
         assert_eq!(*deque.get(1).unwrap().unwrap(), 12);
         assert_eq!(*deque.get(2).unwrap().unwrap(), 13);
     }
+
+    #[test]
+    fn deque_u32_get_iob() {
+        let store = Store::new(MapStore::new());
+        let mut deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
+
+        deque.push_front(12);
+        deque.push_back(13);
+        deque.push_front(1);
+
+        let result = match deque.get(3).unwrap() {
+            Some(_) => assert!(false),
+            None => ()
+        };
+    }
 }
