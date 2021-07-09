@@ -1,10 +1,10 @@
 use crate::encoding::{Decode, Encode};
 
-pub mod map;
 pub mod deque;
+pub mod map;
 
-pub use map::Map;
 pub use deque::Deque;
+pub use map::Map;
 
 /// A trait for types which can be converted to or from a key/value pair.
 ///
