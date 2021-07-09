@@ -125,4 +125,12 @@ mod test {
 
         deque.push_front(42).unwrap();
     }
+
+    #[test]
+    fn deque_u32_push_back() {
+        let store = Store::new(MapStore::new());
+        let mut deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
+
+        deque.push_back(42).unwrap();
+    }
 }
