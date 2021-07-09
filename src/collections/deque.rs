@@ -81,15 +81,13 @@ impl<T: State<S>, S: Write> Deque<T, S> {
         Ok(())
     }
 
-    pub fn pop_front(&mut self) -> Result<()> {
+    pub fn pop_front(&mut self) -> Result<Option<T::Encoding>> {
         if self.len() == 0 {
-            return Ok(());
+            return Ok(None);
         }
 
-        self.map.remove(self.meta.head);
         self.meta.head += 1;
-        
-        Ok(())
+        self.map.remove(self.meta.head - 1)
     }
 
     pub fn pop_back(&mut self) -> Result<()> {
