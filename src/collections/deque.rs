@@ -99,15 +99,13 @@ impl<T: State<S>, S: Write> Deque<T, S> {
         self.map.remove(self.meta.head - 1)
     }
 
-    pub fn pop_back(&mut self) -> Result<()> {
+    pub fn pop_back(&mut self) -> Result<Option<T::Encoding>> {
         if self.len() == 0 {
-            return Ok(());
+            return Ok(None);
         }
 
         self.meta.tail -= 1;
-        self.map.remove(self.meta.tail);
-
-        Ok(())
+        self.map.remove(self.meta.tail)
     }
 
     pub fn get_mut(&mut self, index: u64) -> Result<Option<ChildMut<u64, T, S>>> {
