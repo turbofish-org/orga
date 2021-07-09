@@ -167,4 +167,18 @@ mod test {
         deque.push_back(42);
         assert_eq!(deque.pop_back().unwrap(), ())
     }
+
+    #[test]
+    fn deque_u32_usage() {
+        let store = Store::new(MapStore::new());
+        let mut deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
+
+        deque.push_front(12);
+        deque.push_back(13);
+        deque.push_front(1);
+
+        assert_eq!(*deque.get(0).unwrap().unwrap(), 1);
+        assert_eq!(*deque.get(1).unwrap().unwrap(), 12);
+        assert_eq!(*deque.get(2).unwrap().unwrap(), 13);
+    }
 }
