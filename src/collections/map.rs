@@ -43,7 +43,8 @@ where
     }
 
     fn flush(mut self) -> Result<()>
-        where S: Write
+    where
+        S: Write,
     {
         for (key, maybe_value) in self.children.drain() {
             Self::apply_change(&mut self.store, &key, maybe_value)?;
@@ -242,7 +243,12 @@ pub enum ChildMut<'a, K, V, S> {
     Modified(hash_map::OccupiedEntry<'a, K, Option<V>>),
 }
 
-impl<'a, K: Hash + Eq, V, S> ChildMut<'a, K, V, S> {
+impl<'a, K, V, S> ChildMut<'a, K, V, S>
+where
+    K: Hash + Eq + Encode + Terminated,
+    V: State<S>,
+    S: Read,
+{
     /// Removes the value and all of its child key/value entries (if any) from
     /// the parent collection.
     pub fn remove(self) {
@@ -347,6 +353,7 @@ where
 impl<'a, K, V, S> Entry<'a, K, V, S>
 where
     K: Encode + Terminated + Eq + Hash,
+    V: State<S>,
     S: Write,
 {
     /// Removes the value for the `Entry` if it exists. Returns a boolean which
