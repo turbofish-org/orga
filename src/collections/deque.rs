@@ -1,9 +1,9 @@
-use super::map::{Map, Child, ChildMut};
+use super::map::{Child, ChildMut, Map};
+use crate::encoding::{Decode, Encode};
 use crate::state::State;
 use crate::store::DefaultBackingStore;
 use crate::store::{Read, Store, Write};
 use crate::Result;
-use crate::encoding::{Encode, Decode};
 
 pub struct Deque<T, S = DefaultBackingStore> {
     meta: Meta,
@@ -13,7 +13,7 @@ pub struct Deque<T, S = DefaultBackingStore> {
 #[derive(Encode, Decode)]
 pub struct Meta {
     head: u64,
-    tail: u64, 
+    tail: u64,
 }
 
 impl Default for Meta {
@@ -106,7 +106,7 @@ impl<T: State<S>, S: Write> Deque<T, S> {
 
         self.meta.tail -= 1;
         self.map.remove(self.meta.tail);
-        
+
         Ok(())
     }
 
