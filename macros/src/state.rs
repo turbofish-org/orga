@@ -69,6 +69,18 @@ pub fn derive(item: TokenStream) -> TokenStream {
         )
     };
 
+    let from_body = if is_tuple_struct {
+        let indexes = seq();
+        quote! (
+            #(value.#indexes.into(),)*
+        )
+    } else {
+        let names = field_names();
+        quote! (
+            #(value.#names.into(),)*
+        )
+    };
+
     let output = quote! {
         impl ::orga::state::State for #name {
             type Encoding = (
@@ -86,6 +98,12 @@ pub fn derive(item: TokenStream) -> TokenStream {
 
             fn flush(self) -> ::orga::Result<Self::Encoding> {
                 #flush_body
+            }
+        }
+
+        impl From<#name> for <#name as ::orga::state::State>::Encoding {
+            fn from(value: #name) -> Self {
+                (#from_body)
             }
         }
     };
