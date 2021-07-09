@@ -107,3 +107,14 @@ impl<T: State<S>, S: Write> Deque<T, S> {
         self.map.get_mut(index + self.meta.head)
     }
 }
+
+mod test {
+    use super::*;
+    use crate::store::MapStore;
+
+    #[test]
+    fn deque_u32_create() {
+        let store = Store::new(MapStore::new());
+        let mut deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
+    }
+}
