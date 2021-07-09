@@ -19,7 +19,16 @@ pub struct Meta {
 impl Default for Meta {
     fn default() -> Self {
         let midpoint = u64::MAX / 2;
-        Meta { head: midpoint, tail: midpoint }
+        Meta {
+            head: midpoint,
+            tail: midpoint,
+        }
+    }
+}
+
+impl<T, S> From<Deque<T, S>> for Meta {
+    fn from(deque: Deque<T, S>) -> Meta {
+        deque.meta
     }
 }
 
