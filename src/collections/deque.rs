@@ -117,4 +117,12 @@ mod test {
         let store = Store::new(MapStore::new());
         let mut deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
     }
+
+    #[test]
+    fn deque_u32_push_front() {
+        let store = Store::new(MapStore::new());
+        let mut deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
+
+        deque.push_front(42).unwrap();
+    }
 }
