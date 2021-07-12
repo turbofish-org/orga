@@ -35,7 +35,7 @@ where
 
     fn create(store: Store<S>, _: ()) -> Result<Self> {
         Ok(Map {
-            store: store,
+            store,
             children: Default::default(),
         })
     }
