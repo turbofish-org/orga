@@ -117,6 +117,7 @@ impl<T: State<S>, S: Write> Deque<T, S> {
     }
 }
 
+#[allow(unused_imports)]
 mod test {
     use super::*;
     use crate::store::MapStore;
