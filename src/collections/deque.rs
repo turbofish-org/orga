@@ -60,6 +60,10 @@ impl<T: State<S>, S: Read> Deque<T, S> {
         self.meta.tail - self.meta.head
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn get(&self, index: u64) -> Result<Option<Child<T>>> {
         self.map.get(index + self.meta.head)
     }
@@ -91,7 +95,7 @@ impl<T: State<S>, S: Write> Deque<T, S> {
     }
 
     pub fn pop_front(&mut self) -> Result<Option<ReadOnly<T>>> {
-        if self.len() == 0 {
+        if self.is_empty() {
             return Ok(None);
         }
 
@@ -100,7 +104,7 @@ impl<T: State<S>, S: Write> Deque<T, S> {
     }
 
     pub fn pop_back(&mut self) -> Result<Option<ReadOnly<T>>> {
-        if self.len() == 0 {
+        if self.is_empty() {
             return Ok(None);
         }
 
