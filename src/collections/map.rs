@@ -286,16 +286,18 @@ where
 {
     /// Removes the value and all of its child key/value entries (if any) from
     /// the parent collection.
-    pub fn remove(self) {
+    pub fn remove(self) -> Result<()> {
         match self {
             ChildMut::Unmodified(mut inner) => {
                 let (key, _, parent) = inner.take().unwrap();
-                parent.remove(key);
+                parent.remove(key)?;
             }
             ChildMut::Modified(mut entry) => {
                 entry.insert(None);
             }
-        }
+        };
+
+        Ok(())
     }
 }
 
