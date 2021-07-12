@@ -397,7 +397,7 @@ where
     pub fn remove(self) -> Result<bool> {
         Ok(match self {
             Entry::Occupied { child } => {
-                child.remove();
+                child.remove()?;
                 true
             }
             Entry::Vacant { .. } => false,
