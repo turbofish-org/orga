@@ -1,4 +1,4 @@
-use super::map::{Child, ChildMut, Map};
+use super::map::{Child, ChildMut, Map, ReadOnly};
 use crate::encoding::{Decode, Encode};
 use crate::state::State;
 use crate::store::DefaultBackingStore;
@@ -90,7 +90,7 @@ impl<T: State<S>, S: Write> Deque<T, S> {
         Ok(())
     }
 
-    pub fn pop_front(&mut self) -> Result<Option<T>> {
+    pub fn pop_front(&mut self) -> Result<Option<ReadOnly<T>>> {
         if self.len() == 0 {
             return Ok(None);
         }
@@ -99,7 +99,7 @@ impl<T: State<S>, S: Write> Deque<T, S> {
         self.map.remove(self.meta.head - 1)
     }
 
-    pub fn pop_back(&mut self) -> Result<Option<T>> {
+    pub fn pop_back(&mut self) -> Result<Option<ReadOnly<T>>> {
         if self.len() == 0 {
             return Ok(None);
         }
@@ -146,7 +146,7 @@ mod test {
 
         match deque.pop_front().unwrap() {
             Some(_) => assert!(false),
-            None => ()
+            None => (),
         }
     }
 
@@ -158,7 +158,7 @@ mod test {
         deque.push_front(42).unwrap();
 
         match deque.pop_front().unwrap() {
-            Some(v) => assert_eq!(v, 42),
+            Some(v) => assert_eq!(*v, 42),
             None => (),
         }
     }
@@ -170,7 +170,7 @@ mod test {
 
         match deque.pop_back().unwrap() {
             Some(_) => assert!(false),
-            None => ()
+            None => (),
         }
     }
 
@@ -180,7 +180,7 @@ mod test {
         let mut deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
 
         deque.push_back(42).unwrap();
-        assert_eq!(deque.pop_back().unwrap().unwrap(), 42)
+        assert_eq!(*deque.pop_back().unwrap().unwrap(), 42)
     }
 
     #[test]
@@ -255,10 +255,16 @@ mod test {
     #[test]
     fn deque_complex_types() {
         let store = Store::new(MapStore::new());
-        let mut deque: Deque<Map<u32, u32>> = Deque::create(store.clone(), Meta::default()).unwrap();
-        
+        let mut deque: Deque<Map<u32, u32>> =
+            Deque::create(store.clone(), Meta::default()).unwrap();
+
         deque.push_front(()).unwrap();
-        
-        let map: Map<u32, u32> = deque.pop_front().unwrap().unwrap();
+
+        let map = deque.pop_front().unwrap().unwrap();
+
+        match map.get(1).unwrap() {
+            Some(_) => assert!(false),
+            None => (),
+        }
     }
 }
