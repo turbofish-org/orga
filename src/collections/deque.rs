@@ -125,7 +125,7 @@ mod test {
     #[test]
     fn deque_u32_create() {
         let store = Store::new(MapStore::new());
-        let deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
+        let _deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
     }
 
     #[test]

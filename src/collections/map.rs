@@ -538,7 +538,7 @@ mod tests {
         map.entry(14).unwrap().or_insert(15).unwrap();
         map.entry(16).unwrap().or_insert(17).unwrap();
         assert!(map.children.get(&12).unwrap().is_some());
-        map.remove(12);
+        map.remove(12).unwrap();
         assert!(map.children.get(&12).unwrap().is_none());
         map.flush().unwrap();
         assert!(store.get(&enc(12)).unwrap().is_none());
@@ -547,7 +547,7 @@ mod tests {
         let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
         assert_eq!(*map.get(14).unwrap().unwrap(), 15);
         assert_eq!(*map.get(16).unwrap().unwrap(), 17);
-        map.remove(14);
+        map.remove(14).unwrap();
         // Also remove a value by entry
         let entry = map.entry(16).unwrap();
         assert!(entry.remove().unwrap());
