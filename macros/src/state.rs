@@ -1,7 +1,7 @@
-use std::str::FromStr;
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
+use std::str::FromStr;
 use syn::*;
 
 pub fn derive(item: TokenStream) -> TokenStream {
@@ -11,17 +11,15 @@ pub fn derive(item: TokenStream) -> TokenStream {
     match &item.data {
         Data::Struct(data) => match data.fields {
             Fields::Unnamed(_) => is_tuple_struct = true,
-            _ => {},
+            _ => {}
         },
         _ => todo!("Currently only structs are supported"),
     }
 
     let field_names = || struct_fields(&item).map(|field| &field.ident);
     let field_types = || struct_fields(&item).map(|field| &field.ty);
-    let seq = || {
-        (0..field_names().count())
-            .map(|i| TokenStream2::from_str(&i.to_string()).unwrap())
-    };
+    let seq =
+        || (0..field_names().count()).map(|i| TokenStream2::from_str(&i.to_string()).unwrap());
 
     let name = &item.ident;
     let field_types_encoding = field_types();
@@ -50,7 +48,7 @@ pub fn derive(item: TokenStream) -> TokenStream {
                     )?,
                 )*
             })
-        ) 
+        )
     };
 
     let flush_body = if is_tuple_struct {
@@ -111,9 +109,7 @@ pub fn derive(item: TokenStream) -> TokenStream {
     output.into()
 }
 
-fn struct_fields<'a>(
-    item: &'a DeriveInput
-) -> impl Iterator<Item=&'a Field> {
+fn struct_fields<'a>(item: &'a DeriveInput) -> impl Iterator<Item = &'a Field> {
     let data = match item.data {
         Data::Struct(ref data) => data,
         Data::Enum(ref _data) => todo!("#[derive(State)] does not yet support enums"),
