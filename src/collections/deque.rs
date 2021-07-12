@@ -90,7 +90,7 @@ impl<T: State<S>, S: Write> Deque<T, S> {
         Ok(())
     }
 
-    pub fn pop_front(&mut self) -> Result<Option<T::Encoding>> {
+    pub fn pop_front(&mut self) -> Result<Option<T>> {
         if self.len() == 0 {
             return Ok(None);
         }
@@ -99,7 +99,7 @@ impl<T: State<S>, S: Write> Deque<T, S> {
         self.map.remove(self.meta.head - 1)
     }
 
-    pub fn pop_back(&mut self) -> Result<Option<T::Encoding>> {
+    pub fn pop_back(&mut self) -> Result<Option<T>> {
         if self.len() == 0 {
             return Ok(None);
         }
@@ -156,7 +156,6 @@ mod test {
         let mut deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
 
         deque.push_front(42).unwrap();
-        assert_eq!(deque.pop_front().unwrap().unwrap(), 42);
 
         match deque.pop_front().unwrap() {
             Some(v) => assert_eq!(v, 42),
@@ -169,7 +168,10 @@ mod test {
         let store = Store::new(MapStore::new());
         let mut deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
 
-        assert_eq!(deque.pop_back().unwrap(), None)
+        match deque.pop_back().unwrap() {
+            Some(_) => assert!(false),
+            None => ()
+        }
     }
 
     #[test]
@@ -200,11 +202,11 @@ mod test {
         let store = Store::new(MapStore::new());
         let mut deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
 
-        deque.push_front(12);
-        deque.push_back(13);
-        deque.push_front(1);
+        deque.push_front(12).unwrap();
+        deque.push_back(13).unwrap();
+        deque.push_front(1).unwrap();
 
-        let result = match deque.get(3).unwrap() {
+        let _result = match deque.get(3).unwrap() {
             Some(_) => assert!(false),
             None => (),
         };
@@ -215,7 +217,7 @@ mod test {
         let store = Store::new(MapStore::new());
         let mut deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
 
-        deque.push_front(42);
+        deque.push_front(42).unwrap();
         assert_eq!(*deque.front().unwrap().unwrap(), 42)
     }
 
@@ -224,7 +226,7 @@ mod test {
         let store = Store::new(MapStore::new());
         let mut deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
 
-        deque.push_back(42);
+        deque.push_back(42).unwrap();
         assert_eq!(*deque.back().unwrap().unwrap(), 42)
     }
 
@@ -233,7 +235,8 @@ mod test {
         let store = Store::new(MapStore::new());
         let mut deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
 
-        deque.push_back(42);
+        deque.push_back(42).unwrap();
+
         assert_eq!(
             *deque.front().unwrap().unwrap(),
             *deque.back().unwrap().unwrap()
@@ -245,7 +248,17 @@ mod test {
         let store = Store::new(MapStore::new());
         let mut deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
 
-        deque.push_front(42);
+        deque.push_front(42).unwrap();
         assert_eq!(*deque.get_mut(0).unwrap().unwrap(), 42)
+    }
+
+    #[test]
+    fn deque_complex_types() {
+        let store = Store::new(MapStore::new());
+        let mut deque: Deque<Map<u32, u32>> = Deque::create(store.clone(), Meta::default()).unwrap();
+        
+        deque.push_front(()).unwrap();
+        
+        let map: Map<u32, u32> = deque.pop_front().unwrap().unwrap();
     }
 }
