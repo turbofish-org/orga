@@ -143,11 +143,14 @@ where
     }
 
     /// Removes the value at the given key, if any.
-    pub fn remove(&mut self, key: K) -> Result<Option<V>> {
+    pub fn remove(&mut self, key: K) -> Result<Option<ReadOnly<V>>> {
         if self.children.contains_key(&key) {
             let result = self.children.remove(&key).unwrap();
             self.children.insert(key, None);
-            Ok(result)
+            match result {
+                Some(val) => Ok(Some(ReadOnly::new(val))),
+                None => Ok(None),
+            }
         } else {
             Ok(self.get_from_store(&key)?.map(|val| {
                 self.children.insert(key, None);
@@ -210,6 +213,30 @@ where
         }
 
         Ok(())
+    }
+}
+/// An immutable owned reference to an existing value in a collection.
+pub struct ReadOnly<V> {
+    inner: V,
+}
+
+impl<V> Deref for ReadOnly<V> {
+    type Target = V;
+
+    fn deref(&self) -> &V {
+        &self.inner
+    }
+}
+
+impl<V> From<V> for ReadOnly<V> {
+    fn from(value: V) -> Self {
+        ReadOnly { inner: value }
+    }
+}
+
+impl<V> ReadOnly<V> {
+    fn new(inner: V) -> Self {
+        ReadOnly { inner }
     }
 }
 
