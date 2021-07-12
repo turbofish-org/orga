@@ -23,9 +23,7 @@ pub struct Map<K, V, S = DefaultBackingStore> {
 }
 
 impl<K, V, S> From<Map<K, V, S>> for () {
-    fn from(_map: Map<K, V, S>) -> () {
-        ()
-    }
+    fn from(_map: Map<K, V, S>){}
 }
 
 impl<K, V, S> State<S> for Map<K, V, S>
