@@ -143,9 +143,9 @@ where
     }
 
     /// Removes the value at the given key, if any.
-    pub fn remove(&mut self, key: K) -> Result<Option<V::Encoding>> {
+    pub fn remove(&mut self, key: K) -> Result<Option<V>> {
         if self.children.contains_key(&key) {
-            let result = self.children.remove(&key).unwrap().map(Into::into);
+            let result = self.children.remove(&key).unwrap();
             self.children.insert(key, None);
             Ok(result)
         } else {
