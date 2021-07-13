@@ -108,7 +108,7 @@ pub fn derive(item: TokenStream) -> TokenStream {
     output.into()
 }
 
-fn struct_fields<'a>(item: &'a DeriveInput) -> impl Iterator<Item = &'a Field> {
+fn struct_fields(item: &DeriveInput) -> impl Iterator<Item = &Field> {
     let data = match item.data {
         Data::Struct(ref data) => data,
         Data::Enum(ref _data) => todo!("#[derive(State)] does not yet support enums"),
