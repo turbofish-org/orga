@@ -9,9 +9,11 @@ pub fn derive(item: TokenStream) -> TokenStream {
 
     let mut is_tuple_struct = false;
     match &item.data {
-        Data::Struct(data) => if let Fields::Unnamed(_) = data.fields { 
-            is_tuple_struct = true 
-        },
+        Data::Struct(data) => {
+            if let Fields::Unnamed(_) = data.fields {
+                is_tuple_struct = true
+            }
+        }
         _ => todo!("Currently only structs are supported"),
     }
 
