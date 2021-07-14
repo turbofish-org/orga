@@ -28,65 +28,26 @@ pub trait Next<T> {
     fn next(&self) -> Option<T>;
 }
 
-impl Next<u8> for u8 {
-    fn next(&self) -> Option<Self> {
-        self.checked_add(1)
-    }
+macro_rules! impl_next {
+    ($T:ty) => {
+        impl Next<$T> for $T {
+            fn next(&self) -> Option<Self> {
+                self.checked_add(1)
+            }
+        }
+    };
 }
 
-impl Next<u16> for u16 {
-    fn next(&self) -> Option<Self> {
-        self.checked_add(1)
-    }
-}
-
-impl Next<u32> for u32 {
-    fn next(&self) -> Option<Self> {
-        self.checked_add(1)
-    }
-}
-
-impl Next<u64> for u64 {
-    fn next(&self) -> Option<Self> {
-        self.checked_add(1)
-    }
-}
-
-impl Next<u128> for u128 {
-    fn next(&self) -> Option<Self> {
-        self.checked_add(1)
-    }
-}
-
-impl Next<i8> for i8 {
-    fn next(&self) -> Option<Self> {
-        self.checked_add(1)
-    }
-}
-
-impl Next<i16> for i16 {
-    fn next(&self) -> Option<Self> {
-        self.checked_add(1)
-    }
-}
-
-impl Next<i32> for i32 {
-    fn next(&self) -> Option<Self> {
-        self.checked_add(1)
-    }
-}
-
-impl Next<i64> for i64 {
-    fn next(&self) -> Option<Self> {
-        self.checked_add(1)
-    }
-}
-
-impl Next<i128> for i128 {
-    fn next(&self) -> Option<Self> {
-        self.checked_add(1)
-    }
-}
+impl_next!(u8);
+impl_next!(u16);
+impl_next!(u32);
+impl_next!(u64);
+impl_next!(u128);
+impl_next!(i8);
+impl_next!(i16);
+impl_next!(i32);
+impl_next!(i64);
+impl_next!(i128);
 
 impl<T, const N: usize> Next<[T; N]> for [T; N]
 where
