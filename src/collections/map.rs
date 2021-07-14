@@ -60,12 +60,17 @@ where
 {
     pub fn contains_key(&self, key: K) -> Result<bool> {
         let child_contains = self.children.contains_key(&key);
-        let store_contains = match self.get_from_store(&key)? {
-            Some(..) => true,
-            None => false,
-        };
 
-        Ok(child_contains || store_contains)
+        if child_contains {
+            return Ok(child_contains);
+        } else {
+            let store_contains = match self.get_from_store(&key)? {
+                Some(..) => true,
+                None => false,
+            };
+
+            return Ok(store_contains);
+        }
     }
 
     /// Gets a reference to the value in the map for the given key, or `None` if
