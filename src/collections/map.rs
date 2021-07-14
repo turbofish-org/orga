@@ -62,14 +62,14 @@ where
         let child_contains = self.children.contains_key(&key);
 
         if child_contains {
-            return Ok(child_contains);
+            Ok(child_contains)
         } else {
             let store_contains = match self.get_from_store(&key)? {
                 Some(..) => true,
                 None => false,
             };
 
-            return Ok(store_contains);
+            Ok(store_contains)
         }
     }
 
