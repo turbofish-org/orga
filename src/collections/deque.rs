@@ -134,6 +134,7 @@ mod test {
         let mut deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
 
         deque.push_front(42).unwrap();
+        assert_eq!(deque.len(), 1);
     }
 
     #[test]
@@ -142,6 +143,7 @@ mod test {
         let mut deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
 
         deque.push_back(42).unwrap();
+        assert_eq!(deque.len(), 1);
     }
 
     #[test]
