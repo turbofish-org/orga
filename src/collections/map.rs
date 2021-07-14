@@ -218,6 +218,7 @@ where
         Ok(())
     }
 }
+
 /// An immutable owned reference to an existing value in a collection.
 pub struct ReadOnly<V> {
     inner: V,
