@@ -219,7 +219,7 @@ where
     }
 }
 
-/// An immutable owned reference to an existing value in a collection.
+/// A wrapper which only allows immutable access to its inner value.
 pub struct ReadOnly<V> {
     inner: V,
 }
