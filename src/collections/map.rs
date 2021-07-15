@@ -520,6 +520,10 @@ mod tests {
     use super::*;
     use crate::store::{MapStore, Store};
 
+    fn enc(n: u32) -> Vec<u8> {
+        n.encode().unwrap()
+    }
+
     #[test]
     fn nonexistent() {
         let store = Store::new(MapStore::new());
@@ -623,9 +627,5 @@ mod tests {
         map.flush().unwrap();
         assert!(store.get(&enc(14)).unwrap().is_none());
         assert!(store.get(&enc(16)).unwrap().is_none());
-    }
-
-    fn enc(n: u32) -> Vec<u8> {
-        n.encode().unwrap()
     }
 }
