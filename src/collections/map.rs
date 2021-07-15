@@ -3,6 +3,7 @@ use std::collections::{hash_map, HashMap};
 use std::hash::Hash;
 use std::ops::{Deref, DerefMut};
 
+use super::Next;
 use crate::state::*;
 use crate::store::*;
 use crate::Result;
@@ -213,6 +214,40 @@ where
         Ok(())
     }
 }
+
+pub struct MapIterator<'a, K, V, S>
+where
+    K: Next<K> + Encode + Terminated + Hash + Eq,
+    V: State<S>,
+    S: Read,
+{
+    map: &'a Map<K, V, S>,
+    current_key: K,
+    store: &'a Store<S>,
+}
+
+impl<'a, K, V, S> Iterator for MapIterator<'a, K, V, S>
+where
+    K: Next<K> + Encode + Terminated + Hash + Eq,
+    V: State<S>,
+    S: Read,
+{
+    type Item = (K, Child<'a, V>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.current_key.next().unwrap();
+
+        self.current_key = self.current_key.next().unwrap();
+        Some((
+            self.current_key.next().unwrap(),
+            self.map
+                .get(self.current_key.next().unwrap())
+                .unwrap()
+                .unwrap(),
+        ))
+    }
+}
+
 /// An immutable owned reference to an existing value in a collection.
 pub struct ReadOnly<V> {
     inner: V,
