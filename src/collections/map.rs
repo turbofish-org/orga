@@ -166,7 +166,7 @@ where
     S: Read,
 {
     /// Gets and decodes the first key that is not None returned by the internal store .get_next
-    /// method
+    /// method, if it exists. Otherwise, returns None
     pub fn get_start_key(&self) -> Result<Option<K>> {
         loop {
             match self.store.get_next(&[])? {
