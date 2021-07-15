@@ -161,6 +161,27 @@ where
 
 impl<K, V, S> Map<K, V, S>
 where
+    K: Encode + Decode + Terminated + Eq + Hash,
+    V: State<S>,
+    S: Read,
+{
+    /// Gets and decodes the first key that is not None returned by the internal store .get_next
+    /// method
+    pub fn get_start_key(&self) -> Result<Option<K>> {
+        loop {
+            match self.store.get_next(&[])? {
+                Some(entry) => {
+                    let start_key: K = Decode::decode(entry.0.as_slice())?;
+                    return Ok(Some(start_key));
+                }
+                None => (),
+            };
+        }
+    }
+}
+
+impl<K, V, S> Map<K, V, S>
+where
     K: Encode + Terminated,
     V: State<S>,
     S: Write,
@@ -217,18 +238,31 @@ where
 
 pub struct MapIterator<'a, K, V, S>
 where
-    K: Next<K> + Encode + Terminated + Hash + Eq,
+    K: Next<K> + Decode + Encode + Terminated + Hash + Eq,
     V: State<S>,
     S: Read,
 {
     map: &'a Map<K, V, S>,
     current_key: K,
-    store: &'a Store<S>,
+}
+
+impl<'a, K, V, S> MapIterator<'a, K, V, S>
+where
+    K: Next<K> + Decode + Encode + Terminated + Hash + Eq,
+    V: State<S>,
+    S: Read,
+{
+    fn new(map: &'a Map<K, V, S>) -> MapIterator<'a, K, V, S> {
+        MapIterator {
+            map,
+            current_key: map.get_start_key().unwrap().unwrap(),
+        }
+    }
 }
 
 impl<'a, K, V, S> Iterator for MapIterator<'a, K, V, S>
 where
-    K: Next<K> + Encode + Terminated + Hash + Eq,
+    K: Next<K> + Decode + Encode + Terminated + Hash + Eq,
     V: State<S>,
     S: Read,
 {
