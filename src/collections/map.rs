@@ -1,5 +1,5 @@
 use std::borrow::Borrow;
-use std::collections::{hash_map, HashMap};
+use std::collections::{hash_map, btree_map, HashMap, BTreeMap};
 use std::hash::Hash;
 use std::ops::{Deref, DerefMut};
 
@@ -20,7 +20,7 @@ use ed::*;
 /// changes to the backing store.
 pub struct Map<K, V, S = DefaultBackingStore> {
     store: Store<S>,
-    children: HashMap<K, Option<V>>,
+    children: BTreeMap<K, Option<V>>,
 }
 
 impl<K, V, S> From<Map<K, V, S>> for () {
@@ -29,7 +29,7 @@ impl<K, V, S> From<Map<K, V, S>> for () {
 
 impl<K, V, S> State<S> for Map<K, V, S>
 where
-    K: Encode + Terminated + Eq + Hash,
+    K: Encode + Terminated + Eq + Hash + Ord,
     V: State<S>,
 {
     type Encoding = ();
@@ -45,7 +45,7 @@ where
     where
         S: Write,
     {
-        for (key, maybe_value) in self.children.drain() {
+        for (key, maybe_value) in IntoIterator::into_iter(self.children) {
             Self::apply_change(&mut self.store, &key, maybe_value)?;
         }
 
@@ -55,7 +55,7 @@ where
 
 impl<K, V, S> Map<K, V, S>
 where
-    K: Encode + Terminated + Eq + Hash,
+    K: Encode + Terminated + Eq + Hash + Ord + Copy,
     V: State<S>,
     S: Read,
 {
@@ -108,7 +108,7 @@ where
         Ok(if self.children.contains_key(&key) {
             // value is already retained in memory (was modified)
             let entry = match self.children.entry(key) {
-                hash_map::Entry::Occupied(entry) => entry,
+                btree_map::Entry::Occupied(entry) => entry,
                 _ => unreachable!(),
             };
             let child = ChildMut::Modified(entry);
@@ -161,22 +161,32 @@ where
 
 impl<K, V, S> Map<K, V, S>
 where
-    K: Encode + Decode + Terminated + Eq + Hash,
-    V: State<S>,
+    K: Encode + Decode + Terminated + Eq + Hash + Next<K> + Ord + Deref + Copy,
+    V: State<S> + Decode + Deref + Copy,
     S: Read,
 {
-    /// Gets and decodes the first key that is not None returned by the internal store .get_next
-    /// method, if it exists. Otherwise, returns None
-    pub fn get_start_key(&self) -> Result<Option<K>> {
-        loop {
-            match self.store.get_next(&[])? {
-                Some(entry) => {
-                    let start_key: K = Decode::decode(entry.0.as_slice())?;
-                    return Ok(Some(start_key));
+    pub fn get_next(&self, key: K) -> Result<Option<(K, Option<V>)>> {
+        //check the map and then check the store
+        let encoded_key = Encode::encode(&key)?; 
+
+        Ok(match self.children.range(&key..).next() {
+            Some(entry) => {
+                let inner_value = match *entry.1 {
+                    Some(inner) => Some(inner),
+                    None => None
+                };
+
+                Some((*entry.0, inner_value))
+            },
+            None => {
+                match self.store.get_next(&encoded_key.as_slice())? {
+                    Some(entry) => {
+                        Some((key, Decode::decode(entry.1.as_slice())?))
+                    },
+                    None => None
                 }
-                None => (),
-            };
-        }
+            }
+        })
     }
 }
 
@@ -235,7 +245,7 @@ where
         Ok(())
     }
 }
-
+/*
 pub struct MapIterator<'a, K, V, S>
 where
     K: Next<K> + Decode + Encode + Terminated + Hash + Eq,
@@ -243,7 +253,7 @@ where
     S: Read,
 {
     map: &'a Map<K, V, S>,
-    current_key: K,
+    //current_key: K,
 }
 
 impl<'a, K, V, S> MapIterator<'a, K, V, S>
@@ -255,7 +265,7 @@ where
     fn new(map: &'a Map<K, V, S>) -> MapIterator<'a, K, V, S> {
         MapIterator {
             map,
-            current_key: map.get_start_key().unwrap().unwrap(),
+            //current_key: map.get_start_key().unwrap().unwrap(),
         }
     }
 }
@@ -281,7 +291,7 @@ where
         ))
     }
 }
-
+*/
 /// An immutable owned reference to an existing value in a collection.
 pub struct ReadOnly<V> {
     inner: V,
@@ -344,12 +354,12 @@ pub enum ChildMut<'a, K, V, S> {
 
     /// A mutable reference to an existing value which is being retained in
     /// memory because it was modified.
-    Modified(hash_map::OccupiedEntry<'a, K, Option<V>>),
+    Modified(btree_map::OccupiedEntry<'a, K, Option<V>>),
 }
 
 impl<'a, K, V, S> ChildMut<'a, K, V, S>
 where
-    K: Hash + Eq + Encode + Terminated,
+    K: Hash + Eq + Encode + Terminated + Ord + Copy,
     V: State<S>,
     S: Read,
 {
@@ -370,7 +380,7 @@ where
     }
 }
 
-impl<'a, K, V, S> Deref for ChildMut<'a, K, V, S> {
+impl<'a, K: Ord, V, S> Deref for ChildMut<'a, K, V, S> {
     type Target = V;
 
     fn deref(&self) -> &V {
@@ -383,7 +393,7 @@ impl<'a, K, V, S> Deref for ChildMut<'a, K, V, S> {
 
 impl<'a, K, V, S> DerefMut for ChildMut<'a, K, V, S>
 where
-    K: Eq + Hash,
+    K: Eq + Hash + Ord + Copy,
 {
     fn deref_mut(&mut self) -> &mut V {
         match self {
@@ -391,9 +401,17 @@ where
                 // insert into parent's children map and upgrade child to
                 // Child::ModifiedMut
                 let (key, value, parent) = inner.take().unwrap();
-                let entry = parent.children.entry(key).insert(Some(value));
-                *self = ChildMut::Modified(entry);
-                self.deref_mut()
+                let _insertion = parent.children.insert(key, Some(value));
+                let entry = parent.children.entry(key);
+                match entry {
+                    btree_map::Entry::Occupied(entry) => {
+                        *self = ChildMut::Modified(entry);
+                        return self.deref_mut();
+                    },
+                    btree_map::Entry::Vacant(entry) => {
+                        panic!("Map insertion ensures this block is unreachable")
+                    }
+                }
             }
             ChildMut::Modified(entry) => entry.get_mut().as_mut().unwrap(),
         }
@@ -402,7 +420,7 @@ where
 
 /// A mutable reference to a key/value entry in a collection, which may be
 /// empty.
-pub enum Entry<'a, K, V, S> {
+pub enum Entry<'a, K: Copy, V, S> {
     /// References an entry in the collection which does not have a value.
     Vacant {
         key: K,
@@ -415,7 +433,7 @@ pub enum Entry<'a, K, V, S> {
 
 impl<'a, K, V, S> Entry<'a, K, V, S>
 where
-    K: Encode + Terminated + Eq + Hash,
+    K: Encode + Terminated + Eq + Hash + Ord + Copy,
     V: State<S>,
     S: Read,
 {
@@ -456,7 +474,7 @@ where
 
 impl<'a, K, V, S> Entry<'a, K, V, S>
 where
-    K: Encode + Terminated + Eq + Hash,
+    K: Encode + Terminated + Eq + Hash + Ord + Copy,
     V: State<S>,
     S: Write,
 {
@@ -476,7 +494,7 @@ where
 
 impl<'a, K, V, S, D> Entry<'a, K, V, S>
 where
-    K: Encode + Terminated + Eq + Hash,
+    K: Encode + Terminated + Eq + Hash + Ord + Copy,
     V: State<S, Encoding = D>,
     S: Read,
     D: Default,
@@ -506,7 +524,7 @@ where
     }
 }
 
-impl<'a, K, V, S> From<Entry<'a, K, V, S>> for Option<ChildMut<'a, K, V, S>> {
+impl<'a, K: Copy, V, S> From<Entry<'a, K, V, S>> for Option<ChildMut<'a, K, V, S>> {
     fn from(entry: Entry<'a, K, V, S>) -> Self {
         match entry {
             Entry::Vacant { .. } => None,
