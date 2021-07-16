@@ -662,4 +662,12 @@ mod tests {
 
         assert_eq!(map.get_next(11).unwrap(), Some((12, Some(13))));
     }
+
+    #[test]
+    fn get_next_in_mem_no_entry() {
+        let store = Store::new(MapStore::new());
+        let map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
+        assert_eq!(map.get_next(11).unwrap(), None);
+    }
 }
