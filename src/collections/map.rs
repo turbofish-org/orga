@@ -652,4 +652,14 @@ mod tests {
 
         assert_eq!(map.get_next(12).unwrap(), Some((12, Some(13))));
     }
+
+    #[test]
+    fn get_next_in_mem_out_key() {
+        let store = Store::new(MapStore::new());
+        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
+        map.entry(12).unwrap().or_insert(13).unwrap();
+
+        assert_eq!(map.get_next(11).unwrap(), Some((12, Some(13))));
+    }
 }
