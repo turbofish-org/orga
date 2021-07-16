@@ -180,7 +180,7 @@ where
             }
             None => match self.store.get_next(&encoded_key.as_slice())? {
                 Some(entry) => Some((key, Decode::decode(entry.1.as_slice())?)),
-                None => None,
+                None => Some((key, None)),
             },
         })
     }
