@@ -161,8 +161,8 @@ where
 
 impl<K, V, S> Map<K, V, S>
 where
-    K: Encode + Decode + Terminated + Eq + Hash + Next<K> + Ord + Deref + Copy,
-    V: State<S> + Decode + Deref + Copy,
+    K: Encode + Decode + Terminated + Eq + Hash + Next<K> + Ord + Copy,
+    V: State<S> + Decode + Copy,
     S: Read,
 {
     pub fn get_next(&self, key: K) -> Result<Option<(K, Option<V>)>> {
