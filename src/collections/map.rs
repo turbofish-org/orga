@@ -1,5 +1,5 @@
 use std::borrow::Borrow;
-use std::collections::{hash_map, btree_map, HashMap, BTreeMap};
+use std::collections::{btree_map, hash_map, BTreeMap, HashMap};
 use std::hash::Hash;
 use std::ops::{Deref, DerefMut};
 
@@ -167,25 +167,21 @@ where
 {
     pub fn get_next(&self, key: K) -> Result<Option<(K, Option<V>)>> {
         //check the map and then check the store
-        let encoded_key = Encode::encode(&key)?; 
+        let encoded_key = Encode::encode(&key)?;
 
         Ok(match self.children.range(&key..).next() {
             Some(entry) => {
                 let inner_value = match *entry.1 {
                     Some(inner) => Some(inner),
-                    None => None
+                    None => None,
                 };
 
                 Some((*entry.0, inner_value))
-            },
-            None => {
-                match self.store.get_next(&encoded_key.as_slice())? {
-                    Some(entry) => {
-                        Some((key, Decode::decode(entry.1.as_slice())?))
-                    },
-                    None => None
-                }
             }
+            None => match self.store.get_next(&encoded_key.as_slice())? {
+                Some(entry) => Some((key, Decode::decode(entry.1.as_slice())?)),
+                None => None,
+            },
         })
     }
 }
@@ -407,7 +403,7 @@ where
                     btree_map::Entry::Occupied(entry) => {
                         *self = ChildMut::Modified(entry);
                         return self.deref_mut();
-                    },
+                    }
                     btree_map::Entry::Vacant(entry) => {
                         panic!("Map insertion ensures this block is unreachable")
                     }
