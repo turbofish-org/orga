@@ -165,25 +165,6 @@ where
     V: State<S> + Decode + Copy,
     S: Read,
 {
-    pub fn get_next(&self, key: K) -> Result<Option<(K, Option<V>)>> {
-        //check the map and then check the store
-        let encoded_key = Encode::encode(&key)?;
-
-        Ok(match self.children.range(&key..).next() {
-            Some(entry) => {
-                let inner_value = match *entry.1 {
-                    Some(inner) => Some(inner),
-                    None => None,
-                };
-
-                Some((*entry.0, inner_value))
-            }
-            None => match self.store.get_next(&encoded_key.as_slice())? {
-                Some(entry) => Some((key, Decode::decode(entry.1.as_slice())?)),
-                None => Some((key, None)),
-            },
-        })
-    }
 }
 
 impl<K, V, S> Map<K, V, S>
@@ -241,6 +222,7 @@ where
         Ok(())
     }
 }
+
 /*
 pub struct MapIterator<'a, K, V, S>
 where
@@ -670,4 +652,29 @@ mod tests {
 
         assert_eq!(map.get_next(11).unwrap(), None);
     }
+
+    #[test]
+    fn get_next_in_store() {
+        //need iterator for both the in memory map and the store map
+        //
+        //
+        let store = Store::new(MapStore::new());
+
+        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        edit_map.entry(12).unwrap().or_insert(13).unwrap();
+
+        //flush edit_map to write values to the store
+        edit_map.flush().unwrap();
+
+        let read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        //there is some weird behavior in the get_next method that makes the return vnalues from
+        //the two of these different depending on where the read is happening
+        //
+        //11 as input is returning Some(11, None)
+        //12 as input is returning None
+        //  it's very clear that this None specifically is coming from the map reading
+        //the fact that the 11 is returning is a bit weird for me considering that
+        assert_eq!(read_map.get_next(0).unwrap(), None);
+        assert_eq!(read_map.get_next(12).unwrap(), Some((12, Some(13))));
+   }
 }
