@@ -800,4 +800,30 @@ mod tests {
             None => (),
         }
     }
+
+    #[test]
+    fn iter_merge_next_mem_remove() {
+        let store = Store::new(MapStore::new());
+        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
+        edit_map.entry(12).unwrap().or_insert(24).unwrap();
+
+        edit_map.flush().unwrap();
+
+        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
+        read_map.remove(12).unwrap();
+
+        let map_iter = &mut read_map.children.range(..);
+        let range_iter = &mut read_map.store.range(..);
+
+        let iter_next = Map::iter_merge_next(map_iter, range_iter).unwrap();
+        match iter_next {
+            Some((key, value)) => {
+                assert_eq!(key, 12);
+                assert_eq!(*value, 24);
+            }
+            None => assert!(false),
+        }
+    }
 }
