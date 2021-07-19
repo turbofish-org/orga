@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 use std::cmp::Ordering;
-use std::collections::{btree_map, hash_map, BTreeMap, HashMap};
+use std::collections::{btree_map, BTreeMap};
 use std::hash::Hash;
 use std::ops::{Deref, DerefMut};
 
