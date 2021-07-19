@@ -168,7 +168,7 @@ where
 {
     fn iter_merge_next(
         map_iter: &'a mut btree_map::Range<K, Option<V>>,
-        store_iter: &mut Iter<S>,
+        store_iter: &mut Iter<Store<S>>,
     ) -> Result<Option<(K, Child<'a, V>)>> {
         let mut map_iter = map_iter.peekable();
         let mut store_iter = store_iter.peekable();
@@ -704,5 +704,51 @@ mod tests {
         map.flush().unwrap();
         assert!(store.get(&enc(14)).unwrap().is_none());
         assert!(store.get(&enc(16)).unwrap().is_none());
+    }
+
+    #[test]
+    fn iter_merge_next_map_only() {
+        let store = Store::new(MapStore::new());
+        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
+        map.entry(12).unwrap().or_insert(24).unwrap();
+        map.entry(13).unwrap().or_insert(26).unwrap();
+        map.entry(14).unwrap().or_insert(28).unwrap();
+
+        let map_iter = &mut map.children.range(..);
+        let range_iter = &mut map.store.range(..);
+
+        let iter_next = Map::iter_merge_next(map_iter, range_iter).unwrap();
+        match iter_next {
+            Some((key, value)) => {
+                assert_eq!(key, 12);
+                assert_eq!(*value, 24);
+            }
+            None => assert!(false),
+        }
+
+        let iter_next = Map::iter_merge_next(map_iter, range_iter).unwrap();
+        match iter_next {
+            Some((key, value)) => {
+                assert_eq!(key, 13);
+                assert_eq!(*value, 26);
+            }
+            None => assert!(false),
+        }
+
+        let iter_next = Map::iter_merge_next(map_iter, range_iter).unwrap();
+        match iter_next {
+            Some((key, value)) => {
+                assert_eq!(key, 14);
+                assert_eq!(*value, 28);
+            }
+            None => assert!(false),
+        }
+
+        let iter_next = Map::iter_merge_next(map_iter, range_iter).unwrap();
+        match iter_next {
+            Some(_) => assert!(false),
+            None => (),
+        }
     }
 }
