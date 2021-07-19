@@ -2,6 +2,7 @@ use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::collections::{btree_map, BTreeMap};
 use std::hash::Hash;
+use std::iter::Peekable;
 use std::ops::{Deref, DerefMut};
 
 use super::Next;
@@ -167,12 +168,9 @@ where
     S: Read,
 {
     fn iter_merge_next(
-        map_iter: &'a mut btree_map::Range<K, Option<V>>,
-        store_iter: &mut Iter<Store<S>>,
+        map_iter: &mut Peekable<btree_map::Range<'a, K, Option<V>>>,
+        store_iter: &mut Peekable<Iter<Store<S>>>,
     ) -> Result<Option<(K, Child<'a, V>)>> {
-        let mut map_iter = map_iter.peekable();
-        let mut store_iter = store_iter.peekable();
-
         loop {
             let has_map_entry = map_iter.peek().is_some();
             let has_backing_entry = store_iter.peek().is_some();
@@ -814,16 +812,53 @@ mod tests {
 
         read_map.remove(12).unwrap();
 
-        let map_iter = &mut read_map.children.range(..);
-        let range_iter = &mut read_map.store.range(..);
+        let mut map_iter = read_map.children.range(..).peekable();
+        let mut range_iter = read_map.store.range(..).peekable();
 
-        let iter_next = Map::iter_merge_next(map_iter, range_iter).unwrap();
+        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(key, 12);
                 assert_eq!(*value, 24);
             }
             None => assert!(false),
+        }
+    }
+
+    #[test]
+    fn iter_merge_next_out_of_store_range() {
+        let store = Store::new(MapStore::new());
+        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
+        edit_map.entry(12).unwrap().or_insert(24).unwrap();
+
+        edit_map.flush().unwrap();
+
+        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
+        read_map.entry(14).unwrap().or_insert(28).unwrap();
+
+        let mut map_iter = read_map.children.range(..).peekable();
+        let mut range_iter = read_map.store.range(..).peekable();
+
+        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
+        match iter_next {
+            Some((key, value)) => {
+                assert_eq!(key, 12);
+                assert_eq!(*value, 24);
+            }
+            None => assert!(false),
+        }
+
+        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
+        match iter_next {
+            Some((key, value)) => {
+                assert_eq!(key, 14);
+                assert_eq!(*value, 28);
+            }
+            None => {
+                assert!(false)
+            }
         }
     }
 }
