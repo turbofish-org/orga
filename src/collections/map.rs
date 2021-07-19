@@ -713,10 +713,10 @@ mod tests {
         map.entry(13).unwrap().or_insert(26).unwrap();
         map.entry(14).unwrap().or_insert(28).unwrap();
 
-        let map_iter = &mut map.children.range(..);
-        let range_iter = &mut map.store.range(..);
+        let mut map_iter = map.children.range(..).peekable();
+        let mut range_iter = map.store.range(..).peekable();
 
-        let iter_next = Map::iter_merge_next(map_iter, range_iter).unwrap();
+        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(key, 12);
@@ -725,7 +725,7 @@ mod tests {
             None => assert!(false),
         }
 
-        let iter_next = Map::iter_merge_next(map_iter, range_iter).unwrap();
+        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(key, 13);
@@ -734,7 +734,7 @@ mod tests {
             None => assert!(false),
         }
 
-        let iter_next = Map::iter_merge_next(map_iter, range_iter).unwrap();
+        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(key, 14);
@@ -743,7 +743,7 @@ mod tests {
             None => assert!(false),
         }
 
-        let iter_next = Map::iter_merge_next(map_iter, range_iter).unwrap();
+        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some(_) => assert!(false),
             None => (),
@@ -762,10 +762,11 @@ mod tests {
         edit_map.flush().unwrap();
 
         let read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
-        let map_iter = &mut read_map.children.range(..);
-        let range_iter = &mut read_map.store.range(..);
 
-        let iter_next = Map::iter_merge_next(map_iter, range_iter).unwrap();
+        let mut map_iter = read_map.children.range(..).peekable();
+        let mut range_iter = read_map.store.range(..).peekable();
+
+        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(key, 12);
@@ -774,7 +775,7 @@ mod tests {
             None => assert!(false),
         }
 
-        let iter_next = Map::iter_merge_next(map_iter, range_iter).unwrap();
+        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(key, 13);
@@ -783,7 +784,7 @@ mod tests {
             None => assert!(false),
         }
 
-        let iter_next = Map::iter_merge_next(map_iter, range_iter).unwrap();
+        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(key, 14);
@@ -792,7 +793,7 @@ mod tests {
             None => assert!(false),
         }
 
-        let iter_next = Map::iter_merge_next(map_iter, range_iter).unwrap();
+        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some(_) => assert!(false),
             None => (),
