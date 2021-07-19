@@ -751,4 +751,53 @@ mod tests {
             None => (),
         }
     }
+
+    #[test]
+    fn iter_merge_next_store_only() {
+        let store = Store::new(MapStore::new());
+        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
+        edit_map.entry(12).unwrap().or_insert(24).unwrap();
+        edit_map.entry(13).unwrap().or_insert(26).unwrap();
+        edit_map.entry(14).unwrap().or_insert(28).unwrap();
+
+        edit_map.flush().unwrap();
+
+        let read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let map_iter = &mut read_map.children.range(..);
+        let range_iter = &mut read_map.store.range(..);
+
+        let iter_next = Map::iter_merge_next(map_iter, range_iter).unwrap();
+        match iter_next {
+            Some((key, value)) => {
+                assert_eq!(key, 12);
+                assert_eq!(*value, 24);
+            }
+            None => assert!(false),
+        }
+
+        let iter_next = Map::iter_merge_next(map_iter, range_iter).unwrap();
+        match iter_next {
+            Some((key, value)) => {
+                assert_eq!(key, 13);
+                assert_eq!(*value, 26);
+            }
+            None => assert!(false),
+        }
+
+        let iter_next = Map::iter_merge_next(map_iter, range_iter).unwrap();
+        match iter_next {
+            Some((key, value)) => {
+                assert_eq!(key, 14);
+                assert_eq!(*value, 28);
+            }
+            None => assert!(false),
+        }
+
+        let iter_next = Map::iter_merge_next(map_iter, range_iter).unwrap();
+        match iter_next {
+            Some(_) => assert!(false),
+            None => (),
+        }
+    }
 }
