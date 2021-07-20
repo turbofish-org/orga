@@ -256,8 +256,8 @@ where
         }
     }
 
-    fn range<B: RangeBounds<K> + Copy>(&'a mut self, range: B) -> MapIterator<'a, K, V, S> {
-        let map_iter = self.children.range(range).peekable();
+    fn range<B: RangeBounds<K> + Clone>(&'a mut self, range: B) -> MapIterator<'a, K, V, S> {
+        let map_iter = self.children.range(range.clone()).peekable();
         let bounds = (
             encode_bound(range.start_bound()),
             encode_bound(range.end_bound()),
@@ -1144,6 +1144,24 @@ mod tests {
         map.range(..).for_each(|(k, v)| actual.push((k, *v)));
 
         let expected: Vec<(u32, u32)> = vec![(12, 24), (13, 26), (14, 28)];
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn map_range_map_only_start_bounded() {
+        let store = Store::new(MapStore::new());
+        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
+        map.entry(12).unwrap().or_insert(24).unwrap();
+        map.entry(13).unwrap().or_insert(26).unwrap();
+        map.entry(14).unwrap().or_insert(28).unwrap();
+
+        let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
+
+        map.range(13..).for_each(|(k, v)| actual.push((k, *v)));
+
+        let expected: Vec<(u32, u32)> = vec![(13, 26), (14, 28)];
 
         assert_eq!(actual, expected);
     }
