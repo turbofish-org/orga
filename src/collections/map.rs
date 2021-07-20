@@ -247,11 +247,8 @@ where
     }
 
     fn iter(&'a mut self) -> MapIterator<'a, K, V, S> {
-        let mut map_iter = self.children.range(..).peekable();
-        let mut store_iter = self.store.range(..).peekable();
-
-        let lower_bound: Bound<K> = Unbounded;
-        let upper_bound: Bound<K> = Unbounded;
+        let map_iter = self.children.range(..).peekable();
+        let store_iter = self.store.range(..).peekable();
 
         MapIterator {
             map: self,
