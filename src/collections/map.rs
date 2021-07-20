@@ -202,10 +202,7 @@ where
                             let decoded_key: K = Decode::decode(entry.0.as_slice())?;
                             let decoded_value: V = Decode::decode(entry.1.as_slice())?;
 
-                            Some((
-                                decoded_key,
-                                Child::Unmodified(decoded_value),
-                            ))
+                            Some((decoded_key, Child::Unmodified(decoded_value)))
                         }
 
                         // this should be unreachable considering the peek has returned that there
@@ -232,10 +229,7 @@ where
                         let decoded_key: K = Decode::decode(entry.0.as_slice())?;
                         let encoded_key: V = Decode::decode(entry.1.as_slice())?;
 
-                        return Ok(Some((
-                            decoded_key,
-                            Child::Unmodified(encoded_key),
-                        )));
+                        return Ok(Some((decoded_key, Child::Unmodified(encoded_key))));
                     }
 
                     // map_key < backing_key
@@ -361,7 +355,6 @@ where
         }
     }
 }
-
 
 /// A wrapper which only allows immutable access to its inner value.
 pub struct ReadOnly<V> {
