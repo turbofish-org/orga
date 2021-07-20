@@ -54,7 +54,7 @@ where
     T: Default + Next<T> + Copy,
 {
     fn next(&self) -> Option<[T; N]> {
-        let mut return_key: [T; N] = self.clone();
+        let mut return_key: [T; N] = *self;
         for (i, value) in self.iter().enumerate().rev() {
             match <T>::next(value) {
                 Some(new_value) => {
