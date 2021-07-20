@@ -1208,4 +1208,52 @@ mod tests {
 
         assert_eq!(actual, expected);
     }
+
+    #[test]
+    fn map_range_store_only_bounded_non_inclusive() {
+        let store = Store::new(MapStore::new());
+        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
+        edit_map.entry(12).unwrap().or_insert(24).unwrap();
+        edit_map.entry(13).unwrap().or_insert(26).unwrap();
+        edit_map.entry(14).unwrap().or_insert(28).unwrap();
+
+        edit_map.flush().unwrap();
+
+        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
+        let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
+
+        read_map
+            .range(12..14)
+            .for_each(|(k, v)| actual.push((k, *v)));
+
+        let expected: Vec<(u32, u32)> = vec![(12, 24), (13, 26)];
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn map_range_store_only_bounded_inclusive() {
+        let store = Store::new(MapStore::new());
+        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
+        edit_map.entry(12).unwrap().or_insert(24).unwrap();
+        edit_map.entry(13).unwrap().or_insert(26).unwrap();
+        edit_map.entry(14).unwrap().or_insert(28).unwrap();
+
+        edit_map.flush().unwrap();
+
+        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
+        let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
+
+        read_map
+            .range(12..=14)
+            .for_each(|(k, v)| actual.push((k, *v)));
+
+        let expected: Vec<(u32, u32)> = vec![(12, 24), (13, 26), (14, 28)];
+
+        assert_eq!(actual, expected);
+    }
 }
