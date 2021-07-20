@@ -3,8 +3,7 @@ use std::cmp::Ordering;
 use std::collections::{btree_map, BTreeMap};
 use std::hash::Hash;
 use std::iter::Peekable;
-use std::ops::Bound::*;
-use std::ops::{Bound, Deref, DerefMut, Range};
+use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
 use super::Next;
 use crate::state::*;
@@ -252,29 +251,35 @@ where
 
         MapIterator {
             map: self,
-            bounds: Range {
-                start: Unbounded,
-                end: Unbounded,
-            },
             map_iter,
             store_iter,
         }
     }
 
-    fn range(&'a mut self, range: Range<Bound<K>>) -> MapIterator<'a, K, V, S> {
-        let map_iter = self.children.range(..).peekable();
-        let store_iter = self.store.range(..).peekable();
+    fn range<B: RangeBounds<K> + Copy>(&'a mut self, range: B) -> MapIterator<'a, K, V, S> {
+        let map_iter = self.children.range(range).peekable();
+        let bounds = (
+            encode_bound(range.start_bound()),
+            encode_bound(range.end_bound()),
+        );
+        let store_iter = self.store.range(bounds).peekable();
 
         MapIterator {
             map: self,
-            bounds: Range {
-                start: range.start,
-                end: range.end
-            },
             map_iter,
-            store_iter
+            store_iter,
         }
+    }
+}
 
+fn encode_bound<K>(bound: Bound<&K>) -> Bound<Vec<u8>>
+where
+    K: Encode,
+{
+    match bound {
+        Bound::Included(inner) => Bound::Included(Encode::encode(inner).unwrap()),
+        Bound::Excluded(inner) => Bound::Excluded(Encode::encode(inner).unwrap()),
+        Bound::Unbounded => Bound::Unbounded,
     }
 }
 
@@ -341,7 +346,6 @@ where
     S: Read,
 {
     map: &'a Map<K, V, S>,
-    bounds: Range<Bound<K>>,
     map_iter: Peekable<btree_map::Range<'a, K, Option<V>>>,
     store_iter: Peekable<Iter<'a, Store<S>>>,
 }
@@ -354,13 +358,11 @@ where
 {
     fn new(
         map: &'a Map<K, V, S>,
-        bounds: Range<Bound<K>>,
         map_iter: Peekable<btree_map::Range<'a, K, Option<V>>>,
         store_iter: Peekable<Iter<'a, Store<S>>>,
     ) -> MapIterator<'a, K, V, S> {
         MapIterator {
             map,
-            bounds,
             map_iter,
             store_iter,
         }
