@@ -923,4 +923,32 @@ mod tests {
             None => assert!(false),
         }
     }
+
+    #[test]
+    fn iter_merge_next_map_key_none_store_non_empty() {
+        let store = Store::new(MapStore::new());
+        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
+        edit_map.entry(13).unwrap().or_insert(26).unwrap();
+
+        edit_map.flush().unwrap();
+
+        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
+        read_map.entry(12).unwrap().or_insert(24).unwrap();
+        read_map.remove(12).unwrap();
+
+        let mut map_iter = read_map.children.range(..).peekable();
+        let mut range_iter = read_map.store.range(..).peekable();
+
+        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
+        match iter_next {
+            Some((key, value)) => {
+                assert_eq!(key, 13);
+                assert_eq!(*value, 26);
+            }
+            None => assert!(false),
+        }
+    }
+
 }
