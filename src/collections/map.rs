@@ -348,25 +348,6 @@ where
     store_iter: Peekable<Iter<'a, Store<S>>>,
 }
 
-impl<'a, K, V, S> MapIterator<'a, K, V, S>
-where
-    K: Next<K> + Decode + Encode + Terminated + Hash + Eq,
-    V: State<S>,
-    S: Read,
-{
-    fn new(
-        map: &'a Map<K, V, S>,
-        map_iter: Peekable<btree_map::Range<'a, K, Option<V>>>,
-        store_iter: Peekable<Iter<'a, Store<S>>>,
-    ) -> MapIterator<'a, K, V, S> {
-        MapIterator {
-            map,
-            map_iter,
-            store_iter,
-        }
-    }
-}
-
 impl<'a, K, V, S> Iterator for MapIterator<'a, K, V, S>
 where
     K: Next<K> + Decode + Encode + Terminated + Hash + Eq + Ord + Copy,
