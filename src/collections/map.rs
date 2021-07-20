@@ -263,7 +263,6 @@ where
         let store_iter = self.store.range(bounds).peekable();
 
         MapIterator {
-            map: self,
             map_iter,
             store_iter,
         }
@@ -343,7 +342,6 @@ where
     V: State<S>,
     S: Read,
 {
-    map: &'a Map<K, V, S>,
     map_iter: Peekable<btree_map::Range<'a, K, Option<V>>>,
     store_iter: Peekable<Iter<'a, Store<S>>>,
 }
