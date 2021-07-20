@@ -203,7 +203,7 @@ where
                             let decoded_value: V = Decode::decode(entry.1.as_slice())?;
 
                             Some((
-                                decoded_key.clone(),
+                                decoded_key,
                                 Child::Unmodified(decoded_value),
                             ))
                         }
