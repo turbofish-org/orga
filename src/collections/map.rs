@@ -900,4 +900,27 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn iter_merge_next_map_key_none() {
+        let store = Store::new(MapStore::new());
+        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
+        map.entry(12).unwrap().or_insert(24).unwrap();
+        map.entry(13).unwrap().or_insert(26).unwrap();
+
+        map.remove(12).unwrap();
+
+        let mut map_iter = map.children.range(..).peekable();
+        let mut range_iter = map.store.range(..).peekable();
+
+        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
+        match iter_next {
+            Some((key, value)) => {
+                assert_eq!(key, 13);
+                assert_eq!(*value, 26);
+            }
+            None => assert!(false),
+        }
+    }
 }
