@@ -498,7 +498,7 @@ where
                 match entry {
                     btree_map::Entry::Occupied(entry) => {
                         *self = ChildMut::Modified(entry);
-                        return self.deref_mut();
+                        self.deref_mut()
                     }
                     btree_map::Entry::Vacant(entry) => {
                         panic!("Map insertion ensures this block is unreachable")
