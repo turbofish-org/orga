@@ -188,7 +188,7 @@ where
                 (true, false) => {
                     match map_iter.next().unwrap() {
                         // map value has not been deleted, emit value
-                        (key, Some(value)) => Some((key.clone(), Child::Unmodified(value.clone()))),
+                        (key, Some(value)) => Some((*key, Child::Unmodified(value.clone()))),
 
                         // map value is a delete, go to the next entry
                         (_, None) => continue,
