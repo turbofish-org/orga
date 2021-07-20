@@ -250,7 +250,7 @@ where
         }
     }
 
-    fn iter(&'a mut self) -> MapIterator<'a, K, V, S> {
+    pub fn iter(&'a mut self) -> MapIterator<'a, K, V, S> {
         self.range(..)
     }
 
