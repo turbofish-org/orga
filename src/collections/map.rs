@@ -22,6 +22,10 @@ pub struct Map<K, V, S = DefaultBackingStore> {
     children: HashMap<K, Option<V>>,
 }
 
+impl<K, V, S> From<Map<K, V, S>> for () {
+    fn from(_map: Map<K, V, S>) {}
+}
+
 impl<K, V, S> State<S> for Map<K, V, S>
 where
     K: Encode + Terminated + Eq + Hash,
@@ -31,13 +35,14 @@ where
 
     fn create(store: Store<S>, _: ()) -> Result<Self> {
         Ok(Map {
-            store: store,
+            store,
             children: Default::default(),
         })
     }
 
     fn flush(mut self) -> Result<()>
-        where S: Write
+    where
+        S: Write,
     {
         for (key, maybe_value) in self.children.drain() {
             Self::apply_change(&mut self.store, &key, maybe_value)?;
@@ -53,6 +58,21 @@ where
     V: State<S>,
     S: Read,
 {
+    pub fn contains_key(&self, key: K) -> Result<bool> {
+        let child_contains = self.children.contains_key(&key);
+
+        if child_contains {
+            Ok(child_contains)
+        } else {
+            let store_contains = match self.get_from_store(&key)? {
+                Some(..) => true,
+                None => false,
+            };
+
+            Ok(store_contains)
+        }
+    }
+
     /// Gets a reference to the value in the map for the given key, or `None` if
     /// the key has no value.
     ///
@@ -124,12 +144,22 @@ where
             })
             .transpose()
     }
-}
 
-impl<K: Hash + Eq, V, S> Map<K, V, S> {
     /// Removes the value at the given key, if any.
-    pub fn remove(&mut self, key: K) {
-        self.children.insert(key, None);
+    pub fn remove(&mut self, key: K) -> Result<Option<ReadOnly<V>>> {
+        if self.children.contains_key(&key) {
+            let result = self.children.remove(&key).unwrap();
+            self.children.insert(key, None);
+            match result {
+                Some(val) => Ok(Some(ReadOnly::new(val))),
+                None => Ok(None),
+            }
+        } else {
+            Ok(self.get_from_store(&key)?.map(|val| {
+                self.children.insert(key, None);
+                val.into()
+            }))
+        }
     }
 }
 
@@ -189,6 +219,31 @@ where
     }
 }
 
+/// A wrapper which only allows immutable access to its inner value.
+pub struct ReadOnly<V> {
+    inner: V,
+}
+
+impl<V> Deref for ReadOnly<V> {
+    type Target = V;
+
+    fn deref(&self) -> &V {
+        &self.inner
+    }
+}
+
+impl<V> From<V> for ReadOnly<V> {
+    fn from(value: V) -> Self {
+        ReadOnly { inner: value }
+    }
+}
+
+impl<V> ReadOnly<V> {
+    fn new(inner: V) -> Self {
+        ReadOnly { inner }
+    }
+}
+
 /// An immutable reference to an existing value in a collection.
 pub enum Child<'a, V> {
     /// An existing value which was loaded from the store.
@@ -229,19 +284,26 @@ pub enum ChildMut<'a, K, V, S> {
     Modified(hash_map::OccupiedEntry<'a, K, Option<V>>),
 }
 
-impl<'a, K: Hash + Eq, V, S> ChildMut<'a, K, V, S> {
+impl<'a, K, V, S> ChildMut<'a, K, V, S>
+where
+    K: Hash + Eq + Encode + Terminated,
+    V: State<S>,
+    S: Read,
+{
     /// Removes the value and all of its child key/value entries (if any) from
     /// the parent collection.
-    pub fn remove(self) {
+    pub fn remove(self) -> Result<()> {
         match self {
             ChildMut::Unmodified(mut inner) => {
                 let (key, _, parent) = inner.take().unwrap();
-                parent.remove(key);
+                parent.remove(key)?;
             }
             ChildMut::Modified(mut entry) => {
                 entry.insert(None);
             }
-        }
+        };
+
+        Ok(())
     }
 }
 
@@ -285,9 +347,7 @@ pub enum Entry<'a, K, V, S> {
     },
 
     /// References an entry in the collection which has a value.
-    Occupied {
-        child: ChildMut<'a, K, V, S>,
-    },
+    Occupied { child: ChildMut<'a, K, V, S> },
 }
 
 impl<'a, K, V, S> Entry<'a, K, V, S>
@@ -334,6 +394,7 @@ where
 impl<'a, K, V, S> Entry<'a, K, V, S>
 where
     K: Encode + Terminated + Eq + Hash,
+    V: State<S>,
     S: Write,
 {
     /// Removes the value for the `Entry` if it exists. Returns a boolean which
@@ -342,7 +403,7 @@ where
     pub fn remove(self) -> Result<bool> {
         Ok(match self {
             Entry::Occupied { child } => {
-                child.remove();
+                child.remove()?;
                 true
             }
             Entry::Vacant { .. } => false,
@@ -483,7 +544,7 @@ mod tests {
         map.entry(14).unwrap().or_insert(15).unwrap();
         map.entry(16).unwrap().or_insert(17).unwrap();
         assert!(map.children.get(&12).unwrap().is_some());
-        map.remove(12);
+        map.remove(12).unwrap();
         assert!(map.children.get(&12).unwrap().is_none());
         map.flush().unwrap();
         assert!(store.get(&enc(12)).unwrap().is_none());
@@ -492,7 +553,7 @@ mod tests {
         let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
         assert_eq!(*map.get(14).unwrap().unwrap(), 15);
         assert_eq!(*map.get(16).unwrap().unwrap(), 17);
-        map.remove(14);
+        map.remove(14).unwrap();
         // Also remove a value by entry
         let entry = map.entry(16).unwrap();
         assert!(entry.remove().unwrap());

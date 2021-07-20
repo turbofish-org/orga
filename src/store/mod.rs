@@ -5,6 +5,7 @@ pub mod bufstore;
 pub mod iter;
 pub mod nullstore;
 pub mod share;
+#[allow(clippy::module_inception)]
 pub mod store;
 
 pub use bufstore::{BufStore, Map as BufStoreMap, MapStore};
