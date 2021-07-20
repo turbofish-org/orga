@@ -254,7 +254,7 @@ where
         self.range(..)
     }
 
-    fn range<B: RangeBounds<K> + Clone>(&'a mut self, range: B) -> MapIterator<'a, K, V, S> {
+    pub fn range<B: RangeBounds<K> + Clone>(&'a mut self, range: B) -> MapIterator<'a, K, V, S> {
         let map_iter = self.children.range(range.clone()).peekable();
         let bounds = (
             encode_bound(range.start_bound()),
