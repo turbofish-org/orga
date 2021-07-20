@@ -3,7 +3,8 @@ use std::cmp::Ordering;
 use std::collections::{btree_map, BTreeMap};
 use std::hash::Hash;
 use std::iter::Peekable;
-use std::ops::{Deref, DerefMut, Range};
+use std::ops::Bound::*;
+use std::ops::{Bound, Deref, DerefMut, Range};
 
 use super::Next;
 use crate::state::*;
@@ -161,7 +162,7 @@ where
     }
 }
 
-impl<'a, K, V, S> Map<K, V, S>
+impl<'a, 'b, K, V, S> Map<K, V, S>
 where
     K: Encode + Decode + Terminated + Eq + Hash + Next<K> + Ord + Copy,
     V: State<S> + Decode + Copy,
@@ -244,6 +245,24 @@ where
             });
         }
     }
+
+    fn iter(&'a mut self) -> MapIterator<'a, K, V, S> {
+        let mut map_iter = self.children.range(..).peekable();
+        let mut store_iter = self.store.range(..).peekable();
+
+        let lower_bound: Bound<K> = Unbounded;
+        let upper_bound: Bound<K> = Unbounded;
+
+        MapIterator {
+            map: self,
+            bounds: Range {
+                start: Unbounded,
+                end: Unbounded,
+            },
+            map_iter,
+            store_iter,
+        }
+    }
 }
 
 impl<K, V, S> Map<K, V, S>
@@ -302,19 +321,19 @@ where
     }
 }
 
-pub struct MapIterator<'a, 'b, K, V, S>
+pub struct MapIterator<'a, K, V, S>
 where
     K: Next<K> + Decode + Encode + Terminated + Hash + Eq,
     V: State<S>,
     S: Read,
 {
     map: &'a Map<K, V, S>,
-    bounds: Range<K>,
-    map_iter: &'a mut Peekable<btree_map::Range<'a, K, Option<V>>>,
-    store_iter: &'b mut Peekable<Iter<'b, Store<S>>>,
+    bounds: Range<Bound<K>>,
+    map_iter: Peekable<btree_map::Range<'a, K, Option<V>>>,
+    store_iter: Peekable<Iter<'a, Store<S>>>,
 }
 
-impl<'a, 'b, K, V, S> MapIterator<'a, 'b, K, V, S>
+impl<'a, K, V, S> MapIterator<'a, K, V, S>
 where
     K: Next<K> + Decode + Encode + Terminated + Hash + Eq,
     V: State<S>,
@@ -322,10 +341,10 @@ where
 {
     fn new(
         map: &'a Map<K, V, S>,
-        bounds: Range<K>,
-        map_iter: &'a mut Peekable<btree_map::Range<'a, K, Option<V>>>,
-        store_iter: &'b mut Peekable<Iter<'b, Store<S>>>,
-    ) -> MapIterator<'a, 'b, K, V, S> {
+        bounds: Range<Bound<K>>,
+        map_iter: Peekable<btree_map::Range<'a, K, Option<V>>>,
+        store_iter: Peekable<Iter<'a, Store<S>>>,
+    ) -> MapIterator<'a, K, V, S> {
         MapIterator {
             map,
             bounds,
@@ -335,7 +354,7 @@ where
     }
 }
 
-impl<'a, 'b, K, V, S> Iterator for MapIterator<'a, 'b, K, V, S>
+impl<'a, K, V, S> Iterator for MapIterator<'a, K, V, S>
 where
     K: Next<K> + Decode + Encode + Terminated + Hash + Eq + Ord + Copy,
     V: State<S> + Copy + Decode,
@@ -344,7 +363,7 @@ where
     type Item = (K, Child<'a, V>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        match Map::iter_merge_next(self.map_iter, self.store_iter) {
+        match Map::iter_merge_next(&mut self.map_iter, &mut self.store_iter) {
             Err(err) => panic!("{}", err),
             Ok(val) => val,
         }
