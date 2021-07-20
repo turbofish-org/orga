@@ -260,6 +260,22 @@ where
             store_iter,
         }
     }
+
+    fn range(&'a mut self, range: Range<Bound<K>>) -> MapIterator<'a, K, V, S> {
+        let map_iter = self.children.range(..).peekable();
+        let store_iter = self.store.range(..).peekable();
+
+        MapIterator {
+            map: self,
+            bounds: Range {
+                start: range.start,
+                end: range.end
+            },
+            map_iter,
+            store_iter
+        }
+
+    }
 }
 
 impl<K, V, S> Map<K, V, S>
