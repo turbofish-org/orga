@@ -199,8 +199,8 @@ where
                 (false, true) => {
                     match store_iter.next().transpose()? {
                         Some(entry) => {
-                            let decoded_key: K = Decode::decode(entry.0.clone().as_slice())?;
-                            let decoded_value: V = Decode::decode(entry.1.clone().as_slice())?;
+                            let decoded_key: K = Decode::decode(entry.0.as_slice())?;
+                            let decoded_value: V = Decode::decode(entry.1.as_slice())?;
 
                             Some((
                                 decoded_key.clone(),
