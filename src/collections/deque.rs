@@ -134,6 +134,7 @@ mod test {
         let mut deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
 
         deque.push_front(42).unwrap();
+        assert_eq!(deque.len(), 1);
     }
 
     #[test]
@@ -142,6 +143,7 @@ mod test {
         let mut deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
 
         deque.push_back(42).unwrap();
+        assert_eq!(deque.len(), 1);
     }
 
     #[test]
@@ -161,11 +163,8 @@ mod test {
         let mut deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
 
         deque.push_front(42).unwrap();
-
-        match deque.pop_front().unwrap() {
-            Some(v) => assert_eq!(*v, 42),
-            None => (),
-        }
+        assert_eq!(*deque.pop_front().unwrap().unwrap(), 42);
+        assert!(deque.is_empty());
     }
 
     #[test]
@@ -185,7 +184,8 @@ mod test {
         let mut deque: Deque<u32> = Deque::create(store.clone(), Meta::default()).unwrap();
 
         deque.push_back(42).unwrap();
-        assert_eq!(*deque.pop_back().unwrap().unwrap(), 42)
+        assert_eq!(*deque.pop_back().unwrap().unwrap(), 42);
+        assert!(deque.is_empty());
     }
 
     #[test]
