@@ -204,7 +204,7 @@ where
 
                             Some((
                                 decoded_key.clone(),
-                                Child::Unmodified(decoded_value.clone()),
+                                Child::Unmodified(decoded_value),
                             ))
                         }
 
