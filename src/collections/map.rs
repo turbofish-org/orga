@@ -233,7 +233,7 @@ where
                         let encoded_key: V = Decode::decode(entry.1.as_slice())?;
 
                         return Ok(Some((
-                            decoded_key.clone(),
+                            decoded_key,
                             Child::Unmodified(encoded_key),
                         )));
                     }
