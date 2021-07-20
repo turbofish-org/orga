@@ -971,4 +971,22 @@ mod tests {
             None => assert!(false),
         }
     }
+
+    #[test]
+    fn map_iter_map_only() {
+        let store = Store::new(MapStore::new());
+        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
+        map.entry(12).unwrap().or_insert(24).unwrap();
+        map.entry(13).unwrap().or_insert(26).unwrap();
+        map.entry(14).unwrap().or_insert(28).unwrap();
+
+        let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
+
+        map.iter().for_each(|(k, v)| actual.push((k, *v)));
+
+        let expected: Vec<(u32, u32)> = vec![(12, 24), (13, 26), (14, 28)];
+
+        assert_eq!(actual, expected);
+    }
 }
