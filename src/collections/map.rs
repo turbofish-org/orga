@@ -234,7 +234,7 @@ where
 
                         return Ok(Some((
                             decoded_key.clone(),
-                            Child::Unmodified(encoded_key.clone()),
+                            Child::Unmodified(encoded_key),
                         )));
                     }
 
