@@ -481,7 +481,7 @@ where
                         *self = ChildMut::Modified(entry);
                         self.deref_mut()
                     }
-                    btree_map::Entry::Vacant(entry) => {
+                    btree_map::Entry::Vacant(_entry) => {
                         panic!("Map insertion ensures this block is unreachable")
                     }
                 }
