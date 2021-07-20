@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use std::collections::{btree_map, BTreeMap};
 use std::hash::Hash;
 use std::iter::Peekable;
-use std::ops::{Deref, DerefMut};
+use std::ops::{Deref, DerefMut, Range};
 
 use super::Next;
 use crate::state::*;
@@ -302,53 +302,55 @@ where
     }
 }
 
-/*
-pub struct MapIterator<'a, K, V, S>
+pub struct MapIterator<'a, 'b, K, V, S>
 where
     K: Next<K> + Decode + Encode + Terminated + Hash + Eq,
     V: State<S>,
     S: Read,
 {
     map: &'a Map<K, V, S>,
-    //current_key: K,
+    bounds: Range<K>,
+    map_iter: &'a mut Peekable<btree_map::Range<'a, K, Option<V>>>,
+    store_iter: &'b mut Peekable<Iter<'b, Store<S>>>,
 }
 
-impl<'a, K, V, S> MapIterator<'a, K, V, S>
+impl<'a, 'b, K, V, S> MapIterator<'a, 'b, K, V, S>
 where
     K: Next<K> + Decode + Encode + Terminated + Hash + Eq,
     V: State<S>,
     S: Read,
 {
-    fn new(map: &'a Map<K, V, S>) -> MapIterator<'a, K, V, S> {
+    fn new(
+        map: &'a Map<K, V, S>,
+        bounds: Range<K>,
+        map_iter: &'a mut Peekable<btree_map::Range<'a, K, Option<V>>>,
+        store_iter: &'b mut Peekable<Iter<'b, Store<S>>>,
+    ) -> MapIterator<'a, 'b, K, V, S> {
         MapIterator {
             map,
-            //current_key: map.get_start_key().unwrap().unwrap(),
+            bounds,
+            map_iter,
+            store_iter,
         }
     }
 }
 
-impl<'a, K, V, S> Iterator for MapIterator<'a, K, V, S>
+impl<'a, 'b, K, V, S> Iterator for MapIterator<'a, 'b, K, V, S>
 where
-    K: Next<K> + Decode + Encode + Terminated + Hash + Eq,
-    V: State<S>,
+    K: Next<K> + Decode + Encode + Terminated + Hash + Eq + Ord + Copy,
+    V: State<S> + Copy + Decode,
     S: Read,
 {
     type Item = (K, Child<'a, V>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.current_key.next().unwrap();
-
-        self.current_key = self.current_key.next().unwrap();
-        Some((
-            self.current_key.next().unwrap(),
-            self.map
-                .get(self.current_key.next().unwrap())
-                .unwrap()
-                .unwrap(),
-        ))
+        match Map::iter_merge_next(self.map_iter, self.store_iter) {
+            Err(err) => panic!("{}", err),
+            Ok(val) => val,
+        }
     }
 }
-*/
+
 /// An immutable owned reference to an existing value in a collection.
 pub struct ReadOnly<V> {
     inner: V,
@@ -950,5 +952,4 @@ mod tests {
             None => assert!(false),
         }
     }
-
 }
