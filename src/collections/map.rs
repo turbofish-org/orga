@@ -246,14 +246,7 @@ where
     }
 
     fn iter(&'a mut self) -> MapIterator<'a, K, V, S> {
-        let map_iter = self.children.range(..).peekable();
-        let store_iter = self.store.range(..).peekable();
-
-        MapIterator {
-            map: self,
-            map_iter,
-            store_iter,
-        }
+        self.range(..)
     }
 
     fn range<B: RangeBounds<K> + Clone>(&'a mut self, range: B) -> MapIterator<'a, K, V, S> {
