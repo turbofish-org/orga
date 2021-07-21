@@ -1295,7 +1295,5 @@ mod tests {
         let expected: Vec<(u32, u32)> = vec![];
 
         assert_eq!(actual, expected);
-
-
     }
 }
