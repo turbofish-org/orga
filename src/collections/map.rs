@@ -1310,4 +1310,23 @@ mod tests {
 
         assert_eq!(*actual, 26);
     }
+
+    #[test]
+    fn map_of_map_from_store() {
+        let store = Store::new(MapStore::new());
+        let mut edit_map: Map<u32, Map<u32, u32>> = Map::create(store.clone(), ()).unwrap();
+
+        edit_map.entry(42).unwrap().or_insert(()).unwrap();
+
+        let mut sub_map = edit_map.get_mut(42).unwrap().unwrap();
+        sub_map.entry(13).unwrap().or_insert(26).unwrap();
+
+        edit_map.flush().unwrap();
+
+        let read_map: Map<u32, Map<u32, u32>> = Map::create(store.clone(), ()).unwrap();
+        let inner_map = read_map.get(42).unwrap().unwrap();
+        let actual = inner_map.get(13).unwrap().unwrap();
+
+        assert_eq!(*actual, 26);
+    }
 }
