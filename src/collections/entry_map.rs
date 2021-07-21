@@ -42,6 +42,13 @@ where
         Ok(())
     }
 
+    fn delete(&mut self, entry: T) -> Result<()> {
+        let (key, _) = entry.into_entry();
+        self.map.remove(key)?;
+
+        Ok(())
+    }
+
     fn contains(&self, entry: T) -> Result<bool> {
         let (key, _) = entry.into_entry();
         self.map.contains_key(key)
