@@ -83,6 +83,7 @@ mod test {
         assert!(entry_map.contains(MapEntry { key: 42, value: 84 }).unwrap());
     }
 
+    #[test]
     fn insert_store() {
         let store = Store::new(MapStore::new());
         let mut edit_entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone()).unwrap();
