@@ -1,11 +1,37 @@
 use super::map::{Map, ReadOnly};
 use crate::encoding::{Decode, Encode};
 use crate::store::DefaultBackingStore;
+use std::hash::Hash;
+use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
 use super::Entry;
+use crate::state::*;
+use crate::store::*;
+use ed::*;
 
 pub struct EntryMap<T: Entry, S = DefaultBackingStore> {
     map: Map<T::Key, T::Value, S>,
+}
+
+impl<T, S> EntryMap<T, S>
+where
+    T: Entry,
+    T::Key: Encode + Terminated + Eq + Hash + Ord,
+    T::Value: State<S>,
+    S: Read,
+{
+    fn create(store: Store<S>) -> Result<Self> {
+        Ok(EntryMap {
+            map: Map::create(store, ())?,
+        })
+    }
+
+    fn flush(self) -> Result<()>
+    where
+        S: Write,
+    {
+        self.map.flush()
+    }
 }
 
 mod test {
