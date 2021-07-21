@@ -3,6 +3,8 @@ use crate::encoding::{Decode, Encode};
 use crate::store::DefaultBackingStore;
 use std::hash::Hash;
 use std::ops::{Bound, Deref, DerefMut, RangeBounds};
+use crate::collections;
+use crate::state;
 
 use super::Entry;
 use crate::state::*;
@@ -16,7 +18,7 @@ pub struct EntryMap<T: Entry, S = DefaultBackingStore> {
 impl<T, S> EntryMap<T, S>
 where
     T: Entry,
-    T::Key: Encode + Terminated + Eq + Hash + Ord,
+    T::Key: Encode + Terminated + Eq + Hash + Ord + Copy,
     T::Value: State<S>,
     S: Read,
 {
@@ -31,6 +33,13 @@ where
         S: Write,
     {
         self.map.flush()
+    }
+
+    fn insert(&mut self, entry: T) -> Result<()> {
+        let (key, value) = entry.into_entry();
+        let val = self.map.entry(key)?.or_insert(value.into())?;
+
+        Ok(())
     }
 }
 
