@@ -1288,12 +1288,26 @@ mod tests {
 
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
 
-        map
-            .range(..)
-            .for_each(|(k, v)| actual.push((k, *v)));
+        map.range(..).for_each(|(k, v)| actual.push((k, *v)));
 
         let expected: Vec<(u32, u32)> = vec![];
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn map_of_map() {
+        let store = Store::new(MapStore::new());
+        let mut map: Map<u32, Map<u32, u32>> = Map::create(store.clone(), ()).unwrap();
+
+        map.entry(42).unwrap().or_insert(()).unwrap();
+
+        let mut sub_map = map.get_mut(42).unwrap().unwrap();
+        sub_map.entry(13).unwrap().or_insert(26).unwrap();
+
+        let inner_map = map.get(42).unwrap().unwrap();
+        let actual = inner_map.get(13).unwrap().unwrap();
+
+        assert_eq!(*actual, 26);
     }
 }
