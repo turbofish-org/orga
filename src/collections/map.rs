@@ -1280,4 +1280,22 @@ mod tests {
 
         assert_eq!(actual, expected);
     }
+
+    #[test]
+    fn map_range_empty() {
+        let store = Store::new(MapStore::new());
+        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
+        let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
+
+        map
+            .range(..)
+            .for_each(|(k, v)| actual.push((k, *v)));
+
+        let expected: Vec<(u32, u32)> = vec![];
+
+        assert_eq!(actual, expected);
+
+
+    }
 }
