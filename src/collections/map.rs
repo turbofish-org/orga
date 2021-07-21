@@ -599,6 +599,7 @@ impl<'a, K: Copy, V, S> From<Entry<'a, K, V, S>> for Option<ChildMut<'a, K, V, S
 
 #[cfg(test)]
 mod tests {
+    use super::super::deque::*;
     use super::*;
     use crate::store::{MapStore, Store};
 
@@ -1328,5 +1329,33 @@ mod tests {
         let actual = inner_map.get(13).unwrap().unwrap();
 
         assert_eq!(*actual, 26);
+    }
+
+    #[test]
+    fn map_of_deque() {
+        let store = Store::new(MapStore::new());
+        let mut edit_map: Map<u32, Deque<u32>> = Map::create(store.clone(), ()).unwrap();
+
+        edit_map
+            .entry(42)
+            .unwrap()
+            .or_insert(Meta::default())
+            .unwrap();
+
+        let mut deque = edit_map.get_mut(42).unwrap().unwrap();
+        deque.push_front(84).unwrap();
+
+        edit_map.flush().unwrap();
+
+        let mut read_map: Map<u32, Deque<u32>> = Map::create(store.clone(), ()).unwrap();
+        let actual = read_map
+            .get_mut(42)
+            .unwrap()
+            .unwrap()
+            .pop_front()
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(*actual, 84);
     }
 }
