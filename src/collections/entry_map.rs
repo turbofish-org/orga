@@ -108,7 +108,19 @@ mod test {
     }
 
     #[test]
-    fn delete() {
+    fn delete_map() {
+        let store = Store::new(MapStore::new());
+        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone()).unwrap();
+
+        let entry = MapEntry { key: 42, value: 84 };
+        entry_map.insert(entry).unwrap();
+        entry_map.delete(MapEntry { key: 42, value: 84 }).unwrap();
+
+        assert!(!entry_map.contains(MapEntry { key: 42, value: 84 }).unwrap());
+    }
+
+    #[test]
+    fn delete_store() {
         let store = Store::new(MapStore::new());
         let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone()).unwrap();
 
@@ -120,8 +132,6 @@ mod test {
 
         let read_map: EntryMap<MapEntry> = EntryMap::create(store.clone()).unwrap();
 
-        //this fails when the flush does not happen because self.map.result contains the key in the
-        //in-memory map, but holds None as it's value
         assert!(!read_map.contains(MapEntry { key: 42, value: 84 }).unwrap());
     }
 }
