@@ -1,10 +1,10 @@
 use super::map::{Map, ReadOnly};
+use crate::collections;
 use crate::encoding::{Decode, Encode};
+use crate::state;
 use crate::store::DefaultBackingStore;
 use std::hash::Hash;
 use std::ops::{Bound, Deref, DerefMut, RangeBounds};
-use crate::collections;
-use crate::state;
 
 use super::Entry;
 use crate::state::*;
@@ -40,6 +40,11 @@ where
         let val = self.map.entry(key)?.or_insert(value.into())?;
 
         Ok(())
+    }
+
+    fn contains(&self, entry: T) -> Result<bool> {
+        let (key, _) = entry.into_entry();
+        self.map.contains_key(key)
     }
 }
 
