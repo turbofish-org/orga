@@ -71,4 +71,15 @@ mod test {
             }
         }
     }
+
+    #[test]
+    fn insert() {
+        let store = Store::new(MapStore::new());
+        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone()).unwrap();
+
+        let entry = MapEntry { key: 42, value: 84 };
+        entry_map.insert(entry).unwrap();
+
+        assert!(entry_map.contains(MapEntry { key: 42, value: 84 }).unwrap());
+    }
 }
