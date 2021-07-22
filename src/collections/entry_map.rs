@@ -15,14 +15,21 @@ pub struct EntryMap<T: Entry, S = DefaultBackingStore> {
     map: Map<T::Key, T::Value, S>,
 }
 
-impl<T, S> EntryMap<T, S>
+impl<T: Entry, S> From<EntryMap<T, S>> for () {
+    fn from(_map: EntryMap<T, S>) {}
+}
+
+impl<T: Entry, S> State<S> for EntryMap<T, S>
 where
-    T: Entry,
-    T::Key: Encode + Terminated + Eq + Hash + Ord + Copy,
+    T::Key: Encode + Terminated + Eq + Hash + Ord,
     T::Value: State<S>,
-    S: Read,
 {
-    fn create(store: Store<S>) -> Result<Self> {
+    type Encoding = ();
+
+    fn create(store: Store<S>, _: ()) -> Result<Self>
+    where
+        S: Read,
+    {
         Ok(EntryMap {
             map: Map::create(store, ())?,
         })
@@ -34,7 +41,15 @@ where
     {
         self.map.flush()
     }
+}
 
+impl<T, S> EntryMap<T, S>
+where
+    T: Entry,
+    T::Key: Encode + Terminated + Eq + Hash + Ord + Copy,
+    T::Value: State<S>,
+    S: Read,
+{
     fn insert(&mut self, entry: T) -> Result<()> {
         let (key, value) = entry.into_entry();
         let val = self.map.entry(key)?.or_insert(value.into())?;
@@ -128,7 +143,7 @@ mod test {
     #[test]
     fn insert() {
         let store = Store::new(MapStore::new());
-        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone()).unwrap();
+        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone(), ()).unwrap();
 
         let entry = MapEntry { key: 42, value: 84 };
         entry_map.insert(entry).unwrap();
@@ -139,7 +154,7 @@ mod test {
     #[test]
     fn insert_store() {
         let store = Store::new(MapStore::new());
-        let mut edit_entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone()).unwrap();
+        let mut edit_entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone(), ()).unwrap();
 
         edit_entry_map
             .insert(MapEntry { key: 42, value: 84 })
@@ -147,7 +162,7 @@ mod test {
 
         edit_entry_map.flush().unwrap();
 
-        let read_entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone()).unwrap();
+        let read_entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone(), ()).unwrap();
         assert!(read_entry_map
             .contains(MapEntry { key: 42, value: 84 })
             .unwrap());
@@ -156,7 +171,7 @@ mod test {
     #[test]
     fn delete_map() {
         let store = Store::new(MapStore::new());
-        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone()).unwrap();
+        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone(), ()).unwrap();
 
         let entry = MapEntry { key: 42, value: 84 };
         entry_map.insert(entry).unwrap();
@@ -168,7 +183,7 @@ mod test {
     #[test]
     fn delete_store() {
         let store = Store::new(MapStore::new());
-        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone()).unwrap();
+        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone(), ()).unwrap();
 
         let entry = MapEntry { key: 42, value: 84 };
         entry_map.insert(entry).unwrap();
@@ -176,7 +191,7 @@ mod test {
 
         entry_map.flush().unwrap();
 
-        let read_map: EntryMap<MapEntry> = EntryMap::create(store.clone()).unwrap();
+        let read_map: EntryMap<MapEntry> = EntryMap::create(store.clone(), ()).unwrap();
 
         assert!(!read_map.contains(MapEntry { key: 42, value: 84 }).unwrap());
     }
@@ -184,7 +199,7 @@ mod test {
     #[test]
     fn iter() {
         let store = Store::new(MapStore::new());
-        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone()).unwrap();
+        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone(), ()).unwrap();
 
         entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
         entry_map.insert(MapEntry { key: 13, value: 26 }).unwrap();
@@ -205,7 +220,7 @@ mod test {
     #[test]
     fn range_full() {
         let store = Store::new(MapStore::new());
-        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone()).unwrap();
+        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone(), ()).unwrap();
 
         entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
         entry_map.insert(MapEntry { key: 13, value: 26 }).unwrap();
@@ -226,7 +241,7 @@ mod test {
     #[test]
     fn range_exclusive_upper() {
         let store = Store::new(MapStore::new());
-        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone()).unwrap();
+        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone(), ()).unwrap();
 
         entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
         entry_map.insert(MapEntry { key: 13, value: 26 }).unwrap();
@@ -246,7 +261,7 @@ mod test {
     #[test]
     fn range_bounded_exclusive() {
         let store = Store::new(MapStore::new());
-        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone()).unwrap();
+        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone(), ()).unwrap();
 
         entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
         entry_map.insert(MapEntry { key: 13, value: 26 }).unwrap();
