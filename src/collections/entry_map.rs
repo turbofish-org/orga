@@ -66,6 +66,12 @@ where
             map_iter: self.map.iter(),
         }
     }
+
+    fn range<B: RangeBounds<T::Key> + Clone>(&'a mut self, range: B) -> EntryMapIterator<'a, T, S> {
+        EntryMapIterator {
+            map_iter: self.map.range(range),
+        }
+    }
 }
 
 pub struct EntryMapIterator<'a, T: Entry, S>
