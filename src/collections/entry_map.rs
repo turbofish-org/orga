@@ -97,6 +97,7 @@ where
 mod test {
     use super::*;
 
+    #[derive(Debug, Eq, PartialEq)]
     pub struct MapEntry {
         key: u32,
         value: u32,
@@ -172,5 +173,26 @@ mod test {
         let read_map: EntryMap<MapEntry> = EntryMap::create(store.clone()).unwrap();
 
         assert!(!read_map.contains(MapEntry { key: 42, value: 84 }).unwrap());
+    }
+
+    #[test]
+    fn iter() {
+        let store = Store::new(MapStore::new());
+        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone()).unwrap();
+
+        entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
+        entry_map.insert(MapEntry { key: 13, value: 26 }).unwrap();
+        entry_map.insert(MapEntry { key: 14, value: 28 }).unwrap();
+
+        let mut expected: Vec<MapEntry> = Vec::with_capacity(3);
+        entry_map.iter().for_each(|entry| expected.push(entry));
+
+        let actual: Vec<MapEntry> = vec![
+            MapEntry { key: 12, value: 24 },
+            MapEntry { key: 13, value: 26 },
+            MapEntry { key: 14, value: 28 },
+        ];
+
+        assert_eq!(actual, expected);
     }
 }
