@@ -172,11 +172,11 @@ where
     V: State<S> + Decode + Copy,
     S: Read,
 {
-    pub fn iter(&'a mut self) -> MapIterator<'a, K, V, S> {
+    pub fn iter(&'a self) -> MapIterator<'a, K, V, S> {
         self.range(..)
     }
 
-    pub fn range<B: RangeBounds<K> + Clone>(&'a mut self, range: B) -> MapIterator<'a, K, V, S> {
+    pub fn range<B: RangeBounds<K> + Clone>(&'a self, range: B) -> MapIterator<'a, K, V, S> {
         let map_iter = self.children.range(range.clone()).peekable();
         let bounds = (
             encode_bound(range.start_bound()),
@@ -990,7 +990,7 @@ mod tests {
 
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
 
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
         read_map.iter().for_each(|(k, v)| actual.push((k, *v)));
@@ -1223,7 +1223,7 @@ mod tests {
 
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
 
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
 
@@ -1247,7 +1247,7 @@ mod tests {
 
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
 
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
 
@@ -1287,7 +1287,7 @@ mod tests {
     #[test]
     fn map_range_empty() {
         let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
 
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
 
