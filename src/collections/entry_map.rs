@@ -55,6 +55,19 @@ where
     }
 }
 
+impl<'a, T: Entry, S> EntryMap<T, S>
+where
+    T::Key: Next<T::Key> + Decode + Encode + Terminated + Hash + Eq + Ord + Copy,
+    T::Value: State<S> + Copy,
+    S: Read,
+{
+    fn iter(&'a mut self) -> EntryMapIterator<'a, T, S> {
+        EntryMapIterator {
+            map_iter: self.map.iter(),
+        }
+    }
+}
+
 pub struct EntryMapIterator<'a, T: Entry, S>
 where
     T::Key: Next<T::Key> + Decode + Encode + Terminated + Hash + Eq,
