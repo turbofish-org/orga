@@ -323,12 +323,16 @@ where
 
                     // map_key > backing_key, emit the backing entry
                     // map_key == backing_key, map entry shadows backing entry
-                    if key_cmp == Ordering::Greater || key_cmp == Ordering::Equal {
+                    if key_cmp == Ordering::Greater {
                         let entry = store_iter.next().unwrap()?;
                         let decoded_key: K = Decode::decode(entry.0.as_slice())?;
                         let encoded_key: V = Decode::decode(entry.1.as_slice())?;
 
                         return Ok(Some((decoded_key, Child::Unmodified(encoded_key))));
+                    }
+
+                    if key_cmp == Ordering::Equal {
+                        store_iter.next();
                     }
 
                     // map_key < backing_key
@@ -829,13 +833,7 @@ mod tests {
         let mut range_iter = read_map.store.range(..).peekable();
 
         let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
-        match iter_next {
-            Some((key, value)) => {
-                assert_eq!(key, 12);
-                assert_eq!(*value, 24);
-            }
-            None => assert!(false),
-        }
+        assert!(iter_next.is_none());
     }
 
     #[test]
@@ -1018,7 +1016,7 @@ mod tests {
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(1);
         read_map.iter().for_each(|(x, y)| actual.push((x, *y)));
 
-        let expected: Vec<(u32, u32)> = vec![(12, 24)];
+        let expected: Vec<(u32, u32)> = vec![];
 
         assert_eq!(actual, expected);
     }
