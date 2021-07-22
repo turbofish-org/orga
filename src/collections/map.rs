@@ -172,78 +172,6 @@ where
     V: State<S> + Decode + Copy,
     S: Read,
 {
-    fn iter_merge_next(
-        map_iter: &mut Peekable<btree_map::Range<'a, K, Option<V>>>,
-        store_iter: &mut Peekable<Iter<Store<S>>>,
-    ) -> Result<Option<(K, Child<'a, V>)>> {
-        loop {
-            let has_map_entry = map_iter.peek().is_some();
-            let has_backing_entry = store_iter.peek().is_some();
-
-            return Ok(match (has_map_entry, has_backing_entry) {
-                // consumed both iterators, end here
-                (false, false) => None,
-
-                // consumed backing iterator, still have map values
-                (true, false) => {
-                    match map_iter.next().unwrap() {
-                        // map value has not been deleted, emit value
-                        (key, Some(value)) => Some((*key, Child::Unmodified(*value))),
-
-                        // map value is a delete, go to the next entry
-                        (_, None) => continue,
-                    }
-                }
-
-                // consumed map iterator, still have backing values
-                (false, true) => {
-                    match store_iter.next().transpose()? {
-                        Some(entry) => {
-                            let decoded_key: K = Decode::decode(entry.0.as_slice())?;
-                            let decoded_value: V = Decode::decode(entry.1.as_slice())?;
-
-                            Some((decoded_key, Child::Unmodified(decoded_value)))
-                        }
-
-                        // this should be unreachable considering the peek has returned that there
-                        // are values in the backing
-                        None => unreachable!("Peek ensures that this block is unreachable"),
-                    }
-                }
-
-                // merge values from both iterators
-                (true, true) => {
-                    let map_key = map_iter.peek().unwrap().0;
-                    let backing_key = match store_iter.peek().unwrap() {
-                        Err(err) => failure::bail!("{}", err),
-                        Ok((ref key, _)) => key,
-                    };
-
-                    let decoded_backing_key: K = Decode::decode(backing_key.as_slice())?;
-                    let key_cmp = map_key.cmp(&decoded_backing_key);
-
-                    // map_key > backing_key, emit the backing entry
-                    // map_key == backing_key, map entry shadows backing entry
-                    if key_cmp == Ordering::Greater || key_cmp == Ordering::Equal {
-                        let entry = store_iter.next().unwrap()?;
-                        let decoded_key: K = Decode::decode(entry.0.as_slice())?;
-                        let encoded_key: V = Decode::decode(entry.1.as_slice())?;
-
-                        return Ok(Some((decoded_key, Child::Unmodified(encoded_key))));
-                    }
-
-                    // map_key < backing_key
-                    match map_iter.next().unwrap() {
-                        (key, Some(value)) => Some((*key, Child::Modified(value))),
-
-                        // map entry deleted in in-memory map, skip
-                        (_, None) => continue,
-                    }
-                }
-            });
-        }
-    }
-
     pub fn iter(&'a mut self) -> MapIterator<'a, K, V, S> {
         self.range(..)
     }
@@ -340,6 +268,85 @@ where
     store_iter: Peekable<Iter<'a, Store<S>>>,
 }
 
+impl<'a, K, V, S> MapIterator<'a, K, V, S>
+where
+    K: Encode + Decode + Terminated + Eq + Hash + Next<K> + Ord + Copy,
+    V: State<S> + Decode + Copy,
+    S: Read,
+{
+    fn iter_merge_next(
+        map_iter: &mut Peekable<btree_map::Range<'a, K, Option<V>>>,
+        store_iter: &mut Peekable<Iter<Store<S>>>,
+    ) -> Result<Option<(K, Child<'a, V>)>> {
+        loop {
+            let has_map_entry = map_iter.peek().is_some();
+            let has_backing_entry = store_iter.peek().is_some();
+
+            return Ok(match (has_map_entry, has_backing_entry) {
+                // consumed both iterators, end here
+                (false, false) => None,
+
+                // consumed backing iterator, still have map values
+                (true, false) => {
+                    match map_iter.next().unwrap() {
+                        // map value has not been deleted, emit value
+                        (key, Some(value)) => Some((*key, Child::Unmodified(*value))),
+
+                        // map value is a delete, go to the next entry
+                        (_, None) => continue,
+                    }
+                }
+
+                // consumed map iterator, still have backing values
+                (false, true) => {
+                    match store_iter.next().transpose()? {
+                        Some(entry) => {
+                            let decoded_key: K = Decode::decode(entry.0.as_slice())?;
+                            let decoded_value: V = Decode::decode(entry.1.as_slice())?;
+
+                            Some((decoded_key, Child::Unmodified(decoded_value)))
+                        }
+
+                        // this should be unreachable considering the peek has returned that there
+                        // are values in the backing
+                        None => unreachable!("Peek ensures that this block is unreachable"),
+                    }
+                }
+
+                // merge values from both iterators
+                (true, true) => {
+                    let map_key = map_iter.peek().unwrap().0;
+                    let backing_key = match store_iter.peek().unwrap() {
+                        Err(err) => failure::bail!("{}", err),
+                        Ok((ref key, _)) => key,
+                    };
+
+                    let decoded_backing_key: K = Decode::decode(backing_key.as_slice())?;
+                    let key_cmp = map_key.cmp(&decoded_backing_key);
+
+                    // map_key > backing_key, emit the backing entry
+                    // map_key == backing_key, map entry shadows backing entry
+                    if key_cmp == Ordering::Greater || key_cmp == Ordering::Equal {
+                        let entry = store_iter.next().unwrap()?;
+                        let decoded_key: K = Decode::decode(entry.0.as_slice())?;
+                        let encoded_key: V = Decode::decode(entry.1.as_slice())?;
+
+                        return Ok(Some((decoded_key, Child::Unmodified(encoded_key))));
+                    }
+
+                    // map_key < backing_key
+                    match map_iter.next().unwrap() {
+                        (key, Some(value)) => Some((*key, Child::Modified(value))),
+
+                        // map entry deleted in in-memory map, skip
+                        (_, None) => continue,
+                    }
+                }
+            });
+        }
+    }
+}
+
 impl<'a, K, V, S> Iterator for MapIterator<'a, K, V, S>
 where
     K: Next<K> + Decode + Encode + Terminated + Hash + Eq + Ord + Copy,
@@ -349,7 +356,7 @@ where
     type Item = (K, Child<'a, V>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        match Map::iter_merge_next(&mut self.map_iter, &mut self.store_iter) {
+        match MapIterator::iter_merge_next(&mut self.map_iter, &mut self.store_iter) {
             Err(err) => panic!("{}", err),
             Ok(val) => val,
         }
@@ -724,7 +731,7 @@ mod tests {
         let mut map_iter = map.children.range(..).peekable();
         let mut range_iter = map.store.range(..).peekable();
 
-        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
+        let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(key, 12);
@@ -733,7 +740,7 @@ mod tests {
             None => assert!(false),
         }
 
-        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
+        let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(key, 13);
@@ -742,7 +749,7 @@ mod tests {
             None => assert!(false),
         }
 
-        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
+        let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(key, 14);
@@ -751,7 +758,7 @@ mod tests {
             None => assert!(false),
         }
 
-        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
+        let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some(_) => assert!(false),
             None => (),
@@ -774,7 +781,7 @@ mod tests {
         let mut map_iter = read_map.children.range(..).peekable();
         let mut range_iter = read_map.store.range(..).peekable();
 
-        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
+        let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(key, 12);
@@ -783,7 +790,7 @@ mod tests {
             None => assert!(false),
         }
 
-        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
+        let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(key, 13);
@@ -792,7 +799,7 @@ mod tests {
             None => assert!(false),
         }
 
-        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
+        let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(key, 14);
@@ -801,7 +808,7 @@ mod tests {
             None => assert!(false),
         }
 
-        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
+        let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some(_) => assert!(false),
             None => (),
@@ -824,7 +831,7 @@ mod tests {
         let mut map_iter = read_map.children.range(..).peekable();
         let mut range_iter = read_map.store.range(..).peekable();
 
-        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
+        let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(key, 12);
@@ -850,7 +857,7 @@ mod tests {
         let mut map_iter = read_map.children.range(..).peekable();
         let mut range_iter = read_map.store.range(..).peekable();
 
-        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
+        let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(key, 12);
@@ -859,7 +866,7 @@ mod tests {
             None => assert!(false),
         }
 
-        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
+        let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(key, 14);
@@ -888,7 +895,7 @@ mod tests {
         let mut map_iter = read_map.children.range(..).peekable();
         let mut range_iter = read_map.store.range(..).peekable();
 
-        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
+        let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(key, 12);
@@ -897,7 +904,7 @@ mod tests {
             None => assert!(false),
         }
 
-        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
+        let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(key, 13);
@@ -922,7 +929,7 @@ mod tests {
         let mut map_iter = map.children.range(..).peekable();
         let mut range_iter = map.store.range(..).peekable();
 
-        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
+        let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(key, 13);
@@ -949,7 +956,7 @@ mod tests {
         let mut map_iter = read_map.children.range(..).peekable();
         let mut range_iter = read_map.store.range(..).peekable();
 
-        let iter_next = Map::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
+        let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(key, 13);
