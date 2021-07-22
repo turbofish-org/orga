@@ -299,18 +299,15 @@ where
 
                 // consumed map iterator, still have backing values
                 (false, true) => {
-                    match store_iter.next().transpose()? {
-                        Some(entry) => {
-                            let decoded_key: K = Decode::decode(entry.0.as_slice())?;
-                            let decoded_value: V = Decode::decode(entry.1.as_slice())?;
+                    let entry = store_iter
+                        .next()
+                        .transpose()?
+                        .expect("Peek ensures that this in unreachable");
 
-                            Some((decoded_key, Child::Unmodified(decoded_value)))
-                        }
+                    let decoded_key: K = Decode::decode(entry.0.as_slice())?;
+                    let decoded_value: V = Decode::decode(entry.1.as_slice())?;
 
-                        // this should be unreachable considering the peek has returned that there
-                        // are values in the backing
-                        None => unreachable!("Peek ensures that this block is unreachable"),
-                    }
+                    Some((decoded_key, Child::Unmodified(decoded_value)))
                 }
 
                 // merge values from both iterators
