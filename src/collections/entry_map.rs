@@ -1,4 +1,4 @@
-use super::map::{Map, ReadOnly};
+use super::map::{Child, Map, MapIterator, ReadOnly};
 use crate::collections;
 use crate::encoding::{Decode, Encode};
 use crate::state;
@@ -6,7 +6,7 @@ use crate::store::DefaultBackingStore;
 use std::hash::Hash;
 use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
-use super::Entry;
+use super::{Entry, Next};
 use crate::state::*;
 use crate::store::*;
 use ed::*;
@@ -52,6 +52,32 @@ where
     fn contains(&self, entry: T) -> Result<bool> {
         let (key, _) = entry.into_entry();
         self.map.contains_key(key)
+    }
+}
+
+pub struct EntryMapIterator<'a, T: Entry, S>
+where
+    T::Key: Next<T::Key> + Decode + Encode + Terminated + Hash + Eq,
+    T::Value: State<S>,
+    S: Read,
+{
+    map_iter: MapIterator<'a, T::Key, T::Value, S>,
+}
+
+impl<'a, T: Entry, S> Iterator for EntryMapIterator<'a, T, S>
+where
+    T::Key: Next<T::Key> + Decode + Encode + Terminated + Hash + Eq + Ord + Copy,
+    T::Value: State<S> + Copy,
+    S: Read,
+{
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let map_next: Option<(T::Key, Child<'a, T::Value>)> = self.map_iter.next();
+        match map_next {
+            Some((key, value)) => Some(T::from_entry((key, *value))),
+            None => None,
+        }
     }
 }
 
