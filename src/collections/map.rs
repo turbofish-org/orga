@@ -172,33 +172,42 @@ where
     V: State<S> + Decode + Copy,
     S: Read,
 {
-    pub fn iter(&'a self) -> MapIterator<'a, K, V, S> {
+    pub fn iter(&'a self) -> Result<MapIterator<'a, K, V, S>> {
         self.range(..)
     }
 
-    pub fn range<B: RangeBounds<K> + Clone>(&'a self, range: B) -> MapIterator<'a, K, V, S> {
+    pub fn range<B: RangeBounds<K> + Clone>(
+        &'a self,
+        range: B,
+    ) -> Result<MapIterator<'a, K, V, S>> {
         let map_iter = self.children.range(range.clone()).peekable();
         let bounds = (
-            encode_bound(range.start_bound()),
-            encode_bound(range.end_bound()),
+            encode_bound(range.start_bound())?,
+            encode_bound(range.end_bound())?,
         );
         let store_iter = self.store.range(bounds).peekable();
 
-        MapIterator {
+        Ok(MapIterator {
             map_iter,
             store_iter,
-        }
+        })
     }
 }
 
-fn encode_bound<K>(bound: Bound<&K>) -> Bound<Vec<u8>>
+fn encode_bound<K>(bound: Bound<&K>) -> Result<Bound<Vec<u8>>>
 where
     K: Encode,
 {
     match bound {
-        Bound::Included(inner) => Bound::Included(Encode::encode(inner).unwrap()),
-        Bound::Excluded(inner) => Bound::Excluded(Encode::encode(inner).unwrap()),
-        Bound::Unbounded => Bound::Unbounded,
+        Bound::Included(inner) => {
+            let encoded_bound = Encode::encode(inner)?;
+            Ok(Bound::Included(encoded_bound))
+        }
+        Bound::Excluded(inner) => {
+            let encoded_bound = Encode::encode(inner)?;
+            Ok(Bound::Excluded(encoded_bound))
+        }
+        Bound::Unbounded => Ok(Bound::Unbounded),
     }
 }
 
@@ -970,6 +979,7 @@ mod tests {
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
 
         map.iter()
+            .unwrap()
             .map(|result| result.unwrap())
             .for_each(|(k, v)| actual.push((k, *v)));
 
@@ -994,6 +1004,7 @@ mod tests {
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
         read_map
             .iter()
+            .unwrap()
             .map(|result| result.unwrap())
             .for_each(|(k, v)| actual.push((k, *v)));
 
@@ -1018,6 +1029,7 @@ mod tests {
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(1);
         read_map
             .iter()
+            .unwrap()
             .map(|result| result.unwrap())
             .for_each(|(k, v)| actual.push((k, *v)));
 
@@ -1042,6 +1054,7 @@ mod tests {
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(1);
         read_map
             .iter()
+            .unwrap()
             .map(|result| result.unwrap())
             .for_each(|(k, v)| actual.push((k, *v)));
 
@@ -1067,6 +1080,7 @@ mod tests {
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(1);
         read_map
             .iter()
+            .unwrap()
             .map(|result| result.unwrap())
             .for_each(|(k, v)| actual.push((k, *v)));
 
@@ -1087,6 +1101,7 @@ mod tests {
 
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(1);
         map.iter()
+            .unwrap()
             .map(|result| result.unwrap())
             .for_each(|(k, v)| actual.push((k, *v)));
 
@@ -1112,6 +1127,7 @@ mod tests {
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(1);
         read_map
             .iter()
+            .unwrap()
             .map(|result| result.unwrap())
             .for_each(|(k, v)| actual.push((k, *v)));
 
@@ -1132,6 +1148,7 @@ mod tests {
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
 
         map.iter()
+            .unwrap()
             .map(|result| result.unwrap())
             .for_each(|(k, v)| actual.push((k, *v)));
 
@@ -1152,6 +1169,7 @@ mod tests {
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
 
         map.range(13..)
+            .unwrap()
             .map(|result| result.unwrap())
             .for_each(|(k, v)| actual.push((k, *v)));
 
@@ -1172,6 +1190,7 @@ mod tests {
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
 
         map.range(..13)
+            .unwrap()
             .map(|result| result.unwrap())
             .for_each(|(k, v)| actual.push((k, *v)));
 
@@ -1192,6 +1211,7 @@ mod tests {
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
 
         map.range(..=13)
+            .unwrap()
             .map(|result| result.unwrap())
             .for_each(|(k, v)| actual.push((k, *v)));
 
@@ -1212,6 +1232,7 @@ mod tests {
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
 
         map.range(12..14)
+            .unwrap()
             .map(|result| result.unwrap())
             .for_each(|(k, v)| actual.push((k, *v)));
 
@@ -1232,6 +1253,7 @@ mod tests {
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
 
         map.range(12..=14)
+            .unwrap()
             .map(|result| result.unwrap())
             .for_each(|(k, v)| actual.push((k, *v)));
 
@@ -1257,6 +1279,7 @@ mod tests {
 
         read_map
             .range(12..14)
+            .unwrap()
             .map(|result| result.unwrap())
             .for_each(|(k, v)| actual.push((k, *v)));
 
@@ -1282,6 +1305,7 @@ mod tests {
 
         read_map
             .range(12..=14)
+            .unwrap()
             .map(|result| result.unwrap())
             .for_each(|(k, v)| actual.push((k, *v)));
 
@@ -1307,6 +1331,7 @@ mod tests {
 
         read_map
             .range(12..=14)
+            .unwrap()
             .map(|result| result.unwrap())
             .for_each(|(k, v)| actual.push((k, *v)));
 
@@ -1323,6 +1348,7 @@ mod tests {
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
 
         map.range(..)
+            .unwrap()
             .map(|result| result.unwrap())
             .for_each(|(k, v)| actual.push((k, *v)));
 
