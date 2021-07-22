@@ -50,7 +50,7 @@ where
 {
     pub fn insert(&mut self, entry: T) -> Result<()> {
         let (key, value) = entry.into_entry();
-        let val = self.map.entry(key)?.or_insert(value.into())?;
+        self.map.entry(key)?.or_insert(value.into())?;
 
         Ok(())
     }
