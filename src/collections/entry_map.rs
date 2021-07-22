@@ -109,10 +109,7 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         let map_next: Option<(T::Key, Child<'a, T::Value>)> = self.map_iter.next();
-        match map_next {
-            Some((key, value)) => Some(T::from_entry((key, *value))),
-            None => None,
-        }
+        map_next.map(|(key, value)| T::from_entry((key, *value)))
     }
 }
 
