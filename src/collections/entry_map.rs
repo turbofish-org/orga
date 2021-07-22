@@ -74,13 +74,16 @@ where
     T::Value: State<S> + Copy,
     S: Read,
 {
-    fn iter(&'a mut self) -> EntryMapIterator<'a, T, S> {
+    pub fn iter(&'a mut self) -> EntryMapIterator<'a, T, S> {
         EntryMapIterator {
             map_iter: self.map.iter(),
         }
     }
 
-    fn range<B: RangeBounds<T::Key> + Clone>(&'a mut self, range: B) -> EntryMapIterator<'a, T, S> {
+    pub fn range<B: RangeBounds<T::Key> + Clone>(
+        &'a mut self,
+        range: B,
+    ) -> EntryMapIterator<'a, T, S> {
         EntryMapIterator {
             map_iter: self.map.range(range),
         }
