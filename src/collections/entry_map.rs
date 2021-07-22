@@ -48,21 +48,21 @@ where
     T::Value: State<S>,
     S: Read,
 {
-    fn insert(&mut self, entry: T) -> Result<()> {
+    pub fn insert(&mut self, entry: T) -> Result<()> {
         let (key, value) = entry.into_entry();
         let val = self.map.entry(key)?.or_insert(value.into())?;
 
         Ok(())
     }
 
-    fn delete(&mut self, entry: T) -> Result<()> {
+    pub fn delete(&mut self, entry: T) -> Result<()> {
         let (key, _) = entry.into_entry();
         self.map.remove(key)?;
 
         Ok(())
     }
 
-    fn contains(&self, entry: T) -> Result<bool> {
+    pub fn contains(&self, entry: T) -> Result<bool> {
         let (key, _) = entry.into_entry();
         self.map.contains_key(key)
     }
