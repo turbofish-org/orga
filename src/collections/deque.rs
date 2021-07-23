@@ -1,4 +1,4 @@
-use super::map::{Child, ChildMut, Map, ReadOnly};
+use super::map::{ChildMut, Map, ReadOnly, Ref};
 use crate::encoding::{Decode, Encode};
 use crate::state::State;
 use crate::store::DefaultBackingStore;

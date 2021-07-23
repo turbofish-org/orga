@@ -737,7 +737,7 @@ mod tests {
         let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
-                assert_eq!(key, 12);
+                assert_eq!(*key, 12);
                 assert_eq!(*value, 24);
             }
             None => assert!(false),
@@ -746,7 +746,7 @@ mod tests {
         let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
-                assert_eq!(key, 13);
+                assert_eq!(*key, 13);
                 assert_eq!(*value, 26);
             }
             None => assert!(false),
@@ -755,7 +755,7 @@ mod tests {
         let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
-                assert_eq!(key, 14);
+                assert_eq!(*key, 14);
                 assert_eq!(*value, 28);
             }
             None => assert!(false),
@@ -787,7 +787,7 @@ mod tests {
         let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
-                assert_eq!(key, 12);
+                assert_eq!(*key, 12);
                 assert_eq!(*value, 24);
             }
             None => assert!(false),
@@ -796,7 +796,7 @@ mod tests {
         let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
-                assert_eq!(key, 13);
+                assert_eq!(*key, 13);
                 assert_eq!(*value, 26);
             }
             None => assert!(false),
@@ -805,7 +805,7 @@ mod tests {
         let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
-                assert_eq!(key, 14);
+                assert_eq!(*key, 14);
                 assert_eq!(*value, 28);
             }
             None => assert!(false),
@@ -857,7 +857,7 @@ mod tests {
         let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
-                assert_eq!(key, 12);
+                assert_eq!(*key, 12);
                 assert_eq!(*value, 24);
             }
             None => assert!(false),
@@ -866,7 +866,7 @@ mod tests {
         let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
-                assert_eq!(key, 14);
+                assert_eq!(*key, 14);
                 assert_eq!(*value, 28);
             }
             None => {
@@ -895,7 +895,7 @@ mod tests {
         let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
-                assert_eq!(key, 12);
+                assert_eq!(*key, 12);
                 assert_eq!(*value, 24);
             }
             None => assert!(false),
@@ -904,7 +904,7 @@ mod tests {
         let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
-                assert_eq!(key, 13);
+                assert_eq!(*key, 13);
                 assert_eq!(*value, 26);
             }
             None => {
@@ -929,7 +929,7 @@ mod tests {
         let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
-                assert_eq!(key, 13);
+                assert_eq!(*key, 13);
                 assert_eq!(*value, 26);
             }
             None => assert!(false),
@@ -956,7 +956,7 @@ mod tests {
         let iter_next = MapIterator::iter_merge_next(&mut map_iter, &mut range_iter).unwrap();
         match iter_next {
             Some((key, value)) => {
-                assert_eq!(key, 13);
+                assert_eq!(*key, 13);
                 assert_eq!(*value, 26);
             }
             None => assert!(false),
@@ -977,7 +977,7 @@ mod tests {
         map.iter()
             .unwrap()
             .map(|result| result.unwrap())
-            .for_each(|(k, v)| actual.push((k, *v)));
+            .for_each(|(k, v)| actual.push((*k, *v)));
 
         let expected: Vec<(u32, u32)> = vec![(12, 24), (13, 26), (14, 28)];
 
@@ -1002,7 +1002,7 @@ mod tests {
             .iter()
             .unwrap()
             .map(|result| result.unwrap())
-            .for_each(|(k, v)| actual.push((k, *v)));
+            .for_each(|(k, v)| actual.push((*k, *v)));
 
         let expected: Vec<(u32, u32)> = vec![(12, 24), (13, 26), (14, 28)];
 
@@ -1027,7 +1027,7 @@ mod tests {
             .iter()
             .unwrap()
             .map(|result| result.unwrap())
-            .for_each(|(k, v)| actual.push((k, *v)));
+            .for_each(|(k, v)| actual.push((*k, *v)));
 
         let expected: Vec<(u32, u32)> = vec![];
 
@@ -1052,7 +1052,7 @@ mod tests {
             .iter()
             .unwrap()
             .map(|result| result.unwrap())
-            .for_each(|(k, v)| actual.push((k, *v)));
+            .for_each(|(k, v)| actual.push((*k, *v)));
 
         let expected: Vec<(u32, u32)> = vec![(12, 24), (14, 28)];
 
@@ -1078,7 +1078,7 @@ mod tests {
             .iter()
             .unwrap()
             .map(|result| result.unwrap())
-            .for_each(|(k, v)| actual.push((k, *v)));
+            .for_each(|(k, v)| actual.push((*k, *v)));
 
         let expected: Vec<(u32, u32)> = vec![(12, 24), (13, 26), (14, 28)];
 
@@ -1099,7 +1099,7 @@ mod tests {
         map.iter()
             .unwrap()
             .map(|result| result.unwrap())
-            .for_each(|(k, v)| actual.push((k, *v)));
+            .for_each(|(k, v)| actual.push((*k, *v)));
 
         let expected: Vec<(u32, u32)> = vec![(13, 26)];
 
@@ -1125,7 +1125,7 @@ mod tests {
             .iter()
             .unwrap()
             .map(|result| result.unwrap())
-            .for_each(|(k, v)| actual.push((k, *v)));
+            .for_each(|(k, v)| actual.push((*k, *v)));
 
         let expected: Vec<(u32, u32)> = vec![(13, 26)];
 
@@ -1146,7 +1146,7 @@ mod tests {
         map.iter()
             .unwrap()
             .map(|result| result.unwrap())
-            .for_each(|(k, v)| actual.push((k, *v)));
+            .for_each(|(k, v)| actual.push((*k, *v)));
 
         let expected: Vec<(u32, u32)> = vec![(12, 24), (13, 26), (14, 28)];
 
@@ -1167,7 +1167,7 @@ mod tests {
         map.range(13..)
             .unwrap()
             .map(|result| result.unwrap())
-            .for_each(|(k, v)| actual.push((k, *v)));
+            .for_each(|(k, v)| actual.push((*k, *v)));
 
         let expected: Vec<(u32, u32)> = vec![(13, 26), (14, 28)];
 
@@ -1188,7 +1188,7 @@ mod tests {
         map.range(..13)
             .unwrap()
             .map(|result| result.unwrap())
-            .for_each(|(k, v)| actual.push((k, *v)));
+            .for_each(|(k, v)| actual.push((*k, *v)));
 
         let expected: Vec<(u32, u32)> = vec![(12, 24)];
 
@@ -1209,7 +1209,7 @@ mod tests {
         map.range(..=13)
             .unwrap()
             .map(|result| result.unwrap())
-            .for_each(|(k, v)| actual.push((k, *v)));
+            .for_each(|(k, v)| actual.push((*k, *v)));
 
         let expected: Vec<(u32, u32)> = vec![(12, 24), (13, 26)];
 
@@ -1230,7 +1230,7 @@ mod tests {
         map.range(12..14)
             .unwrap()
             .map(|result| result.unwrap())
-            .for_each(|(k, v)| actual.push((k, *v)));
+            .for_each(|(k, v)| actual.push((*k, *v)));
 
         let expected: Vec<(u32, u32)> = vec![(12, 24), (13, 26)];
 
@@ -1251,7 +1251,7 @@ mod tests {
         map.range(12..=14)
             .unwrap()
             .map(|result| result.unwrap())
-            .for_each(|(k, v)| actual.push((k, *v)));
+            .for_each(|(k, v)| actual.push((*k, *v)));
 
         let expected: Vec<(u32, u32)> = vec![(12, 24), (13, 26), (14, 28)];
 
@@ -1277,7 +1277,7 @@ mod tests {
             .range(12..14)
             .unwrap()
             .map(|result| result.unwrap())
-            .for_each(|(k, v)| actual.push((k, *v)));
+            .for_each(|(k, v)| actual.push((*k, *v)));
 
         let expected: Vec<(u32, u32)> = vec![(12, 24), (13, 26)];
 
@@ -1303,7 +1303,7 @@ mod tests {
             .range(12..=14)
             .unwrap()
             .map(|result| result.unwrap())
-            .for_each(|(k, v)| actual.push((k, *v)));
+            .for_each(|(k, v)| actual.push((*k, *v)));
 
         let expected: Vec<(u32, u32)> = vec![(12, 24), (13, 26), (14, 28)];
 
@@ -1329,7 +1329,7 @@ mod tests {
             .range(12..=14)
             .unwrap()
             .map(|result| result.unwrap())
-            .for_each(|(k, v)| actual.push((k, *v)));
+            .for_each(|(k, v)| actual.push((*k, *v)));
 
         let expected: Vec<(u32, u32)> = vec![(12, 24), (13, 26), (14, 28)];
 
@@ -1346,7 +1346,7 @@ mod tests {
         map.range(..)
             .unwrap()
             .map(|result| result.unwrap())
-            .for_each(|(k, v)| actual.push((k, *v)));
+            .for_each(|(k, v)| actual.push((*k, *v)));
 
         let expected: Vec<(u32, u32)> = vec![];
 
