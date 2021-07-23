@@ -82,18 +82,14 @@ where
     /// The returned value will reference the latest changes to the data even if
     /// the value was inserted, modified, or deleted since the last time the map
     /// was flushed.
-    pub fn get<B: Borrow<K>>(&self, key: B) -> Result<Option<Child<V>>> {
+    pub fn get<B: Borrow<K>>(&self, key: B) -> Result<Option<Ref<V>>> {
         let key = key.borrow();
         Ok(if self.children.contains_key(key) {
             // value is already retained in memory (was modified)
-            self.children
-                .get(key)
-                .unwrap()
-                .as_ref()
-                .map(Child::Modified)
+            self.children.get(key).unwrap().as_ref().map(Ref::Modified)
         } else {
             // value is not in memory, try to get from store
-            self.get_from_store(key)?.map(Child::Unmodified)
+            self.get_from_store(key)?.map(Ref::Unmodified)
         })
     }
 
@@ -286,7 +282,7 @@ where
     fn iter_merge_next(
         map_iter: &mut Peekable<btree_map::Range<'a, K, Option<V>>>,
         store_iter: &mut Peekable<Iter<Store<S>>>,
-    ) -> Result<Option<(K, Child<'a, V>)>> {
+    ) -> Result<Option<(&'a K, Ref<'a, V>)>> {
         loop {
             let has_map_entry = map_iter.peek().is_some();
             let has_backing_entry = store_iter.peek().is_some();
@@ -316,7 +312,7 @@ where
                     let decoded_key: K = Decode::decode(entry.0.as_slice())?;
                     let decoded_value: V = Decode::decode(entry.1.as_slice())?;
 
-                    Some((decoded_key, Child::Unmodified(decoded_value)))
+                    Some((&decoded_key, Ref::Unmodified(decoded_value)))
                 }
 
                 // merge values from both iterators
@@ -337,7 +333,7 @@ where
                         let decoded_key: K = Decode::decode(entry.0.as_slice())?;
                         let encoded_key: V = Decode::decode(entry.1.as_slice())?;
 
-                        return Ok(Some((decoded_key, Child::Unmodified(encoded_key))));
+                        return Ok(Some((&decoded_key, Ref::Unmodified(encoded_key))));
                     }
 
                     if key_cmp == Ordering::Equal {
@@ -346,7 +342,7 @@ where
 
                     // map_key < backing_key
                     match map_iter.next().unwrap() {
-                        (key, Some(value)) => Some((*key, Child::Modified(value))),
+                        (key, Some(value)) => Some((key, Ref::Modified(value))),
 
                         // map entry deleted in in-memory map, skip
                         (_, None) => continue,
@@ -363,7 +359,7 @@ where
     V: State<S> + Decode,
     S: Read,
 {
-    type Item = Result<(K, Child<'a, V>)>;
+    type Item = Result<(&'a K, Ref<'a, V>)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         MapIterator::iter_merge_next(&mut self.map_iter, &mut self.store_iter).transpose()
@@ -396,7 +392,7 @@ impl<V> ReadOnly<V> {
 }
 
 /// An immutable reference to an existing value in a collection.
-pub enum Child<'a, V> {
+pub enum Ref<'a, V> {
     /// An existing value which was loaded from the store.
     Unmodified(V),
 
@@ -405,20 +401,20 @@ pub enum Child<'a, V> {
     Modified(&'a V),
 }
 
-impl<'a, V> Deref for Child<'a, V> {
+impl<'a, V> Deref for Ref<'a, V> {
     type Target = V;
 
     fn deref(&self) -> &V {
         match self {
-            Child::Unmodified(inner) => inner,
-            Child::Modified(value) => value,
+            Ref::Unmodified(inner) => inner,
+            Ref::Modified(value) => value,
         }
     }
 }
 
-impl<'a, V: Default> Default for Child<'a, V> {
+impl<'a, V: Default> Default for Ref<'a, V> {
     fn default() -> Self {
-        Child::Unmodified(V::default())
+        Ref::Unmodified(V::default())
     }
 }
 
