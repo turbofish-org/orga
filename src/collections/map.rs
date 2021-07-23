@@ -1,5 +1,6 @@
 use std::borrow::Borrow;
 use std::cmp::Ordering;
+use std::collections::btree_map::Entry::{Occupied, Vacant};
 use std::collections::{btree_map, BTreeMap};
 use std::hash::Hash;
 use std::iter::Peekable;
@@ -57,7 +58,7 @@ where
 
 impl<K, V, S> Map<K, V, S>
 where
-    K: Encode + Terminated + Eq + Hash + Ord,
+    K: Encode + Terminated + Eq + Hash + Ord + Clone,
     V: State<S>,
     S: Read,
 {
@@ -422,7 +423,7 @@ impl<'a, V: Default> Default for Ref<'a, V> {
 ///
 /// If the value is mutated, it will be retained in memory until the parent
 /// collection is flushed.
-pub enum ChildMut<'a, K, V, S> {
+pub enum ChildMut<'a, K: Clone, V, S> {
     /// An existing value which was loaded from the store.
     Unmodified(Option<(K, V, &'a mut Map<K, V, S>)>),
 
@@ -433,7 +434,7 @@ pub enum ChildMut<'a, K, V, S> {
 
 impl<'a, K, V, S> ChildMut<'a, K, V, S>
 where
-    K: Hash + Eq + Encode + Terminated + Ord,
+    K: Hash + Eq + Encode + Terminated + Ord + Clone,
     V: State<S>,
     S: Read,
 {
@@ -454,7 +455,7 @@ where
     }
 }
 
-impl<'a, K: Ord, V, S> Deref for ChildMut<'a, K, V, S> {
+impl<'a, K: Ord + Clone, V, S> Deref for ChildMut<'a, K, V, S> {
     type Target = V;
 
     fn deref(&self) -> &V {
@@ -467,7 +468,7 @@ impl<'a, K: Ord, V, S> Deref for ChildMut<'a, K, V, S> {
 
 impl<'a, K, V, S> DerefMut for ChildMut<'a, K, V, S>
 where
-    K: Eq + Hash + Ord,
+    K: Eq + Hash + Ord + Clone,
 {
     fn deref_mut(&mut self) -> &mut V {
         match self {
@@ -475,17 +476,16 @@ where
                 // insert into parent's children map and upgrade child to
                 // Child::ModifiedMut
                 let (key, value, parent) = inner.take().unwrap();
-                let _insertion = parent.children.insert(key, Some(value));
+                parent.children.insert(key.clone(), Some(value));
                 let entry = parent.children.entry(key);
-                match entry {
-                    btree_map::Entry::Occupied(entry) => {
-                        *self = ChildMut::Modified(entry);
-                        self.deref_mut()
-                    }
-                    btree_map::Entry::Vacant(_entry) => {
-                        panic!("Map insertion ensures this block is unreachable")
-                    }
-                }
+
+                let entry = match entry {
+                    Occupied(val) => val,
+                    Vacant(_) => unreachable!("Entry insertion ensures this arm is unreachable"),
+                };
+
+                *self = ChildMut::Modified(entry);
+                self.deref_mut()
             }
             ChildMut::Modified(entry) => entry.get_mut().as_mut().unwrap(),
         }
@@ -494,7 +494,7 @@ where
 
 /// A mutable reference to a key/value entry in a collection, which may be
 /// empty.
-pub enum Entry<'a, K, V, S> {
+pub enum Entry<'a, K: Clone, V, S> {
     /// References an entry in the collection which does not have a value.
     Vacant {
         key: K,
@@ -507,7 +507,7 @@ pub enum Entry<'a, K, V, S> {
 
 impl<'a, K, V, S> Entry<'a, K, V, S>
 where
-    K: Encode + Terminated + Eq + Hash + Ord,
+    K: Encode + Terminated + Eq + Hash + Ord + Clone,
     V: State<S>,
     S: Read,
 {
@@ -548,7 +548,7 @@ where
 
 impl<'a, K, V, S> Entry<'a, K, V, S>
 where
-    K: Encode + Terminated + Eq + Hash + Ord,
+    K: Encode + Terminated + Eq + Hash + Ord + Clone,
     V: State<S>,
     S: Write,
 {
@@ -568,7 +568,7 @@ where
 
 impl<'a, K, V, S, D> Entry<'a, K, V, S>
 where
-    K: Encode + Terminated + Eq + Hash + Ord,
+    K: Encode + Terminated + Eq + Hash + Ord + Clone,
     V: State<S, Encoding = D>,
     S: Read,
     D: Default,
@@ -598,7 +598,7 @@ where
     }
 }
 
-impl<'a, K, V, S> From<Entry<'a, K, V, S>> for Option<ChildMut<'a, K, V, S>> {
+impl<'a, K: Clone, V, S> From<Entry<'a, K, V, S>> for Option<ChildMut<'a, K, V, S>> {
     fn from(entry: Entry<'a, K, V, S>) -> Self {
         match entry {
             Entry::Vacant { .. } => None,
