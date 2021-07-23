@@ -86,7 +86,7 @@ where
         let key = key.borrow();
         Ok(if self.children.contains_key(key) {
             // value is already retained in memory (was modified)
-            self.children.get(key).unwrap().as_ref().map(Ref::Modified)
+            self.children.get(key).unwrap().as_ref().map(Ref::Borrowed)
         } else {
             // value is not in memory, try to get from store
             self.get_from_store(key)?.map(Ref::Owned)
@@ -295,7 +295,7 @@ where
                 (true, false) => {
                     match map_iter.next().unwrap() {
                         // map value has not been deleted, emit value
-                        (key, Some(value)) => Some((*key, Child::Unmodified(*value))),
+                        (key, Some(value)) => Some((key, Ref::Borrowed(value))),
 
                         // map value is a delete, go to the next entry
                         (_, None) => continue,
@@ -342,7 +342,7 @@ where
 
                     // map_key < backing_key
                     match map_iter.next().unwrap() {
-                        (key, Some(value)) => Some((key, Ref::Modified(value))),
+                        (key, Some(value)) => Some((key, Ref::Borrowed(value))),
 
                         // map entry deleted in in-memory map, skip
                         (_, None) => continue,
@@ -398,7 +398,7 @@ pub enum Ref<'a, V> {
 
     /// A reference to an existing value which is being retained in memory
     /// because it was modified.
-    Modified(&'a V),
+    Borrowed(&'a V),
 }
 
 impl<'a, V> Deref for Ref<'a, V> {
@@ -407,7 +407,7 @@ impl<'a, V> Deref for Ref<'a, V> {
     fn deref(&self) -> &V {
         match self {
             Ref::Owned(value) => value,
-            Ref::Modified(value) => value,
+            Ref::Borrowed(value) => value,
         }
     }
 }
