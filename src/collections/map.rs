@@ -282,7 +282,7 @@ where
     fn iter_merge_next(
         map_iter: &mut Peekable<btree_map::Range<'a, K, Option<V>>>,
         store_iter: &mut Peekable<Iter<Store<S>>>,
-    ) -> Result<Option<(&'a K, Ref<'a, V>)>> {
+    ) -> Result<Option<(Ref<'a, K>, Ref<'a, V>)>> {
         loop {
             let has_map_entry = map_iter.peek().is_some();
             let has_backing_entry = store_iter.peek().is_some();
@@ -295,7 +295,7 @@ where
                 (true, false) => {
                     match map_iter.next().unwrap() {
                         // map value has not been deleted, emit value
-                        (key, Some(value)) => Some((key, Ref::Borrowed(value))),
+                        (key, Some(value)) => Some((Ref::Borrowed(key), Ref::Borrowed(value))),
 
                         // map value is a delete, go to the next entry
                         (_, None) => continue,
@@ -312,7 +312,7 @@ where
                     let decoded_key: K = Decode::decode(entry.0.as_slice())?;
                     let decoded_value: V = Decode::decode(entry.1.as_slice())?;
 
-                    Some((&decoded_key, Ref::Owned(decoded_value)))
+                    Some((Ref::Owned(decoded_key), Ref::Owned(decoded_value)))
                 }
 
                 // merge values from both iterators
@@ -333,7 +333,7 @@ where
                         let decoded_key: K = Decode::decode(entry.0.as_slice())?;
                         let encoded_key: V = Decode::decode(entry.1.as_slice())?;
 
-                        return Ok(Some((&decoded_key, Ref::Owned(encoded_key))));
+                        return Ok(Some((Ref::Owned(decoded_key), Ref::Owned(encoded_key))));
                     }
 
                     if key_cmp == Ordering::Equal {
@@ -342,7 +342,7 @@ where
 
                     // map_key < backing_key
                     match map_iter.next().unwrap() {
-                        (key, Some(value)) => Some((key, Ref::Borrowed(value))),
+                        (key, Some(value)) => Some((Ref::Borrowed(key), Ref::Borrowed(value))),
 
                         // map entry deleted in in-memory map, skip
                         (_, None) => continue,
@@ -359,7 +359,7 @@ where
     V: State<S> + Decode,
     S: Read,
 {
-    type Item = Result<(&'a K, Ref<'a, V>)>;
+    type Item = Result<(Ref<'a, K>, Ref<'a, V>)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         MapIterator::iter_merge_next(&mut self.map_iter, &mut self.store_iter).transpose()
