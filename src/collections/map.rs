@@ -89,7 +89,7 @@ where
             self.children.get(key).unwrap().as_ref().map(Ref::Modified)
         } else {
             // value is not in memory, try to get from store
-            self.get_from_store(key)?.map(Ref::Unmodified)
+            self.get_from_store(key)?.map(Ref::Owned)
         })
     }
 
@@ -312,7 +312,7 @@ where
                     let decoded_key: K = Decode::decode(entry.0.as_slice())?;
                     let decoded_value: V = Decode::decode(entry.1.as_slice())?;
 
-                    Some((&decoded_key, Ref::Unmodified(decoded_value)))
+                    Some((&decoded_key, Ref::Owned(decoded_value)))
                 }
 
                 // merge values from both iterators
@@ -333,7 +333,7 @@ where
                         let decoded_key: K = Decode::decode(entry.0.as_slice())?;
                         let encoded_key: V = Decode::decode(entry.1.as_slice())?;
 
-                        return Ok(Some((&decoded_key, Ref::Unmodified(encoded_key))));
+                        return Ok(Some((&decoded_key, Ref::Owned(encoded_key))));
                     }
 
                     if key_cmp == Ordering::Equal {
@@ -394,7 +394,7 @@ impl<V> ReadOnly<V> {
 /// An immutable reference to an existing value in a collection.
 pub enum Ref<'a, V> {
     /// An existing value which was loaded from the store.
-    Unmodified(V),
+    Owned(V),
 
     /// A reference to an existing value which is being retained in memory
     /// because it was modified.
@@ -406,7 +406,7 @@ impl<'a, V> Deref for Ref<'a, V> {
 
     fn deref(&self) -> &V {
         match self {
-            Ref::Unmodified(inner) => inner,
+            Ref::Owned(value) => value,
             Ref::Modified(value) => value,
         }
     }
@@ -414,7 +414,7 @@ impl<'a, V> Deref for Ref<'a, V> {
 
 impl<'a, V: Default> Default for Ref<'a, V> {
     fn default() -> Self {
-        Ref::Unmodified(V::default())
+        Ref::Owned(V::default())
     }
 }
 
