@@ -438,7 +438,7 @@ impl<'a, V: Default> Default for Ref<'a, V> {
 ///
 /// If the value is mutated, it will be retained in memory until the parent
 /// collection is flushed.
-pub enum ChildMut<'a, K: Clone, V, S> {
+pub enum ChildMut<'a, K, V, S> {
     /// An existing value which was loaded from the store.
     Unmodified(Option<(K, V, &'a mut Map<K, V, S>)>),
 
@@ -470,7 +470,7 @@ where
     }
 }
 
-impl<'a, K: Ord + Clone, V, S> Deref for ChildMut<'a, K, V, S> {
+impl<'a, K: Ord, V, S> Deref for ChildMut<'a, K, V, S> {
     type Target = V;
 
     fn deref(&self) -> &V {
@@ -495,10 +495,9 @@ where
                 let entry = parent.children.entry(key);
 
                 let entry = match entry {
-                    Occupied(val) => val,
-                    Vacant(_) => unreachable!("Entry insertion ensures this arm is unreachable"),
+                    Occupied(occupied_entry) => occupied_entry,
+                    Vacant(_) => unreachable!("Insert ensures Vacant variant is unreachable"),
                 };
-
                 *self = ChildMut::Modified(entry);
                 self.deref_mut()
             }
