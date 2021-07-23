@@ -64,15 +64,15 @@ impl<T: State<S>, S: Read> Deque<T, S> {
         self.len() == 0
     }
 
-    pub fn get(&self, index: u64) -> Result<Option<Child<T>>> {
+    pub fn get(&self, index: u64) -> Result<Option<Ref<T>>> {
         self.map.get(index + self.meta.head)
     }
 
-    pub fn front(&self) -> Result<Option<Child<T>>> {
+    pub fn front(&self) -> Result<Option<Ref<T>>> {
         self.map.get(self.meta.head)
     }
 
-    pub fn back(&self) -> Result<Option<Child<T>>> {
+    pub fn back(&self) -> Result<Option<Ref<T>>> {
         self.map.get(self.meta.tail - 1)
     }
 }
