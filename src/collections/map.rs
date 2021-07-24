@@ -283,7 +283,7 @@ where
     fn iter_merge_next(
         parent_store: &Store<S>,
         map_iter: &mut Peekable<btree_map::Range<'a, K, Option<V>>>,
-        store_iter: &mut Peekable<Iter<Store<S>>>,
+        store_iter: &mut Peekable<StoreIter<Store<S>>>,
     ) -> Result<Option<(Ref<'a, K>, Ref<'a, V>)>> {
         loop {
             let has_map_entry = map_iter.peek().is_some();
