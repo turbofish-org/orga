@@ -8,6 +8,7 @@ use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
 use super::Next;
 use crate::state::*;
+use crate::store::Iter as StoreIter;
 use crate::store::*;
 use crate::Result;
 use ed::*;
@@ -273,7 +274,7 @@ where
 {
     parent_store: &'a Store<S>,
     map_iter: Peekable<btree_map::Range<'a, K, Option<V>>>,
-    store_iter: Peekable<Iter<'a, Store<S>>>,
+    store_iter: Peekable<StoreIter<'a, Store<S>>>,
 }
 
 impl<'a, K, V, S> MapIterator<'a, K, V, S>
