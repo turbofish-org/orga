@@ -78,8 +78,14 @@ where
         }
     }
 
-    pub fn insert(&mut self, key: K, value: V) {
-        self.children.insert(key, Some(value));
+    pub fn insert(&mut self, key: K, value: V::Encoding) -> Result<()> {
+        let encoded_key = Encode::encode(&key)?;
+
+        let value_store = self.store.sub(encoded_key.as_slice());
+        self.children
+            .insert(key, Some(V::create(value_store, value)?));
+
+        Ok(())
     }
 
     /// Gets a reference to the value in the map for the given key, or `None` if
