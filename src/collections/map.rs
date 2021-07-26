@@ -1532,4 +1532,18 @@ mod tests {
 
         assert_eq!(actual, expected);
     }
+
+    #[test]
+    fn map_insert_store_overwrite() {
+        let store = Store::new(MapStore::new());
+        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
+        edit_map.insert(12, 24).unwrap();
+        edit_map.flush().unwrap();
+
+        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        read_map.insert(12, 26).unwrap();
+
+        assert_eq!(26, *read_map.get(12).unwrap().unwrap());
+    }
 }
