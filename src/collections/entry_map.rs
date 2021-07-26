@@ -1,5 +1,5 @@
 use super::map::Iter as MapIter;
-use super::map::{Map, Ref};
+use super::map::Map;
 use crate::encoding::{Decode, Encode};
 use crate::store::DefaultBackingStore;
 use std::hash::Hash;
