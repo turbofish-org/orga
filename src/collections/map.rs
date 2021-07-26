@@ -1474,4 +1474,24 @@ mod tests {
 
         assert_eq!(*actual, 84);
     }
+
+    #[test]
+    fn map_insert() {
+        let store = Store::new(MapStore::new());
+        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
+        map.insert(12, 24).unwrap();
+        map.insert(13, 26).unwrap();
+
+        let mut actual: Vec<(u32, u32)> = Vec::with_capacity(2);
+
+        map.iter()
+            .unwrap()
+            .map(|result| result.unwrap())
+            .for_each(|(k, v)| actual.push((*k, *v)));
+
+        let expected: Vec<(u32, u32)> = vec![(12, 24), (13, 26)];
+
+        assert_eq!(actual, expected);
+    }
 }
