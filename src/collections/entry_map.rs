@@ -1,4 +1,5 @@
-use super::map::{Iter, Map, Ref};
+use super::map::Iter as MapIter;
+use super::map::{Map, Ref};
 use crate::encoding::{Decode, Encode};
 use crate::store::DefaultBackingStore;
 use std::hash::Hash;
@@ -74,42 +75,42 @@ where
     T::Value: State<S> + Copy,
     S: Read,
 {
-    pub fn iter(&'a mut self) -> EntryMapIterator<'a, T, S> {
-        EntryMapIterator {
-            map_iter: self.map.iter(),
-        }
+    pub fn iter(&'a mut self) -> Result<Iter<'a, T, S>> {
+        Ok(Iter {
+            map_iter: self.map.iter()?,
+        })
     }
 
-    pub fn range<B: RangeBounds<T::Key> + Clone>(
-        &'a mut self,
-        range: B,
-    ) -> EntryMapIterator<'a, T, S> {
-        EntryMapIterator {
-            map_iter: self.map.range(range),
-        }
+    pub fn range<B: RangeBounds<T::Key> + Clone>(&'a mut self, range: B) -> Result<Iter<'a, T, S>> {
+        Ok(Iter {
+            map_iter: self.map.range(range)?,
+        })
     }
 }
 
-pub struct EntryMapIterator<'a, T: Entry, S>
+pub struct Iter<'a, T: Entry, S>
 where
     T::Key: Next<T::Key> + Decode + Encode + Terminated + Hash + Eq,
     T::Value: State<S>,
     S: Read,
 {
-    map_iter: MapIterator<'a, T::Key, T::Value, S>,
+    map_iter: MapIter<'a, T::Key, T::Value, S>,
 }
 
-impl<'a, T: Entry, S> Iterator for EntryMapIterator<'a, T, S>
+impl<'a, T: Entry, S> Iterator for Iter<'a, T, S>
 where
     T::Key: Next<T::Key> + Decode + Encode + Terminated + Hash + Eq + Ord + Copy,
     T::Value: State<S> + Copy,
     S: Read,
 {
-    type Item = T;
+    type Item = Result<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let map_next: Option<(T::Key, Ref<'a, T::Value>)> = self.map_iter.next();
-        map_next.map(|(key, value)| T::from_entry((key, *value)))
+        let map_next = self.map_iter.next();
+        map_next.map(|entry| match entry {
+            Ok((key, value)) => Ok(T::from_entry((*key, *value))),
+            Err(err) => Err(err),
+        })
     }
 }
 
@@ -204,7 +205,10 @@ mod test {
         entry_map.insert(MapEntry { key: 14, value: 28 }).unwrap();
 
         let mut expected: Vec<MapEntry> = Vec::with_capacity(3);
-        entry_map.iter().for_each(|entry| expected.push(entry));
+        entry_map
+            .iter()
+            .unwrap()
+            .for_each(|entry| expected.push(entry.unwrap()));
 
         let actual: Vec<MapEntry> = vec![
             MapEntry { key: 12, value: 24 },
@@ -225,7 +229,10 @@ mod test {
         entry_map.insert(MapEntry { key: 14, value: 28 }).unwrap();
 
         let mut expected: Vec<MapEntry> = Vec::with_capacity(3);
-        entry_map.range(..).for_each(|entry| expected.push(entry));
+        entry_map
+            .range(..)
+            .unwrap()
+            .for_each(|entry| expected.push(entry.unwrap()));
 
         let actual: Vec<MapEntry> = vec![
             MapEntry { key: 12, value: 24 },
@@ -246,7 +253,10 @@ mod test {
         entry_map.insert(MapEntry { key: 14, value: 28 }).unwrap();
 
         let mut expected: Vec<MapEntry> = Vec::with_capacity(3);
-        entry_map.range(..14).for_each(|entry| expected.push(entry));
+        entry_map
+            .range(..14)
+            .unwrap()
+            .for_each(|entry| expected.push(entry.unwrap()));
 
         let actual: Vec<MapEntry> = vec![
             MapEntry { key: 12, value: 24 },
@@ -268,7 +278,8 @@ mod test {
         let mut expected: Vec<MapEntry> = Vec::with_capacity(3);
         entry_map
             .range(13..14)
-            .for_each(|entry| expected.push(entry));
+            .unwrap()
+            .for_each(|entry| expected.push(entry.unwrap()));
 
         let actual: Vec<MapEntry> = vec![MapEntry { key: 13, value: 26 }];
 
