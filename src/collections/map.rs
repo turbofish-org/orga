@@ -430,7 +430,7 @@ impl<'a, V> Deref for Ref<'a, V> {
 
     fn deref(&self) -> &V {
         match self {
-            Ref::Owned(value) => value,
+            Ref::Owned(inner) => inner,
             Ref::Borrowed(value) => value,
         }
     }
