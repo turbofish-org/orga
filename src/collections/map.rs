@@ -1507,4 +1507,29 @@ mod tests {
 
         assert_eq!(12, *deque.pop_front().unwrap().unwrap());
     }
+
+    #[test]
+    fn map_insert_with_flush() {
+        let store = Store::new(MapStore::new());
+        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
+        edit_map.insert(12, 24).unwrap();
+        edit_map.insert(13, 26).unwrap();
+
+        edit_map.flush().unwrap();
+
+        let read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
+        let mut actual: Vec<(u32, u32)> = Vec::with_capacity(2);
+
+        read_map
+            .iter()
+            .unwrap()
+            .map(|result| result.unwrap())
+            .for_each(|(k, v)| actual.push((*k, *v)));
+
+        let expected: Vec<(u32, u32)> = vec![(12, 24), (13, 26)];
+
+        assert_eq!(actual, expected);
+    }
 }
