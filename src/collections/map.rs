@@ -78,6 +78,10 @@ where
         }
     }
 
+    pub fn insert(&mut self, key: K, value: V) {
+        self.children.insert(key, Some(value));
+    }
+
     /// Gets a reference to the value in the map for the given key, or `None` if
     /// the key has no value.
     ///
@@ -843,9 +847,9 @@ mod tests {
 
         edit_map.flush().unwrap();
 
-        let read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
 
-        read_map.insert(12, 24);
+        read_map.insert(12, 26);
 
         let mut map_iter = read_map.children.range(..).peekable();
         let mut range_iter = read_map.store.range(..).peekable();
@@ -855,7 +859,7 @@ mod tests {
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(*key, 12);
-                assert_eq!(*value, 24);
+                assert_eq!(*value, 26);
             }
             None => assert!(false),
         }
