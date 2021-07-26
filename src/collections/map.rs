@@ -1494,4 +1494,17 @@ mod tests {
 
         assert_eq!(actual, expected);
     }
+
+    #[test]
+    fn map_insert_complex_type() {
+        let store = Store::new(MapStore::new());
+        let mut map: Map<u32, Deque<u32>> = Map::create(store.clone(), ()).unwrap();
+
+        map.insert(12, Meta::default()).unwrap();
+
+        let mut deque = map.get_mut(12).unwrap().unwrap();
+        deque.push_front(12).unwrap();
+
+        assert_eq!(12, *deque.pop_front().unwrap().unwrap());
+    }
 }
