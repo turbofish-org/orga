@@ -855,7 +855,7 @@ mod tests {
 
         let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
 
-        read_map.insert(12, 26);
+        read_map.insert(12, 26).unwrap();
 
         let mut map_iter = read_map.children.range(..).peekable();
         let mut range_iter = read_map.store.range(..).peekable();
