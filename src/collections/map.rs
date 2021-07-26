@@ -1546,4 +1546,19 @@ mod tests {
 
         assert_eq!(26, *read_map.get(12).unwrap().unwrap());
     }
+
+    #[test]
+    fn map_insert_store_overwrite_get_entry() {
+        let store = Store::new(MapStore::new());
+        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+
+        edit_map.insert(12, 24).unwrap();
+        edit_map.flush().unwrap();
+
+        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        read_map.insert(12, 26).unwrap();
+
+        let actual = read_map.entry(12).unwrap().or_insert(28).unwrap();
+        assert_eq!(26, *actual);
+    }
 }
