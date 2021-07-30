@@ -85,7 +85,7 @@ fn derive_entry_named_struct_from_entry() {
     assert_eq!(MyNamedStruct::from_entry(((12, 13), (14,))), test);
 }
 
-#[derive(Entry, Debug)]
+#[derive(Entry, Debug, PartialEq)]
 struct TupleStruct(#[key] u8, u16, #[key] u32);
 
 #[test]
@@ -93,4 +93,11 @@ fn derive_entry_tuple_struct_into_entry() {
     let test = TupleStruct(8, 16, 32);
 
     assert_eq!(test.into_entry(), ((8, 32), (16,)));
+}
+
+#[test]
+fn derive_entry_tuple_struct_from_entry() {
+    let test = TupleStruct(8, 16, 32);
+
+    assert_eq!(TupleStruct::from_entry(((8, 32), (16,))), test);
 }
