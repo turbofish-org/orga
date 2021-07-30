@@ -54,7 +54,7 @@ fn struct_state() {
     assert_eq!(bytes, vec![0, 0, 0, 123, 0, 0, 0, 5, 0, 0, 0, 6]);
 }
 
-#[derive(Entry, Debug)]
+#[derive(Entry, Debug, PartialEq)]
 struct MyNamedStruct {
     #[key]
     my_key_1: u32,
@@ -72,4 +72,15 @@ fn derive_entry_named_struct_into_entry() {
     };
 
     assert_eq!(test.into_entry(), ((12, 13), (14,)));
+}
+
+#[test]
+fn derive_entry_named_struct_from_entry() {
+    let test = MyNamedStruct {
+        my_key_1: 12,
+        my_key_2: 13,
+        my_val: 14,
+    };
+
+    assert_eq!(MyNamedStruct::from_entry(((12, 13), (14,))), test);
 }
