@@ -1,4 +1,6 @@
+use orga::collections::Entry;
 use orga::encoding::{Decode, Encode};
+use orga::macros::Entry;
 use orga::state::State;
 use orga::store::{MapStore, Store};
 
@@ -50,4 +52,24 @@ fn struct_state() {
     let data = state.flush().unwrap();
     let bytes = data.encode().unwrap();
     assert_eq!(bytes, vec![0, 0, 0, 123, 0, 0, 0, 5, 0, 0, 0, 6]);
+}
+
+#[derive(Entry, Debug)]
+struct MyNamedStruct {
+    #[key]
+    my_key_1: u32,
+    #[key]
+    my_key_2: u16,
+    my_val: u8,
+}
+
+#[test]
+fn derive_entry_named_struct_into_entry() {
+    let test = MyNamedStruct {
+        my_key_1: 12,
+        my_key_2: 13,
+        my_val: 14,
+    };
+
+    assert_eq!(test.into_entry(), ((12, 13), (14,)));
 }
