@@ -1,11 +1,199 @@
-use proc_macro::TokenStream;
+use proc_macro::{self, TokenStream};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use std::str::FromStr;
-use syn::*;
+use std::collections::BTreeMap;
+use syn::{parse_macro_input, DeriveInput};
 
-pub fn derive(item: TokenStream) -> TokenStream {
-    let output = quote! {};
+fn is_key_field(field: &syn::Field) -> bool {
+    let maybe_keys: Vec<String> = field
+        .attrs
+        .iter()
+        .map(|attr| attr.path.get_ident().unwrap().to_string())
+        .collect();
+    let key = "key";
+
+    maybe_keys.contains(&key.to_string())
+}
+
+fn parse_named_struct(data: syn::DataStruct, keys: bool) -> Vec<(syn::Ident, syn::Type)> {
+    data.fields
+        .iter()
+        .filter(|field| !(keys ^ is_key_field(field)))
+        .map(|f| (f.ident.clone().unwrap(), f.ty.clone()))
+        .collect()
+}
+
+fn parse_unnamed_struct(data: syn::DataStruct, keys: bool) -> Vec<(syn::Index, syn::Type)> {
+    data.fields
+        .iter()
+        .enumerate()
+        .filter(|(_, field)| !(keys ^ is_key_field(field)))
+        .map(|(i, field)| (syn::Index::from(i), field.ty.clone()))
+        .collect()
+}
+
+fn generate_named_struct_body(
+    key_field_names: &Vec<syn::Ident>,
+    value_field_names: &Vec<syn::Ident>,
+) -> std::vec::IntoIter<TokenStream2> {
+    let self_body: Vec<TokenStream2> = key_field_names
+        .iter()
+        .enumerate()
+        .map(|(i, name)| (i, name, 0))
+        .chain(
+            value_field_names
+                .iter()
+                .enumerate()
+                .map(|(i, name)| (i, name, 1)),
+        )
+        .map(|(i, name, position)| {
+            let position = syn::Index::from(position);
+            let index = syn::Index::from(i);
+            quote! { #name: item.#position.#index,}
+        })
+        .collect();
+
+    self_body.into_iter()
+}
+
+fn generate_unnamed_struct_body(
+    keys: Vec<(syn::Index, syn::Type)>,
+    values: Vec<(syn::Index, syn::Type)>,
+) -> std::vec::IntoIter<TokenStream2> {
+    let mut field_key_status = BTreeMap::new();
+
+    for key in keys {
+        let key_index = key.0;
+        field_key_status.insert(key_index.index, true);
+    }
+    for value in values {
+        let val_index = value.0;
+        field_key_status.insert(val_index.index, false);
+    }
+
+    let mut num_keys = 0;
+    let mut num_vals = 0;
+
+    let output: Vec<TokenStream2> = field_key_status
+        .iter()
+        .map(|(_, is_key)| match is_key {
+            true => {
+                let j = syn::Index::from(num_keys);
+                num_keys += 1;
+                quote! { item.0.#j}
+            }
+            false => {
+                let j = syn::Index::from(num_vals);
+                num_vals += 1;
+                quote! { item.1.#j}
+            }
+        })
+        .collect();
+
+    output.into_iter()
+}
+
+fn derive_named_struct(data: syn::DataStruct, ident: syn::Ident) -> TokenStream {
+    let keys = parse_named_struct(data.clone(), true);
+    let values = parse_named_struct(data, false);
+
+    let key_field_types: Vec<syn::Type> = keys.iter().map(|key| key.1.clone()).collect();
+    let key_field_names: Vec<syn::Ident> = keys.iter().map(|key| key.0.clone()).collect();
+
+    let value_field_types: Vec<syn::Type> = values.iter().map(|value| value.1.clone()).collect();
+    let value_field_names: Vec<syn::Ident> = values.iter().map(|value| value.0.clone()).collect();
+
+    let self_body = generate_named_struct_body(&key_field_names, &value_field_names);
+
+    let output = quote! {
+        impl ::orga::collections::Entry for #ident {
+            type Key = (
+                #(#key_field_types,)*
+            );
+
+            type Value = (
+                #(#value_field_types,)*
+            );
+
+            fn into_entry(self) -> (Self::Key, Self::Value) {
+                (
+                    (#(
+                        self.#key_field_names,
+                    )*),
+                    (#(
+                        self.#value_field_names,
+                    )*),
+                )
+            }
+
+            fn from_entry(item: (Self::Key, Self::Value)) -> Self {
+                Self {
+                    #(#self_body)*
+                }
+            }
+        }
+    };
 
     output.into()
+}
+
+fn derive_unnamed_struct(data: syn::DataStruct, ident: syn::Ident) -> TokenStream {
+    let keys = parse_unnamed_struct(data.clone(), true);
+    let values = parse_unnamed_struct(data, false);
+
+    let key_field_types: Vec<syn::Type> = keys.iter().map(|key| key.1.clone()).collect();
+    let key_field_indices: Vec<syn::Index> = keys.iter().map(|key| key.0.clone()).collect();
+
+    let value_field_types: Vec<syn::Type> = values.iter().map(|value| value.1.clone()).collect();
+    let value_field_indices: Vec<syn::Index> = values.iter().map(|value| value.0.clone()).collect();
+
+    let self_body = generate_unnamed_struct_body(keys, values);
+
+    let output = quote! {
+        impl ::orga::collections::Entry for #ident {
+            type Key = (
+                #(#key_field_types,)*
+            );
+
+            type Value = (
+                #(#value_field_types,)*
+            );
+
+            fn into_entry(self) -> (Self::Key, Self::Value) {
+                (
+                    (#(
+                        self.#key_field_indices,
+                    )*),
+                    (#(
+                        self.#value_field_indices,
+                    )*),
+                )
+            }
+
+            fn from_entry(item: (Self::Key, Self::Value)) -> Self {
+                Self(#(#self_body,)*)
+            }
+        }
+    };
+
+    output.into()
+}
+
+pub fn derive(input: TokenStream) -> TokenStream {
+    let DeriveInput { ident, data, .. } = parse_macro_input!(input);
+
+    match data.clone() {
+        syn::Data::Struct(data) => match data.clone().fields {
+            syn::Fields::Named(_) => {
+                return derive_named_struct(data, ident);
+            }
+            syn::Fields::Unnamed(_) => {
+                return derive_unnamed_struct(data, ident);
+            }
+            syn::Fields::Unit => {
+                todo!("Unit structs are not supported")
+            }
+        },
+        _ => todo!("Currently only structs are supported"),
+    };
 }

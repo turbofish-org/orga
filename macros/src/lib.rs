@@ -8,7 +8,7 @@ pub fn state(item: TokenStream) -> TokenStream {
     state::derive(item)
 }
 
-#[proc_macro_derive(Entry)]
+#[proc_macro_derive(Entry, attributes(key))]
 pub fn entry(item: TokenStream) -> TokenStream {
     entry::derive(item)
 }
