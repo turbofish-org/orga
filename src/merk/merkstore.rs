@@ -6,7 +6,6 @@ use merk::{restore::Restorer, rocksdb, tree::Tree, BatchEntry, Merk, Op};
 use std::{collections::BTreeMap, convert::TryInto};
 use std::{mem::transmute, path::PathBuf};
 use tendermint_proto::abci::{self, *};
-
 type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
 const STATE_SYNC_EPOCH: u64 = 1000;
@@ -20,7 +19,7 @@ struct MerkSnapshot {
 /// A [`store::Store`] implementation backed by a [`merk`](https://docs.rs/merk)
 /// Merkle key/value store.
 pub struct MerkStore {
-    pub(super) merk: Option<Merk>,
+    merk: Option<Merk>,
     home: PathBuf,
     map: Option<Map>,
     snapshots: BTreeMap<u64, MerkSnapshot>,
