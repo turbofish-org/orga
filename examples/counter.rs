@@ -8,7 +8,7 @@ use orga::store::{BufStore, DefaultBackingStore, NullStore, Read, Store, Write};
 struct App;
 
 //#[derive(State)]
-struct CounterState<S> {
+struct CounterState<S = &'static mut BufStore<&'static mut BufStore<&'static mut MerkStore>>> {
     count: u32,
     count_map: orga::collections::Map<u32, u32, S>,
 }
@@ -40,18 +40,6 @@ impl<S> State<S> for CounterState<S> {
     }
 }
 
-// impl From<CounterState> for <CounterState as ::orga::state::State>::Encoding {
-// fn from(state: CounterState) -> Self {
-//     (state.count.into(), state.count_map.into())
-// }
-// }
-
-// impl<S, I: Intermediate> From<CounterState<S>> for Intermediate {
-//     fn from(state: CounterState<S>) -> Self {
-//         (state.count.into(), state.count_map.into())
-//     }
-// }
-//
 impl<S> From<CounterState<S>>
     for (
         <u32 as ::orga::state::State<S>>::Encoding,
@@ -63,15 +51,36 @@ impl<S> From<CounterState<S>>
     }
 }
 
-fn foo<S: Read>(store: &mut BufStore<&mut BufStore<&mut S>>) {
-    let store = Store::new(store);
-    let _state = CounterState::create(store, Default::default()).unwrap();
+fn foo<S: Read + Write>(store: Store<S>) -> u32 {
+    //&mut BufStore<&mut BufStore<&mut S>>) {
+    let mut state = CounterState::create(store, Default::default()).unwrap();
+    let mut count = state
+        .count_map
+        .entry(42)
+        .unwrap()
+        .or_insert_default()
+        .unwrap();
+    let c = *count;
+    println!("state.count before increment: {}", c);
+    state.count_map.insert(42, c + 1).unwrap();
+    state.flush();
+    c
 }
 
-fn main() {
-    let store: Store<DefaultBackingStore> = Store::new(MerkStore::new(std::path::PathBuf::new()));
-    // let mut_store: &mut BufStore<&mut BufStore<&mut S>> = BufStore::new(BufStore::new());
+// fn pretty_app(state: CounterState, tx: u32) {
 
+// }
+
+fn main() {
+    //    let store: Store<DefaultBackingStore> = Store::new(MerkStore::new(std::path::PathBuf::new()));
+    let mut store_a = MerkStore::new("./counter-test.db".into());
+    let mut store_b = BufStore::wrap_with_map(&mut store_a, Default::default());
+    let mut store_c = BufStore::wrap_with_map(&mut store_b, Default::default());
+    let mut store = Store::new(&mut store_c);
+    let height = foo(store);
+    store_c.flush();
+    store_b.flush();
+    store_a.commit(height as u64).unwrap();
     // foo(store);
 }
 
