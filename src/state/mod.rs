@@ -49,11 +49,11 @@ pub trait State<S = DefaultBackingStore>: Sized {
         S: Write;
 }
 
-impl<T: ed::Encode + ed::Decode> State for T {
+impl<T: ed::Encode + ed::Decode, S> State<S> for T {
     type Encoding = Self;
 
     #[inline]
-    fn create(_: Store, value: Self) -> Result<Self> {
+    fn create(_: Store<S>, value: Self) -> Result<Self> {
         Ok(value)
     }
 
