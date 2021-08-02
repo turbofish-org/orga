@@ -8,15 +8,15 @@ use orga::store::{BufStore, DefaultBackingStore, NullStore, Read, Store, Write};
 struct App;
 
 //#[derive(State)]
-struct CounterState {
+struct CounterState<S> {
     count: u32,
-    count_map: orga::collections::Map<u32, u32>,
+    count_map: orga::collections::Map<u32, u32, S>,
 }
 
-impl<S> State<S> for CounterState {
+impl<S> State<S> for CounterState<S> {
     type Encoding = (
         <u32 as ::orga::state::State<S>>::Encoding,
-        <orga::collections::Map<u32, u32> as ::orga::state::State<S>>::Encoding,
+        <::orga::collections::Map<u32, u32, S> as ::orga::state::State<S>>::Encoding,
     );
 
     fn create(store: Store<S>, data: Self::Encoding) -> orga::Result<Self>
@@ -24,8 +24,8 @@ impl<S> State<S> for CounterState {
         S: Read,
     {
         Ok(CounterState {
-            count: ::orga::state::State::create(store.sub(&[0]), data.0)?,
-            count_map: orga::collections::Map::create(store.sub(&[0]), ())?,
+            count: ::orga::state::State::<S>::create(store.sub(&[0]), data.0)?,
+            count_map: orga::state::State::<S>::create(store.sub(&[1]), data.1)?,
         })
     }
 
@@ -33,19 +33,39 @@ impl<S> State<S> for CounterState {
     where
         S: Write,
     {
-        let flushed_value: ::orga::Result<u32> = State::<S>::flush(self.count);
-        Ok((flushed_value?,))
+        Ok((
+            State::<S>::flush(self.count)?,
+            State::<S>::flush(self.count_map)?,
+        ))
     }
 }
 
-impl From<CounterState> for <CounterState as ::orga::state::State>::Encoding {
-    fn from(state: CounterState) -> Self {
+// impl From<CounterState> for <CounterState as ::orga::state::State>::Encoding {
+// fn from(state: CounterState) -> Self {
+//     (state.count.into(), state.count_map.into())
+// }
+// }
+
+// impl<S, I: Intermediate> From<CounterState<S>> for Intermediate {
+//     fn from(state: CounterState<S>) -> Self {
+//         (state.count.into(), state.count_map.into())
+//     }
+// }
+//
+impl<S> From<CounterState<S>>
+    for (
+        <u32 as ::orga::state::State<S>>::Encoding,
+        <::orga::collections::Map<u32, u32, S> as ::orga::state::State<S>>::Encoding,
+    )
+{
+    fn from(state: CounterState<S>) -> Self {
         (state.count.into(), state.count_map.into())
     }
 }
 
-fn foo<S: Read>(store: Store<&mut BufStore<&mut BufStore<&mut S>>>) {
-    let _state: CounterState = CounterState::create(store, Default::default()).unwrap();
+fn foo<S: Read>(store: &mut BufStore<&mut BufStore<&mut S>>) {
+    let store = Store::new(store);
+    let _state = CounterState::create(store, Default::default()).unwrap();
 }
 
 fn main() {
