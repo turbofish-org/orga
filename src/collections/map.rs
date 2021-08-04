@@ -49,7 +49,7 @@ where
     where
         S: Write,
     {
-        for (key, maybe_value) in IntoIterator::into_iter(self.children) {
+        for (key, maybe_value) in self.children {
             Self::apply_change(&mut self.store, &key, maybe_value)?;
         }
 
