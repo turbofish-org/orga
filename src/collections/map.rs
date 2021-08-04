@@ -342,7 +342,6 @@ where
                     let key_cmp = map_key.cmp(&decoded_backing_key);
 
                     // map_key > backing_key, emit the backing entry
-                    // map_key == backing_key, map entry shadows backing entry
                     if key_cmp == Ordering::Greater {
                         let entry = iter.store_iter.next().unwrap()?;
                         let decoded_key: K = Decode::decode(entry.0.as_slice())?;
@@ -356,6 +355,7 @@ where
                         )));
                     }
 
+                    // map_key == backing_key, map entry shadows backing entry
                     if key_cmp == Ordering::Equal {
                         iter.store_iter.next();
                     }
