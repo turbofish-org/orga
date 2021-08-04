@@ -332,4 +332,14 @@ mod test {
 
         assert!(!entry_map.contains(MapEntry { key: 12, value: 24 }).unwrap());
     }
+
+    #[test]
+    fn contains_entry_key() {
+        let store = Store::new(MapStore::new());
+        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone(), ()).unwrap();
+
+        entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
+
+        assert!(entry_map.contains(MapEntry { key: 12, value: 24 }).unwrap());
+    }
 }
