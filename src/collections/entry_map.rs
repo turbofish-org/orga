@@ -51,9 +51,7 @@ where
 {
     pub fn insert(&mut self, entry: T) -> Result<()> {
         let (key, value) = entry.into_entry();
-        self.map.entry(key)?.or_insert(value.into())?;
-
-        Ok(())
+        self.map.insert(key, value.into())
     }
 
     pub fn delete(&mut self, entry: T) -> Result<()> {
