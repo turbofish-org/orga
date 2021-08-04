@@ -376,7 +376,7 @@ where
 impl<'a, K, V, S> Iterator for Iter<'a, K, V, S>
 where
     K: Next<K> + Decode + Encode + Terminated + Hash + Eq + Ord,
-    V: State<S> + Decode,
+    V: State<S>,
     S: Read,
 {
     type Item = Result<(Ref<'a, K>, Ref<'a, V>)>;
