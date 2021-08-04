@@ -316,7 +316,7 @@ where
                         .store_iter
                         .next()
                         .transpose()?
-                        .expect("Peek ensures that this in unreachable");
+                        .expect("Peek ensures this arm is unreachable");
 
                     let decoded_key: K = Decode::decode(entry.0.as_slice())?;
                     let decoded_value: <V as State<S>>::Encoding =
