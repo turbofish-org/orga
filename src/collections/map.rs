@@ -411,7 +411,7 @@ impl<V> ReadOnly<V> {
     }
 }
 
-/// An immutable reference to an existing value in a collection.
+/// An immutable reference to an existing key or value in a collection.
 pub enum Ref<'a, V> {
     /// An existing value which was loaded from the store.
     Owned(V),
