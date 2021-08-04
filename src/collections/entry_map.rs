@@ -340,6 +340,8 @@ mod test {
 
         entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
 
-        assert!(entry_map.contains(MapEntry { key: 12, value: 24 }).unwrap());
+        assert!(entry_map
+            .contains_entry_key(MapEntry { key: 12, value: 24 })
+            .unwrap());
     }
 }
