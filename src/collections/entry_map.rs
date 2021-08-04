@@ -67,6 +67,34 @@ where
     }
 }
 
+impl<T, S> EntryMap<T, S>
+where
+    T: Entry,
+    T::Key: Encode + Terminated + Eq + Hash + Ord + Copy,
+    T::Value: State<S> + Eq,
+    S: Read,
+{
+    pub fn contains(&self, entry: T) -> Result<bool> {
+        let (key, value) = entry.into_entry();
+
+        match self.map.contains_key(key)? {
+            true => {
+                let map_value = match self.map.get(key)? {
+                    Some(val) => val,
+                    None => {
+                        return Ok(false);
+                    }
+                };
+
+                Ok(*map_value == value)
+            }
+            false => {
+                return Ok(false);
+            }
+        }
+    }
+}
+
 impl<'a, T: Entry, S> EntryMap<T, S>
 where
     T::Key: Next<T::Key> + Decode + Encode + Terminated + Hash + Eq + Ord + Copy,
