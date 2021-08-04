@@ -173,9 +173,7 @@ mod test {
         let entry = MapEntry { key: 42, value: 84 };
         entry_map.insert(entry).unwrap();
 
-        assert!(entry_map
-            .contains_entry_key(MapEntry { key: 42, value: 84 })
-            .unwrap());
+        assert!(entry_map.contains(MapEntry { key: 42, value: 84 }).unwrap());
     }
 
     #[test]
@@ -191,7 +189,7 @@ mod test {
 
         let read_entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone(), ()).unwrap();
         assert!(read_entry_map
-            .contains_entry_key(MapEntry { key: 42, value: 84 })
+            .contains(MapEntry { key: 42, value: 84 })
             .unwrap());
     }
 
@@ -204,9 +202,7 @@ mod test {
         entry_map.insert(entry).unwrap();
         entry_map.delete(MapEntry { key: 42, value: 84 }).unwrap();
 
-        assert!(!entry_map
-            .contains_entry_key(MapEntry { key: 42, value: 84 })
-            .unwrap());
+        assert!(!entry_map.contains(MapEntry { key: 42, value: 84 }).unwrap());
     }
 
     #[test]
@@ -222,9 +218,7 @@ mod test {
 
         let read_map: EntryMap<MapEntry> = EntryMap::create(store.clone(), ()).unwrap();
 
-        assert!(!read_map
-            .contains_entry_key(MapEntry { key: 42, value: 84 })
-            .unwrap());
+        assert!(!read_map.contains(MapEntry { key: 42, value: 84 }).unwrap());
     }
 
     #[test]
