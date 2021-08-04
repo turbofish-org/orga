@@ -344,4 +344,16 @@ mod test {
             .contains_entry_key(MapEntry { key: 12, value: 24 })
             .unwrap());
     }
+
+    #[test]
+    fn contains_entry_key_value_non_match() {
+        let store = Store::new(MapStore::new());
+        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone(), ()).unwrap();
+
+        entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
+
+        assert!(entry_map
+            .contains_entry_key(MapEntry { key: 12, value: 13 })
+            .unwrap());
+    }
 }
