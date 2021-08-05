@@ -29,7 +29,9 @@ pub struct MerkStore {
 
 impl MerkStore {
     /// Constructs a `MerkStore` which references the given
-    /// [`Merk`](https://docs.rs/merk/latest/merk/struct.Merk.html) instance.
+    /// [`Merk`](https://docs.rs/merk/latest/merk/struct.Merk.html) inside the
+    /// `merk_home` directory. Initializes a new Merk instance if the directory
+    /// is empty.
     pub fn new(merk_home: PathBuf) -> Self {
         let merk = Merk::open(&merk_home.join("db")).unwrap();
         let restore_path = &merk_home.join("restore");
