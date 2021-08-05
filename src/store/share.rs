@@ -22,6 +22,13 @@ impl<T> Shared<T> {
     pub fn new(inner: T) -> Self {
         Shared(Rc::new(RefCell::new(inner)))
     }
+
+    pub fn into_inner(self) -> T {
+        match Rc::try_unwrap(self.0) {
+            Ok(inner) => inner.into_inner(),
+            _ => panic!("Store is already borrowed"),
+        }
+    }
 }
 
 impl<T> Clone for Shared<T> {
