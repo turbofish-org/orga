@@ -313,44 +313,24 @@ impl Worker {
 /// Only exposes the core state machine requests since messages like Echo and
 /// Info are automatically handled within
 /// [`ABCIStateMachine`](struct.ABCIStateMachine.html).
-pub trait Application {
-    fn init_chain<S: Read + Write>(
-        &self,
-        _store: S,
-        _req: RequestInitChain,
-    ) -> Result<ResponseInitChain> {
+pub trait Application<S = DefaultBackingStore> {
+    fn init_chain(&self, _store: Store<S>, _req: RequestInitChain) -> Result<ResponseInitChain> {
         Ok(Default::default())
     }
 
-    fn begin_block<S: Read + Write>(
-        &self,
-        _store: S,
-        _req: RequestBeginBlock,
-    ) -> Result<ResponseBeginBlock> {
+    fn begin_block(&self, _store: Store<S>, _req: RequestBeginBlock) -> Result<ResponseBeginBlock> {
         Ok(Default::default())
     }
 
-    fn deliver_tx<S: Read + Write>(
-        &self,
-        _store: S,
-        _req: RequestDeliverTx,
-    ) -> Result<ResponseDeliverTx> {
+    fn deliver_tx(&self, _store: Store<S>, _req: RequestDeliverTx) -> Result<ResponseDeliverTx> {
         Ok(Default::default())
     }
 
-    fn end_block<S: Read + Write>(
-        &self,
-        _store: S,
-        _req: RequestEndBlock,
-    ) -> Result<ResponseEndBlock> {
+    fn end_block(&self, _store: Store<S>, _req: RequestEndBlock) -> Result<ResponseEndBlock> {
         Ok(Default::default())
     }
 
-    fn check_tx<S: Read + Write>(
-        &self,
-        _store: S,
-        _req: RequestCheckTx,
-    ) -> Result<ResponseCheckTx> {
+    fn check_tx(&self, _store: Store<S>, _req: RequestCheckTx) -> Result<ResponseCheckTx> {
         Ok(Default::default())
     }
 }
