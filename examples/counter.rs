@@ -1,5 +1,7 @@
+use ed::Encode;
 use orga::abci::Application;
 use orga::abci::{ABCIStateMachine, ABCIStore};
+use orga::collections::Map;
 use orga::merk::MerkStore;
 use orga::state::State;
 use orga::state_machine::step_atomic;
@@ -7,81 +9,36 @@ use orga::store::{BufStore, DefaultBackingStore, NullStore, Read, Store, Write};
 
 struct App;
 
-//#[derive(State)]
-struct CounterState<S = &'static mut BufStore<&'static mut BufStore<&'static mut MerkStore>>> {
+#[derive(State)]
+struct CounterState {
     count: u32,
-    count_map: orga::collections::Map<u32, u32, S>,
+    count_map: Map<u32, u32>,
 }
 
-impl<S> State<S> for CounterState<S> {
-    type Encoding = (
-        <u32 as ::orga::state::State<S>>::Encoding,
-        <::orga::collections::Map<u32, u32, S> as ::orga::state::State<S>>::Encoding,
-    );
-
-    fn create(store: Store<S>, data: Self::Encoding) -> orga::Result<Self>
-    where
-        S: Read,
-    {
-        Ok(CounterState {
-            count: ::orga::state::State::<S>::create(store.sub(&[0]), data.0)?,
-            count_map: orga::state::State::<S>::create(store.sub(&[1]), data.1)?,
-        })
-    }
-
-    fn flush(self) -> ::orga::Result<Self::Encoding>
-    where
-        S: Write,
-    {
-        Ok((
-            State::<S>::flush(self.count)?,
-            State::<S>::flush(self.count_map)?,
-        ))
-    }
+fn foo(state: &mut CounterState) {
+    state.count = state.count + 1;
 }
-
-impl<S> From<CounterState<S>>
-    for (
-        <u32 as ::orga::state::State<S>>::Encoding,
-        <::orga::collections::Map<u32, u32, S> as ::orga::state::State<S>>::Encoding,
-    )
-{
-    fn from(state: CounterState<S>) -> Self {
-        (state.count.into(), state.count_map.into())
-    }
-}
-
-fn foo<S: Read + Write>(store: Store<S>) -> u32 {
-    //&mut BufStore<&mut BufStore<&mut S>>) {
-    let mut state = CounterState::create(store, Default::default()).unwrap();
-    let mut count = state
-        .count_map
-        .entry(42)
-        .unwrap()
-        .or_insert_default()
-        .unwrap();
-    let c = *count;
-    println!("state.count before increment: {}", c);
-    state.count_map.insert(42, c + 1).unwrap();
-    state.flush();
-    c
-}
-
-// fn pretty_app(state: CounterState, tx: u32) {
-
-// }
 
 fn main() {
-    //    let store: Store<DefaultBackingStore> = Store::new(MerkStore::new(std::path::PathBuf::new()));
-    let mut store_a = MerkStore::new("./counter-test.db".into());
-    let mut store_b = BufStore::wrap_with_map(&mut store_a, Default::default());
-    let mut store_c = BufStore::wrap_with_map(&mut store_b, Default::default());
-    let mut store = Store::new(&mut store_c);
-    let height = foo(store);
-    store_c.flush();
-    store_b.flush();
-    store_a.commit(height as u64).unwrap();
-    // foo(store);
+    use orga::encoding::{Decode, Encode};
+    use orga::store::{Read, Shared, Write};
+    let mut store_a = Shared::new(MerkStore::new("./counter-test.db".into()));
+    let mut store_b = Shared::new(BufStore::wrap_with_map(store_a.clone(), Default::default()));
+    let mut store_c = Shared::new(BufStore::wrap_with_map(store_b.clone(), Default::default()));
+    let mut store = Store::new(store_c.clone());
+
+    let data = Decode::decode(store.get(&[]).unwrap().unwrap().as_slice()).unwrap();
+    println!("data: {:?}", data);
+    let mut state = CounterState::create(store.clone(), data).unwrap();
+    foo(&mut state);
+    let flushed = state.flush().unwrap();
+    store_c.put(vec![], flushed.encode().unwrap()).unwrap();
+    drop(store);
+
+    store_c.into_inner().flush().unwrap();
+    store_b.into_inner().flush().unwrap();
+    let mut store_a = store_a.into_inner();
+    store_a.commit(store_a.height().unwrap() + 1).unwrap();
 }
 
 // impl Application<DefaultBackingStore> for App {
