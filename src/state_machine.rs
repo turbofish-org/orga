@@ -1,17 +1,22 @@
 use crate::error::Result;
-use crate::store::{BufStore, Read, Write};
+use crate::merk::MerkStore;
+use crate::store::{BufStore, Read, Shared, Write};
 
 /// A helper which runs state machine logic, discarding the writes to the store
 /// for error results and flushing to the underlying store on success.
-pub fn step_atomic<F, S, I, O>(f: F, store: S, input: I) -> Result<O>
+pub fn step_atomic<S, F, I, O>(f: F, mut store: Option<S>, input: I) -> Result<O>
 where
     S: Read + Write,
-    F: Fn(&mut BufStore<S>, I) -> Result<O>,
+    F: Fn(Shared<BufStore<S>>, I) -> Result<O>,
 {
-    let mut flush_store = BufStore::wrap(store);
-    let res = f(&mut flush_store, input)?;
-    flush_store.flush()?;
-    Ok(res)
+    unimplemented!();
+    // let owned_store = store.take().unwrap();
+    // let flush_store = Shared::new(BufStore::wrap(owned_store.clone()));
+    // let res = f(flush_store.clone(), input)?;
+    // let mut unwrapped_fs = flush_store.into_inner();
+    // unwrapped_fs.flush()?;
+    // store.replace(owned_store);
+    // Ok(res)
 }
 
 #[cfg(test)]
