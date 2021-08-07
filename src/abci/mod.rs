@@ -6,9 +6,10 @@ use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use failure::bail;
 use log::info;
 
+use crate::merk::MerkStore;
 use crate::state_machine::step_atomic;
 use crate::store::{
-    BufStore, BufStoreMap, DefaultBackingStore, Iter, MapStore, Read, Store, Write, KV,
+    BufStore, BufStoreMap, DefaultBackingStore, Iter, MapStore, Read, Shared, Store, Write, KV,
 };
 use crate::Result;
 
@@ -22,9 +23,9 @@ pub use tendermint_client::TendermintClient;
 
 /// Top-level struct for running an ABCI application. Maintains an ABCI server,
 /// mempool, and handles committing data to the store.
-pub struct ABCIStateMachine<A: Application, S: ABCIStore> {
+pub struct ABCIStateMachine<A: Application> {
     app: Option<A>,
-    store: S,
+    store: Option<Shared<MerkStore>>,
     receiver: Receiver<(Request, SyncSender<Response>)>,
     sender: SyncSender<(Request, SyncSender<Response>)>,
     mempool_state: Option<BufStoreMap>,
@@ -32,18 +33,18 @@ pub struct ABCIStateMachine<A: Application, S: ABCIStore> {
     height: u64,
 }
 
-impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
+impl<A: Application> ABCIStateMachine<A> {
     /// Constructs an `ABCIStateMachine` from the given app (a set of handlers
     /// for transactions and blocks), and store (a key/value store to persist
     /// the state data).
-    pub fn new(app: A, store: S) -> Self {
+    pub fn new(app: A, store: MerkStore) -> Self {
         let (sender, receiver): (
             SyncSender<(Request, SyncSender<Response>)>,
             Receiver<(Request, SyncSender<Response>)>,
         ) = sync_channel(0);
         ABCIStateMachine {
             app: Some(app),
-            store,
+            store: Some(Shared::new(store)),
             sender,
             receiver,
             mempool_state: Some(Default::default()),
@@ -69,25 +70,26 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                 res_info.data = "Rust ABCI State Machine".into();
                 res_info.version = "X".into();
                 res_info.app_version = 0;
-
-                let start_height = self.store.height()?;
+                let self_store = self.store.take().unwrap().into_inner();
+                let start_height = self_store.height()?;
                 info!("State is at height {}", start_height);
 
                 let app_hash = if start_height == 0 {
                     vec![]
                 } else {
-                    self.store.root_hash()?
+                    self_store.root_hash()?
                 };
 
                 res_info.last_block_height = start_height as i64;
                 res_info.last_block_app_hash = app_hash;
 
+                self.store = Some(Shared::new(self_store));
                 Ok(Res::Info(res_info))
             }
             Req::Flush(_) => Ok(Res::Flush(Default::default())),
             Req::Echo(_) => Ok(Res::Echo(Default::default())),
             Req::SetOption(_) => Ok(Res::SetOption(Default::default())),
-            Req::Query(req) => {
+            Req::Query(_req) => {
                 todo!()
                 // // TODO: handle multiple keys (or should this be handled by store impl?)
                 // let key = req.data;
@@ -103,92 +105,125 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
             }
             Req::InitChain(req) => {
                 let app = self.app.take().unwrap();
-                let mut store =
-                    BufStore::wrap_with_map(&mut self.store, self.consensus_state.take().unwrap());
+                let self_store = self.store.take().unwrap().into_inner();
+                let self_store_shared = Shared::new(self_store);
 
-                let res_init_chain =
-                    match step_atomic(|store, req| app.init_chain(store, req), &mut store, req) {
-                        Ok(res) => res,
-                        Err(_) => Default::default(),
-                    };
+                let mut store = Some(Shared::new(BufStore::wrap_with_map(
+                    self_store_shared.clone(),
+                    self.consensus_state.take().unwrap(),
+                )));
 
-                store.flush()?;
-                self.store.commit(self.height)?;
+                let res_init_chain = {
+                    let owned_store = store.take().unwrap();
+                    let flush_store = Shared::new(BufStore::wrap(owned_store.clone()));
+                    let res = app.init_chain(flush_store.clone(), req)?;
+                    let mut unwrapped_fs = flush_store.into_inner();
+                    unwrapped_fs.flush()?;
+                    store.replace(owned_store);
+                    res
+                };
+
+                store.unwrap().into_inner().flush()?;
+                let mut self_store = self_store_shared.into_inner();
+                self_store.commit(self.height)?;
 
                 self.app.replace(app);
                 self.consensus_state.replace(Default::default());
-
+                self.store = Some(Shared::new(self_store));
                 Ok(Res::InitChain(res_init_chain))
             }
             Req::BeginBlock(req) => {
                 let app = self.app.take().unwrap();
-                let mut store =
-                    BufStore::wrap_with_map(&mut self.store, self.consensus_state.take().unwrap());
+                let self_store = self.store.take().unwrap().into_inner();
+                let self_store_shared = Shared::new(self_store);
 
-                let res_begin_block = match step_atomic(
-                    |store: &mut BufStore<&mut BufStore<&mut S>>, req| app.begin_block(store, req),
-                    &mut store,
-                    req,
-                ) {
-                    Ok(res) => res,
-                    Err(_) => Default::default(),
+                let mut store = Some(Shared::new(BufStore::wrap_with_map(
+                    self_store_shared.clone(),
+                    self.consensus_state.take().unwrap(),
+                )));
+
+                let res_begin_block = {
+                    let owned_store = store.take().unwrap();
+                    let flush_store = Shared::new(BufStore::wrap(owned_store.clone()));
+                    let res = app.begin_block(flush_store.clone(), req)?;
+                    let mut unwrapped_fs = flush_store.into_inner();
+                    unwrapped_fs.flush()?;
+                    store.replace(owned_store);
+                    res
                 };
 
                 self.app.replace(app);
-                self.consensus_state.replace(store.into_map());
+                self.consensus_state
+                    .replace(store.unwrap().into_inner().into_map());
 
+                let self_store = self_store_shared.into_inner();
+                self.store = Some(Shared::new(self_store));
                 Ok(Res::BeginBlock(res_begin_block))
             }
             Req::DeliverTx(req) => {
                 let app = self.app.take().unwrap();
-                let mut store =
-                    BufStore::wrap_with_map(&mut self.store, self.consensus_state.take().unwrap());
+                let self_store = self.store.take().unwrap().into_inner();
+                let self_store_shared = Shared::new(self_store);
+                let mut store = Some(Shared::new(BufStore::wrap_with_map(
+                    self_store_shared.clone(),
+                    self.consensus_state.take().unwrap(),
+                )));
 
-                let res_deliver_tx = match step_atomic(
-                    |store: &mut BufStore<&mut BufStore<&mut S>>, req| app.deliver_tx(store, req),
-                    &mut store,
-                    req,
-                ) {
-                    Ok(res) => res,
-                    Err(err) => {
-                        let mut res: ResponseDeliverTx = Default::default();
-                        res.code = 1;
-                        res.log = format!("{}", err);
-                        res
-                    }
+                let res_deliver_tx = {
+                    let owned_store = store.take().unwrap();
+                    let flush_store = Shared::new(BufStore::wrap(owned_store.clone()));
+                    let res = app.deliver_tx(flush_store.clone(), req)?;
+                    let mut unwrapped_fs = flush_store.into_inner();
+                    unwrapped_fs.flush()?;
+                    store.replace(owned_store);
+                    res
                 };
 
                 self.app.replace(app);
-                self.consensus_state.replace(store.into_map());
-
+                self.consensus_state
+                    .replace(store.unwrap().into_inner().into_map());
+                let self_store = self_store_shared.into_inner();
+                self.store = Some(Shared::new(self_store));
                 Ok(Res::DeliverTx(res_deliver_tx))
             }
             Req::EndBlock(req) => {
                 self.height = req.height as u64;
 
                 let app = self.app.take().unwrap();
-                let mut store =
-                    BufStore::wrap_with_map(&mut self.store, self.consensus_state.take().unwrap());
+                let self_store = self.store.take().unwrap().into_inner();
+                let self_store_shared = Shared::new(self_store);
+                let mut store = Some(Shared::new(BufStore::wrap_with_map(
+                    self_store_shared.clone(),
+                    self.consensus_state.take().unwrap(),
+                )));
 
-                let res_end_block = match step_atomic(
-                    |store: &mut BufStore<&mut BufStore<&mut S>>, req| app.end_block(store, req),
-                    &mut store,
-                    req,
-                ) {
-                    Ok(res) => res,
-                    Err(_) => Default::default(),
+                let res_end_block = {
+                    let owned_store = store.take().unwrap();
+                    let flush_store = Shared::new(BufStore::wrap(owned_store.clone()));
+                    let res = app.end_block(flush_store.clone(), req)?;
+                    let mut unwrapped_fs = flush_store.into_inner();
+                    unwrapped_fs.flush()?;
+                    store.replace(owned_store);
+                    res
                 };
 
                 self.app.replace(app);
-                self.consensus_state.replace(store.into_map());
-
+                self.consensus_state
+                    .replace(store.unwrap().into_inner().into_map());
+                let self_store = self_store_shared.into_inner();
+                self.store = Some(Shared::new(self_store));
                 Ok(Res::EndBlock(res_end_block))
             }
             Req::Commit(_) => {
-                let mut store =
-                    BufStore::wrap_with_map(&mut self.store, self.consensus_state.take().unwrap());
+                let self_store = self.store.take().unwrap().into_inner();
+                let self_store_shared = Shared::new(self_store);
+                let mut store = BufStore::wrap_with_map(
+                    self_store_shared.clone(),
+                    self.consensus_state.take().unwrap(),
+                );
                 store.flush()?;
-                self.store.commit(self.height)?;
+                let mut self_store = self_store_shared.clone().into_inner();
+                self_store.commit(self.height)?;
 
                 if let Some(stop_height_str) = env::var_os("STOP_HEIGHT") {
                     let stop_height: u64 = stop_height_str
@@ -205,50 +240,68 @@ impl<A: Application, S: ABCIStore> ABCIStateMachine<A, S> {
                 self.consensus_state.replace(Default::default());
 
                 let mut res_commit = ResponseCommit::default();
-                res_commit.data = self.store.root_hash()?;
+                let self_store = self_store_shared.into_inner();
+                res_commit.data = self_store.root_hash()?;
+                self.store = Some(Shared::new(self_store));
                 Ok(Res::Commit(res_commit))
             }
             Req::CheckTx(req) => {
                 let app = self.app.take().unwrap();
-                let mut store =
-                    BufStore::wrap_with_map(&mut self.store, self.mempool_state.take().unwrap());
+                let self_store = self.store.take().unwrap().into_inner();
+                let self_store_shared = Shared::new(self_store);
+                let mut store = Some(Shared::new(BufStore::wrap_with_map(
+                    self_store_shared.clone(),
+                    self.mempool_state.take().unwrap(),
+                )));
 
-                let res_check_tx = match step_atomic(
-                    |store: &mut BufStore<&mut BufStore<&mut S>>, req| app.check_tx(store, req),
-                    &mut store,
-                    req,
-                ) {
-                    Ok(res) => res,
-                    Err(err) => {
-                        let mut res: ResponseCheckTx = Default::default();
-                        res.code = 1;
-                        res.log = format!("{}", err);
-                        res
-                    }
+                let res_check_tx = {
+                    let owned_store = store.take().unwrap();
+                    let flush_store = Shared::new(BufStore::wrap(owned_store.clone()));
+                    let res = app.check_tx(flush_store.clone(), req)?;
+                    let mut unwrapped_fs = flush_store.into_inner();
+                    unwrapped_fs.flush()?;
+                    store.replace(owned_store);
+                    res
                 };
 
                 self.app.replace(app);
-                self.mempool_state.replace(store.into_map());
-
+                self.mempool_state
+                    .replace(store.unwrap().into_inner().into_map());
+                let self_store = self_store_shared.into_inner();
+                self.store = Some(Shared::new(self_store));
                 Ok(Res::CheckTx(res_check_tx))
             }
-            // TODO: state sync
+            // // TODO: state sync
             Req::ListSnapshots(_req) => {
-                let snapshots = self.store.list_snapshots()?;
+                let self_store = self.store.take().unwrap();
+                let snapshots = self_store.into_inner().list_snapshots()?;
                 let mut res = ResponseListSnapshots::default();
                 res.snapshots = snapshots;
                 Ok(Res::ListSnapshots(res))
             }
-            Req::OfferSnapshot(req) => Ok(Res::OfferSnapshot(self.store.offer_snapshot(req)?)),
+            Req::OfferSnapshot(req) => {
+                let self_store = self.store.take().unwrap();
+                let return_val =
+                    Res::OfferSnapshot(self_store.clone().into_inner().offer_snapshot(req)?);
+                self.store = Some(self_store);
+                Ok(return_val)
+            }
             Req::LoadSnapshotChunk(req) => {
-                let chunk = self.store.load_snapshot_chunk(req)?;
+                let self_store = self.store.take().unwrap();
+                let chunk = self_store.clone().into_inner().load_snapshot_chunk(req)?;
                 let mut res = ResponseLoadSnapshotChunk::default();
                 res.chunk = chunk;
+                self.store = Some(self_store);
                 Ok(Res::LoadSnapshotChunk(res))
             }
-            Req::ApplySnapshotChunk(req) => Ok(Res::ApplySnapshotChunk(
-                self.store.apply_snapshot_chunk(req)?,
-            )),
+            Req::ApplySnapshotChunk(req) => {
+                let self_store = self.store.take().unwrap();
+                let return_val = Res::ApplySnapshotChunk(
+                    self_store.clone().into_inner().apply_snapshot_chunk(req)?,
+                );
+                self.store = Some(self_store);
+                Ok(return_val)
+            }
         }
     }
 
@@ -313,24 +366,44 @@ impl Worker {
 /// Only exposes the core state machine requests since messages like Echo and
 /// Info are automatically handled within
 /// [`ABCIStateMachine`](struct.ABCIStateMachine.html).
-pub trait Application<S = DefaultBackingStore> {
-    fn init_chain(&self, _store: Store<S>, _req: RequestInitChain) -> Result<ResponseInitChain> {
+pub trait Application {
+    fn init_chain(
+        &self,
+        _store: Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>,
+        _req: RequestInitChain,
+    ) -> Result<ResponseInitChain> {
         Ok(Default::default())
     }
 
-    fn begin_block(&self, _store: Store<S>, _req: RequestBeginBlock) -> Result<ResponseBeginBlock> {
+    fn begin_block(
+        &self,
+        _store: Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>,
+        _req: RequestBeginBlock,
+    ) -> Result<ResponseBeginBlock> {
         Ok(Default::default())
     }
 
-    fn deliver_tx(&self, _store: Store<S>, _req: RequestDeliverTx) -> Result<ResponseDeliverTx> {
+    fn deliver_tx(
+        &self,
+        _store: Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>,
+        _req: RequestDeliverTx,
+    ) -> Result<ResponseDeliverTx> {
         Ok(Default::default())
     }
 
-    fn end_block(&self, _store: Store<S>, _req: RequestEndBlock) -> Result<ResponseEndBlock> {
+    fn end_block(
+        &self,
+        _store: Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>,
+        _req: RequestEndBlock,
+    ) -> Result<ResponseEndBlock> {
         Ok(Default::default())
     }
 
-    fn check_tx(&self, _store: Store<S>, _req: RequestCheckTx) -> Result<ResponseCheckTx> {
+    fn check_tx(
+        &self,
+        _store: Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>,
+        _req: RequestCheckTx,
+    ) -> Result<ResponseCheckTx> {
         Ok(Default::default())
     }
 }
