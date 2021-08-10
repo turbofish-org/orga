@@ -173,8 +173,13 @@ impl<A: Application> ABCIStateMachine<A> {
                     let owned_store = store.take().unwrap();
                     let flush_store = Shared::new(BufStore::wrap(owned_store.clone()));
                     let res = app.deliver_tx(flush_store.clone(), req)?;
-                    let mut unwrapped_fs = flush_store.into_inner();
-                    unwrapped_fs.flush()?;
+                    {
+                        let mut unwrapped_fs = flush_store.into_inner();
+                        unwrapped_fs.flush()?;
+                    }
+                    let mut owned_store_inner = owned_store.into_inner();
+                    owned_store_inner.flush()?;
+                    let owned_store = Shared::new(owned_store_inner);
                     store.replace(owned_store);
                     res
                 };
@@ -217,13 +222,18 @@ impl<A: Application> ABCIStateMachine<A> {
             Req::Commit(_) => {
                 let self_store = self.store.take().unwrap().into_inner();
                 let self_store_shared = Shared::new(self_store);
-                let mut store = BufStore::wrap_with_map(
-                    self_store_shared.clone(),
-                    self.consensus_state.take().unwrap(),
-                );
-                store.flush()?;
-                let mut self_store = self_store_shared.clone().into_inner();
+                {
+                    let mut store = BufStore::wrap_with_map(
+                        self_store_shared.clone(),
+                        self.consensus_state.take().unwrap(),
+                    );
+                    store.flush()?;
+                }
+
+                let mut self_store = self_store_shared.into_inner();
                 self_store.commit(self.height)?;
+
+                let self_store_shared = Shared::new(self_store);
 
                 if let Some(stop_height_str) = env::var_os("STOP_HEIGHT") {
                     let stop_height: u64 = stop_height_str
