@@ -1,6 +1,4 @@
 use std::cell::RefCell;
-use std::collections::BTreeSet;
-use std::ops::{Bound, RangeInclusive};
 use std::rc::Rc;
 
 use super::MerkStore;
