@@ -20,11 +20,11 @@ impl<R: Read> Client<R> {
 impl<R: Read> Read for Client<R> {
     /// Gets a value for the given key, then decodes the response as a Merk
     /// proof and verifies it, returning the extracted value.
-    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+    fn get(&self, _key: &[u8]) -> Result<Option<Vec<u8>>> {
         todo!()
     }
 
-    fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
+    fn get_next(&self, _key: &[u8]) -> Result<Option<KV>> {
         todo!()
     }
 }
