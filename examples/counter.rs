@@ -1,11 +1,9 @@
 use ed::Encode;
 use orga::abci::ABCIStateMachine;
-use orga::abci::ABCIStore;
 use orga::abci::Application;
 use orga::encoding::Decode;
 use orga::merk::MerkStore;
 use orga::state::State;
-use orga::store::DefaultBackingStore;
 use orga::store::Shared;
 use orga::store::{BufStore, Read, Store, Write};
 use std::fs;
@@ -17,14 +15,10 @@ struct CounterState {
     count: u32,
 }
 
-fn foo(state: &mut CounterState) {
-    state.count = state.count + 1;
-}
-
 impl Application for App {
     fn init_chain(
         &self,
-        store: Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>,
+        _store: Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>,
         _req: tendermint_proto::abci::RequestInitChain,
     ) -> orga::Result<tendermint_proto::abci::ResponseInitChain> {
         Ok(Default::default())
@@ -33,7 +27,7 @@ impl Application for App {
     fn deliver_tx(
         &self,
         store: Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>,
-        req: tendermint_proto::abci::RequestDeliverTx,
+        _req: tendermint_proto::abci::RequestDeliverTx,
     ) -> orga::Result<tendermint_proto::abci::ResponseDeliverTx> {
         let mut store = Store::new(store);
 
