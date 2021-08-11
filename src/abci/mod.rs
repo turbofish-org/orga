@@ -7,10 +7,7 @@ use failure::bail;
 use log::info;
 
 use crate::merk::MerkStore;
-use crate::state_machine::step_atomic;
-use crate::store::{
-    BufStore, BufStoreMap, DefaultBackingStore, Iter, MapStore, Read, Shared, Store, Write, KV,
-};
+use crate::store::{BufStore, BufStoreMap, MapStore, Read, Shared, Write, KV};
 use crate::Result;
 
 use messages::*;
