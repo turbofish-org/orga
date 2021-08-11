@@ -3,7 +3,7 @@ use crate::store::{BufStore, Read, Shared, Write};
 
 /// A helper which runs state machine logic, discarding the writes to the store
 /// for error results and flushing to the underlying store on success.
-pub fn step_atomic<S, F, I, O>(f: F, mut store: Option<S>, input: I) -> Result<O>
+pub fn step_atomic<S, F, I, O>(_f: F, _store: Option<S>, _input: I) -> Result<O>
 where
     S: Read + Write,
     F: Fn(Shared<BufStore<S>>, I) -> Result<O>,
