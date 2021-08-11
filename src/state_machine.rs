@@ -1,5 +1,4 @@
 use crate::error::Result;
-use crate::merk::MerkStore;
 use crate::store::{BufStore, Read, Shared, Write};
 
 /// A helper which runs state machine logic, discarding the writes to the store
