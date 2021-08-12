@@ -51,9 +51,7 @@ where
 {
     pub fn insert(&mut self, entry: T) -> Result<()> {
         let (key, value) = entry.into_entry();
-        self.map.entry(key)?.or_insert(value.into())?;
-
-        Ok(())
+        self.map.insert(key, value.into())
     }
 
     pub fn delete(&mut self, entry: T) -> Result<()> {
@@ -63,9 +61,37 @@ where
         Ok(())
     }
 
-    pub fn contains(&self, entry: T) -> Result<bool> {
+    pub fn contains_entry_key(&self, entry: T) -> Result<bool> {
         let (key, _) = entry.into_entry();
         self.map.contains_key(key)
+    }
+}
+
+impl<T, S> EntryMap<T, S>
+where
+    T: Entry,
+    T::Key: Encode + Terminated + Eq + Hash + Ord + Copy,
+    T::Value: State<S> + Eq,
+    S: Read,
+{
+    pub fn contains(&self, entry: T) -> Result<bool> {
+        let (key, value) = entry.into_entry();
+
+        match self.map.contains_key(key)? {
+            true => {
+                let map_value = match self.map.get(key)? {
+                    Some(val) => val,
+                    None => {
+                        return Ok(false);
+                    }
+                };
+
+                Ok(*map_value == value)
+            }
+            false => {
+                return Ok(false);
+            }
+        }
     }
 }
 
@@ -284,5 +310,50 @@ mod test {
         let actual: Vec<MapEntry> = vec![MapEntry { key: 13, value: 26 }];
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn contains_wrong_entry() {
+        let store = Store::new(MapStore::new());
+        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone(), ()).unwrap();
+
+        entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
+
+        assert!(!entry_map.contains(MapEntry { key: 12, value: 13 }).unwrap());
+    }
+
+    #[test]
+    fn contains_removed_entry() {
+        let store = Store::new(MapStore::new());
+        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone(), ()).unwrap();
+
+        entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
+        entry_map.delete(MapEntry { key: 12, value: 24 }).unwrap();
+
+        assert!(!entry_map.contains(MapEntry { key: 12, value: 24 }).unwrap());
+    }
+
+    #[test]
+    fn contains_entry_key() {
+        let store = Store::new(MapStore::new());
+        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone(), ()).unwrap();
+
+        entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
+
+        assert!(entry_map
+            .contains_entry_key(MapEntry { key: 12, value: 24 })
+            .unwrap());
+    }
+
+    #[test]
+    fn contains_entry_key_value_non_match() {
+        let store = Store::new(MapStore::new());
+        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone(), ()).unwrap();
+
+        entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
+
+        assert!(entry_map
+            .contains_entry_key(MapEntry { key: 12, value: 13 })
+            .unwrap());
     }
 }
