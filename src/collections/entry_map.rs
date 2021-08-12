@@ -88,9 +88,7 @@ where
 
                 Ok(*map_value == value)
             }
-            false => {
-                return Ok(false);
-            }
+            false => Ok(false),
         }
     }
 }
