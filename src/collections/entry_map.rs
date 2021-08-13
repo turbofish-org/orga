@@ -96,7 +96,7 @@ where
 impl<'a, T: Entry, S> EntryMap<T, S>
 where
     T::Key: Next<T::Key> + Decode + Encode + Terminated + Hash + Eq + Ord + Clone,
-    T::Value: State<S> + Copy,
+    T::Value: State<S> + Clone,
     S: Read,
 {
     pub fn iter(&'a mut self) -> Result<Iter<'a, T, S>> {
@@ -115,7 +115,7 @@ where
 pub struct Iter<'a, T: Entry, S>
 where
     T::Key: Next<T::Key> + Decode + Encode + Terminated + Hash + Eq,
-    T::Value: State<S> + Copy,
+    T::Value: State<S> + Clone,
     S: Read,
 {
     map_iter: MapIter<'a, T::Key, T::Value, S>,
@@ -124,7 +124,7 @@ where
 impl<'a, T: Entry, S> Iterator for Iter<'a, T, S>
 where
     T::Key: Next<T::Key> + Decode + Encode + Terminated + Hash + Eq + Ord + Clone,
-    T::Value: State<S> + Copy,
+    T::Value: State<S> + Clone,
     S: Read,
 {
     type Item = Result<T>;
@@ -132,7 +132,7 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         let map_next = self.map_iter.next();
         map_next.map(|entry| match entry {
-            Ok((key, value)) => Ok(T::from_entry(((*key).clone(), *value))),
+            Ok((key, value)) => Ok(T::from_entry(((*key).clone(), (*value).clone()))),
             Err(err) => Err(err),
         })
     }
