@@ -1,4 +1,6 @@
+use orga::collections::Entry;
 use orga::encoding::{Decode, Encode};
+use orga::macros::Entry;
 use orga::state::State;
 use orga::store::{MapStore, Store};
 
@@ -50,4 +52,52 @@ fn struct_state() {
     let data = state.flush().unwrap();
     let bytes = data.encode().unwrap();
     assert_eq!(bytes, vec![0, 0, 0, 123, 0, 0, 0, 5, 0, 0, 0, 6]);
+}
+
+#[derive(Entry, Debug, PartialEq)]
+struct MyNamedStruct {
+    #[key]
+    my_key_1: u32,
+    #[key]
+    my_key_2: u16,
+    my_val: u8,
+}
+
+#[test]
+fn derive_entry_named_struct_into_entry() {
+    let test = MyNamedStruct {
+        my_key_1: 12,
+        my_key_2: 13,
+        my_val: 14,
+    };
+
+    assert_eq!(test.into_entry(), ((12, 13), (14,)));
+}
+
+#[test]
+fn derive_entry_named_struct_from_entry() {
+    let test = MyNamedStruct {
+        my_key_1: 12,
+        my_key_2: 13,
+        my_val: 14,
+    };
+
+    assert_eq!(MyNamedStruct::from_entry(((12, 13), (14,))), test);
+}
+
+#[derive(Entry, Debug, PartialEq)]
+struct TupleStruct(#[key] u8, u16, #[key] u32);
+
+#[test]
+fn derive_entry_tuple_struct_into_entry() {
+    let test = TupleStruct(8, 16, 32);
+
+    assert_eq!(test.into_entry(), ((8, 32), (16,)));
+}
+
+#[test]
+fn derive_entry_tuple_struct_from_entry() {
+    let test = TupleStruct(8, 16, 32);
+
+    assert_eq!(TupleStruct::from_entry(((8, 32), (16,))), test);
 }
