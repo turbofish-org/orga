@@ -233,18 +233,20 @@ mod test {
         entry_map.insert(MapEntry { key: 13, value: 26 }).unwrap();
         entry_map.insert(MapEntry { key: 14, value: 28 }).unwrap();
 
-        let mut expected: Vec<MapEntry> = Vec::with_capacity(3);
-        entry_map
-            .iter()
-            .unwrap()
-            .for_each(|entry| expected.push(entry.unwrap()));
-
         let actual: Vec<MapEntry> = vec![
             MapEntry { key: 12, value: 24 },
             MapEntry { key: 13, value: 26 },
             MapEntry { key: 14, value: 28 },
         ];
-        assert_eq!(actual, expected);
+
+        let result: bool = entry_map
+            .iter()
+            .unwrap()
+            .zip(actual.iter())
+            .map(|(actual, expected)| *actual.unwrap() == *expected)
+            .fold(true, |accumulator, item| item & accumulator);
+
+        assert!(result);
     }
 
     #[test]
@@ -256,19 +258,20 @@ mod test {
         entry_map.insert(MapEntry { key: 13, value: 26 }).unwrap();
         entry_map.insert(MapEntry { key: 14, value: 28 }).unwrap();
 
-        let mut expected: Vec<MapEntry> = Vec::with_capacity(3);
-        entry_map
-            .range(..)
-            .unwrap()
-            .for_each(|entry| expected.push(entry.unwrap()));
-
-        let actual: Vec<MapEntry> = vec![
+        let expected_entries: Vec<MapEntry> = vec![
             MapEntry { key: 12, value: 24 },
             MapEntry { key: 13, value: 26 },
             MapEntry { key: 14, value: 28 },
         ];
 
-        assert_eq!(actual, expected);
+        let result: bool = entry_map
+            .range(..)
+            .unwrap()
+            .zip(expected_entries.iter())
+            .map(|(actual, expected)| *actual.unwrap() == *expected)
+            .fold(true, |accumulator, item| item & accumulator);
+
+        assert!(result);
     }
 
     #[test]
@@ -280,18 +283,19 @@ mod test {
         entry_map.insert(MapEntry { key: 13, value: 26 }).unwrap();
         entry_map.insert(MapEntry { key: 14, value: 28 }).unwrap();
 
-        let mut expected: Vec<MapEntry> = Vec::with_capacity(3);
-        entry_map
-            .range(..14)
-            .unwrap()
-            .for_each(|entry| expected.push(entry.unwrap()));
-
-        let actual: Vec<MapEntry> = vec![
+        let expected_entries: Vec<MapEntry> = vec![
             MapEntry { key: 12, value: 24 },
             MapEntry { key: 13, value: 26 },
         ];
 
-        assert_eq!(actual, expected);
+        let result: bool = entry_map
+            .range(..14)
+            .unwrap()
+            .zip(expected_entries.iter())
+            .map(|(actual, expected)| *actual.unwrap() == *expected)
+            .fold(true, |accumulator, item| item & accumulator);
+
+        assert!(result);
     }
 
     #[test]
@@ -303,15 +307,16 @@ mod test {
         entry_map.insert(MapEntry { key: 13, value: 26 }).unwrap();
         entry_map.insert(MapEntry { key: 14, value: 28 }).unwrap();
 
-        let mut expected: Vec<MapEntry> = Vec::with_capacity(3);
-        entry_map
+        let expected_entries: Vec<MapEntry> = vec![MapEntry { key: 13, value: 26 }];
+
+        let result: bool = entry_map
             .range(13..14)
             .unwrap()
-            .for_each(|entry| expected.push(entry.unwrap()));
+            .zip(expected_entries.iter())
+            .map(|(actual, expected)| *actual.unwrap() == *expected)
+            .fold(true, |accumulator, item| item & accumulator);
 
-        let actual: Vec<MapEntry> = vec![MapEntry { key: 13, value: 26 }];
-
-        assert_eq!(actual, expected);
+        assert!(result);
     }
 
     #[test]
