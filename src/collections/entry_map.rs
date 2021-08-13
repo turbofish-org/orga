@@ -96,7 +96,7 @@ where
 impl<'a, T: Entry, S> EntryMap<T, S>
 where
     T::Key: Next<T::Key> + Decode + Encode + Terminated + Hash + Eq + Ord + Copy,
-    T::Value: State<S>,
+    T::Value: State<S> + Copy,
     S: Read,
 {
     pub fn iter(&'a mut self) -> Result<Iter<'a, T, S>> {
@@ -115,7 +115,7 @@ where
 pub struct Iter<'a, T: Entry, S>
 where
     T::Key: Next<T::Key> + Decode + Encode + Terminated + Hash + Eq,
-    T::Value: State<S>,
+    T::Value: State<S> + Copy,
     S: Read,
 {
     map_iter: MapIter<'a, T::Key, T::Value, S>,
