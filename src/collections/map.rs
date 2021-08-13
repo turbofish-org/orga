@@ -407,7 +407,7 @@ impl<V> From<V> for ReadOnly<V> {
 }
 
 impl<V> ReadOnly<V> {
-    fn new(inner: V) -> Self {
+    pub fn new(inner: V) -> Self {
         ReadOnly { inner }
     }
 }

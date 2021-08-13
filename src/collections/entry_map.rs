@@ -1,5 +1,7 @@
 use super::map::Iter as MapIter;
 use super::map::Map;
+use super::map::ReadOnly;
+
 use crate::encoding::{Decode, Encode};
 use crate::store::DefaultBackingStore;
 use std::hash::Hash;
@@ -127,12 +129,15 @@ where
     T::Value: State<S> + Clone,
     S: Read,
 {
-    type Item = Result<T>;
+    type Item = Result<ReadOnly<T>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let map_next = self.map_iter.next();
         map_next.map(|entry| match entry {
-            Ok((key, value)) => Ok(T::from_entry(((*key).clone(), (*value).clone()))),
+            Ok((key, value)) => Ok(ReadOnly::new(T::from_entry((
+                (*key).clone(),
+                (*value).clone(),
+            )))),
             Err(err) => Err(err),
         })
     }
@@ -239,7 +244,6 @@ mod test {
             MapEntry { key: 13, value: 26 },
             MapEntry { key: 14, value: 28 },
         ];
-
         assert_eq!(actual, expected);
     }
 
