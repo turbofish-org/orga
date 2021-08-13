@@ -358,7 +358,7 @@ where
 
                     // map_key == backing_key, map entry shadows backing entry
                     if key_cmp == Ordering::Equal {
-                        self.store_iter.next();
+                        self.store_iter.next().transpose()?;
                     }
 
                     // map_key < backing_key
