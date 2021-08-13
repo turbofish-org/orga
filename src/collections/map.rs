@@ -291,10 +291,10 @@ where
     V: State<S>,
     S: Read,
 {
-    fn iter_merge_next(iter: &mut Iter<'a, K, V, S>) -> Result<Option<(Ref<'a, K>, Ref<'a, V>)>> {
+    fn iter_merge_next(&mut self) -> Result<Option<(Ref<'a, K>, Ref<'a, V>)>> {
         loop {
-            let has_map_entry = iter.map_iter.peek().is_some();
-            let has_backing_entry = iter.store_iter.peek().is_some();
+            let has_map_entry = self.map_iter.peek().is_some();
+            let has_backing_entry = self.store_iter.peek().is_some();
 
             return Ok(match (has_map_entry, has_backing_entry) {
                 // consumed both iterators, end here
@@ -302,7 +302,7 @@ where
 
                 // consumed backing iterator, still have map values
                 (true, false) => {
-                    match iter.map_iter.next().unwrap() {
+                    match self.map_iter.next().unwrap() {
                         // map value has not been deleted, emit value
                         (key, Some(value)) => Some((Ref::Borrowed(key), Ref::Borrowed(value))),
 
@@ -313,7 +313,7 @@ where
 
                 // consumed map iterator, still have backing values
                 (false, true) => {
-                    let entry = iter
+                    let entry = self
                         .store_iter
                         .next()
                         .transpose()?
@@ -323,7 +323,7 @@ where
                     let decoded_value: <V as State<S>>::Encoding =
                         Decode::decode(entry.1.as_slice())?;
 
-                    let value_store = iter.parent_store.sub(entry.0.as_slice());
+                    let value_store = self.parent_store.sub(entry.0.as_slice());
 
                     Some((
                         Ref::Owned(decoded_key),
@@ -333,8 +333,8 @@ where
 
                 // merge values from both iterators
                 (true, true) => {
-                    let map_key = iter.map_iter.peek().unwrap().0;
-                    let backing_key = match iter.store_iter.peek().unwrap() {
+                    let map_key = self.map_iter.peek().unwrap().0;
+                    let backing_key = match self.store_iter.peek().unwrap() {
                         Err(err) => failure::bail!("{}", err),
                         Ok((ref key, _)) => key,
                     };
@@ -344,12 +344,12 @@ where
 
                     // map_key > backing_key, emit the backing entry
                     if key_cmp == Ordering::Greater {
-                        let entry = iter.store_iter.next().unwrap()?;
+                        let entry = self.store_iter.next().unwrap()?;
                         let decoded_key: K = Decode::decode(entry.0.as_slice())?;
                         let decoded_value: <V as State<S>>::Encoding =
                             Decode::decode(entry.1.as_slice())?;
 
-                        let value_store = iter.parent_store.sub(entry.0.as_slice());
+                        let value_store = self.parent_store.sub(entry.0.as_slice());
                         return Ok(Some((
                             Ref::Owned(decoded_key),
                             Ref::Owned(V::create(value_store, decoded_value)?),
@@ -358,11 +358,11 @@ where
 
                     // map_key == backing_key, map entry shadows backing entry
                     if key_cmp == Ordering::Equal {
-                        iter.store_iter.next();
+                        self.store_iter.next();
                     }
 
                     // map_key < backing_key
-                    match iter.map_iter.next().unwrap() {
+                    match self.map_iter.next().unwrap() {
                         (key, Some(value)) => Some((Ref::Borrowed(key), Ref::Borrowed(value))),
 
                         // map entry deleted in in-memory map, skip
@@ -383,7 +383,7 @@ where
     type Item = Result<(Ref<'a, K>, Ref<'a, V>)>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        Iter::iter_merge_next(self).transpose()
+        self.iter_merge_next().transpose()
     }
 }
 
