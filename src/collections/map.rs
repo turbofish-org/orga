@@ -345,7 +345,7 @@ where
                     // map_key > backing_key, emit the backing entry
                     if key_cmp == Ordering::Greater {
                         let entry = self.store_iter.next().unwrap()?;
-                        let decoded_key: K = Decode::decode(entry.0.as_slice())?;
+                        let decoded_key: K = decoded_backing_key;
                         let decoded_value: <V as State<S>>::Encoding =
                             Decode::decode(entry.1.as_slice())?;
 
