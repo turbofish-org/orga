@@ -361,7 +361,7 @@ where
                         self.store_iter.next().transpose()?;
                     }
 
-                    // map_key < backing_key
+                    // map_key <= backing_key
                     match self.map_iter.next().unwrap() {
                         (key, Some(value)) => Some((Ref::Borrowed(key), Ref::Borrowed(value))),
 
