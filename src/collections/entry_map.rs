@@ -45,7 +45,7 @@ where
 impl<T, S> EntryMap<T, S>
 where
     T: Entry,
-    T::Key: Encode + Terminated + Eq + Hash + Ord + Copy,
+    T::Key: Encode + Terminated + Eq + Hash + Ord + Clone,
     T::Value: State<S>,
     S: Read,
 {
@@ -70,14 +70,14 @@ where
 impl<T, S> EntryMap<T, S>
 where
     T: Entry,
-    T::Key: Encode + Terminated + Eq + Hash + Ord + Copy,
+    T::Key: Encode + Terminated + Eq + Hash + Ord + Clone,
     T::Value: State<S> + Eq,
     S: Read,
 {
     pub fn contains(&self, entry: T) -> Result<bool> {
         let (key, value) = entry.into_entry();
 
-        match self.map.contains_key(key)? {
+        match self.map.contains_key(key.clone())? {
             true => {
                 let map_value = match self.map.get(key)? {
                     Some(val) => val,
@@ -95,7 +95,7 @@ where
 
 impl<'a, T: Entry, S> EntryMap<T, S>
 where
-    T::Key: Next<T::Key> + Decode + Encode + Terminated + Hash + Eq + Ord + Copy,
+    T::Key: Next<T::Key> + Decode + Encode + Terminated + Hash + Eq + Ord + Clone,
     T::Value: State<S> + Copy,
     S: Read,
 {
@@ -123,7 +123,7 @@ where
 
 impl<'a, T: Entry, S> Iterator for Iter<'a, T, S>
 where
-    T::Key: Next<T::Key> + Decode + Encode + Terminated + Hash + Eq + Ord + Copy,
+    T::Key: Next<T::Key> + Decode + Encode + Terminated + Hash + Eq + Ord + Clone,
     T::Value: State<S> + Copy,
     S: Read,
 {
@@ -132,7 +132,7 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         let map_next = self.map_iter.next();
         map_next.map(|entry| match entry {
-            Ok((key, value)) => Ok(T::from_entry((*key, *value))),
+            Ok((key, value)) => Ok(T::from_entry(((*key).clone(), *value))),
             Err(err) => Err(err),
         })
     }
