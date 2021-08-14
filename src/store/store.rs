@@ -38,7 +38,7 @@ impl<S> Store<S> {
     /// Creates a new `Store` with no prefix, with `backing` as its backing
     /// store.
     #[inline]
-    pub fn new<'a>(backing: S) -> Self {
+    pub fn new(backing: S) -> Self {
         Store {
             prefix: vec![],
             store: Shared::new(backing),

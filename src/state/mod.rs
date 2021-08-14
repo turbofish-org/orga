@@ -1,6 +1,6 @@
-pub use orga_macros::*;
 use crate::store::*;
 use crate::Result;
+pub use orga_macros::State;
 
 /// A trait for types which provide a higher-level API for data stored within a
 /// [`store::Store`](../store/trait.Store.html).
@@ -20,7 +20,7 @@ pub trait State<S = DefaultBackingStore>: Sized {
     ///
     /// For simple data types, this will often be `Self` since a separate type
     /// is not needed.
-    type Encoding: ed::Encode + ed::Decode;
+    type Encoding: ed::Encode + ed::Decode + From<Self>;
 
     /// Creates an instance of the type from a dedicated substore (`store`) and
     /// associated data (`data`).
@@ -106,7 +106,7 @@ mod tests {
     use super::*;
 
     struct QueryResponder(Result<u64>);
-    
+
     impl Query for QueryResponder {
         type Request = ();
         type Response = u64;
@@ -114,7 +114,7 @@ mod tests {
         fn query(&self, _req: ()) -> Result<u64> {
             match &self.0 {
                 Ok(value) => Ok(*value),
-                Err(err) => Err(failure::err_msg(err.to_string()))
+                Err(err) => Err(failure::err_msg(err.to_string())),
             }
         }
     }

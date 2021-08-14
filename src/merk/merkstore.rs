@@ -1,7 +1,8 @@
 use crate::abci::ABCIStore;
 use crate::error::Result;
 use crate::store::*;
-use merk::{BatchEntry, Merk, Op, rocksdb};
+use merk::tree::Tree;
+use merk::{rocksdb, BatchEntry, Merk, Op};
 use std::collections::BTreeMap;
 use std::mem::transmute;
 
@@ -71,21 +72,31 @@ impl<'a> Read for MerkStore<'a> {
         // (loading if necessary)
         let mut iter = self.merk.raw_iter();
         iter.seek(start);
-        iter.next();
 
         if !iter.valid() {
             iter.status()?;
             return Ok(None);
         }
 
+        if iter.key().unwrap() == start {
+            iter.next();
+
+            if !iter.valid() {
+                iter.status()?;
+                return Ok(None);
+            }
+        }
+
         let key = iter.key().unwrap();
-        let value = iter.value().unwrap();
+        let tree_bytes = iter.value().unwrap();
+        let tree = Tree::decode(vec![], tree_bytes);
+        let value = tree.value();
         Ok(Some((key.to_vec(), value.to_vec())))
     }
 }
 
 pub struct Iter<'a> {
-    iter: rocksdb::DBRawIterator<'a>
+    iter: rocksdb::DBRawIterator<'a>,
 }
 
 impl<'a> Iterator for Iter<'a> {
@@ -103,7 +114,7 @@ impl<'a> Iterator for Iter<'a> {
         let entry = unsafe {
             (
                 transmute(self.iter.key().unwrap()),
-                transmute(self.iter.value().unwrap())
+                transmute(self.iter.value().unwrap()),
             )
         };
         self.iter.next();

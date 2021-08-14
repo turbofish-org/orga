@@ -1,7 +1,7 @@
-use std::str::FromStr;
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
+use std::str::FromStr;
 use syn::*;
 
 pub fn derive(item: TokenStream) -> TokenStream {
@@ -9,25 +9,23 @@ pub fn derive(item: TokenStream) -> TokenStream {
 
     let mut is_tuple_struct = false;
     match &item.data {
-        Data::Struct(data) => match data.fields {
-            Fields::Unnamed(_) => is_tuple_struct = true,
-            _ => {},
-        },
-        _ => {},
+        Data::Struct(data) => {
+            if let Fields::Unnamed(_) = data.fields {
+                is_tuple_struct = true
+            }
+        }
+        _ => todo!("Currently only structs are supported"),
     }
 
     let field_names = || struct_fields(&item).map(|field| &field.ident);
     let field_types = || struct_fields(&item).map(|field| &field.ty);
-    let seq = || {
-        (0..field_names().count())
-            .map(|i| TokenStream2::from_str(&i.to_string()).unwrap())
-    };
+    let seq =
+        || (0..field_names().count()).map(|i| TokenStream2::from_str(&i.to_string()).unwrap());
 
     let name = &item.ident;
     let field_types_encoding = field_types();
     let seq_substore = seq();
     let seq_data = seq();
-    let field_names_flush = field_names();
 
     let create_body = if is_tuple_struct {
         quote!(
@@ -51,7 +49,7 @@ pub fn derive(item: TokenStream) -> TokenStream {
                     )?,
                 )*
             })
-        ) 
+        )
     };
 
     let flush_body = if is_tuple_struct {
@@ -67,6 +65,18 @@ pub fn derive(item: TokenStream) -> TokenStream {
             Ok((
                 #(self.#names.flush()?,)*
             ))
+        )
+    };
+
+    let from_body = if is_tuple_struct {
+        let indexes = seq();
+        quote! (
+            #(value.#indexes.into(),)*
+        )
+    } else {
+        let names = field_names();
+        quote! (
+            #(value.#names.into(),)*
         )
     };
 
@@ -89,14 +99,18 @@ pub fn derive(item: TokenStream) -> TokenStream {
                 #flush_body
             }
         }
+
+        impl From<#name> for <#name as ::orga::state::State>::Encoding {
+            fn from(value: #name) -> Self {
+                (#from_body)
+            }
+        }
     };
 
     output.into()
 }
 
-fn struct_fields<'a>(
-    item: &'a DeriveInput
-) -> impl Iterator<Item=&'a Field> {
+fn struct_fields(item: &DeriveInput) -> impl Iterator<Item = &Field> {
     let data = match item.data {
         Data::Struct(ref data) => data,
         Data::Enum(ref _data) => todo!("#[derive(State)] does not yet support enums"),

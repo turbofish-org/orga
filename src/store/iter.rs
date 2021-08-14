@@ -92,7 +92,7 @@ impl<'a, S: Read> Iterator for Iter<'a, S> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::{Write, MapStore};
+    use crate::store::{MapStore, Write};
 
     fn test_store() -> MapStore {
         let mut store = MapStore::new();
@@ -186,21 +186,15 @@ mod tests {
             parent: &ErrorStore,
             bounds: (Bound::Unbounded, Bound::Unbounded),
             done: false,
-        }; 
-        assert_eq!(
-            iter.next().unwrap().unwrap_err().to_string(),
-            "get",
-        );
+        };
+        assert_eq!(iter.next().unwrap().unwrap_err().to_string(), "get");
 
         let mut iter = Iter {
             parent: &ErrorStore,
             bounds: (Bound::Excluded(vec![]), Bound::Unbounded),
             done: false,
         };
-        assert_eq!(
-            iter.next().unwrap().unwrap_err().to_string(),
-            "get_next",
-        );
+        assert_eq!(iter.next().unwrap().unwrap_err().to_string(), "get_next");
     }
 
     #[test]
