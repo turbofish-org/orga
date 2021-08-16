@@ -1,5 +1,6 @@
 use ed::Encode;
 use orga::abci::ABCIStateMachine;
+use orga::abci::ABCIStore;
 use orga::abci::Application;
 use orga::encoding::Decode;
 use orga::merk::MerkStore;
@@ -71,11 +72,7 @@ impl Application for App {
 
 fn main() {
     let app = App {};
-    let sm_dir = "./counter.sm";
-    if Path::new(sm_dir).is_dir() {
-        fs::remove_dir_all(Path::new(sm_dir)).unwrap();
-    }
-    let store = orga::merk::MerkStore::new("./counter.sm".into());
+    let store = orga::merk::MerkStore::new("./counter.db".into());
     ABCIStateMachine::new(app, store)
         .listen("127.0.0.1:26658")
         .unwrap();
