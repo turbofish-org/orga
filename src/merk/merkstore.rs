@@ -165,7 +165,7 @@ impl Write for MerkStore {
 
 impl<'a> ABCIStore for MerkStore {
     fn height(&self) -> Result<u64> {
-        let maybe_bytes = self.merk.as_ref().unwrap().get_aux(b"height")?;
+        let maybe_bytes = self.merk().get_aux(b"height")?;
         match maybe_bytes {
             None => Ok(0),
             Some(bytes) => Ok(read_u64(&bytes)),
