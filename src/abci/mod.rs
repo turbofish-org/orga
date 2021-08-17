@@ -1,4 +1,4 @@
-use std::borrow::BorrowMut;
+use std::borrow::{Borrow, BorrowMut};
 use std::clone::Clone;
 use std::env;
 use std::net::ToSocketAddrs;
@@ -278,8 +278,8 @@ impl<A: Application> ABCIStateMachine<A> {
             }
             // // TODO: state sync
             Req::ListSnapshots(_req) => {
-                let self_store = self.store.take().unwrap();
-                let snapshots = self_store.into_inner().list_snapshots()?;
+                let self_store = self.store.as_mut().unwrap();
+                let snapshots = self_store.borrow_mut().list_snapshots()?;
                 let mut res = ResponseListSnapshots::default();
                 res.snapshots = snapshots;
                 Ok(Res::ListSnapshots(res))
