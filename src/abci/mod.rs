@@ -272,11 +272,8 @@ impl<A: Application> ABCIStateMachine<A> {
                 self.app.replace(app);
                 self.mempool_state
                     .replace(store.unwrap().into_inner().into_map());
-                let self_store = self_store_shared.into_inner();
-                self.store = Some(Shared::new(self_store));
                 Ok(Res::CheckTx(res_check_tx))
             }
-            // // TODO: state sync
             Req::ListSnapshots(_req) => {
                 let self_store = self.store.as_mut().unwrap();
                 let snapshots = self_store.borrow_mut().list_snapshots()?;
@@ -285,18 +282,16 @@ impl<A: Application> ABCIStateMachine<A> {
                 Ok(Res::ListSnapshots(res))
             }
             Req::OfferSnapshot(req) => {
-                let mut self_store = self.store.take().unwrap();
+                let self_store = self.store.as_mut().unwrap();
                 let return_val =
                     Res::OfferSnapshot(self_store.borrow_mut().offer_snapshot(req)?);
-                self.store = Some(self_store);
                 Ok(return_val)
             }
             Req::LoadSnapshotChunk(req) => {
-                let mut self_store = self.store.take().unwrap();
+                let self_store = self.store.as_mut().unwrap();
                 let chunk = self_store.borrow_mut().load_snapshot_chunk(req)?;
                 let mut res = ResponseLoadSnapshotChunk::default();
                 res.chunk = chunk;
-                self.store = Some(self_store);
                 Ok(Res::LoadSnapshotChunk(res))
             }
             Req::ApplySnapshotChunk(req) => {
