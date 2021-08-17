@@ -295,7 +295,7 @@ impl<A: Application> ABCIStateMachine<A> {
                 Ok(Res::LoadSnapshotChunk(res))
             }
             Req::ApplySnapshotChunk(req) => {
-                let mut self_store = self.store.take().unwrap();
+                let self_store = self.store.as_mut().unwrap();
                 let mut res = ResponseApplySnapshotChunk::default();
                 match self_store.borrow_mut().apply_snapshot_chunk(req.clone()) {
                   Ok(_) => res.result = 1, // ACCEPT
@@ -306,7 +306,6 @@ impl<A: Application> ABCIStateMachine<A> {
                   },
                 };
                 let return_val = Res::ApplySnapshotChunk(res);
-                self.store = Some(self_store);
                 Ok(return_val)
             }
         }
