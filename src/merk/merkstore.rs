@@ -241,12 +241,13 @@ impl<'a> ABCIStore for MerkStore {
     fn apply_snapshot_chunk(
         &mut self,
         req: RequestApplySnapshotChunk,
-    ) -> Result<ResponseApplySnapshotChunk> {
+    ) -> Result<()> {
         let restore_path = self.home.join("restore");
         let target_snapshot = self
             .target_snapshot
             .as_mut()
             .expect("Tried to apply a snapshot chunk while no state sync is in progress");
+            
         if let None = self.restorer {
             let expected_hash: [u8; 32] = target_snapshot
                 .hash
@@ -268,11 +269,17 @@ impl<'a> ABCIStore for MerkStore {
             self.merk.take().unwrap().destroy()?;
             let p = self.home.join("db");
             drop(restored);
+
             std::fs::rename(&restore_path, &p)?;
-            self.merk = Some(Merk::open(&p)?);
+            self.merk = Some(Merk::open(p)?);
+
+            let height = self.target_snapshot.as_ref().unwrap().height;
+            let height_bytes = height.to_be_bytes().to_vec();
+            let metadata = vec![(b"height".to_vec(), Some(height_bytes))];
+            self.write(metadata)?;
         }
 
-        Ok(Default::default())
+        Ok(())
     }
 
     fn offer_snapshot(&mut self, req: RequestOfferSnapshot) -> Result<ResponseOfferSnapshot> {

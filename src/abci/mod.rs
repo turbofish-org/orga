@@ -1,3 +1,4 @@
+use std::borrow::BorrowMut;
 use std::clone::Clone;
 use std::env;
 use std::net::ToSocketAddrs;
@@ -218,7 +219,7 @@ impl<A: Application> ABCIStateMachine<A> {
             }
             Req::Commit(_) => {
                 let self_store = self.store.take().unwrap().into_inner();
-                let self_store_shared = Shared::new(self_store);
+                let mut self_store_shared = Shared::new(self_store);
                 {
                     let mut store = BufStore::wrap_with_map(
                         self_store_shared.clone(),
@@ -227,10 +228,7 @@ impl<A: Application> ABCIStateMachine<A> {
                     store.flush()?;
                 }
 
-                let mut self_store = self_store_shared.into_inner();
-                self_store.commit(self.height)?;
-
-                let self_store_shared = Shared::new(self_store);
+                self_store_shared.borrow_mut().commit(self.height)?;
 
                 if let Some(stop_height_str) = env::var_os("STOP_HEIGHT") {
                     let stop_height: u64 = stop_height_str
@@ -287,25 +285,33 @@ impl<A: Application> ABCIStateMachine<A> {
                 Ok(Res::ListSnapshots(res))
             }
             Req::OfferSnapshot(req) => {
-                let self_store = self.store.take().unwrap();
+                println!("offersnapshot {:?}", &req);
+                let mut self_store = self.store.take().unwrap();
                 let return_val =
-                    Res::OfferSnapshot(self_store.clone().into_inner().offer_snapshot(req)?);
+                    Res::OfferSnapshot(self_store.borrow_mut().offer_snapshot(req)?);
                 self.store = Some(self_store);
                 Ok(return_val)
             }
             Req::LoadSnapshotChunk(req) => {
-                let self_store = self.store.take().unwrap();
-                let chunk = self_store.clone().into_inner().load_snapshot_chunk(req)?;
+                let mut self_store = self.store.take().unwrap();
+                let chunk = self_store.borrow_mut().load_snapshot_chunk(req)?;
                 let mut res = ResponseLoadSnapshotChunk::default();
                 res.chunk = chunk;
                 self.store = Some(self_store);
                 Ok(Res::LoadSnapshotChunk(res))
             }
             Req::ApplySnapshotChunk(req) => {
-                let self_store = self.store.take().unwrap();
-                let return_val = Res::ApplySnapshotChunk(
-                    self_store.clone().into_inner().apply_snapshot_chunk(req)?,
-                );
+                let mut self_store = self.store.take().unwrap();
+                let mut res = ResponseApplySnapshotChunk::default();
+                match self_store.borrow_mut().apply_snapshot_chunk(req.clone()) {
+                  Ok(_) => res.result = 1, // ACCEPT
+                  Err(_) => {
+                      res.result = 3; // RETRY
+                      res.refetch_chunks = vec![ req.index ];
+                      res.reject_senders = vec![ req.sender ];
+                  },
+                };
+                let return_val = Res::ApplySnapshotChunk(res);
                 self.store = Some(self_store);
                 Ok(return_val)
             }
@@ -432,7 +438,7 @@ pub trait ABCIStore: Read + Write {
     fn apply_snapshot_chunk(
         &mut self,
         req: RequestApplySnapshotChunk,
-    ) -> Result<ResponseApplySnapshotChunk>;
+    ) -> Result<()>;
 }
 
 /// A basic implementation of [`ABCIStore`](trait.ABCIStore.html) which persists
@@ -497,7 +503,7 @@ impl ABCIStore for MemStore {
     fn apply_snapshot_chunk(
         &mut self,
         _req: RequestApplySnapshotChunk,
-    ) -> Result<ResponseApplySnapshotChunk> {
+    ) -> Result<()> {
         unimplemented!()
     }
 
