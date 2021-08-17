@@ -1,6 +1,5 @@
 use ed::Encode;
 use orga::abci::ABCIStateMachine;
-use orga::abci::ABCIStore;
 use orga::abci::Application;
 use orga::encoding::Decode;
 use orga::merk::MerkStore;
@@ -9,6 +8,7 @@ use orga::store::Shared;
 use orga::store::{BufStore, Read, Store, Write};
 use std::fs;
 use std::path::Path;
+
 struct App;
 
 #[derive(State)]
@@ -65,19 +65,19 @@ impl Application for App {
         };
         let data = Decode::decode(store_val.as_slice()).unwrap();
         let state: CounterState = CounterState::create(store, data).unwrap();
-        println!("The count is: {}", state.count);
         Ok(Default::default())
     }
 }
 
-fn main() {
+fn app_instance(dir: &str, addr: &str) {
     let app = App {};
-    let dir = "./counter.db";
     if Path::new(dir).is_dir() {
         fs::remove_dir_all(Path::new(dir)).unwrap();
     }
     let store = orga::merk::MerkStore::new(dir.into());
-    ABCIStateMachine::new(app, store)
-        .listen("127.0.0.1:26658")
-        .unwrap();
+    ABCIStateMachine::new(app, store).listen(addr).unwrap();
+}
+
+fn main() {
+    app_instance("./counter.db", "127.0.0.1:26658");
 }
