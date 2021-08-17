@@ -73,9 +73,6 @@ impl Application for App {
 fn main() {
     let app = App {};
     let dir = "./counter_replicant.db";
-    if Path::new(dir).is_dir() {
-        fs::remove_dir_all(Path::new(dir)).unwrap();
-    }
     let store = orga::merk::MerkStore::new(dir.into());
     ABCIStateMachine::new(app, store)
         .listen("127.0.0.1:26678")

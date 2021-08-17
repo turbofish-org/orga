@@ -71,9 +71,6 @@ impl Application for App {
 
 fn app_instance(dir: &str, addr: &str) {
     let app = App {};
-    if Path::new(dir).is_dir() {
-        fs::remove_dir_all(Path::new(dir)).unwrap();
-    }
     let store = orga::merk::MerkStore::new(dir.into());
     ABCIStateMachine::new(app, store).listen(addr).unwrap();
 }
