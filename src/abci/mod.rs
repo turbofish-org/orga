@@ -285,7 +285,6 @@ impl<A: Application> ABCIStateMachine<A> {
                 Ok(Res::ListSnapshots(res))
             }
             Req::OfferSnapshot(req) => {
-                println!("offersnapshot {:?}", &req);
                 let mut self_store = self.store.take().unwrap();
                 let return_val =
                     Res::OfferSnapshot(self_store.borrow_mut().offer_snapshot(req)?);
