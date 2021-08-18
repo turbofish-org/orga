@@ -6,8 +6,6 @@ use orga::merk::MerkStore;
 use orga::state::State;
 use orga::store::Shared;
 use orga::store::{BufStore, Read, Store, Write};
-use std::fs;
-use std::path::Path;
 
 struct App;
 
