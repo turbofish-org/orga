@@ -35,10 +35,7 @@ impl<A: Application> ABCIStateMachine<A> {
     /// for transactions and blocks), and store (a key/value store to persist
     /// the state data).
     pub fn new(app: A, store: MerkStore) -> Self {
-        let (sender, receiver): (
-            SyncSender<(Request, SyncSender<Response>)>,
-            Receiver<(Request, SyncSender<Response>)>,
-        ) = sync_channel(0);
+        let (sender, receiver) = sync_channel(0);
         ABCIStateMachine {
             app: Some(app),
             store: Some(Shared::new(store)),
