@@ -237,16 +237,13 @@ impl<'a> ABCIStore for MerkStore {
         Ok(chunk)
     }
 
-    fn apply_snapshot_chunk(
-        &mut self,
-        req: RequestApplySnapshotChunk,
-    ) -> Result<()> {
+    fn apply_snapshot_chunk(&mut self, req: RequestApplySnapshotChunk) -> Result<()> {
         let restore_path = self.home.join("restore");
         let target_snapshot = self
             .target_snapshot
             .as_mut()
             .expect("Tried to apply a snapshot chunk while no state sync is in progress");
-            
+
         if let None = self.restorer {
             let expected_hash: [u8; 32] = target_snapshot
                 .hash
