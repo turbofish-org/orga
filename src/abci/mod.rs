@@ -291,8 +291,8 @@ impl<A: Application> ABCIStateMachine<A> {
             Req::LoadSnapshotChunk(req) => {
                 let self_store = self.store.as_mut().unwrap();
                 let chunk = self_store.borrow_mut().load_snapshot_chunk(req)?;
-                let mut res = ResponseLoadSnapshotChunk::default();
-                res.chunk = chunk;
+                let res = ResponseLoadSnapshotChunk { chunk };
+
                 Ok(Res::LoadSnapshotChunk(res))
             }
             Req::ApplySnapshotChunk(req) => {
