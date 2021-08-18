@@ -1,14 +1,12 @@
 use ed::Encode;
 use orga::abci::ABCIStateMachine;
-use orga::abci::ABCIStore;
 use orga::abci::Application;
 use orga::encoding::Decode;
 use orga::merk::MerkStore;
 use orga::state::State;
 use orga::store::Shared;
 use orga::store::{BufStore, Read, Store, Write};
-use std::fs;
-use std::path::Path;
+
 struct App;
 
 #[derive(State)]
