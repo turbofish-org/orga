@@ -62,7 +62,7 @@ impl Application for App {
             Err(_) => panic!("Store get failed"),
         };
         let data = Decode::decode(store_val.as_slice()).unwrap();
-        let state: CounterState = CounterState::create(store, data).unwrap();
+        let _state: CounterState = CounterState::create(store, data).unwrap();
         Ok(Default::default())
     }
 }
