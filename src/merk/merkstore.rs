@@ -244,7 +244,7 @@ impl<'a> ABCIStore for MerkStore {
             .as_mut()
             .expect("Tried to apply a snapshot chunk while no state sync is in progress");
 
-        if let None = self.restorer {
+        if self.restorer.is_none() {
             let expected_hash: [u8; 32] = target_snapshot
                 .hash
                 .clone()
