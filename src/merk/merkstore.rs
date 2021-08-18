@@ -297,6 +297,6 @@ impl<'a> ABCIStore for MerkStore {
 
 fn read_u64(bytes: &[u8]) -> u64 {
     let mut array = [0; 8];
-    array.copy_from_slice(&bytes);
+    array.copy_from_slice(bytes);
     u64::from_be_bytes(array)
 }
