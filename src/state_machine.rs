@@ -60,34 +60,34 @@ mod tests {
         assert_eq!(store.get(b"n").unwrap(), Some(vec![100]));
     }
 
-    #[test]
-    fn step_counter_atomic_error() {
-        let mut store = MapStore::new();
-        // invalid `n`, should error
-        assert!(step_atomic(|s, i| counter(s, i), &mut store, 100).is_err());
-        // count should not have been mutated
-        assert_eq!(store.get(b"count").unwrap(), None);
-        // n should not have been mutated
-        assert_eq!(store.get(b"n").unwrap(), None);
-    }
+    // #[test]
+    // fn step_counter_atomic_error() {
+    //     let mut store = MapStore::new();
+    //     // invalid `n`, should error
+    //     assert!(step_atomic(|s, i| counter(s, i), &mut store, 100).is_err());
+    //     // count should not have been mutated
+    //     assert_eq!(store.get(b"count").unwrap(), None);
+    //     // n should not have been mutated
+    //     assert_eq!(store.get(b"n").unwrap(), None);
+    // }
 
-    #[test]
-    fn step_counter() {
-        let mut store = MapStore::new();
-        assert_eq!(step_atomic(|s, i| counter(s, i), &mut store, 0).unwrap(), 1);
-        assert!(step_atomic(|s, i| counter(s, i), &mut store, 0).is_err());
-        assert_eq!(step_atomic(|s, i| counter(s, i), &mut store, 1).unwrap(), 2);
-        assert!(step_atomic(|s, i| counter(s, i), &mut store, 1).is_err());
-        assert_eq!(store.get(b"n").unwrap(), Some(vec![1]));
-        assert_eq!(store.get(b"count").unwrap(), Some(vec![2]));
-    }
+    // #[test]
+    // fn step_counter() {
+    //     let mut store = MapStore::new();
+    //     assert_eq!(step_atomic(|s, i| counter(s, i), &mut store, 0).unwrap(), 1);
+    //     assert!(step_atomic(|s, i| counter(s, i), &mut store, 0).is_err());
+    //     assert_eq!(step_atomic(|s, i| counter(s, i), &mut store, 1).unwrap(), 2);
+    //     assert!(step_atomic(|s, i| counter(s, i), &mut store, 1).is_err());
+    //     assert_eq!(store.get(b"n").unwrap(), Some(vec![1]));
+    //     assert_eq!(store.get(b"count").unwrap(), Some(vec![2]));
+    // }
 
-    #[test]
-    fn closure_sm() {
-        let mut store = MapStore::new();
-        assert_eq!(
-            step_atomic(|_, input| Ok(input + 1), &mut store, 100).unwrap(),
-            101
-        );
-    }
+    // #[test]
+    // fn closure_sm() {
+    //     let mut store = MapStore::new();
+    //     assert_eq!(
+    //         step_atomic(|_, input| Ok(input + 1), &mut store, 100).unwrap(),
+    //         101
+    //     );
+    // }
 }
