@@ -60,11 +60,10 @@ impl MerkStore {
         let batch = to_batch(map);
         let aux_batch = to_batch(aux);
 
-        Ok(self
-            .merk
+        self.merk
             .as_mut()
             .unwrap()
-            .apply(batch.as_ref(), aux_batch.as_ref())?)
+            .apply(batch.as_ref(), aux_batch.as_ref())
     }
 
     pub(super) fn merk<'a>(&'a self) -> &'a Merk {
