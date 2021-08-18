@@ -27,6 +27,7 @@ features = ["abci", "merk"]
 
 [features]
 abci = ["abci2", "tendermint", "tendermint-rpc"]
+default = ["merk", "abci", "tendermint-proto"]
 
 [profile.release]
 lto = true
