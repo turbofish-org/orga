@@ -5,6 +5,7 @@ use crate::{
 
 /// A client which decodes and verifies Merk proofs when accessing data from an
 /// underlying [`Read`](../store/trait.Read.html).
+#[allow(dead_code)]
 pub struct Client<R: Read> {
     read: R,
 }
