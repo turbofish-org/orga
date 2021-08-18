@@ -66,7 +66,7 @@ impl MerkStore {
             .apply(batch.as_ref(), aux_batch.as_ref())
     }
 
-    pub(super) fn merk<'a>(&'a self) -> &'a Merk {
+    pub(super) fn merk(&self) -> &Merk {
         self.merk.as_ref().unwrap()
     }
 }
