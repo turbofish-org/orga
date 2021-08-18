@@ -26,15 +26,15 @@ tempdir = "0.3.7"
 features = ["abci", "merk"]
 
 [features]
-abci = ["abci2", "tendermint", "tendermint-rpc"]
+abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto"]
 
 [profile.release]
 lto = true
 
 [[example]]
 name = "counter"
-required-features = ["merk", "abci", "tendermint-proto"]
+required-features = ["merk", "abci"]
 
 [[example]]
 name = "counter_replicant"
-required-features = ["merk", "abci", "tendermint-proto"]
+required-features = ["merk", "abci"]
