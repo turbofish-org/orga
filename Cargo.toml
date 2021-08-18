@@ -27,7 +27,14 @@ features = ["abci", "merk"]
 
 [features]
 abci = ["abci2", "tendermint", "tendermint-rpc"]
-default = ["merk", "abci", "tendermint-proto"]
 
 [profile.release]
 lto = true
+
+[[example]]
+name = "counter"
+required-features = ["merk", "abci", "tendermint-proto"]
+
+[[example]]
+name = "counter_replicant"
+required-features = ["merk", "abci", "tendermint-proto"]
