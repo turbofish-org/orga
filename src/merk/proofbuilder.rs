@@ -150,7 +150,7 @@ mod tests {
         assert!(map.get(&[3, 4, 5]).unwrap().is_some());
         let mut iter = map.range(&[3, 4, 5][..]..=&[3, 4, 7][..]);
 
-        let res = iter.next().unwrap().unwrap();
+        let _res = iter.next().unwrap().unwrap();
         //assert!(res.is_none());
     }
 }
