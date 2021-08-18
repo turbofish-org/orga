@@ -254,7 +254,7 @@ impl<A: Application> ABCIStateMachine<A> {
                 let self_store = self.store.take().unwrap().into_inner();
                 let self_store_shared = Shared::new(self_store);
                 let mut store = Some(Shared::new(BufStore::wrap_with_map(
-                    self_store_shared,
+                    self_store_shared.clone(),
                     self.mempool_state.take().unwrap(),
                 )));
 
@@ -271,6 +271,7 @@ impl<A: Application> ABCIStateMachine<A> {
                 self.app.replace(app);
                 self.mempool_state
                     .replace(store.unwrap().into_inner().into_map());
+                self.store = Some(Shared::new(self_store_shared.into_inner()));
                 Ok(Res::CheckTx(res_check_tx))
             }
             Req::ListSnapshots(_req) => {
