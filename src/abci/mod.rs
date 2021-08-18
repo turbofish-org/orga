@@ -63,11 +63,8 @@ impl<A: Application> ABCIStateMachine<A> {
 
         match value {
             Req::Info(_) => {
-                let mut res_info = ResponseInfo::default();
-                res_info.data = "Rust ABCI State Machine".into();
-                res_info.version = "X".into();
-                res_info.app_version = 0;
                 let self_store = self.store.take().unwrap().into_inner();
+
                 let start_height = self_store.height()?;
                 info!("State is at height {}", start_height);
 
@@ -77,8 +74,13 @@ impl<A: Application> ABCIStateMachine<A> {
                     self_store.root_hash()?
                 };
 
-                res_info.last_block_height = start_height as i64;
-                res_info.last_block_app_hash = app_hash;
+                let res_info = ResponseInfo {
+                    data: "Rust ABCI State Machine".into(),
+                    version: "X".into(),
+                    app_version: 0,
+                    last_block_height: start_height as i64,
+                    last_block_app_hash: app_hash,
+                };
 
                 self.store = Some(Shared::new(self_store));
                 Ok(Res::Info(res_info))
