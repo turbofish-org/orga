@@ -254,7 +254,7 @@ impl<A: Application> ABCIStateMachine<A> {
                 let self_store = self.store.take().unwrap().into_inner();
                 let self_store_shared = Shared::new(self_store);
                 let mut store = Some(Shared::new(BufStore::wrap_with_map(
-                    self_store_shared.clone(),
+                    self_store_shared,
                     self.mempool_state.take().unwrap(),
                 )));
 
