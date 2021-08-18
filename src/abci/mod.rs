@@ -279,8 +279,8 @@ impl<A: Application> ABCIStateMachine<A> {
             Req::ListSnapshots(_req) => {
                 let self_store = self.store.as_mut().unwrap();
                 let snapshots = self_store.borrow_mut().list_snapshots()?;
-                let mut res = ResponseListSnapshots::default();
-                res.snapshots = snapshots;
+                let res = ResponseListSnapshots { snapshots };
+
                 Ok(Res::ListSnapshots(res))
             }
             Req::OfferSnapshot(req) => {
