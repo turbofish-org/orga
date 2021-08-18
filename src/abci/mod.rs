@@ -448,6 +448,12 @@ impl MemStore {
     }
 }
 
+impl Default for MemStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Read for MemStore {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         self.store.get(key)
