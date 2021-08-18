@@ -1,4 +1,3 @@
-use std::borrow::{Borrow, BorrowMut};
 use std::clone::Clone;
 use std::env;
 use std::net::ToSocketAddrs;
@@ -283,8 +282,7 @@ impl<A: Application> ABCIStateMachine<A> {
             }
             Req::OfferSnapshot(req) => {
                 let self_store = self.store.as_mut().unwrap();
-                let return_val =
-                    Res::OfferSnapshot(self_store.borrow_mut().offer_snapshot(req)?);
+                let return_val = Res::OfferSnapshot(self_store.borrow_mut().offer_snapshot(req)?);
                 Ok(return_val)
             }
             Req::LoadSnapshotChunk(req) => {
@@ -298,12 +296,12 @@ impl<A: Application> ABCIStateMachine<A> {
                 let self_store = self.store.as_mut().unwrap();
                 let mut res = ResponseApplySnapshotChunk::default();
                 match self_store.borrow_mut().apply_snapshot_chunk(req.clone()) {
-                  Ok(_) => res.result = 1, // ACCEPT
-                  Err(_) => {
-                      res.result = 3; // RETRY
-                      res.refetch_chunks = vec![ req.index ];
-                      res.reject_senders = vec![ req.sender ];
-                  },
+                    Ok(_) => res.result = 1, // ACCEPT
+                    Err(_) => {
+                        res.result = 3; // RETRY
+                        res.refetch_chunks = vec![req.index];
+                        res.reject_senders = vec![req.sender];
+                    }
                 };
                 let return_val = Res::ApplySnapshotChunk(res);
                 Ok(return_val)
@@ -428,10 +426,7 @@ pub trait ABCIStore: Read + Write {
 
     fn offer_snapshot(&mut self, req: RequestOfferSnapshot) -> Result<ResponseOfferSnapshot>;
 
-    fn apply_snapshot_chunk(
-        &mut self,
-        req: RequestApplySnapshotChunk,
-    ) -> Result<()>;
+    fn apply_snapshot_chunk(&mut self, req: RequestApplySnapshotChunk) -> Result<()>;
 }
 
 /// A basic implementation of [`ABCIStore`](trait.ABCIStore.html) which persists
@@ -493,10 +488,7 @@ impl ABCIStore for MemStore {
         unimplemented!()
     }
 
-    fn apply_snapshot_chunk(
-        &mut self,
-        _req: RequestApplySnapshotChunk,
-    ) -> Result<()> {
+    fn apply_snapshot_chunk(&mut self, _req: RequestApplySnapshotChunk) -> Result<()> {
         unimplemented!()
     }
 
