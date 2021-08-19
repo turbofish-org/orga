@@ -84,7 +84,6 @@ impl<S: Write> Write for Store<S> {
     #[inline]
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         let prefixed = concat(self.prefix.as_slice(), key.as_slice());
-        println!("store.put()");
         self.store.put(prefixed, value)
     }
 
