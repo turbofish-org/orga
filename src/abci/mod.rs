@@ -8,8 +8,11 @@ use failure::bail;
 use log::info;
 
 use crate::merk::MerkStore;
+use crate::state::State;
 use crate::store::{BufStore, BufStoreMap, MapStore, Read, Shared, Write, KV};
 use crate::Result;
+mod node;
+pub use node::*;
 
 use messages::*;
 pub use tendermint_proto::abci as messages;
@@ -503,3 +506,35 @@ impl ABCIStore for MemStore {
         Ok(Default::default())
     }
 }
+
+pub trait BeginBlock {
+    fn begin_block(&mut self) -> Result<()>;
+}
+
+impl<S: State> BeginBlock for S {
+    default fn begin_block(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+pub trait EndBlock {
+    fn end_block(&mut self) -> Result<()>;
+}
+
+impl<S: State> EndBlock for S {
+    default fn end_block(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+pub trait InitChain {
+    fn init_chain(&mut self) -> Result<()>;
+}
+
+impl<S: State> InitChain for S {
+    default fn init_chain(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+
+// TODO: add Call and Query
+pub trait App: BeginBlock + EndBlock + InitChain + State {}
+impl<T: BeginBlock + EndBlock + InitChain + State> App for T where <T as State>::Encoding: Default {}
