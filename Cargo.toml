@@ -35,6 +35,3 @@ lto = true
 name = "counter"
 required-features = ["merk", "abci"]
 
-[[example]]
-name = "counter_replicant"
-required-features = ["merk", "abci"]
