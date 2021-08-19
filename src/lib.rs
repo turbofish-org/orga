@@ -1,5 +1,6 @@
 #![feature(map_first_last)]
 #![feature(entry_insert)]
+#![feature(min_specialization)]
 
 /// Integration with ABCI (gated by `abci` feature).
 #[cfg(feature = "abci")]
@@ -33,3 +34,11 @@ mod error;
 // re-exports
 pub use error::*;
 pub use orga_macros as macros;
+
+pub mod prelude {
+    pub use crate::abci::*;
+    pub use crate::collections::*;
+    pub use crate::state::*;
+    pub use crate::store::*;
+    pub use crate::Result;
+}
