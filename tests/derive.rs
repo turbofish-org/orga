@@ -173,4 +173,14 @@ mod test {
 
         assert_eq!(test.next().unwrap(), expected);
     }
+
+    #[test]
+    fn derive_next_array_last() {
+        let test = NextArrayStruct {
+            first_field: [255, 255],
+            last_field: [255, 255],
+        };
+
+        assert!(test.next().is_none());
+    }
 }
