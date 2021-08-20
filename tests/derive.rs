@@ -1,8 +1,10 @@
 #[cfg(test)]
 mod test {
     use orga::collections::Entry;
+    use orga::collections::Next;
     use orga::encoding::{Decode, Encode};
     use orga::macros::Entry;
+    use orga::macros::Next;
     use orga::state::State;
     use orga::store::{MapStore, Store};
 
@@ -102,5 +104,27 @@ mod test {
         let test = TupleStruct(8, 16, 32);
 
         assert_eq!(TupleStruct::from_entry(((8, 32), (16,))), test);
+    }
+
+    #[derive(Next, Debug, PartialEq)]
+    struct NextStruct {
+        first_field: u8,
+        second_field: u8,
+        last_field: u8,
+    }
+
+    #[test]
+    fn derive_next() {
+        let test_struct = NextStruct {
+            first_field: 0,
+            second_field: 0,
+            last_field: 0,
+        };
+        let expected = NextStruct {
+            first_field: 0,
+            second_field: 0,
+            last_field: 1,
+        };
+        assert_eq!(test_struct.next().unwrap(), expected);
     }
 }
