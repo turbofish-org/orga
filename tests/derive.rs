@@ -137,4 +137,25 @@ mod test {
         };
         assert!(test_struct.next().is_none());
     }
+
+    #[derive(Next, Debug, PartialEq)]
+    struct NextArrayStruct {
+        first_field: [u8; 2],
+        last_field: [u8; 2],
+    }
+
+    #[test]
+    fn derive_next_array() {
+        let test = NextArrayStruct {
+            first_field: [0; 2],
+            last_field: [0; 2],
+        };
+
+        let expected = NextArrayStruct {
+            first_field: [0; 2],
+            last_field: [0, 1],
+        };
+
+        assert_eq!(test.next().unwrap(), expected);
+    }
 }
