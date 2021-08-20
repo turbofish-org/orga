@@ -158,4 +158,19 @@ mod test {
 
         assert_eq!(test.next().unwrap(), expected);
     }
+
+    #[test]
+    fn derive_next_array_internal_last() {
+        let test = NextArrayStruct {
+            first_field: [0; 2],
+            last_field: [0, 255],
+        };
+
+        let expected = NextArrayStruct {
+            first_field: [0; 2],
+            last_field: [1, 0],
+        };
+
+        assert_eq!(test.next().unwrap(), expected);
+    }
 }
