@@ -127,4 +127,14 @@ mod test {
         };
         assert_eq!(test_struct.next().unwrap(), expected);
     }
+
+    #[test]
+    fn derive_next_last() {
+        let test_struct = NextStruct {
+            first_field: 255,
+            second_field: 255,
+            last_field: 255,
+        };
+        assert!(test_struct.next().is_none());
+    }
 }
