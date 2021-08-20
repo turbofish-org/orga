@@ -16,5 +16,5 @@ pub fn entry(item: TokenStream) -> TokenStream {
 
 #[proc_macro_derive(Next)]
 pub fn next(item: TokenStream) -> TokenStream {
-    state::derive(item)
+    next::derive(item)
 }
