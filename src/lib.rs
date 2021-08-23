@@ -28,6 +28,9 @@ pub mod state_machine;
 /// Low-level key/value store abstraction.
 pub mod store;
 
+/// Tendermint process handler.
+pub mod tendermint;
+
 mod error;
 
 // re-exports
