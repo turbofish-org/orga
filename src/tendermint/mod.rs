@@ -71,14 +71,14 @@ pub struct Tendermint {
 }
 
 impl Tendermint {
-    pub fn new() -> Result<Tendermint> {
-        let home_path: PathBuf = ".tendermint_handler".into();
+    pub fn new(home_path: &str) -> Result<Tendermint> {
+        let home_path: PathBuf = home_path.into();
         if !home_path.exists() {
-            fs::create_dir(".tendermint_handler")?;
+            fs::create_dir(home_path)?;
         }
         Ok(Tendermint {
             process: ProcessHandler::new("tendermint")?,
-            home: ".tendermint_handler".to_string(),
+            home: home_path.to_string(),
         })
     }
 
