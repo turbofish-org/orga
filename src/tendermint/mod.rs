@@ -146,7 +146,7 @@ impl Tendermint {
 
                 let mut f = fs::File::create(tendermint_path)
                     .expect("Could not create Tendermint binary on file system");
-                f.write_all(&mut tendermint_bytes.as_slice())
+                f.write_all(tendermint_bytes.as_slice())
                     .expect("Failed to write Tendermint binary to file system");
 
                 break;
