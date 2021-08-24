@@ -48,7 +48,7 @@ impl ProcessHandler {
 #[derive(Debug)]
 pub struct Tendermint {
     process: ProcessHandler,
-    home: String,
+    home: PathBuf,
 }
 
 impl Tendermint {
@@ -59,7 +59,7 @@ impl Tendermint {
         }
         Ok(Tendermint {
             process: ProcessHandler::new("tendermint")?,
-            home: home_path.to_string(),
+            home: path,
         })
     }
 
@@ -73,22 +73,12 @@ impl Tendermint {
         self
     }
 
-    fn install() {
-        unimplemented!();
-    }
+    fn install() {}
 
     pub fn home(mut self, new_home: &str) -> Self {
         self.process.set_arg("--home");
         self.process.set_arg(new_home);
         self
-    }
-
-    fn init(&self) {
-        unimplemented!();
-    }
-
-    fn unsafe_reset_all(&self) {
-        unimplemented!();
     }
 
     pub fn start(mut self) {
