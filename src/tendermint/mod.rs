@@ -68,6 +68,7 @@ impl ProcessHandler {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn kill(self) -> Result<()> {
         let mut child = match self.process {
             Some(inner) => inner,
