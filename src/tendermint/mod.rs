@@ -131,16 +131,7 @@ impl Tendermint {
         let mut archive = Archive::new(tar);
 
         for item in archive.entries().unwrap() {
-            if item
-                .as_ref()
-                .unwrap()
-                .path()
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .to_string()
-                == "tendermint"
-            {
+            if item.as_ref().unwrap().path().unwrap().to_str().unwrap() == "tendermint" {
                 let tendermint_bytes: Vec<u8> =
                     item.unwrap().bytes().map(|byte| byte.unwrap()).collect();
 
