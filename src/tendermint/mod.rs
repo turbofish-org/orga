@@ -99,16 +99,6 @@ impl Tendermint {
         }
     }
 
-    pub fn stdout<T: Into<Stdio>>(mut self, cfg: T) -> Self {
-        self.process.command.stdout(cfg);
-        self
-    }
-
-    pub fn stderr<T: Into<Stdio>>(mut self, cfg: T) -> Self {
-        self.process.command.stderr(cfg);
-        self
-    }
-
     fn install(&self) {
         let tendermint_path = self.home.join("tendermint-v0.34.11");
 
@@ -149,6 +139,16 @@ impl Tendermint {
     pub fn home(mut self, new_home: &str) -> Self {
         self.process.set_arg("--home");
         self.process.set_arg(new_home);
+        self
+    }
+
+    pub fn stdout<T: Into<Stdio>>(mut self, cfg: T) -> Self {
+        self.process.command.stdout(cfg);
+        self
+    }
+
+    pub fn stderr<T: Into<Stdio>>(mut self, cfg: T) -> Self {
+        self.process.command.stderr(cfg);
         self
     }
 
