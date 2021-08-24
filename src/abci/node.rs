@@ -1,12 +1,12 @@
 use std::marker::PhantomData;
 
+use super::CONTEXT;
 use super::{ABCIStateMachine, App, Application};
 use crate::encoding::{Decode, Encode};
 use crate::merk::MerkStore;
 use crate::state::State;
 use crate::store::{BufStore, Read, Shared, Store, Write};
 use crate::Result;
-
 pub struct Node<A: App>
 where
     <A as State>::Encoding: Default,
@@ -22,9 +22,6 @@ where
     pub fn new(home: &str) -> Self {
         let app = InternalApp::<A>::new();
         let store = MerkStore::new(home.into());
-
-        // TODO: double-check that default encoding is the same as if we made a
-        // state, flushed, encoded, and wrote that instead.
 
         let abci_sm = ABCIStateMachine::new(app, store);
         Node {
@@ -61,6 +58,8 @@ where
             }
         };
         let data: <A as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
+        // TODO: double-check that default encoding is the same as if we made a
+        // state, flushed, encoded, and wrote that instead.
         let mut state = <A as State>::create(store.clone(), data)?;
         A::init_chain(&mut state)?;
         let flushed = state.flush()?;
@@ -72,8 +71,17 @@ where
     fn begin_block(
         &self,
         store: Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>,
-        _req: tendermint_proto::abci::RequestBeginBlock,
+        req: tendermint_proto::abci::RequestBeginBlock,
     ) -> Result<tendermint_proto::abci::ResponseBeginBlock> {
+        // Set context
+        {
+            let mut ctx = CONTEXT.lock().unwrap();
+            if let Some(header) = req.header.as_ref() {
+                ctx.height = header.height as u64;
+            }
+            ctx.header = req.header;
+        };
+        // Step state machine
         let mut store = Store::new(store);
         let state_bytes = store.get(&[])?.unwrap();
         let data: <A as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
@@ -97,8 +105,16 @@ where
         A::end_block(&mut state)?;
         let flushed = state.flush()?;
         store.put(vec![], flushed.encode()?)?;
+        // Send back validator updates
+        let mut res: tendermint_proto::abci::ResponseEndBlock = Default::default();
+        {
+            let mut ctx = CONTEXT.lock().unwrap();
+            ctx.validator_updates.drain().for_each(|(_key, update)| {
+                res.validator_updates.push(update);
+            });
+        }
 
-        Ok(Default::default())
+        Ok(res)
     }
 
     fn deliver_tx(

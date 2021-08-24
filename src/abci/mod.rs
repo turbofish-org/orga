@@ -13,6 +13,8 @@ use crate::store::{BufStore, BufStoreMap, MapStore, Read, Shared, Write, KV};
 use crate::Result;
 mod node;
 pub use node::*;
+mod context;
+pub use context::*;
 
 use messages::*;
 pub use tendermint_proto::abci as messages;
@@ -536,5 +538,12 @@ impl<S: State> InitChain for S {
 }
 
 // TODO: add Call and Query
-pub trait App: BeginBlock + EndBlock + InitChain + State {}
+pub trait App: BeginBlock + EndBlock + InitChain + State {
+    fn context(&self) -> Context {
+        CONTEXT
+            .lock()
+            .expect("Failed to acquire context lock")
+            .clone()
+    }
+}
 impl<T: BeginBlock + EndBlock + InitChain + State> App for T where <T as State>::Encoding: Default {}

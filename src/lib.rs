@@ -1,7 +1,7 @@
 #![feature(map_first_last)]
 #![feature(entry_insert)]
 #![feature(specialization)]
-#![feature(associated_type_defaults)]
+#![feature(once_cell)]
 
 /// Integration with ABCI (gated by `abci` feature).
 #[cfg(feature = "abci")]
