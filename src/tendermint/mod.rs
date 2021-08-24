@@ -158,14 +158,3 @@ impl Tendermint {
         self.process.spawn().unwrap();
     }
 }
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn test_new() {
-        let process = Tendermint::new(".tendermint").home("testy_test");
-        println!("{:?}", process);
-    }
-}
