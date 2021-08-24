@@ -3,7 +3,7 @@ use failure::bail;
 use std::fs;
 use std::io::Read;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 #[derive(Debug)]
 struct ProcessHandler {
@@ -82,8 +82,9 @@ impl Tendermint {
         })
     }
 
-    fn stdout() {
-        unimplemented!();
+    pub fn stdout<T: Into<Stdio>>(mut self, cfg: T) -> Self {
+        self.process.command.stdout(cfg);
+        self
     }
 
     fn install() {
