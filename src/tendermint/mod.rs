@@ -87,6 +87,11 @@ impl Tendermint {
         self
     }
 
+    pub fn stderr<T: Into<Stdio>>(mut self, cfg: T) -> Self {
+        self.process.command.stderr(cfg);
+        self
+    }
+
     fn install() {
         unimplemented!();
     }
