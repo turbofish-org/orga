@@ -7,25 +7,25 @@ use std::process::Command;
 
 #[derive(Debug)]
 struct ProcessHandler {
-    process: std::process::Command,
-    child_process: Option<std::process::Child>,
+    command: std::process::Command,
+    process: Option<std::process::Child>,
 }
 
 impl ProcessHandler {
     pub fn new(command: &str) -> Result<Self> {
-        let process = Command::new(command);
+        let command = Command::new(command);
         Ok(ProcessHandler {
-            process,
-            child_process: None,
+            command,
+            process: None,
         })
     }
 
     pub fn set_arg(&mut self, arg: &str) {
-        self.process.arg(arg);
+        self.command.arg(arg);
     }
 
     pub fn read_stdout(&mut self, buf: &mut [u8]) -> Result<Option<()>> {
-        let child = match &mut self.child_process {
+        let child = match &mut self.process {
             Some(inner) => inner,
             None => {
                 bail!("Child process is not yet spawned. Cannot read from std_out.");
@@ -44,16 +44,16 @@ impl ProcessHandler {
     }
 
     pub fn spawn(mut self) -> Result<()> {
-        match self.child_process {
+        match self.process {
             Some(_) => bail!("Child process already spawned"),
-            None => self.child_process = Some(self.process.spawn()?),
+            None => self.process = Some(self.command.spawn()?),
         };
-        self.child_process.unwrap().wait().unwrap();
+        self.process.unwrap().wait().unwrap();
         Ok(())
     }
 
     pub fn kill(self) -> Result<()> {
-        let mut child = match self.child_process {
+        let mut child = match self.process {
             Some(inner) => inner,
             None => {
                 bail!("Child process is not yet spawned. How do you kill that which has no life?");
