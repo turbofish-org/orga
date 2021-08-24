@@ -24,25 +24,6 @@ impl ProcessHandler {
         self.command.arg(arg);
     }
 
-    pub fn read_stdout(&mut self, buf: &mut [u8]) -> Result<Option<()>> {
-        let child = match &mut self.process {
-            Some(inner) => inner,
-            None => {
-                bail!("Child process is not yet spawned. Cannot read from std_out.");
-            }
-        };
-
-        let stdout = match &mut child.stdout {
-            Some(inner) => inner,
-            None => {
-                return Ok(None);
-            }
-        };
-
-        stdout.read(buf).expect("Failed to read stdout into buf.");
-        Ok(Some(()))
-    }
-
     pub fn spawn(mut self) -> Result<()> {
         match self.process {
             Some(_) => bail!("Child process already spawned"),
