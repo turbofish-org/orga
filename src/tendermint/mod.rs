@@ -1,9 +1,44 @@
 use crate::error::Result;
 use failure::bail;
+use flate2::read::GzDecoder;
+use hex_literal::hex;
+use is_executable::IsExecutable;
+use log::info;
+use sha2::{Digest, Sha256};
 use std::fs;
-use std::io::Read;
+use std::io::prelude::*;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use tar::Archive;
+
+#[cfg(target_os = "macos")]
+static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.11/tendermint_0.34.11_darwin_amd64.tar.gz";
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.11/tendermint_0.34.11_linux_amd64.zip";
+#[cfg(all(target_os = "linux", target_arch = "arm"))]
+static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.11/tendermint_0.34.11_linux_arm64.zip";
+
+#[cfg(target_os = "macos")]
+static TENDERMINT_ZIP_HASH: [u8; 32] =
+    hex!("e565ec1b90a950093d7d77745f1579d87322f5900c67ec51ff2cd02b988b6d52");
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+static TENDERMINT_ZIP_HASH: [u8; 32] =
+    hex!("1496d3808ed1caaf93722983f34d4ba38392ea6530f070a09e7abf1ea4cc5106");
+#[cfg(all(target_os = "linux", target_arch = "arm"))]
+static TENDERMINT_ZIP_HASH: [u8; 32] =
+    hex!("01a076d3297a5381587a77621b7f45dca7acb7fc21ce2e29ca327ccdaee41757");
+
+fn verify_hash(tendermint_bytes: &Vec<u8>) {
+    let mut hasher = Sha256::new();
+    hasher.update(tendermint_bytes);
+    let digest = hasher.finalize();
+    let bytes = digest.as_slice();
+    assert_eq!(
+        bytes, TENDERMINT_ZIP_HASH,
+        "Tendermint binary zip did not match expected hash"
+    );
+    info!("Confirmed correct Tendermint zip hash");
+}
 
 #[derive(Debug)]
 struct ProcessHandler {
@@ -12,12 +47,12 @@ struct ProcessHandler {
 }
 
 impl ProcessHandler {
-    pub fn new(command: &str) -> Result<Self> {
+    pub fn new(command: &str) -> Self {
         let command = Command::new(command);
-        Ok(ProcessHandler {
+        ProcessHandler {
             command,
             process: None,
-        })
+        }
     }
 
     pub fn set_arg(&mut self, arg: &str) {
@@ -52,15 +87,15 @@ pub struct Tendermint {
 }
 
 impl Tendermint {
-    pub fn new(home_path: &str) -> Result<Tendermint> {
+    pub fn new(home_path: &str) -> Tendermint {
         let path: PathBuf = home_path.into();
         if !path.exists() {
-            fs::create_dir(path)?;
+            fs::create_dir(path).expect("Failed to create Tendermint home directory");
         }
-        Ok(Tendermint {
-            process: ProcessHandler::new("tendermint")?,
-            home: path,
-        })
+        Tendermint {
+            process: ProcessHandler::new("tendermint"),
+            home: home_path.into(),
+        }
     }
 
     pub fn stdout<T: Into<Stdio>>(mut self, cfg: T) -> Self {
@@ -73,7 +108,51 @@ impl Tendermint {
         self
     }
 
-    fn install() {}
+    fn install(&self) {
+        let tendermint_path = self.home.join("tendermint-v0.34.11");
+
+        if tendermint_path.is_executable() {
+            info!("Tendermint already installed");
+            return;
+        }
+
+        info!("Installing Tendermint to {}", self.home.to_str().unwrap());
+        let mut buf: Vec<u8> = vec![];
+        reqwest::blocking::get(TENDERMINT_BINARY_URL)
+            .expect("Failed to download Tendermint zip file from GitHub")
+            .copy_to(&mut buf)
+            .expect("Failed to read bytes from zip file");
+
+        info!("Downloaded Tendermint binary");
+        verify_hash(&buf);
+
+        let cursor = std::io::Cursor::new(buf.clone());
+        let tar = GzDecoder::new(cursor);
+        let mut archive = Archive::new(tar);
+
+        for item in archive.entries().unwrap() {
+            if item
+                .as_ref()
+                .unwrap()
+                .path()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string()
+                == "tendermint"
+            {
+                let tendermint_bytes: Vec<u8> =
+                    item.unwrap().bytes().map(|byte| byte.unwrap()).collect();
+
+                let mut f = fs::File::create(tendermint_path)
+                    .expect("Could not create Tendermint binary on file system");
+                f.write_all(&mut tendermint_bytes.as_slice())
+                    .expect("Failed to write Tendermint binary to file system");
+
+                break;
+            }
+        }
+    }
 
     pub fn home(mut self, new_home: &str) -> Self {
         self.process.set_arg("--home");
@@ -82,6 +161,7 @@ impl Tendermint {
     }
 
     pub fn start(mut self) {
+        self.install();
         self.process.set_arg("start");
         self.process.spawn().unwrap();
     }
@@ -93,7 +173,7 @@ mod test {
 
     #[test]
     fn test_new() {
-        let process = Tendermint::new(".tendermint").unwrap().home("testy_test");
+        let process = Tendermint::new(".tendermint").home("testy_test");
         println!("{:?}", process);
     }
 }
