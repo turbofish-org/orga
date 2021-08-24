@@ -28,7 +28,7 @@ static TENDERMINT_ZIP_HASH: [u8; 32] =
 static TENDERMINT_ZIP_HASH: [u8; 32] =
     hex!("01a076d3297a5381587a77621b7f45dca7acb7fc21ce2e29ca327ccdaee41757");
 
-fn verify_hash(tendermint_bytes: &Vec<u8>) {
+fn verify_hash(tendermint_bytes: &[u8]) {
     let mut hasher = Sha256::new();
     hasher.update(tendermint_bytes);
     let digest = hasher.finalize();
