@@ -17,3 +17,12 @@ pub trait CreateClient<T: Client<Self>>: Call {
 
   fn create_client(backing_client: T) -> Self::Client;
 }
+
+pub struct ClientU32;
+impl<T: Client<Self>> CreateClient<T> for u32 {
+  type Client = ClientU32;
+
+  fn create_client(backing_client: T) -> Self::Client {
+    ClientU32
+  }
+}

@@ -3,6 +3,7 @@ use std::cell::RefCell;
 
 use crate::Result;
 use crate::call::Call;
+use crate::state::State;
 use super::{Client, CreateClient};
 
 pub struct Mock<T> {
@@ -15,11 +16,16 @@ impl<T> Clone for Mock<T> {
     }
 }
 
-impl<T> Mock<T> {
+impl<T: State> Mock<T> {
     pub fn new(state: T) -> (Mock<T>, Rc<RefCell<T>>) {
         let shared = Rc::new(RefCell::new(state));
         (Mock { state: shared.clone() }, shared)
     }
+
+    // pub fn setup() -> (Mock<T>, Rc<RefCell<T>>) {
+    //     let shared = Rc::new(RefCell::new(state));
+    //     (Mock { state: shared.clone() }, shared)
+    // }
 }
 
 impl<T: Call> Client<T> for Mock<T> {

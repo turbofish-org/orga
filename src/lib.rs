@@ -15,15 +15,17 @@ pub mod client;
 /// trait.
 pub mod collections;
 
-/// Integration with [merk](https://docs.rs/merk) (gated by `merk` feature).
-#[cfg(feature = "merk")]
-pub mod merk;
-
 /// Traits for deterministic encoding and decoding.
 ///
 /// This module is actually just a re-export of the [ed](https://docs.rs/ed)
 /// crate.
 pub mod encoding;
+
+/// Integration with [merk](https://docs.rs/merk) (gated by `merk` feature).
+#[cfg(feature = "merk")]
+pub mod merk;
+
+pub mod query;
 
 /// High-level abstractions for state data.
 pub mod state;

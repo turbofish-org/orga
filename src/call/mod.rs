@@ -46,9 +46,18 @@ impl<T: Call<Field> + Call<Method>> Call for T {
   }
 }
 
-// pub trait Query<T = Kind> {
-//   type Query: Encode + Decode;
-//   type Res: Encode + Decode;
+impl Call<Field> for u32 {
+  type Call = ();
 
-//   fn query(&self, query: Self::Query) -> Result<Self::Res>;
-// }
+  fn call(&mut self, _: Self::Call) -> Result<()> {
+    bail!("No field calls implemented")
+  }
+}
+
+impl Call<Method> for u32 {
+  type Call = ();
+
+  fn call(&mut self, _: Self::Call) -> Result<()> {
+    bail!("No method calls implemented")
+  }
+}

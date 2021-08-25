@@ -30,9 +30,9 @@ impl Counter {
 
 // first expansion
 
-pub struct Client<T> {
+pub struct Client<T: ::orga::client::Client<Counter>> {
     client: T,
-    // pub count2: <u32 as ::orga::client::CreateClient<T>>::Client,
+    pub count2: <u32 as ::orga::client::CreateClient<Count2Client<T>>>::Client,
 }
 
 impl<T: ::orga::client::Client<Counter>> CreateClient<T> for Counter {
@@ -40,9 +40,19 @@ impl<T: ::orga::client::Client<Counter>> CreateClient<T> for Counter {
 
     fn create_client(client: T) -> Self::Client {
         Client {
-            client,
-            // count2: CreateClient::create_client(client.clone()),
+            client: client.clone(),
+            count2: CreateClient::create_client(Count2Client { client: client.clone() }),
         }
+    }
+}
+
+#[derive(Clone)]
+pub struct Count2Client<T> {
+    client: T,
+}
+impl<T: ::orga::client::Client<Counter>> ::orga::client::Client<u32> for Count2Client<T> {
+    fn call(&mut self, call: <u32 as ::orga::call::Call>::Call) -> Result<()> {
+        self.client.call(::orga::call::Item::Field(FieldCall::Count2(call)))
     }
 }
 
@@ -50,7 +60,6 @@ impl<T: ::orga::client::Client<Counter>> CreateClient<T> for Counter {
 pub enum FieldCall {
     Count2(<u32 as ::orga::call::Call>::Call),
 }
-
 impl ::orga::call::Call<::orga::call::Field> for Counter {
     type Call = FieldCall;
 
@@ -69,7 +78,6 @@ impl ::orga::call::Call<::orga::call::Field> for Counter {
 pub enum MethodCall {
     Increment(u32),
 }
-
 impl ::orga::call::Call<::orga::call::Method> for Counter {
     type Call = MethodCall;
 
@@ -110,6 +118,8 @@ fn client() {
     client.increment(0).unwrap();
     assert_eq!(counter.borrow().count, 1);
     assert_eq!(counter.borrow().count2, 0);
+
+    counter.borrow_mut().increment(1).unwrap();
 
     println!("{:?}", &counter);
 }
