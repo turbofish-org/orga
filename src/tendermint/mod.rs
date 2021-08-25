@@ -176,12 +176,11 @@ impl Tendermint {
         self
     }
 
-    //this should maybe take a list and be a const generic over any number of items?
-    //but would be annoying with parsing that list and generating a new string that concatenates
-    //them all
-    pub fn p2p_persistent_peers(mut self, peers: &str) -> Self {
+    pub fn p2p_persistent_peers<const N: usize>(mut self, peers: [&str; N]) -> Self {
         self.process.set_arg("--p2p.persistent_peers");
-        self.process.set_arg(peers);
+        let mut arg: String = "".to_string();
+        peers.iter().for_each(|x| arg += &x.to_string());
+        self.process.set_arg(&arg);
         self
     }
 
