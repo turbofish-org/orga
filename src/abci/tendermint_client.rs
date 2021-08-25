@@ -5,6 +5,7 @@ use failure::bail;
 
 use crate::encoding::Encode;
 use crate::call::Call;
+use crate::query::Query;
 use crate::client::Client;
 use crate::Result;
 
@@ -33,12 +34,12 @@ impl<T> TendermintClient<T> {
     }
 }
 
-impl<T: Call> Client<T> for TendermintClient<T> {
-    // fn query<F, R>(&self, query: T::Query, check: F) -> Result<R>
-    //   where F: Fn(T::Res) -> Result<R>
-    // {
-    //   todo!()
-    // }
+impl<T: Call + Query> Client<T> for TendermintClient<T> {
+    fn query<F, R>(&self, query: T::Query, check: F) -> Result<R>
+      where F: Fn(T::Res) -> Result<R>
+    {
+      todo!()
+    }
 
     fn call(&mut self, call: T::Call) -> Result<()> {
         let tx = call.encode()?.into();

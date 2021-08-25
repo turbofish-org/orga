@@ -3,6 +3,7 @@ use std::cell::RefCell;
 
 use crate::Result;
 use crate::call::Call;
+use crate::query::Query;
 use crate::state::State;
 use super::{Client, CreateClient};
 
@@ -28,7 +29,13 @@ impl<T: State> Mock<T> {
     // }
 }
 
-impl<T: Call> Client<T> for Mock<T> {
+impl<T: Call + Query> Client<T> for Mock<T> {
+    fn query<F, R>(&self, query: T::Query, check: F) -> Result<R>
+    where F: Fn(T::Res) -> Result<R> {
+        let state = self.state.borrow();
+        check(state.query(query)?)
+    }
+
     fn call(&mut self, call: T::Call) -> Result<()> {
         let mut state = self.state.borrow_mut();
         state.call(call)
