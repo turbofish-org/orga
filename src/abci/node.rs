@@ -46,7 +46,7 @@ where
         store: Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>,
         _req: tendermint_proto::abci::RequestInitChain,
     ) -> Result<tendermint_proto::abci::ResponseInitChain> {
-        let mut store = Store::new(store);
+        let mut store = Store::new(store.into());
 
         let state_bytes = match store.get(&[])? {
             Some(inner) => inner,
@@ -82,7 +82,7 @@ where
             ctx.header = req.header;
         };
         // Step state machine
-        let mut store = Store::new(store);
+        let mut store = Store::new(store.into());
         let state_bytes = store.get(&[])?.unwrap();
         let data: <A as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
         let mut state = <A as State>::create(store.clone(), data)?;
@@ -98,7 +98,7 @@ where
         store: Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>,
         _req: tendermint_proto::abci::RequestEndBlock,
     ) -> Result<tendermint_proto::abci::ResponseEndBlock> {
-        let mut store = Store::new(store);
+        let mut store = Store::new(store.into());
         let state_bytes = store.get(&[])?.unwrap();
         let data: <A as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
         let mut state = <A as State>::create(store.clone(), data)?;
@@ -122,7 +122,7 @@ where
         store: Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>,
         req: tendermint_proto::abci::RequestDeliverTx,
     ) -> Result<tendermint_proto::abci::ResponseDeliverTx> {
-        let mut store = Store::new(store);
+        let mut store = Store::new(store.into());
         let state_bytes = store.get(&[])?.unwrap();
         let data: <A as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
         let mut state = <A as State>::create(store.clone(), data)?;
