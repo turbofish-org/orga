@@ -7,10 +7,8 @@ use crate::Result;
 /// The default backing store used as the type parameter given to `Store`. This
 /// is used to prevent generic parameters bubbling up to the application level
 /// for state types when they often all use the same backing store.
-// #[cfg(any(not(feature = "merk"), test, integration_test))]
-// pub type DefaultBackingStore = super::MapStore;
 #[cfg(feature = "merk")]
-pub type DefaultBackingStore = crate::merk::BackingStore;
+pub type DefaultBackingStore = crate::merk::BackingStore<'static>;
 #[cfg(not(feature = "merk"))]
 pub type DefaultBackingStore = super::MapStore;
 
