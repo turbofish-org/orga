@@ -264,6 +264,7 @@ mod tests {
     use tempdir::TempDir;
 
     #[test]
+    #[ignore]
     fn tendermint_init() {
         let temp_dir = TempDir::new("tendermint_test").unwrap();
         let temp_dir_path = temp_dir.path();
