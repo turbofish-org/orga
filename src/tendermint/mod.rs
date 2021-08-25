@@ -233,9 +233,6 @@ impl Tendermint {
         self
     }
 
-    //any top level command will need to first try to install before anything happens
-    //just need to make sure that this check happens before anything else in the install logic
-    //and that it isn't too heavy
     pub fn start(mut self) {
         self.install();
         self.apply_genesis();
