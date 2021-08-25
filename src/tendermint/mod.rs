@@ -91,12 +91,13 @@ impl Tendermint {
     pub fn new(home_path: &str) -> Tendermint {
         let path: PathBuf = home_path.into();
         if !path.exists() {
-            fs::create_dir(path).expect("Failed to create Tendermint home directory");
+            fs::create_dir(path.clone()).expect("Failed to create Tendermint home directory");
         }
-        Tendermint {
+        let tendermint = Tendermint {
             process: ProcessHandler::new("tendermint"),
             home: home_path.into(),
-        }
+        };
+        tendermint.home(home_path)
     }
 
     fn install(&self) {
