@@ -146,8 +146,6 @@ impl Tendermint {
         }
     }
 
-    //removing this function from the public api ensures that the home passed to the tendermint
-    //process will always be the home of the tendermint
     fn home(mut self, new_home: &str) -> Self {
         self.process.set_arg("--home");
         self.process.set_arg(new_home);
