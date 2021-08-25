@@ -24,6 +24,14 @@ pub trait Call<T = Kind> {
   fn call(&mut self, call: Self::Call) -> Result<()>;
 }
 
+default impl<T> Call<Field> for T {
+  type Call = ();
+
+  fn call(&mut self, _: Self::Call) -> Result<()> {
+    bail!("No field calls implemented")
+  }
+}
+
 default impl<T> Call<Method> for T {
   type Call = ();
 
@@ -53,7 +61,6 @@ impl Call<Field> for u32 {
     bail!("No field calls implemented")
   }
 }
-
 impl Call<Method> for u32 {
   type Call = ();
 
