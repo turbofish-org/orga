@@ -96,17 +96,17 @@ pub struct Tendermint {
 }
 
 impl Tendermint {
-    pub fn new(home_path: &str) -> Tendermint {
-        let path: PathBuf = home_path.into();
+    pub fn new<T: Into<PathBuf> + Clone>(home_path: T) -> Tendermint {
+        let path: PathBuf = home_path.clone().into();
         if !path.exists() {
             fs::create_dir(path.clone()).expect("Failed to create Tendermint home directory");
         }
         let tendermint = Tendermint {
             process: ProcessHandler::new("tendermint"),
-            home: home_path.into(),
+            home: home_path.clone().into(),
             genesis_path: None,
         };
-        tendermint.home(home_path)
+        tendermint.home(home_path.into())
     }
 
     fn install(&self) {
