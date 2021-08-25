@@ -24,18 +24,18 @@ pub trait Call<T = Kind> {
   fn call(&mut self, call: Self::Call) -> Result<()>;
 }
 
-default impl<T> Call<Field> for T {
-  type Call = ();
+impl<T> Call<Field> for T {
+  default type Call = ();
 
-  fn call(&mut self, _: Self::Call) -> Result<()> {
+  default fn call(&mut self, _: Self::Call) -> Result<()> {
     bail!("No field calls implemented")
   }
 }
 
-default impl<T> Call<Method> for T {
-  type Call = ();
+impl<T> Call<Method> for T {
+  default type Call = ();
 
-  fn call(&mut self, _: Self::Call) -> Result<()> {
+  default fn call(&mut self, _: Self::Call) -> Result<()> {
     bail!("No method calls implemented")
   }
 }
@@ -51,20 +51,5 @@ impl<T: Call<Field> + Call<Method>> Call for T {
       Item::Field(call) => Call::<Field>::call(self, call),
       Item::Method(call) => Call::<Method>::call(self, call),
     }
-  }
-}
-
-impl Call<Field> for u32 {
-  type Call = ();
-
-  fn call(&mut self, _: Self::Call) -> Result<()> {
-    bail!("No field calls implemented")
-  }
-}
-impl Call<Method> for u32 {
-  type Call = ();
-
-  fn call(&mut self, _: Self::Call) -> Result<()> {
-    bail!("No method calls implemented")
   }
 }

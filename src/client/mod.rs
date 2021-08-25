@@ -38,8 +38,13 @@ pub struct DefaultClient<T, C> {
 //   }
 // }
 
-impl<C: Client<u32>> DefaultClient<u32, C> {
-  pub fn get(&self) -> Result<u32> {
+impl<T: Query + Call, C: Client<T>, U, V, W, X> DefaultClient<T, C>
+where
+  T: Query<query::This, Query = ()>,
+  T: Query<Query = query::Item<U, V, ()>>,
+  T: Query<Res = query::Item<W, X, T>>,
+{
+  pub fn get(&self) -> Result<T> {
     self.backing_client.query(
       query::Item::This(()),
       |res| match res {

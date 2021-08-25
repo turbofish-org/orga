@@ -72,7 +72,7 @@ impl<T: ::orga::client::Client<Counter>> ::orga::client::Client<u32> for Count2C
     }
 }
 
-#[derive(Debug, ::orga::encoding::Encode, ::orga::encoding::Decode)]
+#[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
 pub enum FieldCall {
     Count2(<u32 as ::orga::call::Call>::Call),
 }
@@ -106,11 +106,11 @@ impl ::orga::call::Call<::orga::call::Method> for Counter {
     }
 }
 
-#[derive(Debug, ::orga::encoding::Encode, ::orga::encoding::Decode)]
+#[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
 pub enum FieldQuery {
     Count2(<u32 as ::orga::query::Query>::Query),
 }
-#[derive(Debug, ::orga::encoding::Encode, ::orga::encoding::Decode)]
+#[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
 pub enum FieldRes {
     Count2(<u32 as ::orga::query::Query>::Res),
 }
@@ -185,11 +185,14 @@ fn client() {
 
     assert_eq!(client.count().unwrap(), 0);
     assert_eq!(client.count2.get().unwrap(), 0);
+    // client.count().await?;
+    // client.count2.await?;
 
     assert_eq!(
         client.increment(123).unwrap_err().to_string(),
         "Incorrect count",
     );
+    // client.increment(123).await?;
 
     client.increment(0).unwrap();
     assert_eq!(counter.borrow().count, 1);
