@@ -69,7 +69,7 @@ impl ProcessHandler {
 
     pub fn wait(&mut self) -> Result<()> {
         match &mut self.process {
-            Some(process) => process.wait().unwrap(),
+            Some(process) => process.wait()?,
             None => bail!("Child process not yet spawned."),
         };
         Ok(())
