@@ -34,26 +34,24 @@ impl<T> TendermintClient<T> {
 }
 
 impl<T: Call> Client<T> for TendermintClient<T> {
-    type CallRes = TxResponse;
-
     // fn query<F, R>(&self, query: T::Query, check: F) -> Result<R>
     //   where F: Fn(T::Res) -> Result<R>
     // {
     //   todo!()
     // }
 
-    fn call(&mut self, call: T::Call) -> Result<Self::CallRes> {
+    fn call(&mut self, call: T::Call) -> Result<()> {
         let tx = call.encode()?.into();
         let res = block_on(self.client.broadcast_tx_commit(tx))?;
 
         if res.check_tx.code.is_err() {
-            bail!("Call failed on checkTx: {:?}", res.check_tx);
+            bail!("Call failed on checkTx: {:?}", &res.check_tx);
         }
 
         if res.deliver_tx.code.is_err() {
-            bail!("Call failed on deliverTx: {:?}", res.deliver_tx);
+            bail!("Call failed on deliverTx: {:?}", &res.deliver_tx);
         }
 
-        Ok(res)
+        Ok(())
     }
 }
