@@ -119,9 +119,12 @@ impl<T: State<S>, S: Write> Deque<T, S> {
 
 #[allow(unused_imports)]
 mod test {
-    use super::*;
+    use super::{Deque as OrgaDeque, Map as OrgaMap, *};
     use crate::store::MapStore;
-
+    #[allow(dead_code)]
+    type Deque<T> = OrgaDeque<T, MapStore>;
+    #[allow(dead_code)]
+    type Map<K, V> = OrgaMap<K, V, MapStore>;
     #[test]
     fn deque_u32_create() {
         let store = Store::new(MapStore::new());

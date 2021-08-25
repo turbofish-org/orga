@@ -632,9 +632,11 @@ impl<'a, K: Clone, V, S> From<Entry<'a, K, V, S>> for Option<ChildMut<'a, K, V, 
 
 #[cfg(test)]
 mod tests {
-    use super::super::deque::*;
-    use super::*;
+    use super::super::deque::{Deque as OrgaDeque, *};
+    use super::{Map as OrgaMap, *};
     use crate::store::{MapStore, Store};
+    type Map<K, V> = OrgaMap<K, V, MapStore>;
+    type Deque<T> = OrgaDeque<T, MapStore>;
 
     fn enc(n: u32) -> Vec<u8> {
         n.encode().unwrap()
