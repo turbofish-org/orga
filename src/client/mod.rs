@@ -1,8 +1,7 @@
 use crate::call::{Call};
 use crate::Result;
 
-pub trait Client<T: Call>: Clone {
-  type CallRes = ();
+mod mock;
 
 pub use mock::Mock;
 
