@@ -255,3 +255,31 @@ impl Tendermint {
         self.process.spawn().unwrap();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+    use tempdir::TempDir;
+
+    #[test]
+    fn tendermint_init() {
+        let temp_dir = TempDir::new("tendermint_test").unwrap();
+        let temp_dir_path = temp_dir.path();
+        Tendermint::new(temp_dir_path).stdout(Stdio::null()).init();
+
+        let file_set: HashSet<String> = temp_dir_path
+            .read_dir()
+            .unwrap()
+            .map(|x| x.unwrap().file_name().to_str().unwrap().to_string())
+            .collect();
+
+        let expected: HashSet<String> = HashSet::from([
+            "config".to_string(),
+            "data".to_string(),
+            "tendermint-v0.34.11".to_string(),
+        ]);
+
+        assert_eq!(file_set, expected);
+    }
+}
