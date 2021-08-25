@@ -146,7 +146,8 @@ impl Tendermint {
         }
     }
 
-    fn home(mut self, new_home: &str) -> Self {
+    fn home(mut self, home_path: PathBuf) -> Self {
+        let new_home = home_path.to_str().unwrap();
         self.process.set_arg("--home");
         self.process.set_arg(new_home);
         self
