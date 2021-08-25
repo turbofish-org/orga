@@ -1,9 +1,12 @@
 #![feature(map_first_last)]
 #![feature(entry_insert)]
+#![feature(specialization)]
 
 /// Integration with ABCI (gated by `abci` feature).
 #[cfg(feature = "abci")]
 pub mod abci;
+
+pub mod call;
 
 /// Data structures which implement the [`state::State`](state/trait.State.html)
 /// trait.
