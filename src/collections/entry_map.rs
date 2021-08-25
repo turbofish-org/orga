@@ -8,6 +8,7 @@ use std::ops::RangeBounds;
 use super::{Entry, Next};
 use crate::state::*;
 use crate::store::*;
+use crate::Result;
 use ed::*;
 
 pub struct EntryMap<T: Entry, S = DefaultBackingStore> {
