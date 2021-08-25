@@ -59,12 +59,19 @@ impl ProcessHandler {
         self.command.arg(arg);
     }
 
-    pub fn spawn(mut self) -> Result<()> {
+    pub fn spawn(&mut self) -> Result<()> {
         match self.process {
             Some(_) => bail!("Child process already spawned"),
             None => self.process = Some(self.command.spawn()?),
         };
-        self.process.unwrap().wait().unwrap();
+        Ok(())
+    }
+
+    pub fn wait(&mut self) -> Result<()> {
+        match &mut self.process {
+            Some(process) => process.wait().unwrap(),
+            None => bail!("Child process not yet spawned."),
+        };
         Ok(())
     }
 
@@ -85,6 +92,7 @@ impl ProcessHandler {
 pub struct Tendermint {
     process: ProcessHandler,
     home: PathBuf,
+    genesis_path: Option<PathBuf>,
 }
 
 impl Tendermint {
@@ -96,6 +104,7 @@ impl Tendermint {
         let tendermint = Tendermint {
             process: ProcessHandler::new("tendermint"),
             home: home_path.into(),
+            genesis_path: None,
         };
         tendermint.home(home_path)
     }
@@ -137,9 +146,49 @@ impl Tendermint {
         }
     }
 
-    pub fn home(mut self, new_home: &str) -> Self {
+    //removing this function from the public api ensures that the home passed to the tendermint
+    //process will always be the home of the tendermint
+    fn home(mut self, new_home: &str) -> Self {
         self.process.set_arg("--home");
         self.process.set_arg(new_home);
+        self
+    }
+
+    pub fn log_level(mut self, level: &str) -> Self {
+        self.process.set_arg("--log_level");
+        self.process.set_arg(level);
+        self
+    }
+
+    pub fn trace(mut self) -> Self {
+        self.process.set_arg("--trace");
+        self
+    }
+
+    pub fn moniker(mut self, moniker: &str) -> Self {
+        self.process.set_arg("--moniker");
+        self.process.set_arg(moniker);
+        self
+    }
+
+    pub fn p2p_laddr(mut self, addr: &str) -> Self {
+        self.process.set_arg("--p2p.laddr");
+        self.process.set_arg(addr);
+        self
+    }
+
+    //this should maybe take a list and be a const generic over any number of items?
+    //but would be annoying with parsing that list and generating a new string that concatenates
+    //them all
+    pub fn p2p_persistent_peers(mut self, peers: &str) -> Self {
+        self.process.set_arg("--p2p.persistent_peers");
+        self.process.set_arg(peers);
+        self
+    }
+
+    pub fn rpc_laddr(mut self, addr: &str) -> Self {
+        self.process.set_arg("--rpc.laddr");
+        self.process.set_arg(addr);
         self
     }
 
@@ -153,9 +202,61 @@ impl Tendermint {
         self
     }
 
+    //only for unsafe reset all
+    pub fn keep_addr_book(mut self) -> Self {
+        self.process.set_arg("--keep_addr_book");
+        self
+    }
+
+    fn apply_genesis(&self) {
+        let path = match &self.genesis_path {
+            Some(inner) => inner,
+            None => {
+                return;
+            }
+        };
+        let file_name = path.file_name().unwrap().clone();
+        if file_name != "genesis.json" {
+            //TODO: more sophisticated method to ensure that the file is a valid genesis.json
+            panic!("Provided file is not a genesis.json.");
+        }
+
+        Command::new("cp")
+            .arg(path.clone())
+            .arg(self.home.join("config").join(file_name))
+            .spawn()
+            .expect("Failed to spawn genesis.json copy process.")
+            .wait()
+            .expect("genesis.json copy process failed.");
+    }
+
+    pub fn with_genesis(mut self, path: PathBuf) -> Self {
+        self.genesis_path = Some(path);
+        self
+    }
+
+    //any top level command will need to first try to install before anything happens
+    //just need to make sure that this check happens before anything else in the install logic
+    //and that it isn't too heavy
     pub fn start(mut self) {
         self.install();
+        self.apply_genesis();
         self.process.set_arg("start");
+        self.process.spawn().unwrap();
+        self.process.wait().unwrap();
+    }
+
+    pub fn init(mut self) {
+        self.install();
+        self.process.set_arg("init");
+        self.process.spawn().unwrap();
+        self.process.wait().unwrap();
+        self.apply_genesis();
+    }
+
+    pub fn unsafe_reset_all(mut self) {
+        self.install();
+        self.process.set_arg("unsafe_reset_all");
         self.process.spawn().unwrap();
     }
 }
