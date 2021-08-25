@@ -115,7 +115,9 @@ where
 }
 
 mod test {
-    use super::*;
+    use super::{EntryMap as OrgaEntryMap, *};
+    #[allow(dead_code)]
+    type EntryMap<T> = OrgaEntryMap<T, MapStore>;
 
     #[derive(Debug, Eq, PartialEq)]
     pub struct MapEntry {

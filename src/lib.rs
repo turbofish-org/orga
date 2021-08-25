@@ -37,6 +37,7 @@ pub use error::*;
 pub use orga_macros as macros;
 
 pub mod prelude {
+    #[cfg(feature = "abci")]
     pub use crate::abci::*;
     pub use crate::collections::*;
     pub use crate::state::*;
