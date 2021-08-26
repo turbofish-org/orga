@@ -15,32 +15,24 @@ pub trait Client<T: Call + Query + ?Sized>: Clone {
   fn call(&mut self, call: T::Call) -> Result<()>;
 }
 
-pub trait CreateClient<T: Client<Self>>: Call + Query {
-  type Client;
+pub trait CreateClient<C>: Call + Query + Sized {
+  type Client: From<C> + Sized = DefaultClient<Self, C>;
 
-  fn create_client(backing_client: T) -> Self::Client;
+  fn create_client(backing_client: C) -> Self::Client {
+    Self::Client::from(backing_client)
+  }
 }
 
+default impl<T: Call + Query, C> CreateClient<C> for T {}
+
+#[derive(Debug)]
 pub struct DefaultClient<T, C> {
   marker: std::marker::PhantomData<T>,
   backing_client: C,
 }
 
-// impl<T: Call + Query + Clone, C: Client<T>> DefaultClient<T, C> {
-//   pub fn get(&self) -> Result<<T as Query<query::This>>::Res> {
-//     self.backing_client.query(
-//       query::Item::This(()),
-//       |res| match res {
-//         query::Kind::This(t) => Ok(t),
-//         _ => bail!("Received incorrect result type")
-//       }
-//     )
-//   }
-// }
-
-impl<T: Query + Call, C: Client<T>, U, V, W, X> DefaultClient<T, C>
+impl<T, C: Client<T>, U, V, W, X> DefaultClient<T, C>
 where
-  T: Query<query::This, Query = ()>,
   T: Query<Query = query::Item<U, V, ()>>,
   T: Query<Res = query::Item<W, X, T>>,
 {
@@ -55,13 +47,13 @@ where
   }
 }
 
-impl<C: Client<u32>> CreateClient<C> for u32 {
-  type Client = DefaultClient<u32, C>;
-
-  fn create_client(backing_client: C) -> Self::Client {
+impl<T, C> From<C> for DefaultClient<T, C> {
+  fn from(client: C) -> Self {
     DefaultClient {
       marker: std::marker::PhantomData,
-      backing_client,
+      backing_client: client,
     }
   }
 }
+
+impl<C> CreateClient<C> for u32 {}

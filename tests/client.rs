@@ -36,17 +36,19 @@ pub struct Client<T: ::orga::client::Client<Counter>> {
     pub count2: <u32 as ::orga::client::CreateClient<Count2Client<T>>>::Client,
 }
 
-impl<T: ::orga::client::Client<Counter>> CreateClient<T> for Counter {
-    type Client = Client<T>;
-
-    fn create_client(client: T) -> Self::Client {
+impl<T: ::orga::client::Client<Counter>> From<T> for Client<T> {
+    fn from(client: T) -> Self {
         Client {
             client: client.clone(),
-            count2: CreateClient::create_client(Count2Client {
+            count2: u32::create_client(Count2Client {
                 client: client.clone(),
             }),
         }
     }
+}
+
+impl<T: ::orga::client::Client<Counter>> CreateClient<T> for Counter {
+    type Client = Client<T>;
 }
 
 #[derive(Clone)]
