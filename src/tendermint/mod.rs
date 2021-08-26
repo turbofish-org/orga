@@ -1,4 +1,5 @@
 use crate::error::Result;
+use datetime::LocalTime;
 use failure::bail;
 use flate2::read::GzDecoder;
 use hex_literal::hex;
@@ -10,6 +11,7 @@ use std::io::prelude::*;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use tar::Archive;
+use toml_edit::{value, Document};
 
 #[cfg(target_os = "macos")]
 static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.11/tendermint_0.34.11_darwin_amd64.tar.gz";
@@ -230,6 +232,36 @@ impl Tendermint {
 
     pub fn with_genesis(mut self, path: PathBuf) -> Self {
         self.genesis_path = Some(path);
+        self
+    }
+
+    pub fn state_sync<const N: usize>(
+        self,
+        rpc_servers: [&str; N],
+        trust_height: u32,
+        trust_hash: &str,
+    ) -> Self {
+        let config_path = self.home.join("config/config.toml");
+        let config_contents = fs::read_to_string(config_path.clone()).unwrap();
+
+        let mut document = config_contents
+            .parse::<Document>()
+            .expect("Invalid config.toml contents");
+
+        let mut rpc_string: String = "".to_string();
+        rpc_servers.iter().for_each(|item| {
+            rpc_string += item;
+            rpc_string += ",";
+        });
+
+        document["statesync"]["rpc_servers"] = value(rpc_string);
+        document["statesync"]["trust_height"] = value(trust_height as i64);
+        document["statesync"]["trust_hash"] = value(trust_hash);
+        document["statesync"]["enable"] = value(true);
+
+        fs::write(config_path, document.to_string())
+            .expect("Unable to write modified config.toml to file.");
+
         self
     }
 
