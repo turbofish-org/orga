@@ -95,6 +95,7 @@ pub struct Tendermint {
     process: ProcessHandler,
     home: PathBuf,
     genesis_path: Option<PathBuf>,
+    config_contents: Option<toml_edit::Document>,
 }
 
 impl Tendermint {
@@ -107,6 +108,7 @@ impl Tendermint {
             process: ProcessHandler::new("tendermint"),
             home: home_path.clone().into(),
             genesis_path: None,
+            config_contents: None,
         };
         tendermint.home(home_path.into())
     }
@@ -235,18 +237,45 @@ impl Tendermint {
         self
     }
 
+    fn read_config_toml(&mut self) {
+        let config_path = self.home.join("config/config.toml");
+        let contents = fs::read_to_string(config_path.clone()).unwrap();
+        let document = contents
+            .parse::<Document>()
+            .expect("Invalid config.toml contents");
+        self.config_contents = Some(document);
+    }
+
+    fn write_config_toml(&self) {
+        let document = match &self.config_contents {
+            Some(inner) => inner.clone(),
+            None => {
+                return;
+            }
+        };
+        let config_path = self.home.join("config/config.toml");
+        fs::write(config_path, document.to_string())
+            .expect("Unable to write modified config.toml to file.");
+    }
+
+    fn mutate_configuration(&self) {
+        self.apply_genesis();
+        self.write_config_toml();
+    }
+
     pub fn state_sync<const N: usize>(
-        self,
+        mut self,
         rpc_servers: [&str; N],
         trust_height: u32,
         trust_hash: &str,
     ) -> Self {
-        let config_path = self.home.join("config/config.toml");
-        let config_contents = fs::read_to_string(config_path.clone()).unwrap();
-
-        let mut document = config_contents
-            .parse::<Document>()
-            .expect("Invalid config.toml contents");
+        let mut document = match &self.config_contents {
+            Some(inner) => inner.clone(),
+            None => {
+                self.read_config_toml();
+                self.config_contents.unwrap()
+            }
+        };
 
         let mut rpc_string: String = "".to_string();
         rpc_servers.iter().for_each(|item| {
@@ -259,29 +288,28 @@ impl Tendermint {
         document["statesync"]["trust_hash"] = value(trust_hash);
         document["statesync"]["enable"] = value(true);
 
-        fs::write(config_path, document.to_string())
-            .expect("Unable to write modified config.toml to file.");
-
+        self.config_contents = Some(document);
         self
     }
 
-    pub fn block_time(self, time: &str) {
-        let config_path = self.home.join("config/config.toml");
-        let config_contents = fs::read_to_string(config_path.clone()).unwrap();
-
-        let mut document = config_contents
-            .parse::<Document>()
-            .expect("Invalid config.toml contents");
+    pub fn block_time(mut self, time: &str) -> Self {
+        let mut document = match &self.config_contents {
+            Some(inner) => inner.clone(),
+            None => {
+                self.read_config_toml();
+                self.config_contents.unwrap()
+            }
+        };
 
         document["consensus"]["timeout_commit"] = value(time);
 
-        fs::write(config_path, document.to_string())
-            .expect("Unable to write modified config.toml to file.");
+        self.config_contents = Some(document);
+        self
     }
 
     pub fn start(mut self) {
         self.install();
-        self.apply_genesis();
+        self.mutate_configuration();
         self.process.set_arg("start");
         self.process.spawn().unwrap();
         self.process.wait().unwrap();
@@ -292,7 +320,7 @@ impl Tendermint {
         self.process.set_arg("init");
         self.process.spawn().unwrap();
         self.process.wait().unwrap();
-        self.apply_genesis();
+        self.mutate_configuration();
     }
 
     pub fn unsafe_reset_all(mut self) {
