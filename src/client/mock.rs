@@ -29,10 +29,7 @@ impl<T: State> Mock<T> {
     // }
 }
 
-impl<T: Call + Query, U, V> Client<T> for Mock<T>
-where
-    T: Query<query::Kind, Query = query::Item<U, V, ()>>,
-{
+impl<T: Call + Query> Client<T> for Mock<T> {
     fn query<F, R>(&self, query: <T as Query>::Query, check: F) -> Result<R>
     where F: Fn(<T as Query>::Res) -> Result<R> {
         let state = self.state.borrow();

@@ -77,14 +77,13 @@ impl<T: ::orga::client::Client<Counter>> ::orga::client::Client<u32> for Count2C
 pub enum FieldCall {
     Count2(<u32 as ::orga::call::Call>::Call),
 }
-impl ::orga::call::Call<::orga::call::Field> for Counter {
+impl ::orga::call::FieldCall for Counter {
     type Call = FieldCall;
 
-    fn call(&mut self, call: FieldCall) -> ::orga::Result<()> {
+    fn field_call(&mut self, call: FieldCall) -> ::orga::Result<()> {
+        use ::orga::call::Call;
         match call {
-            FieldCall::Count2(subcall) => {
-                ::orga::call::Call::<::orga::call::Kind>::call(&mut self.count2, subcall)?
-            }
+            FieldCall::Count2(subcall) => self.count2.call(subcall)?,
         };
 
         Ok(())
@@ -95,10 +94,10 @@ impl ::orga::call::Call<::orga::call::Field> for Counter {
 pub enum MethodCall {
     Increment(u32),
 }
-impl ::orga::call::Call<::orga::call::Method> for Counter {
+impl ::orga::call::MethodCall for Counter {
     type Call = MethodCall;
 
-    fn call(&mut self, call: MethodCall) -> ::orga::Result<()> {
+    fn method_call(&mut self, call: MethodCall) -> ::orga::Result<()> {
         match call {
             MethodCall::Increment(n) => self.increment(n)?,
         };
@@ -115,17 +114,14 @@ pub enum FieldQuery {
 pub enum FieldRes {
     Count2(<u32 as ::orga::query::Query>::Res),
 }
-impl ::orga::query::Query<::orga::query::Field> for Counter {
+impl ::orga::query::FieldQuery for Counter {
     type Query = FieldQuery;
     type Res = FieldRes;
 
-    fn query(&self, query: FieldQuery) -> ::orga::Result<FieldRes> {
+    fn field_query(&self, query: FieldQuery) -> ::orga::Result<FieldRes> {
+        use ::orga::query::Query;
         Ok(match query {
-            FieldQuery::Count2(subquery) => FieldRes::Count2(::orga::query::Query::<
-                ::orga::query::Kind,
-            >::query(
-                &self.count2, subquery
-            )?),
+            FieldQuery::Count2(subquery) => FieldRes::Count2(self.count2.query(subquery)?),
         })
     }
 }
@@ -138,23 +134,14 @@ pub enum MethodQuery {
 pub enum MethodRes {
     Count(u32),
 }
-impl ::orga::query::Query<::orga::query::Method> for Counter {
+impl ::orga::query::MethodQuery for Counter {
     type Query = MethodQuery;
     type Res = MethodRes;
 
-    fn query(&self, query: MethodQuery) -> ::orga::Result<MethodRes> {
+    fn method_query(&self, query: MethodQuery) -> ::orga::Result<MethodRes> {
         Ok(match query {
             MethodQuery::Count => MethodRes::Count(self.count()),
         })
-    }
-}
-
-impl ::orga::query::Query<::orga::query::This> for Counter {
-    type Query = ();
-    type Res = ();
-
-    fn query(&self, _: ()) -> ::orga::Result<Self::Res> {
-        Ok(())
     }
 }
 

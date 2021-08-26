@@ -3,10 +3,6 @@ use failure::bail;
 use crate::encoding::{Encode, Decode};
 use crate::Result;
 
-pub struct Field;
-pub struct Method;
-pub struct This;
-
 #[derive(Debug, Encode, Decode)]
 pub enum Kind {
   Field,
@@ -21,66 +17,78 @@ pub enum Item<T, U, V> {
   This(V),
 }
 
-pub trait Query<T = Kind> {
+pub trait Query {
   type Query: Encode + Decode;
-  type Res: Encode + Decode;
+  type Res;
 
   fn query(&self, query: Self::Query) -> Result<Self::Res>;
 }
 
-impl<T> Query<This> for T {
-  default type Query = ();
-  default type Res = ();
-
-  default fn query(&self, _: Self::Query) -> Result<Self::Res> {
+pub trait ThisQuery: Sized {
+  fn this_query(&self) -> Result<Self>;
+}
+impl<T> ThisQuery for T {
+  default fn this_query(&self) -> Result<Self> {
     bail!("This query not implemented")
   }
 }
-
-impl<T: Clone + Encode + Decode> Query<This> for T {
-  type Query = ();
-  type Res = T;
-
-  fn query(&self, _: ()) -> Result<T> {
+impl<T: Clone + Encode + Decode> ThisQuery for T {
+  fn this_query(&self) -> Result<T> {
     Ok(self.clone())
   }
 }
 
-impl<T> Query<Field> for T {
+pub trait FieldQuery {
+  type Query: Encode + Decode;
+  type Res;
+
+  fn field_query(&self, query: Self::Query) -> Result<Self::Res>;
+}
+impl<T> FieldQuery for T {
   default type Query = ();
   default type Res = ();
 
-  default fn query(&self, _: Self::Query) -> Result<Self::Res> {
+  default fn field_query(&self, _: Self::Query) -> Result<Self::Res> {
     bail!("No field queries implemented")
   }
 }
 
-impl<T> Query<Method> for T {
+pub trait MethodQuery {
+  type Query: Encode + Decode;
+  type Res;
+
+  fn method_query(&self, query: Self::Query) -> Result<Self::Res>;
+}
+impl<T> MethodQuery for T {
   default type Query = ();
   default type Res = ();
 
-  default fn query(&self, _: Self::Query) -> Result<Self::Res> {
+  default fn method_query(&self, _: Self::Query) -> Result<Self::Res> {
     bail!("No method queries implemented")
   }
 }
 
-impl<T: Query<Field> + Query<Method> + Query<This>> Query for T {
+impl<T> Query for T
+where
+  T: ThisQuery + FieldQuery + MethodQuery,
+  T: Sized,
+{
   type Query = Item<
-    <Self as Query<Field>>::Query,
-    <Self as Query<Method>>::Query,
-    <Self as Query<This>>::Query,
+    <Self as FieldQuery>::Query,
+    <Self as MethodQuery>::Query,
+    (),
   >;
   type Res = Item<
-    <Self as Query<Field>>::Res,
-    <Self as Query<Method>>::Res,
-    <Self as Query<This>>::Res,
+    <Self as FieldQuery>::Res,
+    <Self as MethodQuery>::Res,
+    Self,
   >;
 
   fn query(&self, query: Self::Query) -> Result<Self::Res> {
     Ok(match query {
-      Item::Field(call) => Item::Field(Query::<Field>::query(self, call)?),
-      Item::Method(call) => Item::Method(Query::<Method>::query(self, call)?),
-      Item::This(call) => Item::This(Query::<This>::query(self, call)?),
+      Item::Field(call) => Item::Field(self.field_query(call)?),
+      Item::Method(call) => Item::Method(self.method_query(call)?),
+      Item::This(_) => Item::This(self.this_query()?),
     })
   }
 }

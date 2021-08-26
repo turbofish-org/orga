@@ -2,9 +2,6 @@ use crate::Result;
 use ed::{Encode, Decode};
 use failure::bail;
 
-pub struct Field;
-pub struct Method;
-
 #[derive(Debug, Encode, Decode)]
 pub enum Kind {
   Field,
@@ -17,39 +14,49 @@ pub enum Item<T, U> {
   Method(U),
 }
 
-pub trait Call<T = Kind> {
+pub trait Call {
   type Call: Encode + Decode;
   // TODO: type Res: Encode + Decode;
 
   fn call(&mut self, call: Self::Call) -> Result<()>;
 }
 
-impl<T> Call<Field> for T {
+pub trait FieldCall {
+  type Call: Encode + Decode;
+
+  fn field_call(&mut self, call: Self::Call) -> Result<()>;
+}
+impl<T> FieldCall for T {
   default type Call = ();
 
-  default fn call(&mut self, _: Self::Call) -> Result<()> {
+  default fn field_call(&mut self, _: Self::Call) -> Result<()> {
     bail!("No field calls implemented")
   }
 }
 
-impl<T> Call<Method> for T {
+pub trait MethodCall {
+  type Call: Encode + Decode;
+
+  fn method_call(&mut self, call: Self::Call) -> Result<()>;
+}
+impl<T> MethodCall for T {
   default type Call = ();
 
-  default fn call(&mut self, _: Self::Call) -> Result<()> {
+  default fn method_call(&mut self, _: Self::Call) -> Result<()> {
     bail!("No method calls implemented")
   }
 }
 
-impl<T: Call<Field> + Call<Method>> Call for T {
+impl<T: FieldCall + MethodCall> Call for T {
   type Call = Item<
-    <Self as Call<Field>>::Call,
-    <Self as Call<Method>>::Call,
+    <Self as FieldCall>::Call,
+    <Self as MethodCall>::Call,
   >;
 
   fn call(&mut self, call: Self::Call) -> Result<()> {
     match call {
-      Item::Field(call) => Call::<Field>::call(self, call),
-      Item::Method(call) => Call::<Method>::call(self, call),
+      Item::Field(call) => self.field_call(call),
+      Item::Method(call) => self.method_call(call),
     }
   }
 }
