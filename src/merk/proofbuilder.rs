@@ -3,20 +3,21 @@ use std::rc::Rc;
 
 use super::MerkStore;
 use crate::store;
+use crate::store::Shared;
 use crate::Result;
 use merk::proofs::query::Query;
 
 /// Records reads to a `MerkStore` and uses them to build a proof including all
 /// accessed keys.
-pub struct ProofBuilder<'a> {
-    store: &'a MerkStore,
+pub struct ProofBuilder {
+    store: Shared<MerkStore>,
     query: Rc<RefCell<Query>>,
 }
 
-impl<'a> ProofBuilder<'a> {
+impl ProofBuilder {
     /// Constructs a `ProofBuilder` which provides read access to data in the
     /// given `MerkStore`.
-    pub fn new(store: &'a MerkStore) -> Self {
+    pub fn new(store: Shared<MerkStore>) -> Self {
         ProofBuilder {
             store,
             query: Rc::new(RefCell::new(Query::new())),
@@ -26,12 +27,14 @@ impl<'a> ProofBuilder<'a> {
     /// Builds a Merk proof including all the data accessed during the life of
     /// the `ProofBuilder`.
     pub fn build(self) -> Result<Vec<u8>> {
+        let store = self.store.borrow();
         let query = self.query.take();
-        self.store.merk().prove(query)
+
+        store.merk().prove(query)
     }
 }
 
-impl<'a> store::Read for ProofBuilder<'a> {
+impl store::Read for ProofBuilder {
     /// Gets the value from the underlying store, recording the key to be
     /// included in the proof when `build` is called.
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
@@ -74,17 +77,17 @@ mod tests {
 
     #[test]
     fn simple() {
-        let mut store = temp_merk_store();
+        let mut store = Shared::new(temp_merk_store());
         store.put(vec![1, 2, 3], vec![2]).unwrap();
         store.put(vec![3, 4, 5], vec![4]).unwrap();
-        store.write(vec![]).unwrap();
+        store.borrow_mut().write(vec![]).unwrap();
 
-        let builder = ProofBuilder::new(&store);
+        let builder = ProofBuilder::new(store.clone());
         let key = [1, 2, 3];
         assert_eq!(builder.get(&key[..]).unwrap(), Some(vec![2]));
 
         let proof = builder.build().unwrap();
-        let root_hash = store.merk().root_hash();
+        let root_hash = store.borrow().merk().root_hash();
         let map = verify(proof.as_slice(), root_hash).unwrap();
         let res = map.get(&[1, 2, 3]).unwrap();
         assert_eq!(res, Some(&[2][..]));
@@ -92,17 +95,17 @@ mod tests {
 
     #[test]
     fn absence() {
-        let mut store = temp_merk_store();
+        let mut store = Shared::new(temp_merk_store());
         store.put(vec![1, 2, 3], vec![2]).unwrap();
         store.put(vec![3, 4, 5], vec![4]).unwrap();
-        store.write(vec![]).unwrap();
+        store.borrow_mut().write(vec![]).unwrap();
 
-        let builder = ProofBuilder::new(&store);
+        let builder = ProofBuilder::new(store.clone());
         let key = [5];
         assert_eq!(builder.get(&key[..]).unwrap(), None);
 
         let proof = builder.build().unwrap();
-        let root_hash = store.merk().root_hash();
+        let root_hash = store.borrow().merk().root_hash();
         let map = verify(proof.as_slice(), root_hash).unwrap();
         let res = map.get(&[5]).unwrap();
 
@@ -111,12 +114,12 @@ mod tests {
 
     #[test]
     fn simple_get_next() {
-        let mut store = temp_merk_store();
+        let mut store = Shared::new(temp_merk_store());
         store.put(vec![1, 2, 3], vec![2]).unwrap();
         store.put(vec![3, 4, 5], vec![4]).unwrap();
-        store.write(vec![]).unwrap();
+        store.borrow_mut().write(vec![]).unwrap();
 
-        let builder = ProofBuilder::new(&store);
+        let builder = ProofBuilder::new(store.clone());
         let key = [3, 4, 4];
         assert_eq!(
             builder.get_next(&key[..]).unwrap(),
@@ -124,7 +127,7 @@ mod tests {
         );
 
         let proof = builder.build().unwrap();
-        let root_hash = store.merk().root_hash();
+        let root_hash = store.borrow().merk().root_hash();
         let map = verify(proof.as_slice(), root_hash).unwrap();
         let mut iter = map.range(&[3, 4, 4][..]..=&[3, 4, 5][..]);
 
@@ -135,17 +138,17 @@ mod tests {
 
     #[test]
     fn none_get_next() {
-        let mut store = temp_merk_store();
+        let mut store = Shared::new(temp_merk_store());
         store.put(vec![1, 2, 3], vec![2]).unwrap();
         store.put(vec![3, 4, 5], vec![4]).unwrap();
-        store.write(vec![]).unwrap();
+        store.borrow_mut().write(vec![]).unwrap();
 
-        let builder = ProofBuilder::new(&store);
+        let builder = ProofBuilder::new(store.clone());
         let key = [3, 4, 5];
         assert_eq!(builder.get_next(&key[..]).unwrap(), None);
 
         let proof = builder.build().unwrap();
-        let root_hash = store.merk().root_hash();
+        let root_hash = store.borrow().merk().root_hash();
         let map = verify(proof.as_slice(), root_hash).unwrap();
         assert!(map.get(&[3, 4, 5]).unwrap().is_some());
         let mut iter = map.range(&[3, 4, 5][..]..=&[3, 4, 7][..]);
