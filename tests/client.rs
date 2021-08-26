@@ -1,4 +1,5 @@
 #![feature(specialization)]
+#![feature(trivial_bounds)]
 
 use failure::bail;
 
