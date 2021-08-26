@@ -3,12 +3,12 @@ use crate::store::{BufStore, Read, Shared, Write, KV};
 use crate::Result;
 
 type WrappedMerkStore = Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>;
-pub enum BackingStore<'a> {
+pub enum BackingStore {
     WrappedMerk(WrappedMerkStore),
-    ProofBuilder(ProofBuilder<'a>),
+    ProofBuilder(ProofBuilder),
 }
 
-impl<'a> Read for BackingStore<'a> {
+impl Read for BackingStore {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         match self {
             BackingStore::WrappedMerk(ref store) => store.get(key),
@@ -24,7 +24,7 @@ impl<'a> Read for BackingStore<'a> {
     }
 }
 
-impl<'a> Write for BackingStore<'a> {
+impl Write for BackingStore {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         match self {
             BackingStore::WrappedMerk(ref mut store) => store.put(key, value),
@@ -43,8 +43,8 @@ impl<'a> Write for BackingStore<'a> {
     }
 }
 
-impl<'a> From<WrappedMerkStore> for BackingStore<'a> {
-    fn from(store: WrappedMerkStore) -> BackingStore<'a> {
+impl From<WrappedMerkStore> for BackingStore {
+    fn from(store: WrappedMerkStore) -> BackingStore {
         BackingStore::WrappedMerk(store)
     }
 }

@@ -8,7 +8,7 @@ use crate::Result;
 /// is used to prevent generic parameters bubbling up to the application level
 /// for state types when they often all use the same backing store.
 #[cfg(feature = "merk")]
-pub type DefaultBackingStore = crate::merk::BackingStore<'static>;
+pub type DefaultBackingStore = crate::merk::BackingStore;
 #[cfg(not(feature = "merk"))]
 pub type DefaultBackingStore = super::MapStore;
 
