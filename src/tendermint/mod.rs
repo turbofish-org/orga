@@ -265,6 +265,20 @@ impl Tendermint {
         self
     }
 
+    pub fn block_time(self, time: &str) {
+        let config_path = self.home.join("config/config.toml");
+        let config_contents = fs::read_to_string(config_path.clone()).unwrap();
+
+        let mut document = config_contents
+            .parse::<Document>()
+            .expect("Invalid config.toml contents");
+
+        document["consensus"]["timeout_commit"] = value(time);
+
+        fs::write(config_path, document.to_string())
+            .expect("Unable to write modified config.toml to file.");
+    }
+
     pub fn start(mut self) {
         self.install();
         self.apply_genesis();
