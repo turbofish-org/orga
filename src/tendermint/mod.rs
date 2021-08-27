@@ -389,6 +389,9 @@ impl Tendermint {
     /// Edits the statesync enable located in the config.toml in the
     /// config directory under the tendermint home
     ///
+    /// Fully enabling state sync requires the configuration of rpc_servers,
+    /// trust height, and trust hash
+    ///
     /// Note: This update happens upon calling a terminating method in order to
     /// ensure a single file read and to ensure that the config.toml is not
     /// overwritten by called tendermint process
@@ -409,6 +412,8 @@ impl Tendermint {
 
     /// Edits the statesync rpc_servers located in the config.toml in the
     /// config directory under the tendermint home
+    ///
+    /// Two rpc servers are required to enable state sync
     ///
     /// Note: This update happens upon calling a terminating method in order to
     /// ensure a single file read and to ensure that the config.toml is not
