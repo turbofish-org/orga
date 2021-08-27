@@ -1,6 +1,7 @@
 use super::{MerkStore, ProofBuilder};
 use crate::store::{BufStore, Read, Shared, Write, KV};
 use crate::Result;
+use failure::bail;
 
 type WrappedMerkStore = Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>;
 #[derive(Clone)]
@@ -40,6 +41,22 @@ impl Write for BackingStore {
             BackingStore::ProofBuilder(_) => {
                 panic!("delete() is not implemented for ProofBuilder")
             }
+        }
+    }
+}
+
+impl BackingStore {
+    pub fn as_proof_builder(self) -> Result<ProofBuilder> {
+        match self {
+            BackingStore::ProofBuilder(builder) => Ok(builder),
+            _ => bail!("Failed to downcast backing store to proof builder"),
+        }
+    }
+
+    pub fn as_wrapped_merk(self) -> Result<WrappedMerkStore> {
+        match self {
+            BackingStore::WrappedMerk(store) => Ok(store),
+            _ => bail!("Failed to downcast backing store to wrapped merk"),
         }
     }
 }
