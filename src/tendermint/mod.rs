@@ -99,6 +99,12 @@ pub struct Tendermint {
 }
 
 impl Tendermint {
+    /// Constructs a new `Tendermint` for handling tendermint processes
+    /// from Rust programs
+    ///
+    /// Passed home_path generates and enclosing directory which will, in
+    /// addition to housing the downloaded tendermint binary, will serve
+    /// as the tendermint --home argument
     pub fn new<T: Into<PathBuf> + Clone>(home_path: T) -> Tendermint {
         let path: PathBuf = home_path.clone().into();
         if !path.exists() {
@@ -157,29 +163,67 @@ impl Tendermint {
         self
     }
 
+    /// Log Level
+    /// Sets the --log_level argument (default `info`)
+    ///
+    /// Compatible Commands:
+    ///     start
+    ///     init
+    ///     unsafe_reset_all
     pub fn log_level(mut self, level: &str) -> Self {
         self.process.set_arg("--log_level");
         self.process.set_arg(level);
         self
     }
 
+    /// Prints out full stack trace on errors
+    /// Sets the --trace argument
+    ///
+    /// Compatible Commands:
+    ///     start
+    ///     init
+    ///     unsafe_reset_all
     pub fn trace(mut self) -> Self {
         self.process.set_arg("--trace");
         self
     }
 
+    /// Node name
+    /// Sets the --moniker argument
+    ///
+    /// Compatible Commands:
+    ///     start
     pub fn moniker(mut self, moniker: &str) -> Self {
         self.process.set_arg("--moniker");
         self.process.set_arg(moniker);
         self
     }
 
+    /// Node listen address
+    /// Default: "tcp://0.0.0.0:26656"
+    /// 0.0.0.0:0 means any interface, any port
+    /// Sets the --p2p.ladder argument
+    ///
+    /// Compatible Commands:
+    ///     start
+    ///
+    /// Note: Using this configuration command with incompatible
+    /// terminating methods will cause the tendermint process to fail
     pub fn p2p_laddr(mut self, addr: &str) -> Self {
         self.process.set_arg("--p2p.laddr");
         self.process.set_arg(addr);
         self
     }
 
+    /// Persistent peers
+    /// Format: ID@host:port
+    /// Sets the --p2p.persistent_peers argument
+    ///
+    /// Compatible Commands:
+    ///     start
+    ///
+    /// Note: Using this configuration command with incompatible
+    /// terminating methods will cause the tendermint process to fail
     pub fn p2p_persistent_peers<const N: usize>(mut self, peers: [&str; N]) -> Self {
         self.process.set_arg("--p2p.persistent_peers");
         let mut arg: String = "".to_string();
@@ -188,23 +232,93 @@ impl Tendermint {
         self
     }
 
+    /// RPC listen address
+    /// Port required
+    /// Default "tcp://127.0.0.1:26657"
+    /// Sets the --rpc.laddr argument
+    ///
+    /// Compatible Commands:
+    ///     start
+    ///
+    /// Note: Using this configuration command with incompatible
+    /// terminating methods will cause the tendermint process to fail
     pub fn rpc_laddr(mut self, addr: &str) -> Self {
         self.process.set_arg("--rpc.laddr");
         self.process.set_arg(addr);
         self
     }
 
+    /// Stdout target
+    ///
+    /// # Examples
+    ///
+    /// Discard output:
+    ///
+    /// ```no_run
+    /// use orga::tendermint::Tendermint;
+    /// use std::process::Stdio;
+    ///
+    /// Tendermint::new("tendermint")
+    ///     .stdout(Stdio::null())
+    ///     .start();
+    /// ```
+    ///
+    /// Pipe output to file:
+    ///
+    /// ```no_run
+    /// use orga::tendermint::Tendermint;
+    /// use std::fs::File;
+    ///
+    /// let log_file = File::create("log.txt").unwrap();
+    ///
+    /// Tendermint::new("tendermint")
+    ///     .stdout(log_file)
+    ///     .start();
+    /// ```
     pub fn stdout<T: Into<Stdio>>(mut self, cfg: T) -> Self {
         self.process.command.stdout(cfg);
         self
     }
 
+    /// Stderr target
+    ///
+    /// # Examples
+    ///
+    /// Discard output:
+    ///
+    /// ```no_run
+    /// use orga::tendermint::Tendermint;
+    /// use std::process::Stdio;
+    ///
+    /// Tendermint::new("tendermint")
+    ///     .stderr(Stdio::null())
+    ///     .start();
+    /// ```
+    ///
+    /// Pipe output to file:
+    ///
+    /// ```no_run
+    /// use orga::tendermint::Tendermint;
+    /// use std::fs::File;
+    ///
+    /// let log_file = File::create("log.txt").unwrap();
+    ///
+    /// Tendermint::new("tendermint")
+    ///     .stderr(log_file)
+    ///     .start();
+    /// ```
     pub fn stderr<T: Into<Stdio>>(mut self, cfg: T) -> Self {
         self.process.command.stderr(cfg);
         self
     }
 
-    //only for unsafe reset all
+    /// Keep the address book intact
+    ///
+    /// Compatible Commands:
+    ///     unsafe_reset_all
+    ///
+    /// Note: Using this configuration command with incompatible
+    /// terminating methods will cause the tendermint process to fail
     pub fn keep_addr_book(mut self) -> Self {
         self.process.set_arg("--keep_addr_book");
         self
@@ -232,6 +346,15 @@ impl Tendermint {
             .expect("genesis.json copy process failed.");
     }
 
+    /// Copies the contents of the file at passed path to the genesis.json
+    /// file located in the config directory of the tendermint home
+    ///
+    /// Compatible Commands:
+    ///     start
+    ///     init
+    ///
+    /// Note: This copy happens upon calling a terminating method in order to
+    /// ensure file copy is not overwritten by called tendermint process
     pub fn with_genesis(mut self, path: PathBuf) -> Self {
         self.genesis_path = Some(path);
         self
@@ -292,6 +415,16 @@ impl Tendermint {
         self
     }
 
+    /// Edits the block time located in the config.toml in the config directory under the
+    /// tendermint home
+    ///
+    /// Compatible Commands:
+    ///     start
+    ///     init
+    ///
+    /// Note: This update happens upon calling a terminating method in order to
+    /// ensure a single file read and to ensure that the config.toml is not
+    /// overwritten by called tendermint process
     pub fn block_time(mut self, time: &str) -> Self {
         let mut document = match &self.config_contents {
             Some(inner) => inner.clone(),
@@ -307,6 +440,10 @@ impl Tendermint {
         self
     }
 
+    /// Calls tendermint start with configured arguments
+    ///
+    /// Note: This will locally install the Tendermint binary if it is
+    /// not already contained in the Tendermint home directory
     pub fn start(mut self) {
         self.install();
         self.mutate_configuration();
@@ -315,6 +452,10 @@ impl Tendermint {
         self.process.wait().unwrap();
     }
 
+    /// Calls tendermint init with configured arguments
+    ///
+    /// Note: This will locally install the Tendermint binary if it is
+    /// not already contained in the Tendermint home directory
     pub fn init(mut self) {
         self.install();
         self.process.set_arg("init");
@@ -323,6 +464,10 @@ impl Tendermint {
         self.mutate_configuration();
     }
 
+    /// Calls tendermint start with configured arguments
+    ///
+    /// Note: This will locally install the Tendermint binary if it is
+    /// not already contained in the Tendermint home directory
     pub fn unsafe_reset_all(mut self) {
         self.install();
         self.process.set_arg("unsafe_reset_all");
