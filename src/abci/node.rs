@@ -6,31 +6,51 @@ use crate::encoding::{Decode, Encode};
 use crate::merk::MerkStore;
 use crate::state::State;
 use crate::store::{BufStore, Read, Shared, Store, Write};
+use crate::tendermint::Tendermint;
 use crate::Result;
+use std::path::{Path, PathBuf};
 pub struct Node<A: App>
 where
     <A as State>::Encoding: Default,
 {
     abci_sm: ABCIStateMachine<InternalApp<A>>,
     _app: PhantomData<A>,
+    tm_home: PathBuf,
+    merk_home: PathBuf,
 }
 
 impl<A: App> Node<A>
 where
     <A as State>::Encoding: Default,
 {
-    pub fn new(home: &str) -> Self {
+    pub fn new<P: AsRef<Path>>(home: P) -> Self {
+        let home: PathBuf = home.as_ref().into();
+        let merk_home = home.join("merk");
+        let tm_home = home.join("tendermint");
         let app = InternalApp::<A>::new();
-        let store = MerkStore::new(home.into());
+        let store = MerkStore::new(merk_home.clone().join("merk"));
+        Tendermint::new(tm_home.clone()).init();
 
         let abci_sm = ABCIStateMachine::new(app, store);
         Node {
             _app: PhantomData,
             abci_sm,
+            merk_home,
+            tm_home,
         }
     }
 
     pub fn run(self) {
+        // Start tendermint process
+        let home = self.tm_home.clone();
+        std::thread::spawn(move || {
+            Tendermint::new(home)
+                .stdout(std::process::Stdio::inherit())
+                .stderr(std::process::Stdio::inherit())
+                .start();
+        });
+
+        // Start ABCI server
         self.abci_sm
             .listen("127.0.0.1:26658")
             .expect("Failed to start ABCI server");
