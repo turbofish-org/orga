@@ -91,19 +91,15 @@ impl<A: Application> ABCIStateMachine<A> {
             Req::Flush(_) => Ok(Res::Flush(Default::default())),
             Req::Echo(_) => Ok(Res::Echo(Default::default())),
             Req::SetOption(_) => Ok(Res::SetOption(Default::default())),
-            Req::Query(_req) => {
-                todo!()
-                // // TODO: handle multiple keys (or should this be handled by store impl?)
-                // let key = req.data;
-                // let data = self.store.query(&key)?;
+            Req::Query(req) => {
+                let store = self.store.take().unwrap();
+                let app = self.app.take().unwrap();
 
-                // // TODO: indicate if key doesn't exist vs just being empty
-                // let mut res = ResponseQuery::default();
-                // res.code = 0;
-                // res.index = 0;
-                // res.value = data;
-                // res.height = self.height as i64;
-                // Ok(Res::Query(res))
+                let res = app.query(store.clone(), req)?;
+
+                self.store.replace(store);
+                self.app.replace(app);
+                Ok(Res::Query(res))
             }
             Req::InitChain(req) => {
                 let app = self.app.take().unwrap();
@@ -369,6 +365,7 @@ impl Worker {
     }
 }
 
+type WrappedMerk = Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>;
 /// An interface for handling ABCI requests.
 ///
 /// All methods have a default implemenation which returns an empty response.
@@ -377,43 +374,31 @@ impl Worker {
 /// Info are automatically handled within
 /// [`ABCIStateMachine`](struct.ABCIStateMachine.html).
 pub trait Application {
-    fn init_chain(
-        &self,
-        _store: Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>,
-        _req: RequestInitChain,
-    ) -> Result<ResponseInitChain> {
+    fn init_chain(&self, _store: WrappedMerk, _req: RequestInitChain) -> Result<ResponseInitChain> {
         Ok(Default::default())
     }
 
     fn begin_block(
         &self,
-        _store: Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>,
+        _store: WrappedMerk,
         _req: RequestBeginBlock,
     ) -> Result<ResponseBeginBlock> {
         Ok(Default::default())
     }
 
-    fn deliver_tx(
-        &self,
-        _store: Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>,
-        _req: RequestDeliverTx,
-    ) -> Result<ResponseDeliverTx> {
+    fn deliver_tx(&self, _store: WrappedMerk, _req: RequestDeliverTx) -> Result<ResponseDeliverTx> {
         Ok(Default::default())
     }
 
-    fn end_block(
-        &self,
-        _store: Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>,
-        _req: RequestEndBlock,
-    ) -> Result<ResponseEndBlock> {
+    fn end_block(&self, _store: WrappedMerk, _req: RequestEndBlock) -> Result<ResponseEndBlock> {
         Ok(Default::default())
     }
 
-    fn check_tx(
-        &self,
-        _store: Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>,
-        _req: RequestCheckTx,
-    ) -> Result<ResponseCheckTx> {
+    fn check_tx(&self, _store: WrappedMerk, _req: RequestCheckTx) -> Result<ResponseCheckTx> {
+        Ok(Default::default())
+    }
+
+    fn query(&self, _store: Shared<MerkStore>, _req: RequestQuery) -> Result<ResponseQuery> {
         Ok(Default::default())
     }
 }
