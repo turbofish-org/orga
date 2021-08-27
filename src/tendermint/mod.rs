@@ -522,12 +522,14 @@ impl Tendermint {
     ///
     /// Note: This will locally install the Tendermint binary if it is
     /// not already contained in the Tendermint home directory
-    pub fn init(mut self) {
+    pub fn init(mut self) -> Self {
         self.install();
         self.process.set_arg("init");
         self.process.spawn().unwrap();
         self.process.wait().unwrap();
         self.mutate_configuration();
+
+        self
     }
 
     /// Calls tendermint start with configured arguments
