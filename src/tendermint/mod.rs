@@ -8,6 +8,7 @@ use log::info;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::prelude::*;
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use tar::Archive;
@@ -16,9 +17,9 @@ use toml_edit::{value, Document};
 #[cfg(target_os = "macos")]
 static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.11/tendermint_0.34.11_darwin_amd64.tar.gz";
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.11/tendermint_0.34.11_linux_amd64.zip";
+static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.11/tendermint_0.34.11_linux_amd64.tar.gz";
 #[cfg(all(target_os = "linux", target_arch = "arm"))]
-static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.11/tendermint_0.34.11_linux_arm64.zip";
+static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.11/tendermint_0.34.11_linux_arm64.tar.gz";
 
 #[cfg(target_os = "macos")]
 static TENDERMINT_ZIP_HASH: [u8; 32] =
