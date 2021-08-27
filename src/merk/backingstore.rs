@@ -49,3 +49,10 @@ impl From<WrappedMerkStore> for BackingStore {
         BackingStore::WrappedMerk(store)
     }
 }
+
+impl From<Shared<MerkStore>> for BackingStore {
+    fn from(store: Shared<MerkStore>) -> BackingStore {
+        let builder = ProofBuilder::new(store);
+        BackingStore::ProofBuilder(builder)
+    }
+}
