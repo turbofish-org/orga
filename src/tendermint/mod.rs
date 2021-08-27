@@ -386,12 +386,34 @@ impl Tendermint {
         self.write_config_toml();
     }
 
-    pub fn state_sync<const N: usize>(
-        mut self,
-        rpc_servers: [&str; N],
-        trust_height: u32,
-        trust_hash: &str,
-    ) -> Self {
+    /// Edits the statesync enable located in the config.toml in the
+    /// config directory under the tendermint home
+    ///
+    /// Note: This update happens upon calling a terminating method in order to
+    /// ensure a single file read and to ensure that the config.toml is not
+    /// overwritten by called tendermint process
+    pub fn state_sync(mut self, enable: bool) -> Self {
+        let mut document = match &self.config_contents {
+            Some(inner) => inner.clone(),
+            None => {
+                self.read_config_toml();
+                self.config_contents.unwrap()
+            }
+        };
+
+        document["statesync"]["enable"] = value(enable);
+
+        self.config_contents = Some(document);
+        self
+    }
+
+    /// Edits the statesync rpc_servers located in the config.toml in the
+    /// config directory under the tendermint home
+    ///
+    /// Note: This update happens upon calling a terminating method in order to
+    /// ensure a single file read and to ensure that the config.toml is not
+    /// overwritten by called tendermint process
+    pub fn rpc_servers<const N: usize>(mut self, rpc_servers: [&str; N]) -> Self {
         let mut document = match &self.config_contents {
             Some(inner) => inner.clone(),
             None => {
@@ -407,9 +429,48 @@ impl Tendermint {
         });
 
         document["statesync"]["rpc_servers"] = value(rpc_string);
-        document["statesync"]["trust_height"] = value(trust_height as i64);
-        document["statesync"]["trust_hash"] = value(trust_hash);
-        document["statesync"]["enable"] = value(true);
+
+        self.config_contents = Some(document);
+        self
+    }
+
+    /// Edits the statesync trust_height located in the config.toml in the
+    /// config directory under the tendermint home
+    ///
+    /// Note: This update happens upon calling a terminating method in order to
+    /// ensure a single file read and to ensure that the config.toml is not
+    /// overwritten by called tendermint process
+    pub fn trust_height(mut self, height: u32) -> Self {
+        let mut document = match &self.config_contents {
+            Some(inner) => inner.clone(),
+            None => {
+                self.read_config_toml();
+                self.config_contents.unwrap()
+            }
+        };
+
+        document["statesync"]["trust_height"] = value(height as i64);
+
+        self.config_contents = Some(document);
+        self
+    }
+
+    /// Edits the statesync trust_hash located in the config.toml in the
+    /// config directory under the tendermint home
+    ///
+    /// Note: This update happens upon calling a terminating method in order to
+    /// ensure a single file read and to ensure that the config.toml is not
+    /// overwritten by called tendermint process
+    pub fn trust_hash(mut self, hash: &str) -> Self {
+        let mut document = match &self.config_contents {
+            Some(inner) => inner.clone(),
+            None => {
+                self.read_config_toml();
+                self.config_contents.unwrap()
+            }
+        };
+
+        document["statesync"]["trust_hash"] = value(hash);
 
         self.config_contents = Some(document);
         self
