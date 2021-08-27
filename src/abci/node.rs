@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 use super::ABCIStore;
 use super::CONTEXT;
 use super::{ABCIStateMachine, App, Application};
+use crate::call::Call;
 use crate::encoding::{Decode, Encode};
 use crate::merk::{BackingStore, MerkStore};
 use crate::query::Query;
@@ -144,12 +145,13 @@ where
         store: Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>,
         req: tendermint_proto::abci::RequestDeliverTx,
     ) -> Result<tendermint_proto::abci::ResponseDeliverTx> {
+        let call_bytes = req.tx;
         let mut store = Store::new(store.into());
         let state_bytes = store.get(&[])?.unwrap();
         let data: <A as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
-        let state = <A as State>::create(store.clone(), data)?;
-        // TODO: handle call message here
-        println!("Warning: got a TX, did nothing with it");
+        let mut state = <A as State>::create(store.clone(), data)?;
+        let call = Decode::decode(call_bytes.as_slice())?;
+        state.call(call)?;
         let flushed = state.flush()?;
         store.put(vec![], flushed.encode()?)?;
 
