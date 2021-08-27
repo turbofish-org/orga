@@ -151,6 +151,10 @@ impl Tendermint {
                 f.write_all(tendermint_bytes.as_slice())
                     .expect("Failed to write Tendermint binary to file system");
 
+                let mut perms = f.metadata().unwrap().permissions();
+                perms.set_mode(0o755);
+                f.set_permissions(perms)
+                    .expect("Failed to set Tendermint binary permissions");
                 break;
             }
         }
