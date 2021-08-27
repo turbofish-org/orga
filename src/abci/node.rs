@@ -12,6 +12,7 @@ use crate::store::{BufStore, Read, Shared, Store, Write};
 use crate::tendermint::Tendermint;
 use crate::Result;
 use std::path::{Path, PathBuf};
+use tendermint_proto::abci::*;
 pub struct Node<A: App>
 where
     <A as State>::Encoding: Default,
@@ -67,8 +68,8 @@ where
     fn init_chain(
         &self,
         store: Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>,
-        _req: tendermint_proto::abci::RequestInitChain,
-    ) -> Result<tendermint_proto::abci::ResponseInitChain> {
+        _req: RequestInitChain,
+    ) -> Result<ResponseInitChain> {
         let mut store = Store::new(store.into());
 
         let state_bytes = match store.get(&[])? {
@@ -94,8 +95,8 @@ where
     fn begin_block(
         &self,
         store: Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>,
-        req: tendermint_proto::abci::RequestBeginBlock,
-    ) -> Result<tendermint_proto::abci::ResponseBeginBlock> {
+        req: RequestBeginBlock,
+    ) -> Result<ResponseBeginBlock> {
         // Set context
         {
             let mut ctx = CONTEXT.lock().unwrap();
@@ -119,8 +120,8 @@ where
     fn end_block(
         &self,
         store: Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>,
-        _req: tendermint_proto::abci::RequestEndBlock,
-    ) -> Result<tendermint_proto::abci::ResponseEndBlock> {
+        _req: RequestEndBlock,
+    ) -> Result<ResponseEndBlock> {
         let mut store = Store::new(store.into());
         let state_bytes = store.get(&[])?.unwrap();
         let data: <A as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
@@ -129,7 +130,7 @@ where
         let flushed = state.flush()?;
         store.put(vec![], flushed.encode()?)?;
         // Send back validator updates
-        let mut res: tendermint_proto::abci::ResponseEndBlock = Default::default();
+        let mut res: ResponseEndBlock = Default::default();
         {
             let mut ctx = CONTEXT.lock().unwrap();
             ctx.validator_updates.drain().for_each(|(_key, update)| {
@@ -143,8 +144,8 @@ where
     fn deliver_tx(
         &self,
         store: Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>,
-        req: tendermint_proto::abci::RequestDeliverTx,
-    ) -> Result<tendermint_proto::abci::ResponseDeliverTx> {
+        req: RequestDeliverTx,
+    ) -> Result<ResponseDeliverTx> {
         let call_bytes = req.tx;
         let mut store = Store::new(store.into());
         let state_bytes = store.get(&[])?.unwrap();
@@ -158,11 +159,7 @@ where
         Ok(Default::default())
     }
 
-    fn query(
-        &self,
-        store: Shared<MerkStore>,
-        req: tendermint_proto::abci::RequestQuery,
-    ) -> Result<tendermint_proto::abci::ResponseQuery> {
+    fn query(&self, store: Shared<MerkStore>, req: RequestQuery) -> Result<ResponseQuery> {
         let query_bytes = req.data;
         let backing_store: BackingStore = store.clone().into();
         let store_height = store.borrow().height()?;
@@ -177,7 +174,7 @@ where
         let proof_builder = backing_store.as_proof_builder()?;
         let proof_bytes = proof_builder.build()?;
 
-        let res = tendermint_proto::abci::ResponseQuery {
+        let res = ResponseQuery {
             code: 0,
             height: store_height as i64,
             value: proof_bytes,
