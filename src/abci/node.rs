@@ -1,9 +1,11 @@
 use std::marker::PhantomData;
 
+use super::ABCIStore;
 use super::CONTEXT;
 use super::{ABCIStateMachine, App, Application};
 use crate::encoding::{Decode, Encode};
-use crate::merk::MerkStore;
+use crate::merk::{BackingStore, MerkStore};
+use crate::query::Query;
 use crate::state::State;
 use crate::store::{BufStore, Read, Shared, Store, Write};
 use crate::tendermint::Tendermint;
@@ -145,13 +147,42 @@ where
         let mut store = Store::new(store.into());
         let state_bytes = store.get(&[])?.unwrap();
         let data: <A as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
-        let mut state = <A as State>::create(store.clone(), data)?;
+        let state = <A as State>::create(store.clone(), data)?;
         // TODO: handle call message here
         println!("Warning: got a TX, did nothing with it");
         let flushed = state.flush()?;
         store.put(vec![], flushed.encode()?)?;
 
         Ok(Default::default())
+    }
+
+    fn query(
+        &self,
+        store: Shared<MerkStore>,
+        req: tendermint_proto::abci::RequestQuery,
+    ) -> Result<tendermint_proto::abci::ResponseQuery> {
+        let query_bytes = req.data;
+        let backing_store: BackingStore = store.clone().into();
+        let store_height = store.borrow().height()?;
+        let store = Store::new(backing_store.clone());
+        let state_bytes = store.get(&[])?.unwrap();
+        let data: <A as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
+        let state = <A as State>::create(store.clone(), data)?;
+
+        // Check which keys are accessed by the query and build a proof
+        let query = Decode::decode(query_bytes.as_slice())?;
+        state.query(query)?;
+        let proof_builder = backing_store.as_proof_builder()?;
+        let proof_bytes = proof_builder.build()?;
+
+        let res = tendermint_proto::abci::ResponseQuery {
+            code: 0,
+            height: store_height as i64,
+            value: proof_bytes,
+            ..Default::default()
+        };
+
+        Ok(res)
     }
 }
 
