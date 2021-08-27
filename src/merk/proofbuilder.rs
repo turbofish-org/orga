@@ -9,6 +9,7 @@ use merk::proofs::query::Query;
 
 /// Records reads to a `MerkStore` and uses them to build a proof including all
 /// accessed keys.
+#[derive(Clone)]
 pub struct ProofBuilder {
     store: Shared<MerkStore>,
     query: Rc<RefCell<Query>>,

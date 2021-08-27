@@ -3,6 +3,7 @@ use crate::store::{BufStore, Read, Shared, Write, KV};
 use crate::Result;
 
 type WrappedMerkStore = Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>;
+#[derive(Clone)]
 pub enum BackingStore {
     WrappedMerk(WrappedMerkStore),
     ProofBuilder(ProofBuilder),
