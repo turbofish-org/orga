@@ -46,14 +46,14 @@ impl Write for BackingStore {
 }
 
 impl BackingStore {
-    pub fn as_proof_builder(self) -> Result<ProofBuilder> {
+    pub fn into_proof_builder(self) -> Result<ProofBuilder> {
         match self {
             BackingStore::ProofBuilder(builder) => Ok(builder),
             _ => bail!("Failed to downcast backing store to proof builder"),
         }
     }
 
-    pub fn as_wrapped_merk(self) -> Result<WrappedMerkStore> {
+    pub fn into_wrapped_merk(self) -> Result<WrappedMerkStore> {
         match self {
             BackingStore::WrappedMerk(store) => Ok(store),
             _ => bail!("Failed to downcast backing store to wrapped merk"),

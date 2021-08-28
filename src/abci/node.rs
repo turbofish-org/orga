@@ -216,7 +216,7 @@ where
         // Check which keys are accessed by the query and build a proof
         let query = Decode::decode(query_bytes.as_slice())?;
         state.query(query)?;
-        let proof_builder = backing_store.as_proof_builder()?;
+        let proof_builder = backing_store.into_proof_builder()?;
         let proof_bytes = proof_builder.build()?;
 
         let res = ResponseQuery {
