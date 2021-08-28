@@ -545,6 +545,7 @@ impl Tendermint {
         self.install();
         self.process.set_arg("unsafe_reset_all");
         self.process.spawn().unwrap();
+        self.process.wait().unwrap();
     }
 }
 
