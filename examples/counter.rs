@@ -15,5 +15,5 @@ impl BeginBlock for Counter {
 }
 
 fn main() {
-    Node::<Counter>::new("my_counter").run();
+    Node::<Counter>::new("my_counter").reset().run();
 }

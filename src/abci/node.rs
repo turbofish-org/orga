@@ -17,7 +17,6 @@ pub struct Node<A: App>
 where
     <A as State>::Encoding: Default,
 {
-    abci_sm: ABCIStateMachine<InternalApp<A>>,
     _app: PhantomData<A>,
     tm_home: PathBuf,
     merk_home: PathBuf,
@@ -31,14 +30,16 @@ where
         let home: PathBuf = home.as_ref().into();
         let merk_home = home.join("merk");
         let tm_home = home.join("tendermint");
-        let app = InternalApp::<A>::new();
-        let store = MerkStore::new(merk_home.clone().join("merk"));
-        Tendermint::new(tm_home.clone()).init();
+        if !home.exists() {
+            std::fs::create_dir(&home).expect("Failed to initialize application home directory");
+        }
+        Tendermint::new(tm_home.clone())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .init();
 
-        let abci_sm = ABCIStateMachine::new(app, store);
         Node {
             _app: PhantomData,
-            abci_sm,
             merk_home,
             tm_home,
         }
@@ -46,18 +47,33 @@ where
 
     pub fn run(self) {
         // Start tendermint process
-        let home = self.tm_home.clone();
+        let tm_home = self.tm_home.clone();
         std::thread::spawn(move || {
-            Tendermint::new(home)
-                .stdout(std::process::Stdio::inherit())
-                .stderr(std::process::Stdio::inherit())
+            Tendermint::new(&tm_home)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
                 .start();
         });
+        let app = InternalApp::<A>::new();
+        let store = MerkStore::new(self.merk_home.clone());
 
         // Start ABCI server
-        self.abci_sm
+        ABCIStateMachine::new(app, store)
             .listen("127.0.0.1:26658")
             .expect("Failed to start ABCI server");
+    }
+
+    pub fn reset(self) -> Self {
+        if self.merk_home.exists() {
+            std::fs::remove_dir_all(&self.merk_home).expect("Failed to clear Merk data");
+        }
+
+        Tendermint::new(&self.tm_home)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .unsafe_reset_all();
+
+        self
     }
 }
 
