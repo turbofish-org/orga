@@ -20,6 +20,9 @@ where
     _app: PhantomData<A>,
     tm_home: PathBuf,
     merk_home: PathBuf,
+    p2p_port: u16,
+    rpc_port: u16,
+    abci_port: u16,
 }
 
 impl<A: App> Node<A>
@@ -42,16 +45,24 @@ where
             _app: PhantomData,
             merk_home,
             tm_home,
+            p2p_port: 26656,
+            rpc_port: 26657,
+            abci_port: 26658,
         }
     }
 
     pub fn run(self) {
         // Start tendermint process
         let tm_home = self.tm_home.clone();
+        let p2p_port = self.p2p_port;
+        let rpc_port = self.rpc_port;
+
         std::thread::spawn(move || {
             Tendermint::new(&tm_home)
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
+                .p2p_laddr(format!("tcp://0.0.0.0:{}", p2p_port).as_str())
+                .rpc_laddr(format!("tcp://0.0.0.0:{}", rpc_port).as_str()) // Note: public by default
                 .start();
         });
         let app = InternalApp::<A>::new();
@@ -59,7 +70,7 @@ where
 
         // Start ABCI server
         ABCIStateMachine::new(app, store)
-            .listen("127.0.0.1:26658")
+            .listen(format!("127.0.0.1:{}", self.abci_port))
             .expect("Failed to start ABCI server");
     }
 
@@ -72,6 +83,24 @@ where
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .unsafe_reset_all();
+
+        self
+    }
+
+    pub fn rpc_port(mut self, port: u16) -> Self {
+        self.rpc_port = port;
+
+        self
+    }
+
+    pub fn p2p_port(mut self, port: u16) -> Self {
+        self.p2p_port = port;
+
+        self
+    }
+
+    pub fn abci_port(mut self, port: u16) -> Self {
+        self.abci_port = port;
 
         self
     }
