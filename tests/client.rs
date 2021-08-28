@@ -31,41 +31,43 @@ impl Counter {
 
 // first expansion
 
-pub struct Client<T: ::orga::client::Client<Counter>> {
-    client: T,
-    pub count2: <u32 as ::orga::client::CreateClient<Count2Client<T>>>::Client,
+pub struct Client<C: ::orga::client::ClientFor<Counter>> {
+    client: C,
+    pub count2: <u32 as ::orga::client::CreateClient<Count2Client<C>>>::Client,
 }
 
-impl<T: ::orga::client::Client<Counter>> From<T> for Client<T> {
-    fn from(client: T) -> Self {
+impl<C: ::orga::client::ClientFor<Counter>> From<C> for Client<C> {
+    fn from(client: C) -> Self {
         Client {
             client: client.clone(),
-            count2: u32::create_client(Count2Client {
+            count2: Count2Client {
                 client: client.clone(),
-            }),
+            }.into(),
         }
     }
 }
 
-impl<T: ::orga::client::Client<Counter>> CreateClient<T> for Counter {
-    type Client = Client<T>;
+impl<C: ::orga::client::ClientFor<Counter>> CreateClient<C> for Counter {
+    type Client = Client<C>;
 }
 
 #[derive(Clone)]
-pub struct Count2Client<T> {
-    client: T,
+pub struct Count2Client<C> {
+    client: C,
 }
-impl<T: ::orga::client::Client<Counter>> ::orga::client::Client<u32> for Count2Client<T> {
-    fn query<F, R>(&self, query: <u32 as ::orga::query::Query>::Query, check: F) -> Result<R>
+impl<C: ::orga::client::ClientFor<Counter>> ::orga::client::Client for Count2Client<C> {
+    type Query = <u32 as ::orga::query::Query>::Query;
+    type QueryRes = u32;
+
+    type Call = <u32 as ::orga::call::Call>::Call;
+
+    fn query<F, R>(&self, query: Self::Query, check: F) -> Result<R>
     where
-        F: Fn(<u32 as ::orga::query::Query>::Res) -> Result<R>,
+        F: Fn(&Self::QueryRes) -> Result<R>,
     {
         self.client.query(
             ::orga::query::Item::Field(FieldQuery::Count2(query)),
-            |res| match res {
-                ::orga::query::Item::Field(FieldRes::Count2(res)) => check(res),
-                _ => bail!("Unexpected result"),
-            },
+            |parent| check(&parent.count2),
         )
     }
 
@@ -112,19 +114,14 @@ impl ::orga::call::MethodCall for Counter {
 pub enum FieldQuery {
     Count2(<u32 as ::orga::query::Query>::Query),
 }
-#[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
-pub enum FieldRes {
-    Count2(<u32 as ::orga::query::Query>::Res),
-}
 impl ::orga::query::FieldQuery for Counter {
     type Query = FieldQuery;
-    type Res = FieldRes;
 
-    fn field_query(&self, query: FieldQuery) -> ::orga::Result<FieldRes> {
+    fn field_query(&self, query: FieldQuery) -> ::orga::Result<()> {
         use ::orga::query::Query;
-        Ok(match query {
-            FieldQuery::Count2(subquery) => FieldRes::Count2(self.count2.query(subquery)?),
-        })
+        match query {
+            FieldQuery::Count2(subquery) => self.count2.query(subquery),
+        }
     }
 }
 
@@ -132,22 +129,18 @@ impl ::orga::query::FieldQuery for Counter {
 pub enum MethodQuery {
     Count,
 }
-#[derive(Debug, ::orga::encoding::Encode, ::orga::encoding::Decode)]
-pub enum MethodRes {
-    Count(u32),
-}
 impl ::orga::query::MethodQuery for Counter {
     type Query = MethodQuery;
-    type Res = MethodRes;
 
-    fn method_query(&self, query: MethodQuery) -> ::orga::Result<MethodRes> {
-        Ok(match query {
-            MethodQuery::Count => MethodRes::Count(self.count()),
-        })
+    fn method_query(&self, query: MethodQuery) -> ::orga::Result<()> {
+        match query {
+            MethodQuery::Count => self.count(),
+        };
+        Ok(())
     }
 }
 
-impl<T: ::orga::client::Client<Counter>> Client<T> {
+impl<C: ::orga::client::ClientFor<Counter>> Client<C> {
     fn increment(&mut self, n: u32) -> ::orga::Result<()> {
         self.client
             .call(::orga::call::Item::Method(MethodCall::Increment(n)))
@@ -156,10 +149,7 @@ impl<T: ::orga::client::Client<Counter>> Client<T> {
     fn count(&self) -> Result<u32> {
         self.client.query(
             ::orga::query::Item::Method(MethodQuery::Count),
-            |res| match res {
-                ::orga::query::Item::Method(MethodRes::Count(a)) => Ok(a),
-                _ => bail!("Unexpected result"),
-            },
+            |this| Ok(this.count()),
         )
     }
 }
@@ -172,7 +162,6 @@ fn client() {
     };
     let (backing_client, counter) = Mock::new(counter);
     let mut client = Counter::create_client(backing_client);
-
     assert_eq!(client.count().unwrap(), 0);
     assert_eq!(client.count2.get().unwrap(), 0);
     // client.count().await?;

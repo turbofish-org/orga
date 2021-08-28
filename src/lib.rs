@@ -2,6 +2,7 @@
 #![feature(entry_insert)]
 #![feature(specialization)]
 #![feature(once_cell)]
+#![feature(associated_type_defaults)]
 
 /// Integration with ABCI (gated by `abci` feature).
 #[cfg(feature = "abci")]

@@ -34,9 +34,14 @@ impl<T> TendermintClient<T> {
     }
 }
 
-impl<T: Call + Query> Client<T> for TendermintClient<T> {
+impl<T: Call + Query> Client for TendermintClient<T> {
+    type Query = T::Query;
+    type QueryRes = T;
+
+    type Call = T::Call;
+
     fn query<F, R>(&self, query: T::Query, check: F) -> Result<R>
-      where F: Fn(T::Res) -> Result<R>
+      where F: Fn(&Self::QueryRes) -> Result<R>
     {
       todo!()
     }
