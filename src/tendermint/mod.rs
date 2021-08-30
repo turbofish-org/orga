@@ -1,5 +1,4 @@
 use crate::error::Result;
-use datetime::LocalTime;
 use failure::bail;
 use flate2::read::GzDecoder;
 use hex_literal::hex;
@@ -135,7 +134,6 @@ impl Tendermint {
             .copy_to(&mut buf)
             .expect("Failed to read bytes from zip file");
 
-        info!("Downloaded Tendermint binary");
         verify_hash(&buf);
 
         let cursor = std::io::Cursor::new(buf.clone());
@@ -144,8 +142,8 @@ impl Tendermint {
 
         for item in archive.entries().unwrap() {
             if item.as_ref().unwrap().path().unwrap().to_str().unwrap() == "tendermint" {
-                let tendermint_bytes: Vec<u8> =
-                    item.unwrap().bytes().map(|byte| byte.unwrap()).collect();
+                let mut tendermint_bytes = vec![];
+                item.unwrap().read_to_end(&mut tendermint_bytes).unwrap();
 
                 let mut f = fs::File::create(tendermint_path)
                     .expect("Could not create Tendermint binary on file system");
