@@ -1,8 +1,7 @@
 use std::marker::PhantomData;
 
-use super::ABCIStore;
-use super::CONTEXT;
 use super::{ABCIStateMachine, App, Application};
+use super::{ABCIStore, WrappedMerk, CONTEXT};
 use crate::call::Call;
 use crate::encoding::{Decode, Encode};
 use crate::merk::{BackingStore, MerkStore};
@@ -110,11 +109,7 @@ impl<A: App> Application for InternalApp<A>
 where
     <A as State>::Encoding: Default,
 {
-    fn init_chain(
-        &self,
-        store: Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>,
-        _req: RequestInitChain,
-    ) -> Result<ResponseInitChain> {
+    fn init_chain(&self, store: WrappedMerk, _req: RequestInitChain) -> Result<ResponseInitChain> {
         let mut store = Store::new(store.into());
 
         let state_bytes = match store.get(&[])? {
@@ -139,7 +134,7 @@ where
 
     fn begin_block(
         &self,
-        store: Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>,
+        store: WrappedMerk,
         req: RequestBeginBlock,
     ) -> Result<ResponseBeginBlock> {
         // Set context
@@ -162,11 +157,7 @@ where
         Ok(Default::default())
     }
 
-    fn end_block(
-        &self,
-        store: Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>,
-        _req: RequestEndBlock,
-    ) -> Result<ResponseEndBlock> {
+    fn end_block(&self, store: WrappedMerk, _req: RequestEndBlock) -> Result<ResponseEndBlock> {
         let mut store = Store::new(store.into());
         let state_bytes = store.get(&[])?.unwrap();
         let data: <A as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
