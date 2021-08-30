@@ -177,11 +177,21 @@ where
         Ok(res)
     }
 
-    fn deliver_tx(
-        &self,
-        store: Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>,
-        req: RequestDeliverTx,
-    ) -> Result<ResponseDeliverTx> {
+    fn deliver_tx(&self, store: WrappedMerk, req: RequestDeliverTx) -> Result<ResponseDeliverTx> {
+        let call_bytes = req.tx;
+        let mut store = Store::new(store.into());
+        let state_bytes = store.get(&[])?.unwrap();
+        let data: <A as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
+        let mut state = <A as State>::create(store.clone(), data)?;
+        let call = Decode::decode(call_bytes.as_slice())?;
+        state.call(call)?;
+        let flushed = state.flush()?;
+        store.put(vec![], flushed.encode()?)?;
+
+        Ok(Default::default())
+    }
+
+    fn check_tx(&self, store: WrappedMerk, req: RequestCheckTx) -> Result<ResponseCheckTx> {
         let call_bytes = req.tx;
         let mut store = Store::new(store.into());
         let state_bytes = store.get(&[])?.unwrap();
