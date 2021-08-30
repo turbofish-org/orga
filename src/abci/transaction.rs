@@ -12,6 +12,16 @@ pub struct Transaction {
 }
 
 impl Transaction {
+    fn as_call<T: Call + Encode>(call: &T) -> Result<Self> {
+        let call_bytes = Encode::encode(call)?;
+
+        Ok(Self {
+            call_bytes,
+            signature: None,
+            pubkey: None,
+        })
+    }
+
     pub fn signer(&self) -> Result<Option<[u8; 32]>> {
         match (self.pubkey, self.signature) {
             (Some(pubkey_bytes), Some(signature)) => {
