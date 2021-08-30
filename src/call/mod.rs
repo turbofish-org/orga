@@ -3,12 +3,6 @@ use ed::{Encode, Decode};
 use failure::bail;
 
 #[derive(Debug, Encode, Decode)]
-pub enum Kind {
-  Field,
-  Method,
-}
-
-#[derive(Debug, Encode, Decode)]
 pub enum Item<T, U> {
   Field(T),
   Method(U),

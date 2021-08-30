@@ -1,6 +1,6 @@
 use crate::call::Call;
 use crate::encoding::{Decode, Encode};
-use crate::query::{self, Query, FieldQuery, MethodQuery};
+use crate::query::{self, FieldQuery, MethodQuery, Query};
 use crate::Result;
 
 mod mock;
@@ -44,7 +44,7 @@ pub trait CreateClient<C>: Sized {
     }
 }
 
-impl<T: Encode + Decode, C> CreateClient<C> for T {
+impl<T: Encode + Decode, C: ClientFor<T>> CreateClient<C> for T {
     type Client = DefaultClient<T, C>;
 }
 
@@ -55,7 +55,13 @@ pub struct DefaultClient<T, C> {
 
 impl<T: Clone, C> DefaultClient<T, C>
 where
-    C: Client<Query = query::Item<<T as FieldQuery>::Query, <T as MethodQuery>::Query>>,
+    C: Client<
+        Query = query::Item<
+            <T as FieldQuery>::Query,
+            <T as MethodQuery>::Query,
+            <T as MethodQuery>::ChainedQuery,
+        >,
+    >,
     C: Client<QueryRes = T>,
 {
     pub fn get(&self) -> Result<T> {
