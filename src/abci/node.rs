@@ -1,7 +1,6 @@
 use std::marker::PhantomData;
 
-use super::{ABCIStateMachine, App, Application};
-use super::{ABCIStore, WrappedMerk, CONTEXT};
+use super::{ABCIStateMachine, ABCIStore, App, Application, Transaction, WrappedMerk, CONTEXT};
 use crate::call::Call;
 use crate::encoding::{Decode, Encode};
 use crate::merk::{BackingStore, MerkStore};
@@ -178,12 +177,12 @@ where
     }
 
     fn deliver_tx(&self, store: WrappedMerk, req: RequestDeliverTx) -> Result<ResponseDeliverTx> {
-        let call_bytes = req.tx;
+        let tx: Transaction = Decode::decode(req.tx.as_slice())?;
         let mut store = Store::new(store.into());
         let state_bytes = store.get(&[])?.unwrap();
         let data: <A as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
         let mut state = <A as State>::create(store.clone(), data)?;
-        let call = Decode::decode(call_bytes.as_slice())?;
+        let call = Decode::decode(tx.call_bytes.as_slice())?;
         state.call(call)?;
         let flushed = state.flush()?;
         store.put(vec![], flushed.encode()?)?;
@@ -192,12 +191,12 @@ where
     }
 
     fn check_tx(&self, store: WrappedMerk, req: RequestCheckTx) -> Result<ResponseCheckTx> {
-        let call_bytes = req.tx;
+        let tx: Transaction = Decode::decode(req.tx.as_slice())?;
         let mut store = Store::new(store.into());
         let state_bytes = store.get(&[])?.unwrap();
         let data: <A as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
         let mut state = <A as State>::create(store.clone(), data)?;
-        let call = Decode::decode(call_bytes.as_slice())?;
+        let call = Decode::decode(tx.call_bytes.as_slice())?;
         state.call(call)?;
         let flushed = state.flush()?;
         store.put(vec![], flushed.encode()?)?;

@@ -15,6 +15,8 @@ mod node;
 pub use node::*;
 mod context;
 pub use context::*;
+mod transaction;
+pub use transaction::*;
 
 use messages::*;
 pub use tendermint_proto::abci as messages;

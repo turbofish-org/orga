@@ -3,6 +3,7 @@
 #![feature(specialization)]
 #![feature(associated_type_defaults)]
 #![feature(once_cell)]
+#![feature(trivial_bounds)]
 
 /// Integration with ABCI (gated by `abci` feature).
 #[cfg(feature = "abci")]
