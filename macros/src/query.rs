@@ -1,18 +1,25 @@
-use proc_macro::TokenStream;
-use proc_macro2::{Literal, TokenStream as TokenStream2, Span};
-use quote::{quote, ToTokens};
-use syn::*;
 use heck::{CamelCase, SnakeCase};
+use proc_macro::TokenStream;
+use proc_macro2::{Literal, Span, TokenStream as TokenStream2};
+use quote::{quote, ToTokens};
 use std::collections::HashSet;
+use syn::*;
 
 pub fn derive(item: TokenStream) -> TokenStream {
     let item = parse_macro_input!(item as DeriveInput);
     let name = &item.ident;
     let source = parse_parent();
 
-    let enum_methodquery = create_enum_methodquery(&item, &source);
-    let enum_chainedquery = create_enum_chainedquery(&item, &source);
-    let query_impl = create_query_impl(name, &source);
+    let mut query_type = None;
+    let mut chainedquery_type = None;
+    let enum_methodquery = create_enum_methodquery(&item, &source, &mut query_type);
+    let enum_chainedquery = create_enum_chainedquery(&item, &source, &mut chainedquery_type);
+    let query_impl = create_query_impl(
+        &item,
+        &source,
+        query_type.unwrap(),
+        chainedquery_type.unwrap(),
+    );
 
     let output = quote!(
         use ::orga::macros::query;
@@ -30,11 +37,37 @@ pub fn attr(_: TokenStream, _: TokenStream) -> TokenStream {
     quote!().into()
 }
 
-fn create_query_impl(name: &Ident, source: &File) -> TokenStream2 {
-    quote!()
+fn create_query_impl(
+    item: &DeriveInput,
+    source: &File,
+    query_ty: TokenStream2,
+    chainedquery_ty: TokenStream2,
+) -> TokenStream2 {
+    let name = &item.ident;
+    let generics = &item.generics;
+    let generic_params = gen_param_input(generics);
+
+    quote! {
+        impl#generics ::orga::query::MethodQuery for #name#generic_params {
+            type Query = #query_ty;
+            type ChainedQuery = #chainedquery_ty;
+
+            fn method_query(&self, query: Self::Query) -> ::orga::Result<()> {
+                todo!()
+            }
+
+            fn chained_query(&self, query: Self::ChainedQuery) -> ::orga::Result<()> {
+                todo!()
+            }
+        }
+    }
 }
 
-fn create_enum_methodquery(item: &DeriveInput, source: &File) -> TokenStream2 {
+fn create_enum_methodquery(
+    item: &DeriveInput,
+    source: &File,
+    ty: &mut Option<TokenStream2>,
+) -> TokenStream2 {
     let name = &item.ident;
     let generics = &item.generics;
 
@@ -50,7 +83,9 @@ fn create_enum_methodquery(item: &DeriveInput, source: &File) -> TokenStream2 {
             let fields = if method.sig.inputs.len() == 1 {
                 quote!()
             } else {
-                let inputs: Vec<_> = method.sig.inputs
+                let inputs: Vec<_> = method
+                    .sig
+                    .inputs
                     .iter()
                     .skip(1)
                     .map(|input| match input {
@@ -61,7 +96,7 @@ fn create_enum_methodquery(item: &DeriveInput, source: &File) -> TokenStream2 {
 
                 let requirements = get_generic_requirements(
                     inputs.iter().cloned(),
-                    generics.params.iter().cloned()
+                    generics.params.iter().cloned(),
                 );
                 generic_params.extend(requirements);
 
@@ -82,15 +117,21 @@ fn create_enum_methodquery(item: &DeriveInput, source: &File) -> TokenStream2 {
         quote!(<#(#params),*>)
     };
 
+    *ty = Some(quote!(MethodQuery#generic_params));
+
     quote! {
         #[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
-        pub enum MethodQuery#generic_params {
+        pub enum #ty {
             #(#variants,)*
         }
     }
 }
 
-fn create_enum_chainedquery(item: &DeriveInput, source: &File) -> TokenStream2 {
+fn create_enum_chainedquery(
+    item: &DeriveInput,
+    source: &File,
+    ty: &mut Option<TokenStream2>,
+) -> TokenStream2 {
     let name = &item.ident;
     let generics = &item.generics;
 
@@ -102,12 +143,14 @@ fn create_enum_chainedquery(item: &DeriveInput, source: &File) -> TokenStream2 {
         .map(|method| {
             let name = method.sig.ident.to_string();
             let name_camel = name.as_str().to_camel_case();
-            let name = Ident::new(&name_camel, Span::call_site());        
+            let name = Ident::new(&name_camel, Span::call_site());
 
             let fields = if method.sig.inputs.len() == 1 {
                 quote!()
             } else {
-                let inputs: Vec<_> = method.sig.inputs
+                let inputs: Vec<_> = method
+                    .sig
+                    .inputs
                     .iter()
                     .skip(1)
                     .map(|input| match input {
@@ -118,7 +161,7 @@ fn create_enum_chainedquery(item: &DeriveInput, source: &File) -> TokenStream2 {
 
                 let requirements = get_generic_requirements(
                     inputs.iter().cloned(),
-                    generics.params.iter().cloned()
+                    generics.params.iter().cloned(),
                 );
                 generic_params.extend(requirements);
 
@@ -130,10 +173,10 @@ fn create_enum_chainedquery(item: &DeriveInput, source: &File) -> TokenStream2 {
                 ReturnType::Default => panic!("unexpected return type"),
             };
             let subquery = quote!(<#output_type as ::orga::query::Query>::Query);
-            
+
             let requirements = get_generic_requirements(
-                vec![ output_type ].iter().cloned(),
-                generics.params.iter().cloned()
+                vec![output_type].iter().cloned(),
+                generics.params.iter().cloned(),
             );
             generic_params.extend(requirements);
 
@@ -151,9 +194,11 @@ fn create_enum_chainedquery(item: &DeriveInput, source: &File) -> TokenStream2 {
         quote!(<#(#params),*>)
     };
 
+    *ty = Some(quote!(ChainedQuery#generic_params));
+
     quote! {
         #[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
-        pub enum ChainedQuery#generic_params {
+        pub enum #ty {
             #(#variants,)*
         }
     }
@@ -171,11 +216,10 @@ where
     J: Iterator<Item = GenericParam>,
 {
     let params = params.collect::<Vec<_>>();
-    let maybe_generic_inputs = inputs
-        .filter_map(|input| match input {
-            Type::Path(path) => Some(path),
-            _ => None,
-        });
+    let maybe_generic_inputs = inputs.filter_map(|input| match input {
+        Type::Path(path) => Some(path),
+        _ => None,
+    });
     let mut requirements = vec![];
     for input in maybe_generic_inputs {
         params
@@ -184,9 +228,10 @@ where
                 GenericParam::Type(param) => Some(param),
                 _ => None,
             })
-            .find(|param| param.ident == input.path.segments.last().unwrap().ident)
+            .find(|param| {
+                param.ident == input.path.segments.last().unwrap().ident
+            })
             .map(|param| {
-                println!("saw generic type: {:?}", &param.ident);
                 requirements.push(param.ident.clone());
             });
     }
@@ -232,7 +277,8 @@ fn relevant_methods<'a>(name: &Ident, attr: &str, source: &'a File) -> Vec<&'a I
                 _ => None,
             })
             .filter(|method| {
-                method.attrs
+                method
+                    .attrs
                     .iter()
                     .find(|a| a.path.is_ident(&attr))
                     .is_some()
@@ -247,4 +293,27 @@ fn relevant_methods<'a>(name: &Ident, attr: &str, source: &'a File) -> Vec<&'a I
         .into_iter()
         .flat_map(get_methods)
         .collect()
+}
+
+fn gen_param_input(generics: &Generics) -> TokenStream2 {
+    let gen_params = generics.params.iter().map(|p| match p {
+        GenericParam::Type(p) => {
+            let ident = &p.ident;
+            quote!(#ident)
+        }
+        GenericParam::Lifetime(p) => {
+            let ident = &p.lifetime.ident;
+            quote!(#ident)
+        }
+        GenericParam::Const(p) => {
+            let ident = &p.ident;
+            quote!(#ident)
+        }
+    });
+
+    if gen_params.len() == 0 {
+        quote!()
+    } else {
+        quote!(<#(#gen_params),*>)
+    }
 }
