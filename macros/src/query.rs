@@ -10,25 +10,17 @@ pub fn derive(item: TokenStream) -> TokenStream {
     let name = &item.ident;
     let source = parse_parent();
 
-    let mut query_type = None;
-    let mut chainedquery_type = None;
-    let enum_methodquery = create_enum_methodquery(&item, &source, &mut query_type);
-    let enum_chainedquery = create_enum_chainedquery(&item, &source, &mut chainedquery_type);
-    let query_impl = create_query_impl(
-        &item,
-        &source,
-        query_type.unwrap(),
-        chainedquery_type.unwrap(),
-    );
+    let query_enum = create_query_enum(&item, &source);
+    let query_impl = create_query_impl(&item, &source, &query_enum);
 
     let output = quote!(
         use ::orga::macros::query;
-        #enum_methodquery
-        #enum_chainedquery
+
+        #query_enum
         #query_impl
     );
 
-    println!("{}", &output);
+    println!("{}", &output.to_string());
 
     output.into()
 }
@@ -40,106 +32,71 @@ pub fn attr(_: TokenStream, _: TokenStream) -> TokenStream {
 fn create_query_impl(
     item: &DeriveInput,
     source: &File,
-    query_ty: TokenStream2,
-    chainedquery_ty: TokenStream2,
+    query_enum: &ItemEnum,
 ) -> TokenStream2 {
     let name = &item.ident;
     let generics = &item.generics;
     let generic_params = gen_param_input(generics);
 
-    quote! {
-        impl#generics ::orga::query::MethodQuery for #name#generic_params {
-            type Query = #query_ty;
-            type ChainedQuery = #chainedquery_ty;
+    let query_type = &query_enum.ident;
+    let query_generics = &query_enum.generics;
+    let where_preds = item.generics.where_clause.as_ref().map(|w| &w.predicates);
+    
+    let encoding_bounds = relevant_methods(name, "query", source)
+        .into_iter()
+        .flat_map(|method| {
+            let inputs: Vec<_> = method
+                .sig
+                .inputs
+                .iter()
+                .skip(1)
+                .map(|input| match input {
+                    FnArg::Typed(input) => *input.ty.clone(),
+                    _ => panic!("unexpected input"),
+                })
+                .collect();
 
-            fn method_query(&self, query: Self::Query) -> ::orga::Result<()> {
-                todo!()
-            }
+            get_generic_requirements(
+                inputs.iter().cloned(),
+                item.generics.params.iter().cloned(),
+            )
+        })
+        .map(|p| quote!(#p: ::orga::encoding::Encode + ::orga::encoding::Decode + ::orga::encoding::Terminated,));
+    let encoding_bounds = quote!(#(#encoding_bounds)*);
 
-            fn chained_query(&self, query: Self::ChainedQuery) -> ::orga::Result<()> {
-                todo!()
-            }
-        }
-    }
-}
-
-fn create_enum_methodquery(
-    item: &DeriveInput,
-    source: &File,
-    ty: &mut Option<TokenStream2>,
-) -> TokenStream2 {
-    let name = &item.ident;
-    let generics = &item.generics;
-
-    let mut generic_params = vec![];
-
-    let variants: Vec<_> = relevant_methods(name, "query", source)
+    let query_bounds = relevant_methods(name, "query", source)
         .into_iter()
         .map(|method| {
-            let name = method.sig.ident.to_string();
-            let name_camel = name.as_str().to_camel_case();
-            let name = Ident::new(&name_camel, Span::call_site());
-
-            let fields = if method.sig.inputs.len() == 1 {
-                quote!()
-            } else {
-                let inputs: Vec<_> = method
-                    .sig
-                    .inputs
-                    .iter()
-                    .skip(1)
-                    .map(|input| match input {
-                        FnArg::Typed(input) => *input.ty.clone(),
-                        _ => panic!("unexpected input"),
-                    })
-                    .collect();
-
-                let requirements = get_generic_requirements(
-                    inputs.iter().cloned(),
-                    generics.params.iter().cloned(),
-                );
-                generic_params.extend(requirements);
-
-                quote! { (#(#inputs),*) }
-            };
-
-            quote! {
-                #name#fields
+            let unit_tuple: Type = parse2(quote!(())).unwrap();
+            match method.sig.output {
+                ReturnType::Type(_, ref ty) => *(ty.clone()),
+                ReturnType::Default => unit_tuple,
             }
         })
-        .collect();
-
-    let generic_params = if generic_params.is_empty() {
-        quote!()
-    } else {
-        let params: HashSet<_> = generic_params.into_iter().collect();
-        let params = params.into_iter();
-        quote!(<#(#params),*>)
-    };
-
-    *ty = Some(quote!(MethodQuery#generic_params));
+        .map(|t| quote!(#t: ::orga::query::Query,));
+    let query_bounds = quote!(#(#query_bounds)*);
 
     quote! {
-        #[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
-        pub enum #ty {
-            #(#variants,)*
+        impl#generics ::orga::query::Query for #name#generic_params
+        where #where_preds #encoding_bounds #query_bounds
+        {
+            type Query = #query_type#query_generics;
+
+            fn query(&self, query: Self::Query) -> ::orga::Result<()> {
+                todo!()
+            }
         }
     }
 }
 
-fn create_enum_chainedquery(
-    item: &DeriveInput,
-    source: &File,
-    ty: &mut Option<TokenStream2>,
-) -> TokenStream2 {
+fn create_query_enum(item: &DeriveInput, source: &File) -> ItemEnum {
     let name = &item.ident;
     let generics = &item.generics;
 
     let mut generic_params = vec![];
 
-    let variants: Vec<_> = relevant_methods(name, "query", source)
+    let method_variants: Vec<_> = relevant_methods(name, "query", source)
         .into_iter()
-        .filter(|method| matches!(method.sig.output, ReturnType::Type(_, _)))
         .map(|method| {
             let name = method.sig.ident.to_string();
             let name_camel = name.as_str().to_camel_case();
@@ -168,14 +125,15 @@ fn create_enum_chainedquery(
                 quote! { #(#inputs),*, }
             };
 
+            let unit_tuple: Type = parse2(quote!(())).unwrap();
             let output_type = match method.sig.output {
                 ReturnType::Type(_, ref ty) => *(ty.clone()),
-                ReturnType::Default => panic!("unexpected return type"),
+                ReturnType::Default => unit_tuple,
             };
             let subquery = quote!(<#output_type as ::orga::query::Query>::Query);
-
+            
             let requirements = get_generic_requirements(
-                vec![output_type].iter().cloned(),
+                vec![ output_type ].iter().cloned(),
                 generics.params.iter().cloned(),
             );
             generic_params.extend(requirements);
@@ -194,14 +152,32 @@ fn create_enum_chainedquery(
         quote!(<#(#params),*>)
     };
 
-    *ty = Some(quote!(ChainedQuery#generic_params));
-
-    quote! {
-        #[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
-        pub enum #ty {
-            #(#variants,)*
+    let where_clause = if item.generics.params.is_empty() {
+        quote!()
+    } else {
+        let params = item.generics.params
+            .iter()
+            .filter_map(|p| match p {
+                GenericParam::Type(t) => Some(t),
+                _ => None,
+            })
+            .map(|p| &p.ident);
+        quote! {
+            where
+                #(#params: ::orga::query::Query,)*
         }
-    }
+    };
+
+    let output = quote! {
+        #[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
+        pub enum __Query#generic_params
+        #where_clause
+        {
+            #(#method_variants,)*
+        }
+    };
+
+    syn::parse2(output).unwrap()
 }
 
 fn parse_parent() -> File {

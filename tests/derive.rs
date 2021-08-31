@@ -11,7 +11,7 @@ use orga::store::Shared;
 use orga::store::{MapStore, Store};
 use orga::query::Query;
 
-#[derive(Encode, Decode, PartialEq, Debug, Query)]
+#[derive(Query, PartialEq, Debug)]
 struct Foo<T> {
     a: u8,
     b: Option<T>,
@@ -54,14 +54,14 @@ impl<T> Foo<T> {
     }
 }
 
-#[test]
-fn encode_decode() {
-    let value = Foo { a: 5, b: Some(6) };
-    let bytes = value.encode().unwrap();
-    assert_eq!(bytes.as_slice(), &[5, 1, 6]);
-    let decoded_value = Foo::decode(bytes.as_slice()).unwrap();
-    assert_eq!(decoded_value, value);
-}
+// #[test]
+// fn encode_decode() {
+//     let value = Foo { a: 5, b: Some(6) };
+//     let bytes = value.encode().unwrap();
+//     assert_eq!(bytes.as_slice(), &[5, 1, 6]);
+//     let decoded_value = Foo::decode(bytes.as_slice()).unwrap();
+//     assert_eq!(decoded_value, value);
+// }
 
 #[derive(State)]
 struct MyStruct {
