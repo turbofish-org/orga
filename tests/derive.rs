@@ -10,12 +10,12 @@ use orga::store::{MapStore, Store};
 use orga::query::Query;
 
 #[derive(Encode, Decode, PartialEq, Debug, Query)]
-struct Foo {
+struct Foo<T> {
     a: u8,
-    b: Option<u8>,
+    b: Option<T>,
 }
 
-impl Foo {
+impl<T> Foo<T> {
     fn x() {}
 
     #[query]
@@ -25,9 +25,19 @@ impl Foo {
     pub fn z(&self, n: u32) -> u32 {
         123 + n
     }
+
+    #[query]
+    pub fn generic_input(&self, t: T) -> u32 {
+        123
+    }
+    
+    #[query]
+    pub fn generic_output(&self) -> T {
+        self.b.unwrap()
+    }
 }
 
-impl Foo {
+impl<T> Foo<T> {
     #[query]
     pub fn y2(&self) {}
 
