@@ -1,4 +1,6 @@
 // #![cfg(integration_test)]
+
+#![feature(specialization)]
 #![feature(trivial_bounds)]
 
 use orga::collections::Entry;
