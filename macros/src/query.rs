@@ -1,14 +1,19 @@
 use heck::{CamelCase, SnakeCase};
 use proc_macro::TokenStream;
-use proc_macro2::{Literal, Span, TokenStream as TokenStream2};
-use quote::{quote, ToTokens};
+use proc_macro2::{Span, TokenStream as TokenStream2};
+use quote::quote;
 use std::collections::HashSet;
 use syn::*;
 
 pub fn derive(item: TokenStream) -> TokenStream {
     let item = parse_macro_input!(item as DeriveInput);
-    let name = &item.ident;
     let source = parse_parent();
+
+    let name = &item.ident;
+    let modname = Ident::new(
+        format!("{}_query", name).to_snake_case().as_str(),
+        Span::call_site(),
+    );
 
     let query_enum = create_query_enum(&item, &source);
     let query_impl = create_query_impl(&item, &source, &query_enum);
@@ -16,8 +21,11 @@ pub fn derive(item: TokenStream) -> TokenStream {
     let output = quote!(
         use ::orga::macros::query;
 
-        #query_enum
-        #query_impl
+        pub mod #modname {
+            use super::*;
+            #query_enum
+            #query_impl
+        }
     );
 
     println!("{}", &output.to_string());
@@ -25,8 +33,8 @@ pub fn derive(item: TokenStream) -> TokenStream {
     output.into()
 }
 
-pub fn attr(_: TokenStream, _: TokenStream) -> TokenStream {
-    quote!().into()
+pub fn attr(args: TokenStream, input: TokenStream) -> TokenStream {
+    input
 }
 
 fn create_query_impl(
@@ -76,6 +84,38 @@ fn create_query_impl(
         .map(|t| quote!(#t: ::orga::query::Query,));
     let query_bounds = quote!(#(#query_bounds)*);
 
+    let field_query_arms = vec![quote!()];
+
+    let method_query_arms: Vec<_> = relevant_methods(name, "query", source)
+        .into_iter()
+        .map(|method| {
+            let method_name = &method.sig.ident;
+            let name_camel = method_name.to_string().to_camel_case();
+            let variant_name = Ident::new(&name_camel, Span::call_site());
+
+            let inputs: Vec<_> = (0..method.sig.inputs.len() - 1)
+                .into_iter()
+                .map(|i| Ident::new(
+                    format!("var{}", i).as_str(),
+                    Span::call_site(),
+                ))
+                .collect();
+
+            let unit_tuple: Type = parse2(quote!(())).unwrap();
+            let output_type = match method.sig.output {
+                ReturnType::Type(_, ref ty) => *(ty.clone()),
+                ReturnType::Default => unit_tuple,
+            };
+            let subquery = quote!(<#output_type as ::orga::query::Query>::Query);
+            
+            quote! {
+                Query::#variant_name(#(#inputs,)* subquery) => {
+                    self.#method_name(#(#inputs),*).query(subquery)
+                }
+            }
+        })
+        .collect();
+
     quote! {
         impl#generics ::orga::query::Query for #name#generic_params
         where #where_preds #encoding_bounds #query_bounds
@@ -83,7 +123,11 @@ fn create_query_impl(
             type Query = #query_type#query_generics;
 
             fn query(&self, query: Self::Query) -> ::orga::Result<()> {
-                todo!()
+                match query {
+                    Query::This => Ok(()),
+                    #(#field_query_arms),*
+                    #(#method_query_arms),*
+                }
             }
         }
     }
@@ -170,9 +214,10 @@ fn create_query_enum(item: &DeriveInput, source: &File) -> ItemEnum {
 
     let output = quote! {
         #[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
-        pub enum __Query#generic_params
+        pub enum Query#generic_params
         #where_clause
         {
+            This,
             #(#method_variants,)*
         }
     };
