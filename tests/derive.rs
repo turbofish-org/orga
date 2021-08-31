@@ -11,17 +11,17 @@ use orga::store::Shared;
 use orga::store::{MapStore, Store};
 use orga::query::Query;
 
-#[derive(Query, PartialEq, Debug)]
+#[derive(Encode, Decode, Query, PartialEq, Debug)]
 struct Foo<T> {
     a: u8,
     b: Option<T>,
 }
 
-impl<T> Foo<T> {
+impl<T: Clone> Foo<T> {
     fn x() {}
 
-    #[query]
-    pub fn some_method(&self) {}
+    // #[query]
+    // pub fn some_method(&self) {}
 
     #[query]
     pub fn z(&self, n: u32) -> u32 {
@@ -35,7 +35,7 @@ impl<T> Foo<T> {
     
     #[query]
     pub fn generic_output(&self) -> T {
-        self.b.unwrap()
+        self.b.as_ref().unwrap().clone()
     }
 }
 
@@ -54,14 +54,29 @@ impl<T> Foo<T> {
     }
 }
 
-// #[test]
-// fn encode_decode() {
-//     let value = Foo { a: 5, b: Some(6) };
-//     let bytes = value.encode().unwrap();
-//     assert_eq!(bytes.as_slice(), &[5, 1, 6]);
-//     let decoded_value = Foo::decode(bytes.as_slice()).unwrap();
-//     assert_eq!(decoded_value, value);
-// }
+#[test]
+fn encode_decode() {
+    let value = Foo { a: 5, b: Some(6) };
+    let bytes = value.encode().unwrap();
+    assert_eq!(bytes.as_slice(), &[5, 1, 6]);
+    let decoded_value = Foo::decode(bytes.as_slice()).unwrap();
+    assert_eq!(decoded_value, value);
+}
+
+#[derive(Encode, Decode)]
+struct X;
+impl Query for X {
+    type Query = ();
+    fn query(&self, _: ()) -> orga::Result<()> {
+        Ok(())
+    }
+}
+
+#[test]
+fn query() {
+    let value = Foo { a: 5, b: Some(5u32) };
+    value.query(foo_query::Query::Z(10, ())).unwrap();
+}
 
 #[derive(State)]
 struct MyStruct {
