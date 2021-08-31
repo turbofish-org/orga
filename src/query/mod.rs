@@ -3,6 +3,8 @@ use failure::bail;
 use crate::encoding::{Encode, Decode};
 use crate::Result;
 
+pub use orga_macros::{Query, query};
+
 #[derive(Debug, Encode, Decode)]
 pub enum Item<T, U, V> {
   Field(T),
@@ -29,6 +31,13 @@ impl<T> FieldQuery for T {
     bail!("No field queries implemented")
   }
 }
+impl<T: FieldQuery> FieldQuery for &T {
+  type Query = T::Query;
+
+  fn field_query(&self, query: T::Query) -> Result<()> {
+    (*self).field_query(query)
+  }
+}
 
 pub trait MethodQuery {
   type Query: Encode + Decode;
@@ -48,6 +57,18 @@ impl<T> MethodQuery for T {
 
   default fn chained_query(&self, _: Self::ChainedQuery) -> Result<()> {
     bail!("No chained method queries implemented")
+  }
+}
+impl<T: MethodQuery> MethodQuery for &T {
+  type Query = T::Query;
+  type ChainedQuery = T::ChainedQuery;
+
+  fn method_query(&self, query: T::Query) -> Result<()> {
+    (*self).method_query(query)
+  }
+
+  fn chained_query(&self, query: T::ChainedQuery) -> Result<()> {
+    (*self).chained_query(query)
   }
 }
 
