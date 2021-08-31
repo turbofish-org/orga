@@ -495,6 +495,8 @@ impl ABCIStore for MemStore {
         Ok(Default::default())
     }
 }
+mod container;
+pub use container::*;
 
 pub trait BeginBlock {
     fn begin_block(&mut self) -> Result<()>;
