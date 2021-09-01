@@ -1,4 +1,3 @@
-use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::collections::btree_map::Entry::{Occupied, Vacant};
 use std::collections::{btree_map, BTreeMap};
@@ -11,6 +10,7 @@ use crate::state::*;
 use crate::store::Iter as StoreIter;
 use crate::store::*;
 use crate::Result;
+use crate::query::Query;
 use ed::*;
 
 /// A map collection which stores data in a backing key/value store.
@@ -22,6 +22,7 @@ use ed::*;
 /// When values in the map are mutated, inserted, or deleted, they are retained
 /// in an in-memory map until the call to `State::flush` which writes the
 /// changes to the backing store.
+#[derive(Query)]
 pub struct Map<K, V, S = DefaultBackingStore> {
     store: Store<S>,
     children: BTreeMap<K, Option<V>>,
@@ -63,6 +64,7 @@ where
     V: State<S>,
     S: Read,
 {
+    #[query]
     pub fn contains_key(&self, key: K) -> Result<bool> {
         let child_contains = self.children.contains_key(&key);
 
@@ -95,8 +97,9 @@ where
     /// The returned value will reference the latest changes to the data even if
     /// the value was inserted, modified, or deleted since the last time the map
     /// was flushed.
-    pub fn get<B: Borrow<K>>(&self, key: B) -> Result<Option<Ref<V>>> {
-        let key = key.borrow();
+    #[query]
+    pub fn get(&self, key: K) -> Result<Option<Ref<V>>> {
+        let key = &key;
         Ok(if self.children.contains_key(key) {
             // value is already retained in memory (was modified)
             self.children.get(key).unwrap().as_ref().map(Ref::Borrowed)
@@ -424,6 +427,14 @@ pub enum Ref<'a, V> {
     /// A reference to an existing value which is being retained in memory
     /// because it was modified.
     Borrowed(&'a V),
+}
+
+impl<'a, V: Query> Query for Ref<'a, V> {
+    type Query = V::Query;
+
+    fn query(&self, query: Self::Query) -> Result<()> {
+        self.deref().query(query)
+    }
 }
 
 impl<'a, V> Deref for Ref<'a, V> {

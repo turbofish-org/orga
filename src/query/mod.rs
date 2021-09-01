@@ -33,6 +33,14 @@ impl<T: Query> Query for Option<T> {
 
 // TODO: primitives
 
+impl Query for bool {
+  type Query = ();
+
+  fn query(&self, _: Self::Query) -> Result<()> {
+    Ok(())
+  }
+}
+
 impl Query for u32 {
   type Query = ();
 

@@ -3,6 +3,9 @@
 #![feature(specialization)]
 #![feature(once_cell)]
 #![feature(associated_type_defaults)]
+#![feature(trivial_bounds)]
+
+extern crate self as orga;
 
 /// Integration with ABCI (gated by `abci` feature).
 #[cfg(feature = "abci")]
