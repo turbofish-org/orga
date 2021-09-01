@@ -308,6 +308,10 @@ where
     let maybe_generic_inputs = inputs
         .filter_map(|input| match input {
             Type::Path(path) => Some(path),
+            Type::Reference(reference) => match *reference.elem {
+                Type::Path(path) => Some(path),
+                _ => None,
+            }
             _ => None,
         })
         .flat_map(|path| {
