@@ -9,6 +9,15 @@ pub trait Query {
   fn query(&self, query: Self::Query) -> Result<()>;
 }
 
+
+impl<T: Query> Query for &T {
+  type Query = T::Query;
+
+  fn query(&self, query: Self::Query) -> Result<()> {
+    (*self).query(query)
+  }
+}
+
 impl<T: Query> Query for Result<T> {
   type Query = T::Query;
 
