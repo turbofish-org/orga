@@ -44,6 +44,15 @@ fn create_query_impl(
 ) -> TokenStream2 {
     let name = &item.ident;
     let generics = &item.generics;
+    let mut generics_sanitized = generics.clone();
+    generics_sanitized
+        .params
+        .iter_mut()
+        .for_each(|g| {
+            if let GenericParam::Type(ref mut t) = g {
+                t.default = None;
+            }
+        });
     let generic_params = gen_param_input(generics, true);
     let generic_params_unbracketed = gen_param_input(generics, false);
 
@@ -180,7 +189,7 @@ fn create_query_impl(
         .collect();
 
     quote! {
-        impl#generics ::orga::query::Query for #name#generic_params
+        impl#generics_sanitized ::orga::query::Query for #name#generic_params
         where #where_preds #encoding_bounds #query_bounds
         {
             type Query = #query_type#query_generics;
@@ -291,10 +300,28 @@ where
     J: Iterator<Item = GenericParam>,
 {
     let params = params.collect::<Vec<_>>();
-    let maybe_generic_inputs = inputs.filter_map(|input| match input {
-        Type::Path(path) => Some(path),
-        _ => None,
-    });
+    let maybe_generic_inputs = inputs
+        .filter_map(|input| match input {
+            Type::Path(path) => Some(path),
+            _ => None,
+        })
+        .flat_map(|path| {
+            let mut paths = vec![];
+            fn add_arguments(path: &TypePath, paths: &mut Vec<PathSegment>) {
+                let last = path.path.segments.last().unwrap();
+                paths.push(last.clone());
+                if let PathArguments::AngleBracketed(ref args) = last.arguments {
+                    for arg in args.args.iter() {
+                        if let GenericArgument::Type(Type::Path(ref path)) = arg {
+                            add_arguments(path, paths)
+                        }
+                    }
+                }
+            };
+            add_arguments(&path, &mut paths);
+
+            paths
+        });
     let mut requirements = vec![];
     for input in maybe_generic_inputs {
         params
@@ -304,7 +331,7 @@ where
                 _ => None,
             })
             .find(|param| {
-                param.ident == input.path.segments.last().unwrap().ident
+                param.ident == input.ident
             })
             .map(|param| {
                 requirements.push(param.ident.clone());
