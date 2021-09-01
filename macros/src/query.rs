@@ -91,6 +91,12 @@ fn create_query_impl(
                 ReturnType::Default => unit_tuple,
             }
         })
+        .flat_map(|ty| {
+            get_generic_requirements(
+                std::iter::once(&ty).cloned(),
+                generics.params.iter().cloned(),
+            )
+        })
         .map(|t| quote!(#t: ::orga::query::Query,));
     let query_bounds = quote!(#(#query_bounds)*);
 
@@ -182,6 +188,7 @@ fn create_query_impl(
             
             quote! {
                 Query::#variant_name(#(#inputs,)* subquery) => {
+                    let subquery = Decode::decode(subquery.as_slice())?;
                     #trait_name#dotted_generic_reqs::maybe_call(self, #(#inputs),*).query(subquery)
                 }
             }
@@ -248,17 +255,16 @@ fn create_query_enum(item: &DeriveInput, source: &File) -> ItemEnum {
                 ReturnType::Type(_, ref ty) => *(ty.clone()),
                 ReturnType::Default => unit_tuple,
             };
-            let subquery = quote!(<#output_type as ::orga::query::Query>::Query);
-            
+
             let requirements = get_generic_requirements(
                 vec![ output_type ].iter().cloned(),
                 generics.params.iter().cloned(),
             );
-            generic_params.extend(requirements.clone());
+            // generic_params.extend(requirements.clone());
             query_params.extend(requirements);
 
             quote! {
-                #name(#fields #subquery)
+                #name(#fields Vec<u8>)
             }
         })
         .collect();
@@ -278,7 +284,6 @@ fn create_query_enum(item: &DeriveInput, source: &File) -> ItemEnum {
     let output = quote! {
         #[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
         pub enum Query#generic_params
-        where #query_preds
         {
             This,
             #(#method_variants,)*
