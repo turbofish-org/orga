@@ -13,6 +13,38 @@ use crate::store::*;
 use crate::Result;
 use ed::*;
 
+pub struct MapKey<K: Encode> {
+    inner: K,
+    inner_bytes: Vec<u8>,
+}
+
+impl<K: Encode> MapKey<K> {
+    pub fn new(key: K) -> Result<MapKey<K>> {
+        Ok(MapKey {
+            inner: key,
+            inner_bytes: Encode::encode(&key)?,
+        })
+    }
+}
+
+impl<K: Encode> PartialEq for MapKey<K> {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner_bytes == other.inner_bytes
+    }
+}
+
+impl<K: Encode> PartialOrd for MapKey<K> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<K: Encode> Ord for MapKey<K> {
+    fn cmp(&self, other: &Self) -> Ordering {}
+}
+
+impl<K: Encode> Eq for MapKey<K> {}
+
 /// A map collection which stores data in a backing key/value store.
 ///
 /// Keys are encoded into bytes and values are stored at the resulting key, with
