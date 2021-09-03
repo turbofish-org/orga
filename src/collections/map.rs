@@ -143,11 +143,11 @@ where
     }
 
     pub fn insert(&mut self, key: K, value: V::Encoding) -> Result<()> {
-        let encoded_key = Encode::encode(&key)?;
+        let map_key = MapKey::<K>::new(key)?;
 
-        let value_store = self.store.sub(encoded_key.as_slice());
+        let value_store = self.store.sub(map_key.inner_bytes.as_slice());
         self.children
-            .insert(key, Some(V::create(value_store, value)?));
+            .insert(map_key, Some(V::create(value_store, value)?));
 
         Ok(())
     }
