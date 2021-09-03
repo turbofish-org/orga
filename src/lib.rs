@@ -1,5 +1,6 @@
 #![feature(map_first_last)]
 #![feature(entry_insert)]
+#![feature(bound_map)]
 
 /// Integration with ABCI (gated by `abci` feature).
 #[cfg(feature = "abci")]
