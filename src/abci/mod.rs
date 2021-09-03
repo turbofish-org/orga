@@ -1,3 +1,4 @@
+#![cfg(feature = "abci")]
 use std::clone::Clone;
 use std::env;
 use std::net::ToSocketAddrs;
