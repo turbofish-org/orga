@@ -12,21 +12,50 @@ use crate::store::*;
 use crate::Result;
 use ed::*;
 
-pub struct MapKey<K: Encode> {
+#[derive(Clone)]
+pub struct MapKey<K> {
     inner: K,
     inner_bytes: Vec<u8>,
 }
 
-impl<K: Encode> MapKey<K> {
-    pub fn new(key: K) -> Result<MapKey<K>> {
+impl<V> Deref for MapKey<V> {
+    type Target = V;
+
+    fn deref(&self) -> &V {
+        &self.inner
+    }
+}
+
+impl<K> Encode for MapKey<K> {
+    fn encode(&self) -> ed::Result<Vec<u8>> {
+        Ok(self.inner_bytes.clone())
+    }
+
+    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+        match dest.write(self.inner_bytes.as_slice()) {
+            Ok(_) => Ok(()),
+            Err(e) => failure::bail!(e),
+        }
+    }
+
+    fn encoding_length(&self) -> ed::Result<usize> {
+        Ok(self.inner_bytes.len())
+    }
+}
+
+//implement deref for MapKey to deref into the inner type
+//implement Encode for MapKey that just returns the inner_bytes
+impl<K> MapKey<K> {
+    pub fn new<E: Encode>(key: E) -> Result<MapKey<E>> {
+        let inner_bytes = Encode::encode(&key)?;
         Ok(MapKey {
             inner: key,
-            inner_bytes: Encode::encode(&key)?,
+            inner_bytes,
         })
     }
 }
 
-impl<K: Encode> PartialEq for MapKey<K> {
+impl<K> PartialEq for MapKey<K> {
     fn eq(&self, other: &Self) -> bool {
         self.inner_bytes == other.inner_bytes
     }
@@ -39,10 +68,12 @@ impl<K: Encode> PartialOrd for MapKey<K> {
 }
 
 impl<K: Encode> Ord for MapKey<K> {
-    fn cmp(&self, other: &Self) -> Ordering {}
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.inner_bytes.cmp(&other.inner_bytes)
+    }
 }
 
-impl<K: Encode> Eq for MapKey<K> {}
+impl<K> Eq for MapKey<K> {}
 
 /// A map collection which stores data in a backing key/value store.
 ///
