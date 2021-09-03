@@ -1,5 +1,4 @@
-use super::{BeginBlock, EndBlock, InitChain, MerkStore, Transaction, WrappedMerk};
-use crate::call::Call;
+use super::{BeginBlock, EndBlock, InitChain, Transaction};
 use crate::encoding::{Decode, Encode};
 use crate::state::State;
 use crate::store::Store;
@@ -91,22 +90,4 @@ where
 #[derive(Encode, Decode)]
 pub enum ContainerCall {
     Transaction(Transaction),
-}
-
-impl<S> Call for Container<S>
-where
-    S: State,
-{
-    type Call = ContainerCall;
-    fn call(&mut self, call: Self::Call) -> Result<()> {
-        match call {
-            ContainerCall::Transaction(tx) => {
-                let signer = tx.signer()?;
-                let call_bytes = Decode::decode(tx.call_bytes);
-                self.inner.call(tx)?;
-            }
-        };
-
-        Ok(())
-    }
 }

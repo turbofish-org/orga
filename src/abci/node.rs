@@ -1,9 +1,6 @@
 use std::marker::PhantomData;
 
-use super::{
-    ABCIStateMachine, ABCIStore, App, Application, Container, ContainerEncoding, Transaction,
-    WrappedMerk, CONTEXT,
-};
+use super::{ABCIStateMachine, ABCIStore, App, Application, Container, WrappedMerk, CONTEXT};
 use crate::call::Call;
 use crate::encoding::{Decode, Encode};
 use crate::merk::{BackingStore, MerkStore};
