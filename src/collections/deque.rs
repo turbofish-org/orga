@@ -1,4 +1,4 @@
-use super::map::{Map, ReadOnly, Ref, RefMut};
+use super::map::{ChildMut, Map, ReadOnly, Ref};
 use crate::encoding::{Decode, Encode};
 use crate::state::State;
 use crate::store::DefaultBackingStore;
@@ -112,7 +112,7 @@ impl<T: State<S>, S: Write> Deque<T, S> {
         self.map.remove(self.meta.tail)
     }
 
-    pub fn get_mut(&mut self, index: u64) -> Result<Option<RefMut<u64, T, S>>> {
+    pub fn get_mut(&mut self, index: u64) -> Result<Option<ChildMut<u64, T, S>>> {
         self.map.get_mut(index + self.meta.head)
     }
 }

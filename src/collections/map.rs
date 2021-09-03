@@ -369,11 +369,7 @@ where
     V: State<S>,
     S: Read,
 {
-    fn iter_merge_next(
-        parent_store: &Store<S>,
-        map_iter: &mut Peekable<btree_map::Range<'a, MapKey<K>, Option<V>>>,
-        store_iter: &mut Peekable<StoreIter<Store<S>>>,
-    ) -> Result<Option<(Ref<'a, K>, Ref<'a, V>)>> {
+    fn iter_merge_next(&mut self) -> Result<Option<(Ref<'a, K>, Ref<'a, V>)>> {
         loop {
             let has_map_entry = self.map_iter.peek().is_some();
             let has_backing_entry = self.store_iter.peek().is_some();
@@ -448,7 +444,7 @@ where
                     }
 
                     // map_key < backing_key
-                    match map_iter.next().unwrap() {
+                    match self.map_iter.next().unwrap() {
                         (key, Some(value)) => {
                             Some((Ref::Borrowed(&key.inner), Ref::Borrowed(value)))
                         }
