@@ -126,13 +126,14 @@ where
     S: Read,
 {
     pub fn contains_key(&self, key: K) -> Result<bool> {
-        let child_contains = self.children.contains_key(&key);
+        let map_key = MapKey::<K>::new(key)?;
+        let child_contains = self.children.contains_key(&map_key);
 
         if child_contains {
-            let entry = self.children.get(&key);
+            let entry = self.children.get(&map_key);
             Ok(matches!(entry, Some(Some(_))))
         } else {
-            let store_contains = match self.get_from_store(&key)? {
+            let store_contains = match self.get_from_store(&map_key.inner)? {
                 Some(..) => true,
                 None => false,
             };
