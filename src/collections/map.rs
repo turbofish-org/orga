@@ -199,13 +199,16 @@ where
             Entry::Occupied { child }
         } else {
             // value is not in memory, try to get from store
-            match self.get_from_store(&key)? {
+            match self.get_from_store(&map_key.inner)? {
                 Some(value) => {
-                    let kvs = (key, value, self);
+                    let kvs = (map_key.inner, value, self);
                     let child = ChildMut::Unmodified(Some(kvs));
                     Entry::Occupied { child }
                 }
-                None => Entry::Vacant { key, parent: self },
+                None => Entry::Vacant {
+                    key: map_key.inner,
+                    parent: self,
+                },
             }
         })
     }
