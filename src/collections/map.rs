@@ -158,14 +158,18 @@ where
     /// The returned value will reference the latest changes to the data even if
     /// the value was inserted, modified, or deleted since the last time the map
     /// was flushed.
-    pub fn get<B: Borrow<K>>(&self, key: B) -> Result<Option<Ref<V>>> {
-        let key = key.borrow();
-        Ok(if self.children.contains_key(key) {
+    pub fn get(&self, key: K) -> Result<Option<Ref<V>>> {
+        let map_key = MapKey::<K>::new(key)?;
+        Ok(if self.children.contains_key(&map_key) {
             // value is already retained in memory (was modified)
-            self.children.get(key).unwrap().as_ref().map(Ref::Borrowed)
+            self.children
+                .get(&map_key)
+                .unwrap()
+                .as_ref()
+                .map(Ref::Borrowed)
         } else {
             // value is not in memory, try to get from store
-            self.get_from_store(key)?.map(Ref::Owned)
+            self.get_from_store(&map_key.inner)?.map(Ref::Owned)
         })
     }
 
