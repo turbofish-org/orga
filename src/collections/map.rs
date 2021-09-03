@@ -188,9 +188,10 @@ where
 
     /// Returns a mutable reference to the key/value entry for the given key.
     pub fn entry(&mut self, key: K) -> Result<Entry<K, V, S>> {
-        Ok(if self.children.contains_key(&key) {
+        let map_key = MapKey::<K>::new(key)?;
+        Ok(if self.children.contains_key(&map_key) {
             // value is already retained in memory (was modified)
-            let entry = match self.children.entry(key) {
+            let entry = match self.children.entry(map_key) {
                 btree_map::Entry::Occupied(entry) => entry,
                 _ => unreachable!(),
             };
