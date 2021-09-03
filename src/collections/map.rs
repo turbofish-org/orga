@@ -112,7 +112,7 @@ where
         S: Write,
     {
         for (key, maybe_value) in IntoIterator::into_iter(self.children) {
-            Self::apply_change(&mut self.store, &key, maybe_value)?;
+            Self::apply_change(&mut self.store, &key.inner, maybe_value)?;
         }
 
         Ok(())
