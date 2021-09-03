@@ -56,14 +56,15 @@ pub fn derive(item: TokenStream) -> TokenStream {
         let indexes = seq();
         quote!(
             Ok((
-                #(self.#indexes.flush()?,)*
+                #(::orga::state::State::<::orga::store::DefaultBackingStore>::flush(self.#indexes)?,)*
             ))
         )
     } else {
         let names = field_names();
         quote!(
             Ok((
-                #(self.#names.flush()?,)*
+
+                #(::orga::state::State::<::orga::store::DefaultBackingStore>::flush(self.#names)?,)*
             ))
         )
     };

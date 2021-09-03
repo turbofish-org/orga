@@ -41,7 +41,7 @@ impl Read for TendermintClient {
         ))
     }
 
-    fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
+    fn get_next(&self, _key: &[u8]) -> Result<Option<KV>> {
         todo!()
     }
 }

@@ -1,6 +1,4 @@
 use std::cell::RefCell;
-use std::collections::BTreeSet;
-use std::ops::{Bound, RangeInclusive};
 use std::rc::Rc;
 
 use super::MerkStore;
@@ -11,14 +9,14 @@ use merk::proofs::query::Query;
 /// Records reads to a `MerkStore` and uses them to build a proof including all
 /// accessed keys.
 pub struct ProofBuilder<'a> {
-    store: &'a MerkStore<'a>,
+    store: &'a MerkStore,
     query: Rc<RefCell<Query>>,
 }
 
 impl<'a> ProofBuilder<'a> {
     /// Constructs a `ProofBuilder` which provides read access to data in the
     /// given `MerkStore`.
-    pub fn new(store: &'a MerkStore<'a>) -> Self {
+    pub fn new(store: &'a MerkStore) -> Self {
         ProofBuilder {
             store,
             query: Rc::new(RefCell::new(Query::new())),
@@ -63,15 +61,20 @@ impl<'a> store::Read for ProofBuilder<'a> {
 #[cfg(test)]
 mod tests {
     use super::super::*;
+    use super::MerkStore;
     use super::*;
     use crate::store::*;
     use merk::proofs::query::verify;
-    use merk::test_utils::TempMerk;
+    use tempdir::TempDir;
+
+    fn temp_merk_store() -> MerkStore {
+        let temp_dir = TempDir::new("TempMerkStore").unwrap();
+        MerkStore::new(temp_dir.path().into())
+    }
 
     #[test]
     fn simple() {
-        let mut merk = TempMerk::new().unwrap();
-        let mut store = MerkStore::new(&mut merk);
+        let mut store = temp_merk_store();
         store.put(vec![1, 2, 3], vec![2]).unwrap();
         store.put(vec![3, 4, 5], vec![4]).unwrap();
         store.write(vec![]).unwrap();
@@ -81,7 +84,7 @@ mod tests {
         assert_eq!(builder.get(&key[..]).unwrap(), Some(vec![2]));
 
         let proof = builder.build().unwrap();
-        let root_hash = merk.root_hash();
+        let root_hash = store.merk().root_hash();
         let map = verify(proof.as_slice(), root_hash).unwrap();
         let res = map.get(&[1, 2, 3]).unwrap();
         assert_eq!(res, Some(&[2][..]));
@@ -89,8 +92,7 @@ mod tests {
 
     #[test]
     fn absence() {
-        let mut merk = TempMerk::new().unwrap();
-        let mut store = MerkStore::new(&mut merk);
+        let mut store = temp_merk_store();
         store.put(vec![1, 2, 3], vec![2]).unwrap();
         store.put(vec![3, 4, 5], vec![4]).unwrap();
         store.write(vec![]).unwrap();
@@ -100,7 +102,7 @@ mod tests {
         assert_eq!(builder.get(&key[..]).unwrap(), None);
 
         let proof = builder.build().unwrap();
-        let root_hash = merk.root_hash();
+        let root_hash = store.merk().root_hash();
         let map = verify(proof.as_slice(), root_hash).unwrap();
         let res = map.get(&[5]).unwrap();
 
@@ -109,8 +111,7 @@ mod tests {
 
     #[test]
     fn simple_get_next() {
-        let mut merk = TempMerk::new().unwrap();
-        let mut store = MerkStore::new(&mut merk);
+        let mut store = temp_merk_store();
         store.put(vec![1, 2, 3], vec![2]).unwrap();
         store.put(vec![3, 4, 5], vec![4]).unwrap();
         store.write(vec![]).unwrap();
@@ -123,7 +124,7 @@ mod tests {
         );
 
         let proof = builder.build().unwrap();
-        let root_hash = merk.root_hash();
+        let root_hash = store.merk().root_hash();
         let map = verify(proof.as_slice(), root_hash).unwrap();
         let mut iter = map.range(&[3, 4, 4][..]..=&[3, 4, 5][..]);
 
@@ -134,8 +135,7 @@ mod tests {
 
     #[test]
     fn none_get_next() {
-        let mut merk = TempMerk::new().unwrap();
-        let mut store = MerkStore::new(&mut merk);
+        let mut store = temp_merk_store();
         store.put(vec![1, 2, 3], vec![2]).unwrap();
         store.put(vec![3, 4, 5], vec![4]).unwrap();
         store.write(vec![]).unwrap();
@@ -145,12 +145,12 @@ mod tests {
         assert_eq!(builder.get_next(&key[..]).unwrap(), None);
 
         let proof = builder.build().unwrap();
-        let root_hash = merk.root_hash();
+        let root_hash = store.merk().root_hash();
         let map = verify(proof.as_slice(), root_hash).unwrap();
         assert!(map.get(&[3, 4, 5]).unwrap().is_some());
         let mut iter = map.range(&[3, 4, 5][..]..=&[3, 4, 7][..]);
 
-        let res = iter.next().unwrap().unwrap();
+        let _res = iter.next().unwrap().unwrap();
         //assert!(res.is_none());
     }
 }
