@@ -86,7 +86,7 @@ impl<K> Eq for MapKey<K> {}
 /// changes to the backing store.
 pub struct Map<K, V, S = DefaultBackingStore> {
     store: Store<S>,
-    children: BTreeMap<K, Option<V>>,
+    children: BTreeMap<MapKey<K>, Option<V>>,
 }
 
 impl<K, V, S> From<Map<K, V, S>> for () {
