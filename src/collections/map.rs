@@ -531,13 +531,13 @@ impl<'a, V: Default> Default for Ref<'a, V> {
 ///
 /// If the value is mutated, it will be retained in memory until the parent
 /// collection is flushed.
-pub enum ChildMut<'a, K, V, S> {
+pub enum ChildMut<'a, K: Encode, V, S> {
     /// An existing value which was loaded from the store.
     Unmodified(Option<(K, V, &'a mut Map<K, V, S>)>),
 
     /// A mutable reference to an existing value which is being retained in
     /// memory because it was modified.
-    Modified(btree_map::OccupiedEntry<'a, K, Option<V>>),
+    Modified(btree_map::OccupiedEntry<'a, MapKey<K>, Option<V>>),
 }
 
 impl<'a, K, V, S> ChildMut<'a, K, V, S>
@@ -563,7 +563,7 @@ where
     }
 }
 
-impl<'a, K: Ord, V, S> Deref for ChildMut<'a, K, V, S> {
+impl<'a, K: Encode, V, S> Deref for ChildMut<'a, K, V, S> {
     type Target = V;
 
     fn deref(&self) -> &V {
@@ -576,7 +576,7 @@ impl<'a, K: Ord, V, S> Deref for ChildMut<'a, K, V, S> {
 
 impl<'a, K, V, S> DerefMut for ChildMut<'a, K, V, S>
 where
-    K: Eq + Hash + Ord + Clone,
+    K: Eq + Hash + Ord + Clone + Encode,
 {
     fn deref_mut(&mut self) -> &mut V {
         match self {
@@ -584,8 +584,10 @@ where
                 // insert into parent's children map and upgrade child to
                 // Child::ModifiedMut
                 let (key, value, parent) = inner.take().unwrap();
-                parent.children.insert(key.clone(), Some(value));
-                let entry = parent.children.entry(key);
+
+                let map_key = MapKey::<K>::new(key).unwrap();
+                parent.children.insert(map_key.clone(), Some(value));
+                let entry = parent.children.entry(map_key);
 
                 let entry = match entry {
                     Occupied(occupied_entry) => occupied_entry,
