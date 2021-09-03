@@ -757,7 +757,8 @@ mod tests {
 
         map.entry(4).unwrap().or_create(5).unwrap();
         assert!(map.get(4).unwrap().is_none());
-        assert_eq!(map.children.contains_key(&4), false);
+        let map_key = MapKey::<u32>::new(4).unwrap();
+        assert_eq!(map.children.contains_key(&map_key), false);
         assert!(store.get(&enc(4)).unwrap().is_none());
     }
 
@@ -769,7 +770,8 @@ mod tests {
         let mut v = map.entry(6).unwrap().or_create(7).unwrap();
         *v = 8;
         assert_eq!(*map.get(6).unwrap().unwrap(), 8);
-        assert!(map.children.contains_key(&6));
+        let map_key = MapKey::<u32>::new(6).unwrap();
+        assert!(map.children.contains_key(&map_key));
         assert!(store.get(&enc(6)).unwrap().is_none());
 
         map.flush().unwrap();
@@ -783,7 +785,8 @@ mod tests {
 
         map.entry(9).unwrap().or_insert(10).unwrap();
         assert_eq!(*map.get(9).unwrap().unwrap(), 10);
-        assert!(map.children.contains_key(&9));
+        let map_key = MapKey::<u32>::new(9).unwrap();
+        assert!(map.children.contains_key(&map_key));
         assert!(store.get(&enc(9)).unwrap().is_none());
 
         map.flush().unwrap();
@@ -797,7 +800,8 @@ mod tests {
 
         map.entry(11).unwrap().or_insert_default().unwrap();
         assert_eq!(*map.get(11).unwrap().unwrap(), u32::default());
-        assert!(map.children.contains_key(&11));
+        let map_key = MapKey::<u32>::new(11).unwrap();
+        assert!(map.children.contains_key(&map_key));
         assert!(store.get(&enc(11)).unwrap().is_none());
 
         map.flush().unwrap();
@@ -812,9 +816,11 @@ mod tests {
         map.entry(12).unwrap().or_insert(13).unwrap();
         map.entry(14).unwrap().or_insert(15).unwrap();
         map.entry(16).unwrap().or_insert(17).unwrap();
-        assert!(map.children.get(&12).unwrap().is_some());
+        let map_key = MapKey::<u32>::new(12).unwrap();
+        assert!(map.children.get(&map_key).unwrap().is_some());
         map.remove(12).unwrap();
-        assert!(map.children.get(&12).unwrap().is_none());
+        let map_key = MapKey::<u32>::new(12).unwrap();
+        assert!(map.children.get(&map_key).unwrap().is_none());
         map.flush().unwrap();
         assert!(store.get(&enc(12)).unwrap().is_none());
 
