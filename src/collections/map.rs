@@ -371,7 +371,7 @@ where
 {
     fn iter_merge_next(
         parent_store: &Store<S>,
-        map_iter: &mut Peekable<btree_map::Range<'a, K, Option<V>>>,
+        map_iter: &mut Peekable<btree_map::Range<'a, MapKey<K>, Option<V>>>,
         store_iter: &mut Peekable<StoreIter<Store<S>>>,
     ) -> Result<Option<(Ref<'a, K>, Ref<'a, V>)>> {
         loop {
@@ -386,7 +386,9 @@ where
                 (true, false) => {
                     match map_iter.next().unwrap() {
                         // map value has not been deleted, emit value
-                        (key, Some(value)) => Some((Ref::Borrowed(key), Ref::Borrowed(value))),
+                        (key, Some(value)) => {
+                            Some((Ref::Borrowed(&key.inner), Ref::Borrowed(value)))
+                        }
 
                         // map value is a delete, go to the next entry
                         (_, None) => continue,
@@ -421,7 +423,9 @@ where
                     };
 
                     let decoded_backing_key: K = Decode::decode(backing_key.as_slice())?;
-                    let key_cmp = map_key.cmp(&decoded_backing_key);
+
+                    //so compare backing_key with map_key.inner_bytes
+                    let key_cmp = map_key.inner.cmp(&decoded_backing_key);
 
                     // map_key > backing_key, emit the backing entry
                     // map_key == backing_key, map entry shadows backing entry
@@ -444,7 +448,9 @@ where
 
                     // map_key < backing_key
                     match map_iter.next().unwrap() {
-                        (key, Some(value)) => Some((Ref::Borrowed(key), Ref::Borrowed(value))),
+                        (key, Some(value)) => {
+                            Some((Ref::Borrowed(&key.inner), Ref::Borrowed(value)))
+                        }
 
                         // map entry deleted in in-memory map, skip
                         (_, None) => continue,
