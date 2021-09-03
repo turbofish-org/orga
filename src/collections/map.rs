@@ -249,7 +249,7 @@ where
 
 impl<'a, 'b, K, V, S> Map<K, V, S>
 where
-    K: Encode + Decode + Terminated + Eq + Hash + Next<K> + Ord,
+    K: Encode + Decode + Terminated + Eq + Hash + Next<K> + Ord + Clone,
     V: State<S>,
     S: Read,
 {
@@ -257,8 +257,15 @@ where
         self.range(..)
     }
 
-    pub fn range<B: RangeBounds<K> + Clone>(&'a self, range: B) -> Result<Iter<'a, K, V, S>> {
-        let map_iter = self.children.range(range.clone()).peekable();
+    pub fn range<B: RangeBounds<K>>(&'a self, range: B) -> Result<Iter<'a, K, V, S>> {
+        let map_start = range
+            .start_bound()
+            .map(|inner| MapKey::<K>::new(inner.clone()).unwrap());
+        let map_end = range
+            .end_bound()
+            .map(|inner| MapKey::<K>::new(inner.clone()).unwrap());
+
+        let map_iter = self.children.range((map_start, map_end)).peekable();
         let bounds = (
             encode_bound(range.start_bound())?,
             encode_bound(range.end_bound())?,
@@ -273,17 +280,16 @@ where
     }
 }
 
-fn encode_bound<K>(bound: Bound<&K>) -> Result<Bound<Vec<u8>>>
-where
-    K: Encode,
-{
+fn encode_bound<K: Encode + Clone>(bound: Bound<&K>) -> Result<Bound<Vec<u8>>> {
     match bound {
         Bound::Included(inner) => {
-            let encoded_bound = Encode::encode(inner)?;
+            let map_key = MapKey::<K>::new(inner.clone())?;
+            let encoded_bound = map_key.inner_bytes;
             Ok(Bound::Included(encoded_bound))
         }
         Bound::Excluded(inner) => {
-            let encoded_bound = Encode::encode(inner)?;
+            let map_key = MapKey::<K>::new(inner.clone())?;
+            let encoded_bound = map_key.inner_bytes;
             Ok(Bound::Excluded(encoded_bound))
         }
         Bound::Unbounded => Ok(Bound::Unbounded),
@@ -353,7 +359,7 @@ where
     S: Read,
 {
     parent_store: &'a Store<S>,
-    map_iter: Peekable<btree_map::Range<'a, K, Option<V>>>,
+    map_iter: Peekable<btree_map::Range<'a, MapKey<K>, Option<V>>>,
     store_iter: Peekable<StoreIter<'a, Store<S>>>,
 }
 
