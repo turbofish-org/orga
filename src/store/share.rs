@@ -1,6 +1,6 @@
 use super::{Read, Write, KV};
 use crate::Result;
-use std::cell::RefCell;
+use std::cell::{RefCell, RefMut};
 use std::rc::Rc;
 
 // TODO: we can probably use UnsafeCell instead of RefCell since operations are
@@ -21,6 +21,17 @@ impl<T> Shared<T> {
     #[inline]
     pub fn new(inner: T) -> Self {
         Shared(Rc::new(RefCell::new(inner)))
+    }
+
+    pub fn into_inner(self) -> T {
+        match Rc::try_unwrap(self.0) {
+            Ok(inner) => inner.into_inner(),
+            _ => panic!("Store is already borrowed"),
+        }
+    }
+
+    pub fn borrow_mut(&mut self) -> RefMut<T> {
+        self.0.borrow_mut()
     }
 }
 

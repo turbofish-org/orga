@@ -7,12 +7,17 @@ use crate::Result;
 /// The default backing store used as the type parameter given to `Store`. This
 /// is used to prevent generic parameters bubbling up to the application level
 /// for state types when they often all use the same backing store.
-#[cfg(merk)]
-pub type DefaultBackingStore = crate::merk::MerkStore;
-#[cfg(any(test, not(merk)))]
-// TODO: default to a dynamic store for non-production builds
+#[cfg(any(not(feature = "merk"), test, integration_test))]
 pub type DefaultBackingStore = super::MapStore;
 
+#[cfg(all(feature = "merk", not(test), not(integration_test)))]
+use crate::merk::MerkStore;
+#[cfg(all(feature = "merk", not(test), not(integration_test)))]
+use crate::store::BufStore;
+#[cfg(all(feature = "merk", not(test), not(integration_test)))]
+pub type DefaultBackingStore = Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>;
+
+// pub type DefaultBackingStore = crate::merk::MerkStore;
 /// Wraps a "backing store" (an implementation of `Read` and possibly `Write`),
 /// and applies all operations to a certain part of the backing store's keyspace
 /// by adding a prefix.
@@ -79,6 +84,7 @@ impl<S: Write> Write for Store<S> {
     #[inline]
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         let prefixed = concat(self.prefix.as_slice(), key.as_slice());
+        println!("store.put()");
         self.store.put(prefixed, value)
     }
 

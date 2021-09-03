@@ -105,7 +105,7 @@ mod test {
 
         assert_eq!(TupleStruct::from_entry(((8, 32), (16,))), test);
     }
-
+  
     #[derive(Next, Debug, PartialEq)]
     struct NextStruct {
         first_field: u8,
