@@ -182,7 +182,7 @@ where
     /// The returned value will reference the latest changes to the data even if
     /// the value was inserted, modified, or deleted since the last time the map
     /// was flushed.
-    pub fn get_mut(&mut self, key: K) -> Result<Option<RefMut<K, V, S>>> {
+    pub fn get_mut(&mut self, key: K) -> Result<Option<ChildMut<K, V, S>>> {
         Ok(self.entry(key)?.into())
     }
 
@@ -195,7 +195,7 @@ where
                 btree_map::Entry::Occupied(entry) => entry,
                 _ => unreachable!(),
             };
-            let child = RefMut::Modified(entry);
+            let child = ChildMut::Modified(entry);
             Entry::Occupied { child }
         } else {
             // value is not in memory, try to get from store
@@ -532,7 +532,6 @@ impl<'a, V: Default> Default for Ref<'a, V> {
 /// If the value is mutated, it will be retained in memory until the parent
 /// collection is flushed.
 pub enum ChildMut<'a, K: Encode, V, S> {
-
     /// An existing value which was loaded from the store.
     Unmodified(Option<(K, V, &'a mut Map<K, V, S>)>),
 
@@ -541,7 +540,7 @@ pub enum ChildMut<'a, K: Encode, V, S> {
     Modified(btree_map::OccupiedEntry<'a, MapKey<K>, Option<V>>),
 }
 
-impl<'a, K, V, S> RefMut<'a, K, V, S>
+impl<'a, K, V, S> ChildMut<'a, K, V, S>
 where
     K: Hash + Eq + Encode + Terminated + Ord + Clone,
     V: State<S>,
@@ -551,11 +550,11 @@ where
     /// the parent collection.
     pub fn remove(self) -> Result<()> {
         match self {
-            RefMut::Unmodified(mut inner) => {
+            ChildMut::Unmodified(mut inner) => {
                 let (key, _, parent) = inner.take().unwrap();
                 parent.remove(key)?;
             }
-            RefMut::Modified(mut entry) => {
+            ChildMut::Modified(mut entry) => {
                 entry.insert(None);
             }
         };
@@ -569,19 +568,19 @@ impl<'a, K: Encode, V, S> Deref for ChildMut<'a, K, V, S> {
 
     fn deref(&self) -> &V {
         match self {
-            RefMut::Unmodified(inner) => &inner.as_ref().unwrap().1,
-            RefMut::Modified(entry) => entry.get().as_ref().unwrap(),
+            ChildMut::Unmodified(inner) => &inner.as_ref().unwrap().1,
+            ChildMut::Modified(entry) => entry.get().as_ref().unwrap(),
         }
     }
 }
 
-impl<'a, K, V, S> DerefMut for RefMut<'a, K, V, S>
+impl<'a, K, V, S> DerefMut for ChildMut<'a, K, V, S>
 where
     K: Eq + Hash + Ord + Clone + Encode,
 {
     fn deref_mut(&mut self) -> &mut V {
         match self {
-            RefMut::Unmodified(inner) => {
+            ChildMut::Unmodified(inner) => {
                 // insert into parent's children map and upgrade child to
                 // Child::ModifiedMut
                 let (key, value, parent) = inner.take().unwrap();
@@ -594,10 +593,10 @@ where
                     Occupied(occupied_entry) => occupied_entry,
                     Vacant(_) => unreachable!("Insert ensures Vacant variant is unreachable"),
                 };
-                *self = RefMut::Modified(entry);
+                *self = ChildMut::Modified(entry);
                 self.deref_mut()
             }
-            RefMut::Modified(entry) => entry.get_mut().as_mut().unwrap(),
+            ChildMut::Modified(entry) => entry.get_mut().as_mut().unwrap(),
         }
     }
 }
@@ -612,7 +611,7 @@ pub enum Entry<'a, K: Clone + Encode, V, S> {
     },
 
     /// References an entry in the collection which has a value.
-    Occupied { child: RefMut<'a, K, V, S> },
+    Occupied { child: ChildMut<'a, K, V, S> },
 }
 
 impl<'a, K, V, S> Entry<'a, K, V, S>
@@ -629,13 +628,13 @@ where
     /// store during the flush step unless the value gets modified. See
     /// `or_insert` for a variation which will always write the newly created
     /// value.
-    pub fn or_create(self, data: V::Encoding) -> Result<RefMut<'a, K, V, S>> {
+    pub fn or_create(self, data: V::Encoding) -> Result<ChildMut<'a, K, V, S>> {
         Ok(match self {
             Entry::Vacant { key, parent } => {
                 let key_bytes = key.encode()?;
                 let substore = parent.store.sub(key_bytes.as_slice());
                 let value = V::create(substore, data)?;
-                RefMut::Unmodified(Some((key, value, parent)))
+                ChildMut::Unmodified(Some((key, value, parent)))
             }
             Entry::Occupied { child } => child,
         })
@@ -649,7 +648,7 @@ where
     /// store during the flush step even if the value never gets modified. See
     /// `or_create` for a variation which will only write the newly created
     /// value if it gets modified.
-    pub fn or_insert(self, data: V::Encoding) -> Result<RefMut<'a, K, V, S>> {
+    pub fn or_insert(self, data: V::Encoding) -> Result<ChildMut<'a, K, V, S>> {
         let mut child = self.or_create(data)?;
         child.deref_mut();
         Ok(child)
@@ -691,7 +690,7 @@ where
     /// store during the flush step unless the value gets modified. See
     /// `or_insert_default` for a variation which will always write the newly
     /// created value.
-    pub fn or_default(self) -> Result<RefMut<'a, K, V, S>> {
+    pub fn or_default(self) -> Result<ChildMut<'a, K, V, S>> {
         self.or_create(D::default())
     }
 
@@ -703,7 +702,7 @@ where
     /// store during the flush step even if the value never gets modified. See
     /// `or_default` for a variation which will only write the newly created
     /// value if it gets modified.
-    pub fn or_insert_default(self) -> Result<RefMut<'a, K, V, S>> {
+    pub fn or_insert_default(self) -> Result<ChildMut<'a, K, V, S>> {
         self.or_insert(D::default())
     }
 }
