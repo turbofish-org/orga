@@ -603,7 +603,7 @@ where
 
 /// A mutable reference to a key/value entry in a collection, which may be
 /// empty.
-pub enum Entry<'a, K: Clone, V, S> {
+pub enum Entry<'a, K: Clone + Encode, V, S> {
     /// References an entry in the collection which does not have a value.
     Vacant {
         key: K,
@@ -707,7 +707,7 @@ where
     }
 }
 
-impl<'a, K: Clone, V, S> From<Entry<'a, K, V, S>> for Option<ChildMut<'a, K, V, S>> {
+impl<'a, K: Clone + Encode, V, S> From<Entry<'a, K, V, S>> for Option<ChildMut<'a, K, V, S>> {
     fn from(entry: Entry<'a, K, V, S>) -> Self {
         match entry {
             Entry::Vacant { .. } => None,
