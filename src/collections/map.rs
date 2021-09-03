@@ -230,16 +230,17 @@ where
 
     /// Removes the value at the given key, if any.
     pub fn remove(&mut self, key: K) -> Result<Option<ReadOnly<V>>> {
-        if self.children.contains_key(&key) {
-            let result = self.children.remove(&key).unwrap();
-            self.children.insert(key, None);
+        let map_key = MapKey::<K>::new(key)?;
+        if self.children.contains_key(&map_key) {
+            let result = self.children.remove(&map_key).unwrap();
+            self.children.insert(map_key, None);
             match result {
                 Some(val) => Ok(Some(ReadOnly::new(val))),
                 None => Ok(None),
             }
         } else {
-            Ok(self.get_from_store(&key)?.map(|val| {
-                self.children.insert(key, None);
+            Ok(self.get_from_store(&map_key.inner)?.map(|val| {
+                self.children.insert(map_key, None);
                 val.into()
             }))
         }
