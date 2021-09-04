@@ -6,8 +6,6 @@
 use orga::collections::Entry;
 use orga::collections::Next;
 use orga::encoding::{Decode, Encode};
-use orga::macros::Entry;
-use orga::macros::Next;
 use orga::state::State;
 use orga::store::Shared;
 use orga::store::{MapStore, Store};

@@ -28,6 +28,6 @@ pub fn query(args: TokenStream, input: TokenStream) -> TokenStream {
 }
     
 #[proc_macro_derive(Next)]
-pub fn next(item: TokenStream) -> TokenStream {
+pub fn derive_next(item: TokenStream) -> TokenStream {
     next::derive(item)
 }
