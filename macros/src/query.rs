@@ -1,6 +1,6 @@
 use heck::{CamelCase, SnakeCase};
 use proc_macro::TokenStream;
-use proc_macro2::{Span, TokenStream as TokenStream2};
+use proc_macro2::{Span, TokenStream as TokenStream2, Literal};
 use quote::quote;
 use std::collections::HashSet;
 use syn::*;
@@ -28,8 +28,6 @@ pub fn derive(item: TokenStream) -> TokenStream {
         }
     );
 
-    println!("{}", &output.to_string());
-
     output.into()
 }
 
@@ -37,29 +35,22 @@ pub fn attr(args: TokenStream, input: TokenStream) -> TokenStream {
     input
 }
 
-fn create_query_impl(
-    item: &DeriveInput,
-    source: &File,
-    query_enum: &ItemEnum,
-) -> TokenStream2 {
+fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -> TokenStream2 {
     let name = &item.ident;
     let generics = &item.generics;
     let mut generics_sanitized = generics.clone();
-    generics_sanitized
-        .params
-        .iter_mut()
-        .for_each(|g| {
-            if let GenericParam::Type(ref mut t) = g {
-                t.default = None;
-            }
-        });
+    generics_sanitized.params.iter_mut().for_each(|g| {
+        if let GenericParam::Type(ref mut t) = g {
+            t.default = None;
+        }
+    });
     let generic_params = gen_param_input(generics, true);
     let generic_params_unbracketed = gen_param_input(generics, false);
 
     let query_type = &query_enum.ident;
     let query_generics = &query_enum.generics;
     let where_preds = item.generics.where_clause.as_ref().map(|w| &w.predicates);
-    
+
     let encoding_bounds = relevant_methods(name, "query", source)
         .into_iter()
         .flat_map(|(method, _)| {
@@ -100,25 +91,56 @@ fn create_query_impl(
         .map(|t| quote!(#t: ::orga::query::Query,));
     let query_bounds = quote!(#(#query_bounds)*);
 
-    let field_query_arms = vec![quote!()];
+    let fields = match &item.data {
+        Data::Struct(data) => data.fields.iter(),
+        Data::Enum(_) => panic!("Enums are not supported"),
+        Data::Union(_) => panic!("Unions are not supported"),
+    };
+    let field_query_arms: Vec<_> = fields
+        .filter(|field| matches!(field.vis, Visibility::Public(_)))
+        .enumerate()
+        .map(|(i, field)| {
+            let variant_name = field.ident.as_ref().map_or(
+                Ident::new(format!("Field{}", i).as_str(), Span::call_site()),
+                |f| {
+                    Ident::new(
+                        format!("Field{}", f.to_string().to_camel_case()).as_str(),
+                        Span::call_site(),
+                    )
+                },
+            );
+            let field_name = field.ident.as_ref().map_or_else(
+                || {
+                    let i = Literal::usize_unsuffixed(i);
+                    quote!(#i)
+                },
+                |f| quote!(#f)
+            );
+
+            quote! {
+                Query::#variant_name(subquery) => {
+                    self.#field_name.query(subquery)
+                }
+            }
+        })
+        .collect();
 
     let mut maybe_call_defs = vec![];
     let method_query_arms: Vec<_> = relevant_methods(name, "query", source)
         .into_iter()
         .map(|(method, parent)| {
             let method_name = &method.sig.ident;
-                    
+
             let name_camel = method_name.to_string().to_camel_case();
             let variant_name = Ident::new(&name_camel, Span::call_site());
 
             let inputs: Vec<_> = (1..method.sig.inputs.len())
                 .into_iter()
-                .map(|i| Ident::new(
-                    format!("var{}", i).as_str(),
-                    Span::call_site(),
-                ))
+                .map(|i| Ident::new(format!("var{}", i).as_str(), Span::call_site()))
                 .collect();
-            let input_types: Vec<_> = method.sig.inputs
+            let input_types: Vec<_> = method
+                .sig
+                .inputs
                 .iter()
                 .skip(1)
                 .filter_map(|input| match input {
@@ -138,7 +160,10 @@ fn create_query_impl(
             let subquery = quote!(<#output_type as ::orga::query::Query>::Query);
 
             let requirements = get_generic_requirements(
-                input_types.iter().chain(std::iter::once(&output_type)).cloned(),
+                input_types
+                    .iter()
+                    .chain(std::iter::once(&output_type))
+                    .cloned(),
                 generics.params.iter().cloned(),
             );
             let generic_reqs = if requirements.is_empty() {
@@ -146,8 +171,10 @@ fn create_query_impl(
             } else {
                 quote!(<#(#requirements),*>)
             };
-            
-            let parent_params: Vec<_> = parent.generics.params
+
+            let parent_params: Vec<_> = parent
+                .generics
+                .params
                 .iter()
                 .filter_map(|p| match p {
                     GenericParam::Type(p) => Some(p),
@@ -157,7 +184,7 @@ fn create_query_impl(
                 .collect();
             let parent_generics = &parent.generics;
             let parent_where_preds = &parent.generics.where_clause.as_ref().map(|w| &w.predicates);
-            
+
             let trait_name = Ident::new(
                 format!("MaybeCall{}", &variant_name).as_str(),
                 Span::call_site(),
@@ -185,7 +212,7 @@ fn create_query_impl(
             } else {
                 quote!(::#generic_reqs)
             };
-            
+
             quote! {
                 Query::#variant_name(#(#inputs,)* subquery) => {
                     let subquery = Decode::decode(subquery.as_slice())?;
@@ -220,11 +247,42 @@ fn create_query_enum(item: &DeriveInput, source: &File) -> ItemEnum {
     let mut generic_params = vec![];
     let mut query_params = vec![];
 
+    let fields = match &item.data {
+        Data::Struct(data) => data.fields.iter(),
+        Data::Enum(_) => panic!("Enums are not supported"),
+        Data::Union(_) => panic!("Unions are not supported"),
+    };
+    let field_variants: Vec<_> = fields
+        .filter(|field| matches!(field.vis, Visibility::Public(_)))
+        .enumerate()
+        .map(|(i, field)| {
+            let name = field.ident.as_ref().map_or(
+                Ident::new(format!("Field{}", i).as_str(), Span::call_site()),
+                |f| {
+                    Ident::new(
+                        format!("Field{}", f.to_string().to_camel_case()).as_str(),
+                        Span::call_site(),
+                    )
+                },
+            );
+
+            let requirements = get_generic_requirements(
+                vec![field.ty.clone()].into_iter(),
+                generics.params.iter().cloned(),
+            );
+            generic_params.extend(requirements.clone());
+            query_params.extend(requirements);
+
+            let ty = &field.ty;
+
+            quote!(#name(<#ty as ::orga::query::Query>::Query))
+        })
+        .collect();
+
     let method_variants: Vec<_> = relevant_methods(name, "query", source)
         .into_iter()
         .map(|(method, _)| {
-            let name = method.sig.ident.to_string();
-            let name_camel = name.as_str().to_camel_case();
+            let name_camel = method.sig.ident.to_string().to_camel_case();
             let name = Ident::new(&name_camel, Span::call_site());
 
             let fields = if method.sig.inputs.len() == 1 {
@@ -256,13 +314,6 @@ fn create_query_enum(item: &DeriveInput, source: &File) -> ItemEnum {
                 ReturnType::Default => unit_tuple,
             };
 
-            let requirements = get_generic_requirements(
-                vec![ output_type ].iter().cloned(),
-                generics.params.iter().cloned(),
-            );
-            // generic_params.extend(requirements.clone());
-            query_params.extend(requirements);
-
             quote! {
                 #name(#fields Vec<u8>)
             }
@@ -277,15 +328,15 @@ fn create_query_enum(item: &DeriveInput, source: &File) -> ItemEnum {
         quote!(<#(#params),*>)
     };
 
-    let query_preds = quote! {
-        #(#query_params: ::orga::query::Query,)*
-    };
+    let query_preds = quote!(#(#query_params: ::orga::query::Query),*);
 
     let output = quote! {
         #[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
         pub enum Query#generic_params
+        where #query_preds
         {
             This,
+            #(#field_variants,)*
             #(#method_variants,)*
         }
     };
@@ -311,7 +362,7 @@ where
             Type::Reference(reference) => match *reference.elem {
                 Type::Path(path) => Some(path),
                 _ => None,
-            }
+            },
             _ => None,
         })
         .flat_map(|path| {
@@ -339,9 +390,7 @@ where
                 GenericParam::Type(param) => Some(param),
                 _ => None,
             })
-            .find(|param| {
-                param.ident == input.ident
-            })
+            .find(|param| param.ident == input.ident)
             .map(|param| {
                 requirements.push(param.ident.clone());
             });
@@ -431,5 +480,13 @@ fn gen_param_input(generics: &Generics, bracketed: bool) -> TokenStream2 {
         quote!(<#(#gen_params),*>)
     } else {
         quote!(#(#gen_params),*)
+    }
+}
+
+fn iter_fields(fields: &Fields) -> Box<dyn Iterator<Item = Field>> {
+    match fields.clone() {
+        Fields::Named(fields) => Box::new(fields.named.into_iter()),
+        Fields::Unnamed(fields) => Box::new(fields.unnamed.into_iter()),
+        Fields::Unit => Box::new(vec![].into_iter()),
     }
 }
