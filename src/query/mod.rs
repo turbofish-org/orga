@@ -9,15 +9,6 @@ pub trait Query {
   fn query(&self, query: Self::Query) -> Result<()>;
 }
 
-
-impl<T: Query> Query for &T {
-  type Query = T::Query;
-
-  fn query(&self, query: Self::Query) -> Result<()> {
-    (*self).query(query)
-  }
-}
-
 impl<T: Query> Query for Result<T> {
   type Query = T::Query;
 
@@ -40,28 +31,140 @@ impl<T: Query> Query for Option<T> {
   }
 }
 
-// TODO: primitives
+macro_rules! noop_impl {
+  ($type:ty) => {
+    impl Query for $type {
+      type Query = ();
 
-impl Query for bool {
-  type Query = ();
+      fn query(&self, _: ()) -> Result<()> {
+        Ok(())
+      }
+    }
+  };
+}
 
-  fn query(&self, _: Self::Query) -> Result<()> {
-    Ok(())
+noop_impl!(());
+noop_impl!(bool);
+noop_impl!(u8);
+noop_impl!(u16);
+noop_impl!(u32);
+noop_impl!(u64);
+noop_impl!(u128);
+noop_impl!(i8);
+noop_impl!(i16);
+noop_impl!(i32);
+noop_impl!(i64);
+noop_impl!(i128);
+
+impl<T> Query for (T,)
+where
+  T: Query,
+{
+  type Query = T::Query;
+
+  fn query(&self, query: Self::Query) -> Result<()> {
+    self.0.query(query)
   }
 }
 
-impl Query for u32 {
-  type Query = ();
+#[derive(Encode, Decode)]
+pub enum Tuple2Query<T, U>
+where
+  T: Query,
+  U: Query,
+{
+  Field0(T::Query),
+  Field1(U::Query),
+}
 
-  fn query(&self, _: Self::Query) -> Result<()> {
-    Ok(())
+impl<T, U> Query for (T, U)
+where
+  T: Query,
+  U: Query,
+{
+  type Query = Tuple2Query<T, U>;
+
+  fn query(&self, query: Self::Query) -> Result<()> {
+    match query {
+      Tuple2Query::Field0(query) => self.0.query(query),
+      Tuple2Query::Field1(query) => self.1.query(query),
+    }
   }
 }
 
-impl Query for () {
-  type Query = ();
+#[derive(Encode, Decode)]
+pub enum Tuple3Query<T, U, V>
+where
+  T: Query,
+  U: Query,
+  V: Query,
+{
+  Field0(T::Query),
+  Field1(U::Query),
+  Field2(V::Query),
+}
 
-  fn query(&self, _: Self::Query) -> Result<()> {
-    Ok(())
+impl<T, U, V> Query for (T, U, V)
+where
+  T: Query,
+  U: Query,
+  V: Query,
+{
+  type Query = Tuple3Query<T, U, V>;
+
+  fn query(&self, query: Self::Query) -> Result<()> {
+    match query {
+      Tuple3Query::Field0(query) => self.0.query(query),
+      Tuple3Query::Field1(query) => self.1.query(query),
+      Tuple3Query::Field2(query) => self.2.query(query),
+    }
+  }
+}
+
+#[derive(Encode, Decode)]
+pub enum Tuple4Query<T, U, V, W>
+where
+  T: Query,
+  U: Query,
+  V: Query,
+  W: Query,
+{
+  Field0(T::Query),
+  Field1(U::Query),
+  Field2(V::Query),
+  Field3(W::Query),
+}
+
+impl<T, U, V, W> Query for (T, U, V, W)
+where
+  T: Query,
+  U: Query,
+  V: Query,
+  W: Query,
+{
+  type Query = Tuple4Query<T, U, V, W>;
+
+  fn query(&self, query: Self::Query) -> Result<()> {
+    match query {
+      Tuple4Query::Field0(query) => self.0.query(query),
+      Tuple4Query::Field1(query) => self.1.query(query),
+      Tuple4Query::Field2(query) => self.2.query(query),
+      Tuple4Query::Field3(query) => self.3.query(query),
+    }
+  }
+}
+
+impl<T: Query, const N: usize> Query for [T; N] {
+  type Query = (u64, T::Query);
+
+  fn query(&self, query: Self::Query) -> Result<()> {
+    let (index, subquery) = query;
+    let index = index as usize;
+
+    if index >= N {
+      return Err(failure::format_err!("index out of bounds"));
+    }
+
+    self[index].query(subquery)
   }
 }
