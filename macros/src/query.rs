@@ -119,7 +119,7 @@ fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -
 
             quote! {
                 Query::#variant_name(subquery) => {
-                    self.#field_name.query(subquery)
+                    ::orga::query::Query::query(&self.#field_name, subquery)
                 }
             }
         })
@@ -216,7 +216,10 @@ fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -
             quote! {
                 Query::#variant_name(#(#inputs,)* subquery) => {
                     let subquery = Decode::decode(subquery.as_slice())?;
-                    #trait_name#dotted_generic_reqs::maybe_call(self, #(#inputs),*).query(subquery)
+                    ::orga::query::Query::query(
+                        &#trait_name#dotted_generic_reqs::maybe_call(self, #(#inputs),*),
+                        subquery,
+                    )
                 }
             }
         })

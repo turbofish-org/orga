@@ -3,6 +3,7 @@
 use proc_macro::TokenStream;
 
 mod entry;
+mod next;
 mod state;
 mod query;
 
@@ -24,4 +25,9 @@ pub fn derive_query(item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn query(args: TokenStream, input: TokenStream) -> TokenStream {
     query::attr(args, input)
+}
+    
+#[proc_macro_derive(Next)]
+pub fn next(item: TokenStream) -> TokenStream {
+    next::derive(item)
 }

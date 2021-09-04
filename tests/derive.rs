@@ -4,8 +4,10 @@
 #![feature(trivial_bounds)]
 
 use orga::collections::Entry;
+use orga::collections::Next;
 use orga::encoding::{Decode, Encode};
 use orga::macros::Entry;
+use orga::macros::Next;
 use orga::state::State;
 use orga::store::Shared;
 use orga::store::{MapStore, Store};
@@ -58,7 +60,7 @@ impl<T> Foo<T> {
 fn encode_decode() {
     let value = Foo { a: 5, b: Some(6) };
     let bytes = value.encode().unwrap();
-    assert_eq!(bytes.as_slice(), &[5, 1, 6]);
+    assert_eq!(bytes.as_slice(), &[5, 1, 0, 0, 0, 6]);
     let decoded_value = Foo::decode(bytes.as_slice()).unwrap();
     assert_eq!(decoded_value, value);
 }
@@ -75,7 +77,7 @@ impl Query for X {
 #[test]
 fn query() {
     let value = Foo { a: 5, b: Some(5u32) };
-    value.query(foo_query::Query::Z(10, ())).unwrap();
+    value.query(foo_query::Query::Z(10, vec![])).unwrap();
 }
 
 #[derive(State)]
@@ -158,4 +160,82 @@ fn derive_entry_tuple_struct_from_entry() {
     let test = TupleStruct(8, 16, 32);
 
     assert_eq!(TupleStruct::from_entry(((8, 32), (16,))), test);
+}
+
+#[derive(Next, Debug, PartialEq)]
+struct NextStruct {
+    first_field: u8,
+    second_field: u8,
+    last_field: u8,
+}
+
+#[test]
+fn derive_next() {
+    let test_struct = NextStruct {
+        first_field: 0,
+        second_field: 0,
+        last_field: 0,
+    };
+    let expected = NextStruct {
+        first_field: 0,
+        second_field: 0,
+        last_field: 1,
+    };
+    assert_eq!(test_struct.next().unwrap(), expected);
+}
+
+#[test]
+fn derive_next_last() {
+    let test_struct = NextStruct {
+        first_field: 255,
+        second_field: 255,
+        last_field: 255,
+    };
+    assert!(test_struct.next().is_none());
+}
+
+#[derive(Next, Debug, PartialEq)]
+struct NextArrayStruct {
+    first_field: [u8; 2],
+    last_field: [u8; 2],
+}
+
+#[test]
+fn derive_next_array() {
+    let test = NextArrayStruct {
+        first_field: [0; 2],
+        last_field: [0; 2],
+    };
+
+    let expected = NextArrayStruct {
+        first_field: [0; 2],
+        last_field: [0, 1],
+    };
+
+    assert_eq!(test.next().unwrap(), expected);
+}
+
+#[test]
+fn derive_next_array_internal_last() {
+    let test = NextArrayStruct {
+        first_field: [0; 2],
+        last_field: [0, 255],
+    };
+
+    let expected = NextArrayStruct {
+        first_field: [0; 2],
+        last_field: [1, 0],
+    };
+
+    assert_eq!(test.next().unwrap(), expected);
+}
+
+#[test]
+fn derive_next_array_last() {
+    let test = NextArrayStruct {
+        first_field: [255, 255],
+        last_field: [255, 255],
+    };
+
+    assert!(test.next().is_none());
 }
