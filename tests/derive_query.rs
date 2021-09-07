@@ -18,6 +18,8 @@ pub struct Bar {
 }
 
 impl<T> Foo<T> {
+    pub fn _no_query_attr(&self) {}
+
     #[query]
     pub fn basic(&self) {}
 
@@ -25,6 +27,15 @@ impl<T> Foo<T> {
     pub fn input_and_output(&self, n: u32) -> u32 {
         self.a as u32 + n
     }
+
+    #[query]
+    pub fn ref_output(&self) -> &u32 {
+        &123
+    }
+
+    // TODO:
+    // #[query]
+    // pub fn ref_input(&self, _n: &u32) {}
 
     #[query]
     pub fn generic_input(&self, _t: T) -> u32 {
@@ -62,6 +73,9 @@ fn _exhaustive_match<T: Query>(query: foo_query::Query<T>) {
         Query::MethodBasic(subquery) => _assert_type::<Vec<u8>>(subquery),
         Query::MethodInputAndOutput(n, subquery) => {
             _assert_type::<u32>(n);
+            _assert_type::<Vec<u8>>(subquery);
+        }
+        Query::MethodRefOutput(subquery) => {
             _assert_type::<Vec<u8>>(subquery);
         }
         Query::MethodGenericInput(t, subquery) => {
