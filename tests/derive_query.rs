@@ -1,6 +1,8 @@
 #![feature(specialization)]
 #![feature(trivial_bounds)]
 
+use std::ops::Add;
+
 use orga::collections::Deque;
 use orga::query::Query;
 
@@ -16,6 +18,18 @@ struct Foo<T> {
 pub struct Bar {
     deque: Deque<u32>,
 }
+
+#[derive(Query)]
+pub struct Baz<T: Clone>
+where
+    T: Add,
+{
+    pub deque: Deque<u32>,
+    _marker: std::marker::PhantomData<T>,
+}
+
+#[derive(Query)]
+pub struct TupleStruct(pub u32);
 
 impl<T> Foo<T> {
     pub fn _no_query_attr(&self) {}
