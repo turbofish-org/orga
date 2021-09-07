@@ -95,7 +95,7 @@ impl<K, V, S> From<Map<K, V, S>> for () {
 
 impl<K, V, S> State<S> for Map<K, V, S>
 where
-    K: Encode + Terminated + Eq + Hash + Ord,
+    K: Encode + Terminated,
     V: State<S>,
 {
     type Encoding = ();
@@ -121,7 +121,7 @@ where
 
 impl<K, V, S> Map<K, V, S>
 where
-    K: Encode + Terminated + Eq + Hash + Ord + Clone,
+    K: Encode + Terminated,
     V: State<S>,
     S: Read,
 {
@@ -249,7 +249,7 @@ where
 
 impl<'a, 'b, K, V, S> Map<K, V, S>
 where
-    K: Encode + Decode + Terminated + Eq + Hash + Next<K> + Ord + Clone,
+    K: Encode + Decode + Terminated + Next<K> + Clone,
     V: State<S>,
     S: Read,
 {
@@ -346,7 +346,7 @@ where
 
 pub struct Iter<'a, K, V, S>
 where
-    K: Next<K> + Decode + Encode + Terminated + Hash + Eq,
+    K: Next<K> + Decode + Encode + Terminated,
     V: State<S>,
     S: Read,
 {
@@ -357,7 +357,7 @@ where
 
 impl<'a, K, V, S> Iter<'a, K, V, S>
 where
-    K: Encode + Decode + Terminated + Eq + Hash + Next<K> + Ord,
+    K: Encode + Decode + Terminated + Next<K>,
     V: State<S>,
     S: Read,
 {
@@ -452,7 +452,7 @@ where
 
 impl<'a, K, V, S> Iterator for Iter<'a, K, V, S>
 where
-    K: Next<K> + Decode + Encode + Terminated + Hash + Eq + Ord,
+    K: Next<K> + Decode + Encode + Terminated,
     V: State<S>,
     S: Read,
 {
@@ -530,7 +530,7 @@ pub enum ChildMut<'a, K: Encode, V, S> {
 
 impl<'a, K, V, S> ChildMut<'a, K, V, S>
 where
-    K: Hash + Eq + Encode + Terminated + Ord + Clone,
+    K: Encode + Terminated + Clone,
     V: State<S>,
     S: Read,
 {
@@ -564,7 +564,7 @@ impl<'a, K: Encode, V, S> Deref for ChildMut<'a, K, V, S> {
 
 impl<'a, K, V, S> DerefMut for ChildMut<'a, K, V, S>
 where
-    K: Eq + Hash + Ord + Clone + Encode,
+    K: Clone + Encode,
 {
     fn deref_mut(&mut self) -> &mut V {
         match self {
@@ -591,7 +591,7 @@ where
 
 /// A mutable reference to a key/value entry in a collection, which may be
 /// empty.
-pub enum Entry<'a, K: Clone + Encode, V, S> {
+pub enum Entry<'a, K: Encode, V, S> {
     /// References an entry in the collection which does not have a value.
     Vacant {
         key: K,
@@ -604,7 +604,7 @@ pub enum Entry<'a, K: Clone + Encode, V, S> {
 
 impl<'a, K, V, S> Entry<'a, K, V, S>
 where
-    K: Encode + Terminated + Eq + Hash + Ord + Clone,
+    K: Encode + Terminated + Clone,
     V: State<S>,
     S: Read,
 {
@@ -645,7 +645,7 @@ where
 
 impl<'a, K, V, S> Entry<'a, K, V, S>
 where
-    K: Encode + Terminated + Eq + Hash + Ord + Clone,
+    K: Encode + Terminated + Clone,
     V: State<S>,
     S: Write,
 {
@@ -665,7 +665,7 @@ where
 
 impl<'a, K, V, S, D> Entry<'a, K, V, S>
 where
-    K: Encode + Terminated + Eq + Hash + Ord + Clone,
+    K: Encode + Terminated + Clone,
     V: State<S, Encoding = D>,
     S: Read,
     D: Default,
@@ -695,7 +695,7 @@ where
     }
 }
 
-impl<'a, K: Clone + Encode, V, S> From<Entry<'a, K, V, S>> for Option<ChildMut<'a, K, V, S>> {
+impl<'a, K: Encode, V, S> From<Entry<'a, K, V, S>> for Option<ChildMut<'a, K, V, S>> {
     fn from(entry: Entry<'a, K, V, S>) -> Self {
         match entry {
             Entry::Vacant { .. } => None,
