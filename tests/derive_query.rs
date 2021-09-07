@@ -7,7 +7,7 @@ use orga::query::Query;
 #[derive(Query)]
 struct Foo<T> {
     pub a: u8,
-    a2: u8,
+    _a2: u8,
     pub b: Option<T>,
     pub bar: Bar,
 }
@@ -50,26 +50,26 @@ impl<T: Clone + Default> Foo<T> {
     }
 }
 
-fn assert_type<T>(_: T) {}
+fn _assert_type<T>(_: T) {}
 
-fn exhaustive_match<T: Query>(query: foo_query::Query<T>) {
+fn _exhaustive_match<T: Query>(query: foo_query::Query<T>) {
     use foo_query::Query;
     match query {
         Query::This => {}
-        Query::FieldA(subquery) => assert_type::<()>(subquery),
-        Query::FieldB(subquery) => assert_type::<T::Query>(subquery),
-        Query::FieldBar(subquery) => assert_type::<<Bar as orga::query::Query>::Query>(subquery),
-        Query::MethodBasic(subquery) => assert_type::<Vec<u8>>(subquery),
+        Query::FieldA(subquery) => _assert_type::<()>(subquery),
+        Query::FieldB(subquery) => _assert_type::<T::Query>(subquery),
+        Query::FieldBar(subquery) => _assert_type::<<Bar as orga::query::Query>::Query>(subquery),
+        Query::MethodBasic(subquery) => _assert_type::<Vec<u8>>(subquery),
         Query::MethodInputAndOutput(n, subquery) => {
-            assert_type::<u32>(n);
-            assert_type::<Vec<u8>>(subquery);
+            _assert_type::<u32>(n);
+            _assert_type::<Vec<u8>>(subquery);
         }
         Query::MethodGenericInput(t, subquery) => {
-            assert_type::<T>(t);
-            assert_type::<Vec<u8>>(subquery);
+            _assert_type::<T>(t);
+            _assert_type::<Vec<u8>>(subquery);
         }
-        Query::MethodComplexType(subquery) => assert_type::<Vec<u8>>(subquery),
-        Query::MethodGenericOutput(subquery) => assert_type::<Vec<u8>>(subquery),
-        Query::MethodWrappedGenericOutput(subquery) => assert_type::<Vec<u8>>(subquery),
+        Query::MethodComplexType(subquery) => _assert_type::<Vec<u8>>(subquery),
+        Query::MethodGenericOutput(subquery) => _assert_type::<Vec<u8>>(subquery),
+        Query::MethodWrappedGenericOutput(subquery) => _assert_type::<Vec<u8>>(subquery),
     }
 }

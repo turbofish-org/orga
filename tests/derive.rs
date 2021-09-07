@@ -4,44 +4,13 @@
 use orga::collections::Entry;
 use orga::collections::Next;
 use orga::encoding::{Decode, Encode};
-use orga::query::Query;
 use orga::state::State;
 use orga::store::{MapStore, Store};
 
-#[derive(Encode, Decode, Query, PartialEq, Debug)]
+#[derive(Encode, Decode, PartialEq, Debug)]
 struct Foo<T> {
     a: u8,
     b: Option<T>,
-}
-
-impl<T: Clone> Foo<T> {
-    #[query]
-    pub fn some_method(&self) {}
-
-    #[query]
-    pub fn z(&self, n: u32) -> u32 {
-        123 + n
-    }
-
-    #[query]
-    pub fn generic_input(&self, _t: T) -> u32 {
-        123
-    }
-
-    #[query]
-    pub fn generic_output(&self) -> T {
-        self.b.as_ref().unwrap().clone()
-    }
-}
-
-impl<T> Foo<T> {
-    #[query]
-    pub fn y2(&self) {}
-
-    #[query]
-    pub fn z3(&self) -> u32 {
-        123
-    }
 }
 
 #[test]
@@ -52,24 +21,6 @@ fn encode_decode() {
     let decoded_value = Foo::decode(bytes.as_slice()).unwrap();
     assert_eq!(decoded_value, value);
 }
-
-#[derive(Encode, Decode)]
-struct X;
-impl Query for X {
-    type Query = ();
-    fn query(&self, _: ()) -> orga::Result<()> {
-        Ok(())
-    }
-}
-
-// #[test]
-// fn query() {
-//     let value = Foo {
-//         a: 5,
-//         b: Some(5u32),
-//     };
-//     value.query(foo_query::Query::Z(10, vec![])).unwrap();
-// }
 
 #[derive(State)]
 struct MyStruct {
