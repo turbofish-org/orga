@@ -19,7 +19,7 @@ pub fn derive(item: TokenStream) -> TokenStream {
     let query_impl = create_query_impl(&item, &source, &query_enum);
 
     let output = quote!(
-        use ::orga::macros::query;
+        use ::orga::macros::*;
 
         pub mod #modname {
             use super::*;
@@ -221,7 +221,7 @@ fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -
 
             quote! {
                 Query::#variant_name(#(#inputs,)* subquery) => {
-                    let subquery = Decode::decode(subquery.as_slice())?;
+                    let subquery = ::orga::encoding::Decode::decode(subquery.as_slice())?;
                     ::orga::query::Query::query(
                         &#trait_name#dotted_generic_reqs::maybe_call(self, #(#inputs),*),
                         subquery,
