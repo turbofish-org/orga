@@ -422,7 +422,7 @@ where
                     let decoded_backing_key: K = Decode::decode(backing_key.as_slice())?;
 
                     //so compare backing_key with map_key.inner_bytes
-                    let key_cmp = map_key.inner.cmp(&decoded_backing_key);
+                    let key_cmp = map_key.inner_bytes.cmp(backing_key);
 
                     // map_key > backing_key, emit the backing entry
                     if key_cmp == Ordering::Greater {
