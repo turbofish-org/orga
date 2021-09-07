@@ -7,7 +7,6 @@ use orga::collections::Entry;
 use orga::collections::Next;
 use orga::encoding::{Decode, Encode};
 use orga::state::State;
-use orga::store::Shared;
 use orga::store::{MapStore, Store};
 use orga::query::Query;
 
@@ -18,10 +17,8 @@ struct Foo<T> {
 }
 
 impl<T: Clone> Foo<T> {
-    fn x() {}
-
-    // #[query]
-    // pub fn some_method(&self) {}
+    #[query]
+    pub fn some_method(&self) {}
 
     #[query]
     pub fn z(&self, n: u32) -> u32 {
@@ -29,7 +26,7 @@ impl<T: Clone> Foo<T> {
     }
 
     #[query]
-    pub fn generic_input(&self, t: T) -> u32 {
+    pub fn generic_input(&self, _t: T) -> u32 {
         123
     }
     
@@ -42,11 +39,6 @@ impl<T: Clone> Foo<T> {
 impl<T> Foo<T> {
     #[query]
     pub fn y2(&self) {}
-
-    #[query]
-    fn z2(&self) -> u32 {
-        123
-    }
 
     #[query]
     pub fn z3(&self) -> u32 {
@@ -94,23 +86,24 @@ struct MyStruct2(u32, u32);
 //     Named { foo: u32 },
 // }
 
-// fn struct_state() {
-//     let mapstore = MapStore::new();
-//     let store = Store::new(mapstore);
+#[test]
+fn struct_state() {
+    let mapstore = MapStore::new();
+    let store = Store::new(mapstore);
 
-//     let mut state = MyStruct::create(store.clone(), Default::default()).unwrap();
+    let mut state = MyStruct::create(store.clone(), Default::default()).unwrap();
 
-//     assert_eq!(state.a, 0);
-//     assert_eq!(state.c.0, 0);
+    assert_eq!(state.a, 0);
+    assert_eq!(state.c.0, 0);
 
-//     state.a = 123;
-//     state.c.0 = 5;
-//     state.c.1 = 6;
+    state.a = 123;
+    state.c.0 = 5;
+    state.c.1 = 6;
 
-//     let data = state.flush().unwrap();
-//     let bytes = data.encode().unwrap();
-//     assert_eq!(bytes, vec![0, 0, 0, 123, 0, 0, 0, 5, 0, 0, 0, 6]);
-// }
+    let data = state.flush().unwrap();
+    let bytes = data.encode().unwrap();
+    assert_eq!(bytes, vec![0, 0, 0, 123, 0, 0, 0, 5, 0, 0, 0, 6]);
+}
 
 #[derive(Entry, Debug, PartialEq)]
 struct MyNamedStruct {

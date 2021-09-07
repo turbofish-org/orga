@@ -31,8 +31,26 @@ pub fn derive(item: TokenStream) -> TokenStream {
     output.into()
 }
 
-pub fn attr(args: TokenStream, input: TokenStream) -> TokenStream {
-    input
+pub fn attr(_args: TokenStream, input: TokenStream) -> TokenStream {
+    let method = parse_macro_input!(input as ImplItemMethod);
+
+    if !matches!(method.vis, Visibility::Public(_)) {
+        panic!("Query methods must be public");
+    }
+
+    if method.sig.unsafety.is_some() {
+        panic!("Query methods cannot be unsafe");
+    }
+
+    if method.sig.asyncness.is_some() {
+        panic!("Query methods cannot be async");
+    }
+
+    if method.sig.abi.is_some() {
+        panic!("Query methods cannot specify ABI");
+    }
+
+    quote!(#method).into()
 }
 
 fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -> TokenStream2 {
@@ -45,7 +63,6 @@ fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -
         }
     });
     let generic_params = gen_param_input(generics, true);
-    let generic_params_unbracketed = gen_param_input(generics, false);
 
     let query_type = &query_enum.ident;
     let query_generics = &query_enum.generics;
@@ -157,7 +174,6 @@ fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -
                 ReturnType::Type(_, ref ty) => *(ty.clone()),
                 ReturnType::Default => unit_tuple,
             };
-            let subquery = quote!(<#output_type as ::orga::query::Query>::Query);
 
             let requirements = get_generic_requirements(
                 input_types
@@ -172,16 +188,6 @@ fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -
                 quote!(<#(#requirements),*>)
             };
 
-            let parent_params: Vec<_> = parent
-                .generics
-                .params
-                .iter()
-                .filter_map(|p| match p {
-                    GenericParam::Type(p) => Some(p),
-                    _ => None,
-                })
-                .map(|p| &p.ident)
-                .collect();
             let parent_generics = &parent.generics;
             let parent_where_preds = &parent.generics.where_clause.as_ref().map(|w| &w.predicates);
 
@@ -311,12 +317,6 @@ fn create_query_enum(item: &DeriveInput, source: &File) -> ItemEnum {
                 quote! { #(#inputs),*, }
             };
 
-            let unit_tuple: Type = parse2(quote!(())).unwrap();
-            let output_type = match method.sig.output {
-                ReturnType::Type(_, ref ty) => *(ty.clone()),
-                ReturnType::Default => unit_tuple,
-            };
-
             quote! {
                 #name(#fields Vec<u8>)
             }
@@ -380,7 +380,7 @@ where
                         }
                     }
                 }
-            };
+            }
             add_arguments(&path, &mut paths);
 
             paths
@@ -483,13 +483,5 @@ fn gen_param_input(generics: &Generics, bracketed: bool) -> TokenStream2 {
         quote!(<#(#gen_params),*>)
     } else {
         quote!(#(#gen_params),*)
-    }
-}
-
-fn iter_fields(fields: &Fields) -> Box<dyn Iterator<Item = Field>> {
-    match fields.clone() {
-        Fields::Named(fields) => Box::new(fields.named.into_iter()),
-        Fields::Unnamed(fields) => Box::new(fields.unnamed.into_iter()),
-        Fields::Unit => Box::new(vec![].into_iter()),
     }
 }
