@@ -527,12 +527,5 @@ impl<S: State> InitChain for S {
 }
 
 // TODO: add Call and Query
-pub trait App: BeginBlock + EndBlock + InitChain + State {
-    fn context(&self) -> Context {
-        CONTEXT
-            .lock()
-            .expect("Failed to acquire context lock")
-            .clone()
-    }
-}
+pub trait App: BeginBlock + EndBlock + InitChain + State {}
 impl<T: BeginBlock + EndBlock + InitChain + State> App for T where <T as State>::Encoding: Default {}

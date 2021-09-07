@@ -1,3 +1,4 @@
+use crate::state::State;
 use std::any::TypeId;
 use std::collections::HashMap;
 use std::lazy::SyncLazy;
@@ -7,7 +8,7 @@ use std::sync::Mutex;
 static CONTEXT_MAP: SyncLazy<Mutex<ManuallyDrop<HashMap<TypeId, Box<()>>>>> =
     SyncLazy::new(|| Mutex::new(ManuallyDrop::new(HashMap::new())));
 
-pub struct Context<I> {
+pub(super) struct Context<I> {
     _inner: I,
 }
 
@@ -38,6 +39,16 @@ impl Context<()> {
         if let Some(replaced) = context_store.remove(&TypeId::of::<T>()) {
             unsafe { transmute::<_, Box<T>>(replaced) };
         }
+    }
+}
+
+pub trait GetContext {
+    fn context<T: 'static>(&mut self) -> Option<&mut T>;
+}
+
+impl<S: State> GetContext for S {
+    fn context<T: 'static>(&mut self) -> Option<&mut T> {
+        Context::resolve::<T>()
     }
 }
 
