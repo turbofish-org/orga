@@ -280,7 +280,7 @@ where
     }
 }
 
-fn encode_bound<K: Encode + Clone>(bound: Bound<&K>) -> Result<Bound<Vec<u8>>> {
+fn encode_bound<K: Encode>(bound: Bound<&K>) -> Result<Bound<Vec<u8>>> {
     match bound {
         Bound::Included(inner) => Ok(Bound::Included(inner.encode()?)),
         Bound::Excluded(inner) => Ok(Bound::Excluded(inner.encode()?)),
