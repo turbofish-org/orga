@@ -27,9 +27,8 @@ impl SignerCall {
         match (self.pubkey, self.signature) {
             (Some(pubkey_bytes), Some(signature)) => {
                 let pubkey = Ed25519::from_bytes(&pubkey_bytes)?;
-                let call_bytes = Encode::encode(&self.call_bytes)?;
                 let signature = Ed25519Signature::new(signature);
-                pubkey.verify_strict(&call_bytes, &signature)?;
+                pubkey.verify_strict(&self.call_bytes, &signature)?;
 
                 Ok(Some(pubkey_bytes))
             }
