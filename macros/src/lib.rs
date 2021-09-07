@@ -6,6 +6,7 @@ mod entry;
 mod next;
 mod query;
 mod state;
+mod call;
 
 #[proc_macro_derive(State)]
 pub fn derive_state(item: TokenStream) -> TokenStream {
@@ -25,6 +26,16 @@ pub fn derive_query(item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn query(args: TokenStream, input: TokenStream) -> TokenStream {
     query::attr(args, input)
+}
+
+#[proc_macro_derive(Call)]
+pub fn derive_call(item: TokenStream) -> TokenStream {
+    call::derive(item)
+}
+
+#[proc_macro_attribute]
+pub fn call(args: TokenStream, input: TokenStream) -> TokenStream {
+    call::attr(args, input)
 }
 
 #[proc_macro_derive(Next)]
