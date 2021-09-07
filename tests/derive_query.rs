@@ -6,13 +6,14 @@ use orga::query::Query;
 
 #[derive(Query)]
 struct Foo<T> {
-    a: u8,
-    b: Option<T>,
-    bar: Bar,
+    pub a: u8,
+    a2: u8,
+    pub b: Option<T>,
+    pub bar: Bar,
 }
 
 #[derive(Query)]
-struct Bar {
+pub struct Bar {
     deque: Deque<u32>,
 }
 
@@ -46,5 +47,29 @@ impl<T: Clone + Default> Foo<T> {
     #[query]
     pub fn wrapped_generic_output(&self) -> Option<T> {
         self.b.clone()
+    }
+}
+
+fn assert_type<T>(_: T) {}
+
+fn exhaustive_match<T: Query>(query: foo_query::Query<T>) {
+    use foo_query::Query;
+    match query {
+        Query::This => {}
+        Query::FieldA(subquery) => assert_type::<()>(subquery),
+        Query::FieldB(subquery) => assert_type::<T::Query>(subquery),
+        Query::FieldBar(subquery) => assert_type::<<Bar as orga::query::Query>::Query>(subquery),
+        Query::Basic(subquery) => assert_type::<Vec<u8>>(subquery),
+        Query::InputAndOutput(n, subquery) => {
+            assert_type::<u32>(n);
+            assert_type::<Vec<u8>>(subquery);
+        }
+        Query::GenericInput(t, subquery) => {
+            assert_type::<T>(t);
+            assert_type::<Vec<u8>>(subquery);
+        }
+        Query::ComplexType(subquery) => assert_type::<Vec<u8>>(subquery),
+        Query::GenericOutput(subquery) => assert_type::<Vec<u8>>(subquery),
+        Query::WrappedGenericOutput(subquery) => assert_type::<Vec<u8>>(subquery),
     }
 }
