@@ -6,11 +6,11 @@ use std::iter::Peekable;
 use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
 use super::Next;
+use crate::query::Query;
 use crate::state::*;
 use crate::store::Iter as StoreIter;
 use crate::store::*;
 use crate::Result;
-use crate::query::Query;
 use ed::*;
 
 /// A map collection which stores data in a backing key/value store.

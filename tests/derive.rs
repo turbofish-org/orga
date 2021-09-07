@@ -6,9 +6,9 @@
 use orga::collections::Entry;
 use orga::collections::Next;
 use orga::encoding::{Decode, Encode};
+use orga::query::Query;
 use orga::state::State;
 use orga::store::{MapStore, Store};
-use orga::query::Query;
 
 #[derive(Encode, Decode, Query, PartialEq, Debug)]
 struct Foo<T> {
@@ -29,7 +29,7 @@ impl<T: Clone> Foo<T> {
     pub fn generic_input(&self, _t: T) -> u32 {
         123
     }
-    
+
     #[query]
     pub fn generic_output(&self) -> T {
         self.b.as_ref().unwrap().clone()
@@ -66,7 +66,10 @@ impl Query for X {
 
 #[test]
 fn query() {
-    let value = Foo { a: 5, b: Some(5u32) };
+    let value = Foo {
+        a: 5,
+        b: Some(5u32),
+    };
     value.query(foo_query::Query::Z(10, vec![])).unwrap();
 }
 

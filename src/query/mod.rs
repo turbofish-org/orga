@@ -1,46 +1,46 @@
-use crate::encoding::{Encode, Decode};
+use crate::encoding::{Decode, Encode};
 use crate::Result;
 
-pub use orga_macros::{Query, query};
+pub use orga_macros::{query, Query};
 
 pub trait Query {
-  type Query: Encode + Decode;
+    type Query: Encode + Decode;
 
-  fn query(&self, query: Self::Query) -> Result<()>;
+    fn query(&self, query: Self::Query) -> Result<()>;
 }
 
 impl<T: Query> Query for Result<T> {
-  type Query = T::Query;
+    type Query = T::Query;
 
-  fn query(&self, query: Self::Query) -> Result<()> {
-    match self {
-      Ok(inner) => inner.query(query),
-      Err(err) => Err(failure::format_err!("{}", err)),
+    fn query(&self, query: Self::Query) -> Result<()> {
+        match self {
+            Ok(inner) => inner.query(query),
+            Err(err) => Err(failure::format_err!("{}", err)),
+        }
     }
-  }
 }
 
 impl<T: Query> Query for Option<T> {
-  type Query = T::Query;
+    type Query = T::Query;
 
-  fn query(&self, query: Self::Query) -> Result<()> {
-    if let Some(inner) = self {
-      inner.query(query)?;
+    fn query(&self, query: Self::Query) -> Result<()> {
+        if let Some(inner) = self {
+            inner.query(query)?;
+        }
+        Ok(())
     }
-    Ok(())
-  }
 }
 
 macro_rules! noop_impl {
-  ($type:ty) => {
-    impl Query for $type {
-      type Query = ();
+    ($type:ty) => {
+        impl Query for $type {
+            type Query = ();
 
-      fn query(&self, _: ()) -> Result<()> {
-        Ok(())
-      }
-    }
-  };
+            fn query(&self, _: ()) -> Result<()> {
+                Ok(())
+            }
+        }
+    };
 }
 
 noop_impl!(());
@@ -58,113 +58,113 @@ noop_impl!(i128);
 
 impl<T> Query for (T,)
 where
-  T: Query,
+    T: Query,
 {
-  type Query = T::Query;
+    type Query = T::Query;
 
-  fn query(&self, query: Self::Query) -> Result<()> {
-    self.0.query(query)
-  }
+    fn query(&self, query: Self::Query) -> Result<()> {
+        self.0.query(query)
+    }
 }
 
 #[derive(Encode, Decode)]
 pub enum Tuple2Query<T, U>
 where
-  T: Query,
-  U: Query,
+    T: Query,
+    U: Query,
 {
-  Field0(T::Query),
-  Field1(U::Query),
+    Field0(T::Query),
+    Field1(U::Query),
 }
 
 impl<T, U> Query for (T, U)
 where
-  T: Query,
-  U: Query,
+    T: Query,
+    U: Query,
 {
-  type Query = Tuple2Query<T, U>;
+    type Query = Tuple2Query<T, U>;
 
-  fn query(&self, query: Self::Query) -> Result<()> {
-    match query {
-      Tuple2Query::Field0(query) => self.0.query(query),
-      Tuple2Query::Field1(query) => self.1.query(query),
+    fn query(&self, query: Self::Query) -> Result<()> {
+        match query {
+            Tuple2Query::Field0(query) => self.0.query(query),
+            Tuple2Query::Field1(query) => self.1.query(query),
+        }
     }
-  }
 }
 
 #[derive(Encode, Decode)]
 pub enum Tuple3Query<T, U, V>
 where
-  T: Query,
-  U: Query,
-  V: Query,
+    T: Query,
+    U: Query,
+    V: Query,
 {
-  Field0(T::Query),
-  Field1(U::Query),
-  Field2(V::Query),
+    Field0(T::Query),
+    Field1(U::Query),
+    Field2(V::Query),
 }
 
 impl<T, U, V> Query for (T, U, V)
 where
-  T: Query,
-  U: Query,
-  V: Query,
+    T: Query,
+    U: Query,
+    V: Query,
 {
-  type Query = Tuple3Query<T, U, V>;
+    type Query = Tuple3Query<T, U, V>;
 
-  fn query(&self, query: Self::Query) -> Result<()> {
-    match query {
-      Tuple3Query::Field0(query) => self.0.query(query),
-      Tuple3Query::Field1(query) => self.1.query(query),
-      Tuple3Query::Field2(query) => self.2.query(query),
+    fn query(&self, query: Self::Query) -> Result<()> {
+        match query {
+            Tuple3Query::Field0(query) => self.0.query(query),
+            Tuple3Query::Field1(query) => self.1.query(query),
+            Tuple3Query::Field2(query) => self.2.query(query),
+        }
     }
-  }
 }
 
 #[derive(Encode, Decode)]
 pub enum Tuple4Query<T, U, V, W>
 where
-  T: Query,
-  U: Query,
-  V: Query,
-  W: Query,
+    T: Query,
+    U: Query,
+    V: Query,
+    W: Query,
 {
-  Field0(T::Query),
-  Field1(U::Query),
-  Field2(V::Query),
-  Field3(W::Query),
+    Field0(T::Query),
+    Field1(U::Query),
+    Field2(V::Query),
+    Field3(W::Query),
 }
 
 impl<T, U, V, W> Query for (T, U, V, W)
 where
-  T: Query,
-  U: Query,
-  V: Query,
-  W: Query,
+    T: Query,
+    U: Query,
+    V: Query,
+    W: Query,
 {
-  type Query = Tuple4Query<T, U, V, W>;
+    type Query = Tuple4Query<T, U, V, W>;
 
-  fn query(&self, query: Self::Query) -> Result<()> {
-    match query {
-      Tuple4Query::Field0(query) => self.0.query(query),
-      Tuple4Query::Field1(query) => self.1.query(query),
-      Tuple4Query::Field2(query) => self.2.query(query),
-      Tuple4Query::Field3(query) => self.3.query(query),
+    fn query(&self, query: Self::Query) -> Result<()> {
+        match query {
+            Tuple4Query::Field0(query) => self.0.query(query),
+            Tuple4Query::Field1(query) => self.1.query(query),
+            Tuple4Query::Field2(query) => self.2.query(query),
+            Tuple4Query::Field3(query) => self.3.query(query),
+        }
     }
-  }
 }
 
 impl<T: Query, const N: usize> Query for [T; N] {
-  type Query = (u64, T::Query);
+    type Query = (u64, T::Query);
 
-  fn query(&self, query: Self::Query) -> Result<()> {
-    let (index, subquery) = query;
-    let index = index as usize;
+    fn query(&self, query: Self::Query) -> Result<()> {
+        let (index, subquery) = query;
+        let index = index as usize;
 
-    if index >= N {
-      return Err(failure::format_err!("index out of bounds"));
+        if index >= N {
+            return Err(failure::format_err!("index out of bounds"));
+        }
+
+        self[index].query(subquery)
     }
-
-    self[index].query(subquery)
-  }
 }

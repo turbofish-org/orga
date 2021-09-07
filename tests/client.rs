@@ -175,7 +175,7 @@
 // //     let store = orga::store::Shared::new(orga::store::MapStore::new());
 // //     let store = orga::store::Store::new(store);
 // //     let counter = Counter::create(store.clone(), ()).unwrap();
-    
+
 // //     let (backing_client, counter) = Mock::new(counter);
 // //     let mut client = Counter::create_client(backing_client);
 // //     assert_eq!(client.count().unwrap(), Some(0));
