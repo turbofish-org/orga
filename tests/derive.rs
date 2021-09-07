@@ -1,4 +1,3 @@
-#![feature(specialization)]
 #![feature(trivial_bounds)]
 
 use orga::collections::Entry;
