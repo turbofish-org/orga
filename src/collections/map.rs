@@ -1,7 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::btree_map::Entry::{Occupied, Vacant};
 use std::collections::{btree_map, BTreeMap};
-use std::hash::Hash;
 use std::iter::Peekable;
 use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
