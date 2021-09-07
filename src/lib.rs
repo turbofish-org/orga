@@ -53,6 +53,7 @@ pub mod prelude {
     #[cfg(feature = "abci")]
     pub use crate::abci::*;
     pub use crate::collections::*;
+    pub use crate::contexts::*;
     pub use crate::state::*;
     pub use crate::store::*;
     pub use crate::Result;
