@@ -1,10 +1,12 @@
 use super::map::{Map, ReadOnly, Ref, RefMut};
 use crate::encoding::{Decode, Encode};
+use crate::query::Query;
 use crate::state::State;
 use crate::store::DefaultBackingStore;
 use crate::store::{Read, Store, Write};
 use crate::Result;
 
+#[derive(Query)]
 pub struct Deque<T, S = DefaultBackingStore> {
     meta: Meta,
     map: Map<u64, T, S>,
@@ -56,22 +58,27 @@ impl<T: State<S>, S: Read> State<S> for Deque<T, S> {
 }
 
 impl<T: State<S>, S: Read> Deque<T, S> {
+    #[query]
     pub fn len(&self) -> u64 {
         self.meta.tail - self.meta.head
     }
 
+    #[query]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
+    #[query]
     pub fn get(&self, index: u64) -> Result<Option<Ref<T>>> {
         self.map.get(index + self.meta.head)
     }
 
+    #[query]
     pub fn front(&self) -> Result<Option<Ref<T>>> {
         self.map.get(self.meta.head)
     }
 
+    #[query]
     pub fn back(&self) -> Result<Option<Ref<T>>> {
         self.map.get(self.meta.tail - 1)
     }
