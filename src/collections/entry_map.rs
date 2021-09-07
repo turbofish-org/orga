@@ -8,10 +8,13 @@ use std::hash::Hash;
 use std::ops::RangeBounds;
 
 use super::{Entry, Next};
+use crate::query::Query;
 use crate::state::*;
 use crate::store::*;
+use crate::Result;
 use ed::*;
 
+#[derive(Query)]
 pub struct EntryMap<T: Entry, S = DefaultBackingStore> {
     map: Map<T::Key, T::Value, S>,
 }
@@ -63,6 +66,7 @@ where
         Ok(())
     }
 
+    #[query]
     pub fn contains_entry_key(&self, entry: T) -> Result<bool> {
         let (key, _) = entry.into_entry();
         self.map.contains_key(key)
@@ -76,6 +80,7 @@ where
     T::Value: State<S> + Eq,
     S: Read,
 {
+    #[query]
     pub fn contains(&self, entry: T) -> Result<bool> {
         let (key, value) = entry.into_entry();
 
@@ -144,7 +149,9 @@ where
 }
 
 mod test {
-    use super::*;
+    use super::{EntryMap as OrgaEntryMap, *};
+    #[allow(dead_code)]
+    type EntryMap<T> = OrgaEntryMap<T, MapStore>;
 
     #[derive(Debug, Eq, PartialEq)]
     pub struct MapEntry {
