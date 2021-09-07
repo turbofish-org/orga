@@ -4,8 +4,8 @@ use proc_macro::TokenStream;
 
 mod entry;
 mod next;
-mod state;
 mod query;
+mod state;
 
 #[proc_macro_derive(State)]
 pub fn derive_state(item: TokenStream) -> TokenStream {
@@ -26,7 +26,7 @@ pub fn derive_query(item: TokenStream) -> TokenStream {
 pub fn query(args: TokenStream, input: TokenStream) -> TokenStream {
     query::attr(args, input)
 }
-    
+
 #[proc_macro_derive(Next)]
 pub fn derive_next(item: TokenStream) -> TokenStream {
     next::derive(item)

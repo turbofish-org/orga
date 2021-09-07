@@ -1,6 +1,6 @@
 use heck::{CamelCase, SnakeCase};
 use proc_macro::TokenStream;
-use proc_macro2::{Span, TokenStream as TokenStream2, Literal};
+use proc_macro2::{Literal, Span, TokenStream as TokenStream2};
 use quote::quote;
 use std::collections::HashSet;
 use syn::*;
@@ -131,7 +131,7 @@ fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -
                     let i = Literal::usize_unsuffixed(i);
                     quote!(#i)
                 },
-                |f| quote!(#f)
+                |f| quote!(#f),
             );
 
             quote! {
@@ -149,7 +149,8 @@ fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -
             let method_name = &method.sig.ident;
 
             let name_camel = method_name.to_string().to_camel_case();
-            let variant_name = Ident::new(format!("Method{}", &name_camel).as_str(), Span::call_site());
+            let variant_name =
+                Ident::new(format!("Method{}", &name_camel).as_str(), Span::call_site());
 
             let inputs: Vec<_> = (1..method.sig.inputs.len())
                 .into_iter()
