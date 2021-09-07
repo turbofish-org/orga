@@ -34,7 +34,7 @@ impl<K> Encode for MapKey<K> {
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
         match dest.write_all(self.inner_bytes.as_slice()) {
             Ok(_) => Ok(()),
-            Err(e) => failure::bail!(e),
+            Err(e) => Err(e.into()),
         }
     }
 
