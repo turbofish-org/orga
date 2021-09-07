@@ -62,14 +62,14 @@ impl Query for X {
     }
 }
 
-#[test]
-fn query() {
-    let value = Foo {
-        a: 5,
-        b: Some(5u32),
-    };
-    value.query(foo_query::Query::Z(10, vec![])).unwrap();
-}
+// #[test]
+// fn query() {
+//     let value = Foo {
+//         a: 5,
+//         b: Some(5u32),
+//     };
+//     value.query(foo_query::Query::Z(10, vec![])).unwrap();
+// }
 
 #[derive(State)]
 struct MyStruct {

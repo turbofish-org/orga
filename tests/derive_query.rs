@@ -59,17 +59,17 @@ fn exhaustive_match<T: Query>(query: foo_query::Query<T>) {
         Query::FieldA(subquery) => assert_type::<()>(subquery),
         Query::FieldB(subquery) => assert_type::<T::Query>(subquery),
         Query::FieldBar(subquery) => assert_type::<<Bar as orga::query::Query>::Query>(subquery),
-        Query::Basic(subquery) => assert_type::<Vec<u8>>(subquery),
-        Query::InputAndOutput(n, subquery) => {
+        Query::MethodBasic(subquery) => assert_type::<Vec<u8>>(subquery),
+        Query::MethodInputAndOutput(n, subquery) => {
             assert_type::<u32>(n);
             assert_type::<Vec<u8>>(subquery);
         }
-        Query::GenericInput(t, subquery) => {
+        Query::MethodGenericInput(t, subquery) => {
             assert_type::<T>(t);
             assert_type::<Vec<u8>>(subquery);
         }
-        Query::ComplexType(subquery) => assert_type::<Vec<u8>>(subquery),
-        Query::GenericOutput(subquery) => assert_type::<Vec<u8>>(subquery),
-        Query::WrappedGenericOutput(subquery) => assert_type::<Vec<u8>>(subquery),
+        Query::MethodComplexType(subquery) => assert_type::<Vec<u8>>(subquery),
+        Query::MethodGenericOutput(subquery) => assert_type::<Vec<u8>>(subquery),
+        Query::MethodWrappedGenericOutput(subquery) => assert_type::<Vec<u8>>(subquery),
     }
 }

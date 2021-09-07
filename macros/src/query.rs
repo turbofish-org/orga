@@ -110,7 +110,7 @@ fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -
 
     let fields = match &item.data {
         Data::Struct(data) => data.fields.iter(),
-        Data::Enum(_) => panic!("Enums are not supported"),
+        Data::Enum(_) => todo!("Enums are not supported yet"),
         Data::Union(_) => panic!("Unions are not supported"),
     };
     let field_query_arms: Vec<_> = fields
@@ -149,7 +149,7 @@ fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -
             let method_name = &method.sig.ident;
 
             let name_camel = method_name.to_string().to_camel_case();
-            let variant_name = Ident::new(&name_camel, Span::call_site());
+            let variant_name = Ident::new(format!("Method{}", &name_camel).as_str(), Span::call_site());
 
             let inputs: Vec<_> = (1..method.sig.inputs.len())
                 .into_iter()
@@ -258,7 +258,7 @@ fn create_query_enum(item: &DeriveInput, source: &File) -> ItemEnum {
 
     let fields = match &item.data {
         Data::Struct(data) => data.fields.iter(),
-        Data::Enum(_) => panic!("Enums are not supported"),
+        Data::Enum(_) => todo!("Enums are not supported yet"),
         Data::Union(_) => panic!("Unions are not supported"),
     };
     let field_variants: Vec<_> = fields
@@ -292,7 +292,7 @@ fn create_query_enum(item: &DeriveInput, source: &File) -> ItemEnum {
         .into_iter()
         .map(|(method, _)| {
             let name_camel = method.sig.ident.to_string().to_camel_case();
-            let name = Ident::new(&name_camel, Span::call_site());
+            let name = Ident::new(format!("Method{}", &name_camel).as_str(), Span::call_site());
 
             let fields = if method.sig.inputs.len() == 1 {
                 quote!()
