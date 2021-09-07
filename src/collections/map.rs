@@ -283,13 +283,11 @@ where
 fn encode_bound<K: Encode + Clone>(bound: Bound<&K>) -> Result<Bound<Vec<u8>>> {
     match bound {
         Bound::Included(inner) => {
-            let map_key = MapKey::<K>::new(inner.clone())?;
-            let encoded_bound = map_key.inner_bytes;
+            let encoded_bound = inner.encode()?;
             Ok(Bound::Included(encoded_bound))
         }
         Bound::Excluded(inner) => {
-            let map_key = MapKey::<K>::new(inner.clone())?;
-            let encoded_bound = map_key.inner_bytes;
+            let encoded_bound = inner.encode()?;
             Ok(Bound::Excluded(encoded_bound))
         }
         Bound::Unbounded => Ok(Bound::Unbounded),
