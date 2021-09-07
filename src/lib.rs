@@ -41,6 +41,8 @@ pub mod store;
 /// Tendermint process handler.
 pub mod tendermint;
 
+pub mod contexts;
+
 mod error;
 
 // re-exports
