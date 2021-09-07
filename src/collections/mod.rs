@@ -1,5 +1,7 @@
 use crate::encoding::{Decode, Encode};
 
+pub use crate::macros::{Entry, Next};
+
 pub mod deque;
 pub mod entry_map;
 pub mod map;

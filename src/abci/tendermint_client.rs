@@ -1,60 +1,63 @@
-use crate::{
-    store::{Read, KV},
-    Result,
-};
-use blocking::block_on;
-use tendermint_rpc::{Client, HttpClient};
+// use blocking::block_on;
+// use tendermint_rpc as tm;
+// use tm::Client as _;
+// use failure::bail;
 
-/// A [`store::Read`](../store/trait.Read.html) implementation which queries a
-/// Tendermint node's state via RPC.
-///
-/// This client simply passes the query response through as bytes, so if the
-/// query response is a merkle proof then another layer must be used to verify,
-/// for example [`MerkClient`](../merkstore/struct.Client.html).
-pub struct TendermintClient {
-    client: HttpClient,
-}
+// use crate::encoding::Encode;
+// use crate::call::Call;
+// use crate::query::Query;
+// use crate::client::Client;
+// use crate::Result;
 
-impl TendermintClient {
-    /// Constructs a `TendermintClient` to make RPC requests to the given
-    /// address (for example, "localhost:26657").
-    ///
-    /// This will only fail for incorrectly formatted addresses, but will still
-    /// succeed even if the address is not a valid Tendermint RPC server.
-    /// Instead, if the address is not a valid server, requests made through the
-    /// client will fail.
-    pub fn new(addr: &str) -> Result<TendermintClient> {
-        Ok(TendermintClient {
-            client: HttpClient::new(addr)?,
-        })
-    }
-}
+// pub use tm::endpoint::broadcast::tx_commit::Response as TxResponse;
 
-impl Read for TendermintClient {
-    /// Gets a value from the store by making a raw key query to the Tendermint
-    /// RPC server. The raw response bytes will be returned, which may include
-    /// unverified proof bytes depending on the node's
-    /// [`ABCIStore`](../trait.ABCIStore.html) implementation.
-    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        Ok(Some(
-            block_on(self.client.abci_query(None, key, None, false))?.value,
-        ))
-    }
+// pub struct TendermintClient<T> {
+//     marker: std::marker::PhantomData<T>,
+//     client: tm::HttpClient,
+// }
 
-    fn get_next(&self, _key: &[u8]) -> Result<Option<KV>> {
-        todo!()
-    }
-}
+// impl<T> Clone for TendermintClient<T> {
+//     fn clone(&self) -> TendermintClient<T> {
+//         TendermintClient {
+//             marker: self.marker.clone(),
+//             client: self.client.clone(),
+//         }
+//     }
+// }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// impl<T> TendermintClient<T> {
+//     pub fn new(addr: &str) -> Result<Self> {
+//         Ok(TendermintClient {
+//             marker: std::marker::PhantomData,
+//             client: tm::HttpClient::new(addr)?,
+//         })
+//     }
+// }
 
-    #[test]
-    #[ignore]
-    fn get() {
-        let tc = TendermintClient::new("localhost:26657").unwrap();
-        let data = tc.get(b"count").unwrap();
-        println!("{:?}", data.unwrap()[3]);
-    }
-}
+// impl<T: Call + Query> Client for TendermintClient<T> {
+//     type Query = T::Query;
+//     type QueryRes = T;
+
+//     type Call = T::Call;
+
+//     fn query<F, R>(&self, query: T::Query, check: F) -> Result<R>
+//       where F: Fn(&Self::QueryRes) -> Result<R>
+//     {
+//       todo!()
+//     }
+
+//     fn call(&mut self, call: T::Call) -> Result<()> {
+//         let tx = call.encode()?.into();
+//         let res = block_on(self.client.broadcast_tx_commit(tx))?;
+
+//         if res.check_tx.code.is_err() {
+//             bail!("Call failed on checkTx: {:?}", &res.check_tx);
+//         }
+
+//         if res.deliver_tx.code.is_err() {
+//             bail!("Call failed on deliverTx: {:?}", &res.deliver_tx);
+//         }
+
+//         Ok(())
+//     }
+// }

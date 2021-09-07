@@ -1,6 +1,6 @@
 use super::{Read, Write, KV};
 use crate::Result;
-use std::cell::{RefCell, RefMut};
+use std::cell::{Ref, RefCell, RefMut};
 use std::rc::Rc;
 
 // TODO: we can probably use UnsafeCell instead of RefCell since operations are
@@ -32,6 +32,10 @@ impl<T> Shared<T> {
 
     pub fn borrow_mut(&mut self) -> RefMut<T> {
         self.0.borrow_mut()
+    }
+
+    pub fn borrow(&self) -> Ref<T> {
+        self.0.borrow()
     }
 }
 
