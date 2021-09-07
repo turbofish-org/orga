@@ -142,6 +142,21 @@ where
         }
     }
 
+    /// Gets the value from the key/value store by reading and decoding from raw
+    /// bytes, then constructing a `State` instance for the value by creating a
+    /// substore which uses the key as a prefix.
+    fn get_from_store(&self, key: &K) -> Result<Option<V>> {
+        let key_bytes = key.encode()?;
+        self.store
+            .get(key_bytes.as_slice())?
+            .map(|value_bytes| {
+                let substore = self.store.sub(key_bytes.as_slice());
+                let decoded = V::Encoding::decode(value_bytes.as_slice())?;
+                V::create(substore, decoded)
+            })
+            .transpose()
+    }
+
     pub fn insert(&mut self, key: K, value: V::Encoding) -> Result<()> {
         let map_key = MapKey::<K>::new(key)?;
 
@@ -172,7 +187,14 @@ where
             self.get_from_store(&map_key.inner)?.map(Ref::Owned)
         })
     }
+}
 
+impl<K, V, S> Map<K, V, S>
+where
+    K: Encode + Terminated + Clone,
+    V: State<S>,
+    S: Read,
+{
     /// Gets a mutable reference to the value in the map for the given key, or
     /// `None` if the key has no value.
     ///
@@ -211,21 +233,6 @@ where
                 },
             }
         })
-    }
-
-    /// Gets the value from the key/value store by reading and decoding from raw
-    /// bytes, then constructing a `State` instance for the value by creating a
-    /// substore which uses the key as a prefix.
-    fn get_from_store(&self, key: &K) -> Result<Option<V>> {
-        let key_bytes = key.encode()?;
-        self.store
-            .get(key_bytes.as_slice())?
-            .map(|value_bytes| {
-                let substore = self.store.sub(key_bytes.as_slice());
-                let decoded = V::Encoding::decode(value_bytes.as_slice())?;
-                V::create(substore, decoded)
-            })
-            .transpose()
     }
 
     /// Removes the value at the given key, if any.
