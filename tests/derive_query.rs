@@ -1,8 +1,8 @@
 #![feature(specialization)]
 #![feature(trivial_bounds)]
 
-use orga::query::Query;
 use orga::collections::Deque;
+use orga::query::Query;
 
 #[derive(Query)]
 struct Foo<T> {
@@ -32,8 +32,7 @@ impl<T> Foo<T> {
 
     #[query]
     pub fn complex_type(&self) -> orga::Result<u32> {
-        let res = self.bar.deque.get(123)?
-            .unwrap_or_default();
+        let res = self.bar.deque.get(123)?.unwrap_or_default();
         Ok(*res)
     }
 }
