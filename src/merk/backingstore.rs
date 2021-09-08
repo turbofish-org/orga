@@ -64,6 +64,13 @@ impl BackingStore {
             _ => bail!("Failed to downcast backing store to wrapped merk"),
         }
     }
+
+    pub fn into_map_store(self) -> Result<Shared<MapStore>> {
+        match self {
+            BackingStore::MapStore(store) => Ok(store),
+            _ => bail!("Failed to downcast backing store to map store"),
+        }
+    }
 }
 
 impl From<WrappedMerkStore> for BackingStore {
