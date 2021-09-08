@@ -25,7 +25,7 @@ impl<T: Entry, S> From<EntryMap<T, S>> for () {
 
 impl<T: Entry, S> State<S> for EntryMap<T, S>
 where
-    T::Key: Encode + Terminated + Eq + Hash + Ord,
+    T::Key: Encode + Terminated,
     T::Value: State<S>,
 {
     type Encoding = ();
