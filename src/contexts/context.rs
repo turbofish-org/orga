@@ -5,7 +5,8 @@ use std::lazy::SyncLazy;
 use std::mem::{transmute, ManuallyDrop};
 use std::sync::Mutex;
 
-static CONTEXT_MAP: SyncLazy<Mutex<ManuallyDrop<HashMap<TypeId, Box<()>>>>> =
+type ContextMap = ManuallyDrop<HashMap<TypeId, Box<()>>>;
+static CONTEXT_MAP: SyncLazy<Mutex<ContextMap>> =
     SyncLazy::new(|| Mutex::new(ManuallyDrop::new(HashMap::new())));
 
 pub struct Context<I> {
