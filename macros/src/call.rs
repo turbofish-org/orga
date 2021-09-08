@@ -136,7 +136,7 @@ fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> 
 
             quote! {
                 Call::#variant_name(subcall) => {
-                    ::orga::call::Call::call(&self.#field_name, subcall)
+                    ::orga::call::Call::call(&mut self.#field_name, subcall)
                 }
             }
         })
@@ -198,17 +198,17 @@ fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> 
             );
             maybe_call_defs.push(quote! {
                 trait #trait_name#generic_reqs {
-                    fn maybe_call(&self #full_inputs) -> ::orga::Result<#output_type>;
+                    fn maybe_call(&mut self #full_inputs) -> ::orga::Result<#output_type>;
                 }
                 impl<__Self, #(#requirements),*> #trait_name#generic_reqs for __Self {
-                    default fn maybe_call(&self #full_inputs) -> ::orga::Result<#output_type> {
+                    default fn maybe_call(&mut self #full_inputs) -> ::orga::Result<#output_type> {
                         failure::bail!("This call cannot be called because not all bounds are met")
                     }
                 }
                 impl#parent_generics #trait_name#generic_reqs for #name#generic_params
                 where #where_preds #encoding_bounds #call_bounds #parent_where_preds
                 {
-                    fn maybe_call(&self #full_inputs) -> ::orga::Result<#output_type> {
+                    fn maybe_call(&mut self #full_inputs) -> ::orga::Result<#output_type> {
                         Ok(self.#method_name(#(#inputs),*))
                     }
                 }
@@ -224,7 +224,7 @@ fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> 
                 Call::#variant_name(#(#inputs,)* subcall) => {
                     let subcall = ::orga::encoding::Decode::decode(subcall.as_slice())?;
                     ::orga::call::Call::call(
-                        &#trait_name#dotted_generic_reqs::maybe_call(self, #(#inputs),*),
+                        &mut #trait_name#dotted_generic_reqs::maybe_call(self, #(#inputs),*),
                         subcall,
                     )
                 }
@@ -240,7 +240,6 @@ fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> 
 
             fn call(&mut self, call: Self::Call) -> ::orga::Result<()> {
                 match call {
-                    Call::This => Ok(()),
                     #(#field_call_arms),*
                     #(#method_call_arms),*
                 }
@@ -339,7 +338,6 @@ fn create_call_enum(item: &DeriveInput, source: &File) -> ItemEnum {
         pub enum Call#generic_params
         where #call_preds
         {
-            This,
             #(#field_variants,)*
             #(#method_variants,)*
         }
