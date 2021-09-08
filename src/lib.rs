@@ -1,5 +1,6 @@
 #![feature(map_first_last)]
 #![feature(entry_insert)]
+#![feature(bound_map)]
 #![feature(once_cell)]
 #![feature(associated_type_defaults)]
 #![feature(trivial_bounds)]
