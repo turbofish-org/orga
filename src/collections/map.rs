@@ -779,7 +779,7 @@ mod tests {
         map.entry(4).unwrap().or_create(5).unwrap();
         assert!(map.get(4).unwrap().is_none());
         let map_key = MapKey::<u32>::new(4).unwrap();
-        assert!(map.children.contains_key(&map_key));
+        assert!(!map.children.contains_key(&map_key));
         assert!(store.get(&enc(4)).unwrap().is_none());
     }
 
