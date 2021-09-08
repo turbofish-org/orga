@@ -1,7 +1,7 @@
 #![feature(min_specialization)]
 use orga::prelude::*;
 
-#[derive(State)]
+#[derive(State, Call, Query)]
 pub struct Counter {
     num_blocks: u32,
 }
@@ -10,13 +10,6 @@ impl BeginBlock for Counter {
     fn begin_block(&mut self) -> Result<()> {
         self.num_blocks += 1;
         println!("num_blocks is {}", self.num_blocks);
-        Ok(())
-    }
-}
-
-impl Call for Counter {
-    type Call = ();
-    fn call(&mut self, _call: Self::Call) -> Result<()> {
         Ok(())
     }
 }
