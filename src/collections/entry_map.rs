@@ -8,6 +8,7 @@ use std::hash::Hash;
 use std::ops::RangeBounds;
 
 use super::{Entry, Next};
+use crate::call::Call;
 use crate::query::Query;
 use crate::state::*;
 use crate::store::*;
@@ -21,6 +22,15 @@ pub struct EntryMap<T: Entry, S = DefaultBackingStore> {
 
 impl<T: Entry, S> From<EntryMap<T, S>> for () {
     fn from(_map: EntryMap<T, S>) {}
+}
+
+// TODO: add a get_mut method (maybe just takes in T::Key?) so we can route calls to children
+impl<T: Entry, S> Call for EntryMap<T, S> {
+    type Call = ();
+
+    fn call(&mut self, _: ()) -> Result<()> {
+        failure::bail!("not callable yet")
+    }
 }
 
 impl<T: Entry, S> State<S> for EntryMap<T, S>

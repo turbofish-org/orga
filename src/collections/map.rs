@@ -6,6 +6,7 @@ use std::iter::Peekable;
 use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
 use super::Next;
+use crate::call::Call;
 use crate::query::Query;
 use crate::state::*;
 use crate::store::Iter as StoreIter;
@@ -118,6 +119,7 @@ where
     /// The returned value will reference the latest changes to the data even if
     /// the value was inserted, modified, or deleted since the last time the map
     /// was flushed.
+    #[call]
     pub fn get_mut(&mut self, key: K) -> Result<Option<RefMut<K, V, S>>> {
         Ok(self.entry(key)?.into())
     }
@@ -454,7 +456,7 @@ impl<'a, V: Default> Default for Ref<'a, V> {
 ///
 /// If the value is mutated, it will be retained in memory until the parent
 /// collection is flushed.
-pub enum RefMut<'a, K, V, S> {
+pub enum RefMut<'a, K, V, S = DefaultBackingStore> {
     /// An existing value which was loaded from the store.
     Unmodified(Option<(K, V, &'a mut Map<K, V, S>)>),
 
@@ -483,6 +485,17 @@ where
         };
 
         Ok(())
+    }
+}
+
+impl<'a, K, V: Call, S> Call for RefMut<'a, K, V, S>
+where
+    K: Eq + Hash + Ord + Clone,
+{
+    type Call = V::Call;
+
+    fn call(&mut self, call: Self::Call) -> Result<()> {
+        (**self).call(call)
     }
 }
 
