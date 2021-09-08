@@ -19,7 +19,6 @@ struct Foo<T> {
 #[derive(Query, Call)]
 pub struct Bar {
     deque: Deque<u32>,
-    pub _x: (), // TODO: allow noop impls
 }
 
 #[derive(Query, Call)]
@@ -137,6 +136,7 @@ fn _exhaustive_match_query<T: Query>(query: foo_query::Query<T>) {
 fn _exhaustive_match_call<T: Call>(call: foo_call::Call<T>) {
     use foo_call::Call;
     match call {
+        Call::Noop => {}
         Call::FieldA(subcall) => _assert_type::<()>(subcall),
         Call::FieldB(subcall) => _assert_type::<T::Call>(subcall),
         Call::FieldBar(subcall) => _assert_type::<bar_call::Call>(subcall),

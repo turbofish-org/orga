@@ -15,22 +15,13 @@ use crate::store::*;
 use crate::Result;
 use ed::*;
 
-#[derive(Query)]
+#[derive(Query, Call)]
 pub struct EntryMap<T: Entry, S = DefaultBackingStore> {
     map: Map<T::Key, T::Value, S>,
 }
 
 impl<T: Entry, S> From<EntryMap<T, S>> for () {
     fn from(_map: EntryMap<T, S>) {}
-}
-
-// TODO: add a get_mut method (maybe just takes in T::Key?) so we can route calls to children
-impl<T: Entry, S> Call for EntryMap<T, S> {
-    type Call = ();
-
-    fn call(&mut self, _: ()) -> Result<()> {
-        failure::bail!("not callable yet")
-    }
 }
 
 impl<T: Entry, S> State<S> for EntryMap<T, S>
@@ -56,6 +47,9 @@ where
         self.map.flush()
     }
 }
+
+// TODO: add a get_mut method (maybe just takes in T::Key?) so we can add
+// #[call] to it to route calls to children
 
 impl<T, S> EntryMap<T, S>
 where

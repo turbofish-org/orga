@@ -240,6 +240,7 @@ fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> 
 
             fn call(&mut self, call: Self::Call) -> ::orga::Result<()> {
                 match call {
+                    Noop => failure::bail!("not callable"),
                     #(#field_call_arms),*
                     #(#method_call_arms),*
                 }
@@ -338,6 +339,7 @@ fn create_call_enum(item: &DeriveInput, source: &File) -> ItemEnum {
         pub enum Call#generic_params
         where #call_preds
         {
+            Noop,
             #(#field_variants,)*
             #(#method_variants,)*
         }
