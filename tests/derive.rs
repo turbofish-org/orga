@@ -42,7 +42,7 @@ fn struct_state() {
     let mapstore = Shared::new(MapStore::new());
     let store = Store::new(mapstore.into());
 
-    let mut state = MyStruct::create(store.clone(), Default::default()).unwrap();
+    let mut state = MyStruct::create(store, Default::default()).unwrap();
 
     assert_eq!(state.a, 0);
     assert_eq!(state.c.0, 0);
