@@ -11,20 +11,20 @@ pub fn derive(item: TokenStream) -> TokenStream {
 
     let name = &item.ident;
     let modname = Ident::new(
-        format!("{}_query", name).to_snake_case().as_str(),
+        format!("{}_call", name).to_snake_case().as_str(),
         Span::call_site(),
     );
 
-    let query_enum = create_query_enum(&item, &source);
-    let query_impl = create_query_impl(&item, &source, &query_enum);
+    let call_enum = create_call_enum(&item, &source);
+    let call_impl = create_call_impl(&item, &source, &call_enum);
 
     let output = quote!(
         use ::orga::macros::*;
 
         pub mod #modname {
             use super::*;
-            #query_enum
-            #query_impl
+            #call_enum
+            #call_impl
         }
     );
 
@@ -35,25 +35,25 @@ pub fn attr(_args: TokenStream, input: TokenStream) -> TokenStream {
     let method = parse_macro_input!(input as ImplItemMethod);
 
     if !matches!(method.vis, Visibility::Public(_)) {
-        panic!("Query methods must be public");
+        panic!("Call methods must be public");
     }
 
     if method.sig.unsafety.is_some() {
-        panic!("Query methods cannot be unsafe");
+        panic!("Call methods cannot be unsafe");
     }
 
     if method.sig.asyncness.is_some() {
-        panic!("Query methods cannot be async");
+        panic!("Call methods cannot be async");
     }
 
     if method.sig.abi.is_some() {
-        panic!("Query methods cannot specify ABI");
+        panic!("Call methods cannot specify ABI");
     }
 
     quote!(#method).into()
 }
 
-fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -> TokenStream2 {
+fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> TokenStream2 {
     let name = &item.ident;
     let generics = &item.generics;
     let mut generics_sanitized = generics.clone();
@@ -64,11 +64,11 @@ fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -
     });
     let generic_params = gen_param_input(generics, true);
 
-    let query_type = &query_enum.ident;
-    let query_generics = &query_enum.generics;
+    let call_type = &call_enum.ident;
+    let call_generics = &call_enum.generics;
     let where_preds = item.generics.where_clause.as_ref().map(|w| &w.predicates);
 
-    let encoding_bounds = relevant_methods(name, "query", source)
+    let encoding_bounds = relevant_methods(name, "call", source)
         .into_iter()
         .flat_map(|(method, _)| {
             let inputs: Vec<_> = method
@@ -90,7 +90,7 @@ fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -
         .map(|p| quote!(#p: ::orga::encoding::Encode + ::orga::encoding::Decode + ::orga::encoding::Terminated,));
     let encoding_bounds = quote!(#(#encoding_bounds)*);
 
-    let query_bounds = relevant_methods(name, "query", source)
+    let call_bounds = relevant_methods(name, "call", source)
         .into_iter()
         .map(|(method, _)| {
             let unit_tuple: Type = parse2(quote!(())).unwrap();
@@ -105,15 +105,15 @@ fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -
                 generics.params.iter().cloned(),
             )
         })
-        .map(|t| quote!(#t: ::orga::query::Query,));
-    let query_bounds = quote!(#(#query_bounds)*);
+        .map(|t| quote!(#t: ::orga::call::Call,));
+    let call_bounds = quote!(#(#call_bounds)*);
 
     let fields = match &item.data {
         Data::Struct(data) => data.fields.iter(),
         Data::Enum(_) => todo!("Enums are not supported yet"),
         Data::Union(_) => panic!("Unions are not supported"),
     };
-    let field_query_arms: Vec<_> = fields
+    let field_call_arms: Vec<_> = fields
         .filter(|field| matches!(field.vis, Visibility::Public(_)))
         .enumerate()
         .map(|(i, field)| {
@@ -135,15 +135,15 @@ fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -
             );
 
             quote! {
-                Query::#variant_name(subquery) => {
-                    ::orga::query::Query::query(&self.#field_name, subquery)
+                Call::#variant_name(subcall) => {
+                    ::orga::call::Call::call(&mut self.#field_name, subcall)
                 }
             }
         })
         .collect();
 
     let mut maybe_call_defs = vec![];
-    let method_query_arms: Vec<_> = relevant_methods(name, "query", source)
+    let method_call_arms: Vec<_> = relevant_methods(name, "call", source)
         .into_iter()
         .map(|(method, parent)| {
             let method_name = &method.sig.ident;
@@ -198,17 +198,17 @@ fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -
             );
             maybe_call_defs.push(quote! {
                 trait #trait_name#generic_reqs {
-                    fn maybe_call(&self #full_inputs) -> ::orga::Result<#output_type>;
+                    fn maybe_call(&mut self #full_inputs) -> ::orga::Result<#output_type>;
                 }
                 impl<__Self, #(#requirements),*> #trait_name#generic_reqs for __Self {
-                    default fn maybe_call(&self #full_inputs) -> ::orga::Result<#output_type> {
-                        failure::bail!("This query cannot be called because not all bounds are met")
+                    default fn maybe_call(&mut self #full_inputs) -> ::orga::Result<#output_type> {
+                        failure::bail!("This call cannot be called because not all bounds are met")
                     }
                 }
                 impl#parent_generics #trait_name#generic_reqs for #name#generic_params
-                where #where_preds #encoding_bounds #query_bounds #parent_where_preds
+                where #where_preds #encoding_bounds #call_bounds #parent_where_preds
                 {
-                    fn maybe_call(&self #full_inputs) -> ::orga::Result<#output_type> {
+                    fn maybe_call(&mut self #full_inputs) -> ::orga::Result<#output_type> {
                         Ok(self.#method_name(#(#inputs),*))
                     }
                 }
@@ -221,11 +221,11 @@ fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -
             };
 
             quote! {
-                Query::#variant_name(#(#inputs,)* subquery) => {
-                    let subquery = ::orga::encoding::Decode::decode(subquery.as_slice())?;
-                    ::orga::query::Query::query(
-                        &#trait_name#dotted_generic_reqs::maybe_call(self, #(#inputs),*),
-                        subquery,
+                Call::#variant_name(#(#inputs,)* subcall) => {
+                    let subcall = ::orga::encoding::Decode::decode(subcall.as_slice())?;
+                    ::orga::call::Call::call(
+                        &mut #trait_name#dotted_generic_reqs::maybe_call(self, #(#inputs),*),
+                        subcall,
                     )
                 }
             }
@@ -233,16 +233,16 @@ fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -
         .collect();
 
     quote! {
-        impl#generics_sanitized ::orga::query::Query for #name#generic_params
-        where #where_preds #encoding_bounds #query_bounds
+        impl#generics_sanitized ::orga::call::Call for #name#generic_params
+        where #where_preds #encoding_bounds #call_bounds
         {
-            type Query = #query_type#query_generics;
+            type Call = #call_type#call_generics;
 
-            fn query(&self, query: Self::Query) -> ::orga::Result<()> {
-                match query {
-                    Query::This => Ok(()),
-                    #(#field_query_arms),*
-                    #(#method_query_arms),*
+            fn call(&mut self, call: Self::Call) -> ::orga::Result<()> {
+                match call {
+                    Noop => failure::bail!("not callable"),
+                    #(#field_call_arms),*
+                    #(#method_call_arms),*
                 }
             }
         }
@@ -250,12 +250,12 @@ fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -
     }
 }
 
-fn create_query_enum(item: &DeriveInput, source: &File) -> ItemEnum {
+fn create_call_enum(item: &DeriveInput, source: &File) -> ItemEnum {
     let name = &item.ident;
     let generics = &item.generics;
 
     let mut generic_params = vec![];
-    let mut query_params = vec![];
+    let mut call_params = vec![];
 
     let fields = match &item.data {
         Data::Struct(data) => data.fields.iter(),
@@ -281,15 +281,15 @@ fn create_query_enum(item: &DeriveInput, source: &File) -> ItemEnum {
                 generics.params.iter().cloned(),
             );
             generic_params.extend(requirements.clone());
-            query_params.extend(requirements);
+            call_params.extend(requirements);
 
             let ty = &field.ty;
 
-            quote!(#name(<#ty as ::orga::query::Query>::Query))
+            quote!(#name(<#ty as ::orga::call::Call>::Call))
         })
         .collect();
 
-    let method_variants: Vec<_> = relevant_methods(name, "query", source)
+    let method_variants: Vec<_> = relevant_methods(name, "call", source)
         .into_iter()
         .map(|(method, _)| {
             let name_camel = method.sig.ident.to_string().to_camel_case();
@@ -332,14 +332,14 @@ fn create_query_enum(item: &DeriveInput, source: &File) -> ItemEnum {
         quote!(<#(#params),*>)
     };
 
-    let query_preds = quote!(#(#query_params: ::orga::query::Query),*);
+    let call_preds = quote!(#(#call_params: ::orga::call::Call),*);
 
     let output = quote! {
         #[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
-        pub enum Query#generic_params
-        where #query_preds
+        pub enum Call#generic_params
+        where #call_preds
         {
-            This,
+            Noop,
             #(#field_variants,)*
             #(#method_variants,)*
         }

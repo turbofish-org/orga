@@ -8,13 +8,14 @@ use std::hash::Hash;
 use std::ops::RangeBounds;
 
 use super::{Entry, Next};
+use crate::call::Call;
 use crate::query::Query;
 use crate::state::*;
 use crate::store::*;
 use crate::Result;
 use ed::*;
 
-#[derive(Query)]
+#[derive(Query, Call)]
 pub struct EntryMap<T: Entry, S = DefaultBackingStore> {
     map: Map<T::Key, T::Value, S>,
 }
@@ -46,6 +47,9 @@ where
         self.map.flush()
     }
 }
+
+// TODO: add a get_mut method (maybe just takes in T::Key?) so we can add
+// #[call] to it to route calls to children
 
 impl<T, S> EntryMap<T, S>
 where

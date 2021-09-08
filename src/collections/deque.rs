@@ -1,4 +1,5 @@
 use super::map::{ChildMut, Map, ReadOnly, Ref};
+use crate::call::Call;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
@@ -31,6 +32,15 @@ impl Default for Meta {
 impl<T, S> From<Deque<T, S>> for Meta {
     fn from(deque: Deque<T, S>) -> Meta {
         deque.meta
+    }
+}
+
+impl<T: Call + State<S>, S: Write> Call for Deque<T, S> {
+    type Call = (u64, T::Call);
+
+    fn call(&mut self, call: Self::Call) -> Result<()> {
+        let (index, subcall) = call;
+        self.get_mut(index)?.call(subcall)
     }
 }
 
@@ -85,6 +95,10 @@ impl<T: State<S>, S: Read> Deque<T, S> {
 }
 
 impl<T: State<S>, S: Write> Deque<T, S> {
+    pub fn get_mut(&mut self, index: u64) -> Result<Option<ChildMut<u64, T, S>>> {
+        self.map.get_mut(index + self.meta.head)
+    }
+
     pub fn push_back(&mut self, value: T::Encoding) -> Result<()> {
         let index = self.meta.tail;
         self.meta.tail += 1;
@@ -117,10 +131,6 @@ impl<T: State<S>, S: Write> Deque<T, S> {
 
         self.meta.tail -= 1;
         self.map.remove(self.meta.tail)
-    }
-
-    pub fn get_mut(&mut self, index: u64) -> Result<Option<ChildMut<u64, T, S>>> {
-        self.map.get_mut(index + self.meta.head)
     }
 }
 
