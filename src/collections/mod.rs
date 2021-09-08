@@ -10,6 +10,8 @@ pub use deque::Deque;
 pub use entry_map::EntryMap;
 pub use map::Map;
 
+pub use map::{Ref, RefMut};
+
 /// A trait for types which can be converted to or from a key/value pair.
 ///
 /// This is useful when it is conceptually easier to think about values as
