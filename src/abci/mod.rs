@@ -9,6 +9,7 @@ use log::info;
 
 use crate::call::Call;
 use crate::merk::MerkStore;
+use crate::query::Query;
 use crate::state::State;
 use crate::store::{BufStore, BufStoreMap, MapStore, Read, Shared, Write, KV};
 use crate::Result;
@@ -522,8 +523,8 @@ impl<S: State> InitChain for S {
 }
 
 // TODO: add Call and Query
-pub trait App: BeginBlock + EndBlock + InitChain + State + Call {}
-impl<T: BeginBlock + EndBlock + InitChain + State + Call> App for T where
+pub trait App: BeginBlock + EndBlock + InitChain + State + Call + Query {}
+impl<T: BeginBlock + EndBlock + InitChain + State + Call + Query> App for T where
     <T as State>::Encoding: Default
 {
 }
