@@ -119,9 +119,9 @@ where
                 encoded_bytes
             }
         };
-        let data: <A as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
-        let mut state = <A as State>::create(store.clone(), data)?;
-        A::init_chain(&mut state)?;
+        let data: <ABCIProvider<A> as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
+        let mut state = <ABCIProvider<A> as State>::create(store.clone(), data)?;
+        state.call(ABCICall::InitChain)?;
         let flushed = state.flush()?;
         store.put(vec![], flushed.encode()?)?;
 
@@ -133,7 +133,6 @@ where
         store: WrappedMerk,
         _req: RequestBeginBlock,
     ) -> Result<ResponseBeginBlock> {
-        println!("got beginblock request");
         let mut store = Store::new(store.into());
         let state_bytes = store.get(&[])?.unwrap();
         let data: <ABCIProvider<A> as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
@@ -185,29 +184,28 @@ where
     }
 
     fn query(&self, store: Shared<MerkStore>, req: RequestQuery) -> Result<ResponseQuery> {
-        todo!();
-        // let query_bytes = req.data;
-        // let backing_store: BackingStore = store.clone().into();
-        // let store_height = store.borrow().height()?;
-        // let store = Store::new(backing_store.clone());
-        // let state_bytes = store.get(&[])?.unwrap();
-        // let data: <A as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
-        // let state = <A as State>::create(store.clone(), data)?;
+        let query_bytes = req.data;
+        let backing_store: BackingStore = store.clone().into();
+        let store_height = store.borrow().height()?;
+        let store = Store::new(backing_store.clone());
+        let state_bytes = store.get(&[])?.unwrap();
+        let data: <ABCIProvider<A> as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
+        let state = <ABCIProvider<A> as State>::create(store.clone(), data)?;
 
-        // // Check which keys are accessed by the query and build a proof
-        // let query = Decode::decode(query_bytes.as_slice())?;
-        // state.query(query)?;
-        // let proof_builder = backing_store.into_proof_builder()?;
-        // let proof_bytes = proof_builder.build()?;
+        // Check which keys are accessed by the query and build a proof
+        let query = Decode::decode(query_bytes.as_slice())?;
+        state.query(query)?;
+        let proof_builder = backing_store.into_proof_builder()?;
+        let proof_bytes = proof_builder.build()?;
 
-        // let res = ResponseQuery {
-        //     code: 0,
-        //     height: store_height as i64,
-        //     value: proof_bytes,
-        //     ..Default::default()
-        // };
+        let res = ResponseQuery {
+            code: 0,
+            height: store_height as i64,
+            value: proof_bytes,
+            ..Default::default()
+        };
 
-        // Ok(res)
+        Ok(res)
     }
 }
 
