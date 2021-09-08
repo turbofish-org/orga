@@ -50,7 +50,7 @@ where
 impl<T, S> EntryMap<T, S>
 where
     T: Entry,
-    T::Key: Encode + Terminated + Clone,
+    T::Key: Encode + Terminated,
     T::Value: State<S>,
     S: Read,
 {
@@ -59,17 +59,25 @@ where
         self.map.insert(key, value.into())
     }
 
+    #[query]
+    pub fn contains_entry_key(&self, entry: T) -> Result<bool> {
+        let (key, _) = entry.into_entry();
+        self.map.contains_key(key)
+    }
+}
+
+impl<T, S> EntryMap<T, S>
+where
+    T: Entry,
+    T::Key: Encode + Terminated + Clone,
+    T::Value: State<S>,
+    S: Read,
+{
     pub fn delete(&mut self, entry: T) -> Result<()> {
         let (key, _) = entry.into_entry();
         self.map.remove(key)?;
 
         Ok(())
-    }
-
-    #[query]
-    pub fn contains_entry_key(&self, entry: T) -> Result<bool> {
-        let (key, _) = entry.into_entry();
-        self.map.contains_key(key)
     }
 }
 
