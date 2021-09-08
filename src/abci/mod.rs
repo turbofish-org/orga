@@ -7,24 +7,21 @@ use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use failure::bail;
 use log::info;
 
+use crate::call::Call;
 use crate::merk::MerkStore;
 use crate::state::State;
 use crate::store::{BufStore, BufStoreMap, MapStore, Read, Shared, Write, KV};
 use crate::Result;
 mod node;
 pub use node::*;
-mod context;
-pub use context::*;
-mod transaction;
-pub use transaction::*;
 
 use messages::*;
 pub use tendermint_proto::abci as messages;
 use tendermint_proto::abci::request::Value as Req;
 use tendermint_proto::abci::response::Value as Res;
 
-mod tendermint_client;
-pub use tendermint_client::TendermintClient;
+// mod tendermint_client;
+// pub use tendermint_client::TendermintClient;
 
 /// Top-level struct for running an ABCI application. Maintains an ABCI server,
 /// mempool, and handles committing data to the store.
@@ -495,8 +492,6 @@ impl ABCIStore for MemStore {
         Ok(Default::default())
     }
 }
-mod container;
-pub use container::*;
 
 pub trait BeginBlock {
     fn begin_block(&mut self) -> Result<()>;
