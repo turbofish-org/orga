@@ -83,7 +83,7 @@ where
 impl<T, S> EntryMap<T, S>
 where
     T: Entry,
-    T::Key: Encode + Terminated + Eq + Clone,
+    T::Key: Encode + Terminated + Clone,
     T::Value: State<S> + Eq,
     S: Read,
 {
