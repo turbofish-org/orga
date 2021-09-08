@@ -120,7 +120,7 @@ where
         })
     }
 
-    pub fn range<B: RangeBounds<T::Key> + Clone>(&'a mut self, range: B) -> Result<Iter<'a, T, S>> {
+    pub fn range<B: RangeBounds<T::Key>>(&'a mut self, range: B) -> Result<Iter<'a, T, S>> {
         Ok(Iter {
             map_iter: self.map.range(range)?,
         })
