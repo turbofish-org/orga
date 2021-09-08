@@ -1,7 +1,8 @@
 use std::marker::PhantomData;
 
-use super::{ABCIStateMachine, ABCIStore, App, Application, Container, WrappedMerk, CONTEXT};
+use super::{ABCIStateMachine, ABCIStore, App, Application, WrappedMerk};
 use crate::call::Call;
+use crate::contexts::{ABCICall, ABCIProvider};
 use crate::encoding::{Decode, Encode};
 use crate::merk::{BackingStore, MerkStore};
 use crate::query::Query;
@@ -11,10 +12,7 @@ use crate::tendermint::Tendermint;
 use crate::Result;
 use std::path::{Path, PathBuf};
 use tendermint_proto::abci::*;
-pub struct Node<A: App>
-where
-    <A as State>::Encoding: Default,
-{
+pub struct Node<A> {
     _app: PhantomData<A>,
     tm_home: PathBuf,
     merk_home: PathBuf,
@@ -63,7 +61,7 @@ where
                 .rpc_laddr(format!("tcp://0.0.0.0:{}", rpc_port).as_str()) // Note: public by default
                 .start();
         });
-        let app = InternalApp::<Container<A>>::new();
+        let app = InternalApp::<ABCIProvider<A>>::new();
         let store = MerkStore::new(self.merk_home.clone());
 
         // Start ABCI server
@@ -104,8 +102,9 @@ where
     }
 }
 
-impl<A: App> Application for InternalApp<A>
+impl<A> Application for InternalApp<ABCIProvider<A>>
 where
+    A: App,
     <A as State>::Encoding: Default,
 {
     fn init_chain(&self, store: WrappedMerk, _req: RequestInitChain) -> Result<ResponseInitChain> {
@@ -121,8 +120,6 @@ where
             }
         };
         let data: <A as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
-        // TODO: double-check that default encoding is the same as if we made a
-        // state, flushed, encoded, and wrote that instead.
         let mut state = <A as State>::create(store.clone(), data)?;
         A::init_chain(&mut state)?;
         let flushed = state.flush()?;
@@ -134,22 +131,14 @@ where
     fn begin_block(
         &self,
         store: WrappedMerk,
-        req: RequestBeginBlock,
+        _req: RequestBeginBlock,
     ) -> Result<ResponseBeginBlock> {
-        // Set context
-        {
-            let mut ctx = CONTEXT.lock().unwrap();
-            if let Some(header) = req.header.as_ref() {
-                ctx.height = header.height as u64;
-            }
-            ctx.header = req.header;
-        };
-        // Step state machine
+        println!("got beginblock request");
         let mut store = Store::new(store.into());
         let state_bytes = store.get(&[])?.unwrap();
-        let data: <A as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
-        let mut state = <A as State>::create(store.clone(), data)?;
-        A::begin_block(&mut state)?;
+        let data: <ABCIProvider<A> as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
+        let mut state = <ABCIProvider<A> as State>::create(store.clone(), data)?;
+        state.call(ABCICall::BeginBlock)?;
         let flushed = state.flush()?;
         store.put(vec![], flushed.encode()?)?;
 
@@ -159,19 +148,12 @@ where
     fn end_block(&self, store: WrappedMerk, _req: RequestEndBlock) -> Result<ResponseEndBlock> {
         let mut store = Store::new(store.into());
         let state_bytes = store.get(&[])?.unwrap();
-        let data: <A as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
-        let mut state = <A as State>::create(store.clone(), data)?;
-        A::end_block(&mut state)?;
+        let data: <ABCIProvider<A> as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
+        let mut state = <ABCIProvider<A> as State>::create(store.clone(), data)?;
+        state.call(ABCICall::EndBlock)?;
         let flushed = state.flush()?;
         store.put(vec![], flushed.encode()?)?;
-        // Send back validator updates
-        let mut res: ResponseEndBlock = Default::default();
-        {
-            let mut ctx = CONTEXT.lock().unwrap();
-            ctx.validator_updates.drain().for_each(|(_key, update)| {
-                res.validator_updates.push(update);
-            });
-        }
+        let res: ResponseEndBlock = Default::default();
 
         Ok(res)
     }
@@ -179,10 +161,10 @@ where
     fn deliver_tx(&self, store: WrappedMerk, req: RequestDeliverTx) -> Result<ResponseDeliverTx> {
         let mut store = Store::new(store.into());
         let state_bytes = store.get(&[])?.unwrap();
-        let data: <A as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
-        let mut state = <A as State>::create(store.clone(), data)?;
-        let call = Decode::decode(req.tx.as_slice())?;
-        state.call(call)?;
+        let data: <ABCIProvider<A> as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
+        let mut state = <ABCIProvider<A> as State>::create(store.clone(), data)?;
+        let inner_call = Decode::decode(req.tx.as_slice())?;
+        state.call(ABCICall::DeliverTx(inner_call))?;
         let flushed = state.flush()?;
         store.put(vec![], flushed.encode()?)?;
 
@@ -192,10 +174,10 @@ where
     fn check_tx(&self, store: WrappedMerk, req: RequestCheckTx) -> Result<ResponseCheckTx> {
         let mut store = Store::new(store.into());
         let state_bytes = store.get(&[])?.unwrap();
-        let data: <A as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
-        let mut state = <A as State>::create(store.clone(), data)?;
-        let call = Decode::decode(req.tx.as_slice())?;
-        state.call(call)?;
+        let data: <ABCIProvider<A> as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
+        let mut state = <ABCIProvider<A> as State>::create(store.clone(), data)?;
+        let inner_call = Decode::decode(req.tx.as_slice())?;
+        state.call(ABCICall::CheckTx(inner_call))?;
         let flushed = state.flush()?;
         store.put(vec![], flushed.encode()?)?;
 
@@ -228,14 +210,11 @@ where
     }
 }
 
-struct InternalApp<A: App>
-where
-    <A as State>::Encoding: Default,
-{
+struct InternalApp<A> {
     _app: PhantomData<A>,
 }
 
-impl<A: App> InternalApp<A>
+impl<A: App> InternalApp<ABCIProvider<A>>
 where
     <A as State>::Encoding: Default,
 {

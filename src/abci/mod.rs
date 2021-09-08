@@ -522,5 +522,8 @@ impl<S: State> InitChain for S {
 }
 
 // TODO: add Call and Query
-pub trait App: BeginBlock + EndBlock + InitChain + State {}
-impl<T: BeginBlock + EndBlock + InitChain + State> App for T where <T as State>::Encoding: Default {}
+pub trait App: BeginBlock + EndBlock + InitChain + State + Call {}
+impl<T: BeginBlock + EndBlock + InitChain + State + Call> App for T where
+    <T as State>::Encoding: Default
+{
+}
