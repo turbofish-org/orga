@@ -376,8 +376,16 @@ where
                 paths.push(last.clone());
                 if let PathArguments::AngleBracketed(ref args) = last.arguments {
                     for arg in args.args.iter() {
-                        if let GenericArgument::Type(Type::Path(ref path)) = arg {
-                            add_arguments(path, paths)
+                        if let GenericArgument::Type(ty) = arg {
+                            let maybe_path = match ty {
+                                Type::Path(path) => Some(path),
+                                Type::Reference(reference) => match *reference.elem {
+                                    Type::Path(ref path) => Some(path),
+                                    _ => None,
+                                },
+                                _ => None,
+                            };
+                            maybe_path.map(|path| add_arguments(path, paths));
                         }
                     }
                 }
