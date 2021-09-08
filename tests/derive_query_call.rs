@@ -16,7 +16,6 @@ struct Foo<T> {
     pub bar: Bar,
 }
 
-
 #[derive(Query, Call)]
 pub struct Bar {
     deque: Deque<u32>,
@@ -89,7 +88,9 @@ impl<T> Foo<T> {
     }
 
     #[call]
-    pub fn complex_type_call(&mut self) -> orga::Result<Option<orga::collections::RefMut<u64, u32>>> {
+    pub fn complex_type_call(
+        &mut self,
+    ) -> orga::Result<Option<orga::collections::RefMut<u64, u32>>> {
         self.bar.deque.get_mut(123)
     }
 }

@@ -2,11 +2,11 @@
 
 use proc_macro::TokenStream;
 
+mod call;
 mod entry;
 mod next;
 mod query;
 mod state;
-mod call;
 
 #[proc_macro_derive(State)]
 pub fn derive_state(item: TokenStream) -> TokenStream {
