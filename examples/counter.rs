@@ -14,6 +14,13 @@ impl BeginBlock for Counter {
     }
 }
 
+impl Call for Counter {
+    type Call = ();
+    fn call(&mut self, _call: Self::Call) -> Result<()> {
+        Ok(())
+    }
+}
+
 fn main() {
     Node::<Counter>::new("my_counter").reset().run();
 }
