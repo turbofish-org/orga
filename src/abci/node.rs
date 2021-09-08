@@ -190,7 +190,7 @@ where
         let store = Store::new(backing_store.clone());
         let state_bytes = store.get(&[])?.unwrap();
         let data: <ABCIProvider<A> as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
-        let state = <ABCIProvider<A> as State>::create(store.clone(), data)?;
+        let state = <ABCIProvider<A> as State>::create(store, data)?;
 
         // Check which keys are accessed by the query and build a proof
         let query = Decode::decode(query_bytes.as_slice())?;
