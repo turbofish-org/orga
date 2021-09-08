@@ -52,6 +52,7 @@ pub use orga_macros as macros;
 pub mod prelude {
     #[cfg(feature = "abci")]
     pub use crate::abci::*;
+    pub use crate::call::*;
     pub use crate::collections::*;
     pub use crate::contexts::*;
     pub use crate::state::*;
