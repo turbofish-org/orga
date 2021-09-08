@@ -1,4 +1,5 @@
 use super::Context;
+use crate::abci::{BeginBlock, EndBlock, InitChain};
 use crate::call::Call;
 use crate::encoding::{Decode, Encode};
 use crate::state::State;
@@ -75,5 +76,35 @@ where
 {
     fn from(provider: SignerProvider<T>) -> Self {
         (provider.inner.into(),)
+    }
+}
+
+// TODO: In the future, Signer shouldn't need to know about ABCI, but
+// implementing passthrough of ABCI lifecycle methods as below seems preferable to creating a formal
+// distinction between Contexts and normal State / Call / Query types for now.
+impl<T> BeginBlock for SignerProvider<T>
+where
+    T: BeginBlock + State,
+{
+    fn begin_block(&mut self) -> Result<()> {
+        self.inner.begin_block()
+    }
+}
+
+impl<T> EndBlock for SignerProvider<T>
+where
+    T: EndBlock + State,
+{
+    fn end_block(&mut self) -> Result<()> {
+        self.inner.end_block()
+    }
+}
+
+impl<T> InitChain for SignerProvider<T>
+where
+    T: InitChain + State,
+{
+    fn init_chain(&mut self) -> Result<()> {
+        self.inner.init_chain()
     }
 }
