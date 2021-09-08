@@ -2,8 +2,6 @@ use crate::store::*;
 use crate::Result;
 pub use orga_macros::State;
 
-mod context;
-pub use context::*;
 /// A trait for types which provide a higher-level API for data stored within a
 /// [`store::Store`](../store/trait.Store.html).
 ///
