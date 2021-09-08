@@ -572,7 +572,8 @@ where
 }
 
 impl<'a, K, V: Call, S> Call for ChildMut<'a, K, V, S>
-where K: Encode + Clone
+where
+    K: Encode + Clone,
 {
     type Call = V::Call;
 
