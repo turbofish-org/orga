@@ -1,6 +1,7 @@
 use crate::abci::App;
 use crate::call::Call;
 use crate::encoding::{Decode, Encode};
+use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::Result;
@@ -31,6 +32,13 @@ impl<T: State + App> Call for ABCIProvider<T> {
             DeliverTx(inner_call) => self.inner.call(inner_call),
             CheckTx(inner_call) => self.inner.call(inner_call),
         }
+    }
+}
+
+impl<T: Query> Query for ABCIProvider<T> {
+    type Query = T::Query;
+    fn query(&self, query: Self::Query) -> Result<()> {
+        self.inner.query(query)
     }
 }
 

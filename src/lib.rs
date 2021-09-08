@@ -59,6 +59,7 @@ pub mod prelude {
     pub use crate::call::*;
     pub use crate::collections::*;
     pub use crate::contexts::*;
+    pub use crate::query::*;
     pub use crate::state::*;
     pub use crate::store::*;
     pub use crate::Result;
