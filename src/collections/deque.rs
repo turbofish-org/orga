@@ -171,10 +171,7 @@ mod test {
         let store = Store::new(MapStore::new());
         let mut deque: Deque<u32> = Deque::create(store, Meta::default()).unwrap();
 
-        match deque.pop_front().unwrap() {
-            Some(_) => assert!(false),
-            None => (),
-        }
+        assert!(deque.pop_front().unwrap().is_none());
     }
 
     #[test]
@@ -192,10 +189,7 @@ mod test {
         let store = Store::new(MapStore::new());
         let mut deque: Deque<u32> = Deque::create(store, Meta::default()).unwrap();
 
-        match deque.pop_back().unwrap() {
-            Some(_) => assert!(false),
-            None => (),
-        }
+        assert!(deque.pop_back().unwrap().is_none());
     }
 
     #[test]
@@ -231,10 +225,7 @@ mod test {
         deque.push_back(13).unwrap();
         deque.push_front(1).unwrap();
 
-        let _result = match deque.get(3).unwrap() {
-            Some(_) => assert!(false),
-            None => (),
-        };
+        assert!(deque.get(3).unwrap().is_none());
     }
 
     #[test]
@@ -286,9 +277,6 @@ mod test {
 
         let map = deque.pop_front().unwrap().unwrap();
 
-        match map.get(1).unwrap() {
-            Some(_) => assert!(false),
-            None => (),
-        }
+        assert!(map.get(1).unwrap().is_none());
     }
 }

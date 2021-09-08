@@ -779,7 +779,7 @@ mod tests {
         map.entry(4).unwrap().or_create(5).unwrap();
         assert!(map.get(4).unwrap().is_none());
         let map_key = MapKey::<u32>::new(4).unwrap();
-        assert_eq!(map.children.contains_key(&map_key), false);
+        assert!(map.children.contains_key(&map_key));
         assert!(store.get(&enc(4)).unwrap().is_none());
     }
 
@@ -882,7 +882,7 @@ mod tests {
                 assert_eq!(*key, 12);
                 assert_eq!(*value, 24);
             }
-            None => assert!(false),
+            None => panic!("Expected Some"),
         }
 
         let iter_next = Iter::iter_merge_next(&mut iter).unwrap();
@@ -891,7 +891,7 @@ mod tests {
                 assert_eq!(*key, 13);
                 assert_eq!(*value, 26);
             }
-            None => assert!(false),
+            None => panic!("Expected Some"),
         }
 
         let iter_next = Iter::iter_merge_next(&mut iter).unwrap();
@@ -900,14 +900,11 @@ mod tests {
                 assert_eq!(*key, 14);
                 assert_eq!(*value, 28);
             }
-            None => assert!(false),
+            None => panic!("Expected Some"),
         }
 
         let iter_next = Iter::iter_merge_next(&mut iter).unwrap();
-        match iter_next {
-            Some(_) => assert!(false),
-            None => (),
-        }
+        assert!(iter_next.is_none());
     }
 
     #[test]
@@ -938,7 +935,7 @@ mod tests {
                 assert_eq!(*key, 12);
                 assert_eq!(*value, 24);
             }
-            None => assert!(false),
+            None => panic!("Expected Some"),
         }
 
         let iter_next = Iter::iter_merge_next(&mut iter).unwrap();
@@ -947,7 +944,7 @@ mod tests {
                 assert_eq!(*key, 13);
                 assert_eq!(*value, 26);
             }
-            None => assert!(false),
+            None => panic!("Expected Some"),
         }
 
         let iter_next = Iter::iter_merge_next(&mut iter).unwrap();
@@ -956,14 +953,11 @@ mod tests {
                 assert_eq!(*key, 14);
                 assert_eq!(*value, 28);
             }
-            None => assert!(false),
+            None => panic!("Expected Some"),
         }
 
         let iter_next = Iter::iter_merge_next(&mut iter).unwrap();
-        match iter_next {
-            Some(_) => assert!(false),
-            None => (),
-        }
+        assert!(iter_next.is_none());
     }
 
     #[test]
@@ -994,7 +988,7 @@ mod tests {
                 assert_eq!(*key, 12);
                 assert_eq!(*value, 26);
             }
-            None => assert!(false),
+            None => panic!("Expected Some"),
         }
     }
 
@@ -1052,7 +1046,7 @@ mod tests {
                 assert_eq!(*key, 12);
                 assert_eq!(*value, 24);
             }
-            None => assert!(false),
+            None => panic!("Expected Some"),
         }
 
         let iter_next = Iter::iter_merge_next(&mut iter).unwrap();
@@ -1062,7 +1056,7 @@ mod tests {
                 assert_eq!(*value, 28);
             }
             None => {
-                assert!(false)
+                panic!("Expected Some")
             }
         }
     }
@@ -1096,7 +1090,7 @@ mod tests {
                 assert_eq!(*key, 12);
                 assert_eq!(*value, 24);
             }
-            None => assert!(false),
+            None => panic!("Expected Some"),
         }
 
         let iter_next = Iter::iter_merge_next(&mut iter).unwrap();
@@ -1106,7 +1100,7 @@ mod tests {
                 assert_eq!(*value, 26);
             }
             None => {
-                assert!(false)
+                panic!("Expected Some")
             }
         }
     }
@@ -1136,7 +1130,7 @@ mod tests {
                 assert_eq!(*key, 13);
                 assert_eq!(*value, 26);
             }
-            None => assert!(false),
+            None => panic!("Expected Some"),
         }
     }
 
@@ -1169,14 +1163,14 @@ mod tests {
                 assert_eq!(*key, 13);
                 assert_eq!(*value, 26);
             }
-            None => assert!(false),
+            None => panic!("Expected Some"),
         }
     }
 
     #[test]
     fn map_iter_map_only() {
         let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1205,7 +1199,7 @@ mod tests {
 
         edit_map.flush().unwrap();
 
-        let read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
 
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
         read_map
@@ -1228,7 +1222,7 @@ mod tests {
 
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
 
         read_map.remove(12).unwrap();
 
@@ -1253,7 +1247,7 @@ mod tests {
 
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
 
         read_map.entry(14).unwrap().or_insert(28).unwrap();
 
@@ -1278,7 +1272,7 @@ mod tests {
 
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
 
         read_map.entry(12).unwrap().or_insert(24).unwrap();
         read_map.entry(14).unwrap().or_insert(28).unwrap();
@@ -1298,7 +1292,7 @@ mod tests {
     #[test]
     fn map_iter_map_key_none() {
         let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1325,7 +1319,7 @@ mod tests {
 
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
 
         read_map.entry(12).unwrap().or_insert(24).unwrap();
         read_map.remove(12).unwrap();
@@ -1345,7 +1339,7 @@ mod tests {
     #[test]
     fn map_range_map_only_unbounded() {
         let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1366,7 +1360,7 @@ mod tests {
     #[test]
     fn map_range_map_only_start_bounded() {
         let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1387,7 +1381,7 @@ mod tests {
     #[test]
     fn map_range_map_only_end_bounded_non_inclusive() {
         let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1408,7 +1402,7 @@ mod tests {
     #[test]
     fn map_range_map_only_end_bounded_inclusive() {
         let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1429,7 +1423,7 @@ mod tests {
     #[test]
     fn map_range_map_only_bounded_non_inclusive() {
         let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1450,7 +1444,7 @@ mod tests {
     #[test]
     fn map_range_map_only_bounded_inclusive() {
         let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1479,7 +1473,7 @@ mod tests {
 
         edit_map.flush().unwrap();
 
-        let read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
 
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
 
@@ -1505,7 +1499,7 @@ mod tests {
 
         edit_map.flush().unwrap();
 
-        let read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
 
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
 
@@ -1530,7 +1524,7 @@ mod tests {
 
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
         read_map.entry(13).unwrap().or_insert(26).unwrap();
 
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
@@ -1549,7 +1543,7 @@ mod tests {
     #[test]
     fn map_range_empty() {
         let store = Store::new(MapStore::new());
-        let map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let map: Map<u32, u32> = Map::create(store, ()).unwrap();
 
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
 
@@ -1566,7 +1560,7 @@ mod tests {
     #[test]
     fn map_of_map() {
         let store = Store::new(MapStore::new());
-        let mut map: Map<u32, Map<u32, u32>> = Map::create(store.clone(), ()).unwrap();
+        let mut map: Map<u32, Map<u32, u32>> = Map::create(store, ()).unwrap();
 
         map.entry(42).unwrap().or_insert(()).unwrap();
 
@@ -1591,7 +1585,7 @@ mod tests {
 
         edit_map.flush().unwrap();
 
-        let read_map: Map<u32, Map<u32, u32>> = Map::create(store.clone(), ()).unwrap();
+        let read_map: Map<u32, Map<u32, u32>> = Map::create(store, ()).unwrap();
         let inner_map = read_map.get(42).unwrap().unwrap();
         let actual = inner_map.get(13).unwrap().unwrap();
 
@@ -1614,7 +1608,7 @@ mod tests {
 
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, Deque<u32>> = Map::create(store.clone(), ()).unwrap();
+        let mut read_map: Map<u32, Deque<u32>> = Map::create(store, ()).unwrap();
         let actual = read_map
             .get_mut(42)
             .unwrap()
@@ -1629,7 +1623,7 @@ mod tests {
     #[test]
     fn map_insert() {
         let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
 
         map.insert(12, 24).unwrap();
         map.insert(13, 26).unwrap();
@@ -1649,7 +1643,7 @@ mod tests {
     #[test]
     fn map_insert_complex_type() {
         let store = Store::new(MapStore::new());
-        let mut map: Map<u32, Deque<u32>> = Map::create(store.clone(), ()).unwrap();
+        let mut map: Map<u32, Deque<u32>> = Map::create(store, ()).unwrap();
 
         map.insert(12, Meta::default()).unwrap();
 
@@ -1669,7 +1663,7 @@ mod tests {
 
         edit_map.flush().unwrap();
 
-        let read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
 
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(2);
 
@@ -1692,7 +1686,7 @@ mod tests {
         edit_map.insert(12, 24).unwrap();
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
         read_map.insert(12, 26).unwrap();
 
         assert_eq!(26, *read_map.get(12).unwrap().unwrap());
@@ -1706,7 +1700,7 @@ mod tests {
         edit_map.insert(12, 24).unwrap();
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
         read_map.insert(12, 26).unwrap();
 
         let actual = read_map.entry(12).unwrap().or_insert(28).unwrap();
