@@ -4,7 +4,6 @@ use super::map::ReadOnly;
 
 use crate::encoding::{Decode, Encode};
 use crate::store::DefaultBackingStore;
-use std::hash::Hash;
 use std::ops::RangeBounds;
 
 use super::{Entry, Next};
