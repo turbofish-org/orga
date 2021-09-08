@@ -1,20 +1,44 @@
+#![feature(proc_macro_span)]
+
 use proc_macro::TokenStream;
 
+mod call;
 mod entry;
+mod next;
+mod query;
 mod state;
-// mod bindgen;
 
 #[proc_macro_derive(State)]
-pub fn state(item: TokenStream) -> TokenStream {
+pub fn derive_state(item: TokenStream) -> TokenStream {
     state::derive(item)
 }
 
 #[proc_macro_derive(Entry, attributes(key))]
-pub fn entry(item: TokenStream) -> TokenStream {
+pub fn derive_entry(item: TokenStream) -> TokenStream {
     entry::derive(item)
 }
 
-// #[proc_macro_attribute]
-// pub fn orga_bindgen(args: TokenStream, input: TokenStream) -> TokenStream {
-//     bindgen::attr(args, input)
-// }
+#[proc_macro_derive(Query)]
+pub fn derive_query(item: TokenStream) -> TokenStream {
+    query::derive(item)
+}
+
+#[proc_macro_attribute]
+pub fn query(args: TokenStream, input: TokenStream) -> TokenStream {
+    query::attr(args, input)
+}
+
+#[proc_macro_derive(Call)]
+pub fn derive_call(item: TokenStream) -> TokenStream {
+    call::derive(item)
+}
+
+#[proc_macro_attribute]
+pub fn call(args: TokenStream, input: TokenStream) -> TokenStream {
+    call::attr(args, input)
+}
+
+#[proc_macro_derive(Next)]
+pub fn derive_next(item: TokenStream) -> TokenStream {
+    next::derive(item)
+}

@@ -1,5 +1,7 @@
 use crate::encoding::{Decode, Encode};
 
+pub use crate::macros::{Entry, Next};
+
 pub mod deque;
 pub mod entry_map;
 pub mod map;
@@ -7,6 +9,8 @@ pub mod map;
 pub use deque::Deque;
 pub use entry_map::EntryMap;
 pub use map::Map;
+
+pub use map::{ChildMut, Ref};
 
 /// A trait for types which can be converted to or from a key/value pair.
 ///

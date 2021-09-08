@@ -1,16 +1,21 @@
 use super::map::Iter as MapIter;
 use super::map::Map;
+use super::map::ReadOnly;
+
 use crate::encoding::{Decode, Encode};
 use crate::store::DefaultBackingStore;
 use std::hash::Hash;
 use std::ops::RangeBounds;
 
 use super::{Entry, Next};
+use crate::call::Call;
+use crate::query::Query;
 use crate::state::*;
 use crate::store::*;
 use crate::Result;
 use ed::*;
 
+#[derive(Query, Call)]
 pub struct EntryMap<T: Entry, S = DefaultBackingStore> {
     map: Map<T::Key, T::Value, S>,
 }
@@ -43,18 +48,19 @@ where
     }
 }
 
+// TODO: add a get_mut method (maybe just takes in T::Key?) so we can add
+// #[call] to it to route calls to children
+
 impl<T, S> EntryMap<T, S>
 where
     T: Entry,
-    T::Key: Encode + Terminated + Eq + Hash + Ord + Copy,
+    T::Key: Encode + Terminated + Eq + Hash + Ord + Clone,
     T::Value: State<S>,
     S: Read,
 {
     pub fn insert(&mut self, entry: T) -> Result<()> {
         let (key, value) = entry.into_entry();
-        self.map.entry(key)?.or_insert(value.into())?;
-
-        Ok(())
+        self.map.insert(key, value.into())
     }
 
     pub fn delete(&mut self, entry: T) -> Result<()> {
@@ -64,16 +70,44 @@ where
         Ok(())
     }
 
-    pub fn contains(&self, entry: T) -> Result<bool> {
+    #[query]
+    pub fn contains_entry_key(&self, entry: T) -> Result<bool> {
         let (key, _) = entry.into_entry();
         self.map.contains_key(key)
     }
 }
 
+impl<T, S> EntryMap<T, S>
+where
+    T: Entry,
+    T::Key: Encode + Terminated + Eq + Hash + Ord + Clone,
+    T::Value: State<S> + Eq,
+    S: Read,
+{
+    #[query]
+    pub fn contains(&self, entry: T) -> Result<bool> {
+        let (key, value) = entry.into_entry();
+
+        match self.map.contains_key(key.clone())? {
+            true => {
+                let map_value = match self.map.get(key)? {
+                    Some(val) => val,
+                    None => {
+                        return Ok(false);
+                    }
+                };
+
+                Ok(*map_value == value)
+            }
+            false => Ok(false),
+        }
+    }
+}
+
 impl<'a, T: Entry, S> EntryMap<T, S>
 where
-    T::Key: Next<T::Key> + Decode + Encode + Terminated + Hash + Eq + Ord + Copy,
-    T::Value: State<S> + Copy,
+    T::Key: Next<T::Key> + Decode + Encode + Terminated + Hash + Eq + Ord + Clone,
+    T::Value: State<S> + Clone,
     S: Read,
 {
     pub fn iter(&'a mut self) -> Result<Iter<'a, T, S>> {
@@ -92,7 +126,7 @@ where
 pub struct Iter<'a, T: Entry, S>
 where
     T::Key: Next<T::Key> + Decode + Encode + Terminated + Hash + Eq,
-    T::Value: State<S>,
+    T::Value: State<S> + Clone,
     S: Read,
 {
     map_iter: MapIter<'a, T::Key, T::Value, S>,
@@ -100,16 +134,19 @@ where
 
 impl<'a, T: Entry, S> Iterator for Iter<'a, T, S>
 where
-    T::Key: Next<T::Key> + Decode + Encode + Terminated + Hash + Eq + Ord + Copy,
-    T::Value: State<S> + Copy,
+    T::Key: Next<T::Key> + Decode + Encode + Terminated + Hash + Eq + Ord + Clone,
+    T::Value: State<S> + Clone,
     S: Read,
 {
-    type Item = Result<T>;
+    type Item = Result<ReadOnly<T>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let map_next = self.map_iter.next();
         map_next.map(|entry| match entry {
-            Ok((key, value)) => Ok(T::from_entry((*key, *value))),
+            Ok((key, value)) => Ok(ReadOnly::new(T::from_entry((
+                (*key).clone(),
+                (*value).clone(),
+            )))),
             Err(err) => Err(err),
         })
     }
@@ -207,19 +244,20 @@ mod test {
         entry_map.insert(MapEntry { key: 13, value: 26 }).unwrap();
         entry_map.insert(MapEntry { key: 14, value: 28 }).unwrap();
 
-        let mut expected: Vec<MapEntry> = Vec::with_capacity(3);
-        entry_map
-            .iter()
-            .unwrap()
-            .for_each(|entry| expected.push(entry.unwrap()));
-
         let actual: Vec<MapEntry> = vec![
             MapEntry { key: 12, value: 24 },
             MapEntry { key: 13, value: 26 },
             MapEntry { key: 14, value: 28 },
         ];
 
-        assert_eq!(actual, expected);
+        let result: bool = entry_map
+            .iter()
+            .unwrap()
+            .zip(actual.iter())
+            .map(|(actual, expected)| *actual.unwrap() == *expected)
+            .fold(true, |accumulator, item| item & accumulator);
+
+        assert!(result);
     }
 
     #[test]
@@ -231,19 +269,20 @@ mod test {
         entry_map.insert(MapEntry { key: 13, value: 26 }).unwrap();
         entry_map.insert(MapEntry { key: 14, value: 28 }).unwrap();
 
-        let mut expected: Vec<MapEntry> = Vec::with_capacity(3);
-        entry_map
-            .range(..)
-            .unwrap()
-            .for_each(|entry| expected.push(entry.unwrap()));
-
-        let actual: Vec<MapEntry> = vec![
+        let expected_entries: Vec<MapEntry> = vec![
             MapEntry { key: 12, value: 24 },
             MapEntry { key: 13, value: 26 },
             MapEntry { key: 14, value: 28 },
         ];
 
-        assert_eq!(actual, expected);
+        let result: bool = entry_map
+            .range(..)
+            .unwrap()
+            .zip(expected_entries.iter())
+            .map(|(actual, expected)| *actual.unwrap() == *expected)
+            .fold(true, |accumulator, item| item & accumulator);
+
+        assert!(result);
     }
 
     #[test]
@@ -255,18 +294,19 @@ mod test {
         entry_map.insert(MapEntry { key: 13, value: 26 }).unwrap();
         entry_map.insert(MapEntry { key: 14, value: 28 }).unwrap();
 
-        let mut expected: Vec<MapEntry> = Vec::with_capacity(3);
-        entry_map
-            .range(..14)
-            .unwrap()
-            .for_each(|entry| expected.push(entry.unwrap()));
-
-        let actual: Vec<MapEntry> = vec![
+        let expected_entries: Vec<MapEntry> = vec![
             MapEntry { key: 12, value: 24 },
             MapEntry { key: 13, value: 26 },
         ];
 
-        assert_eq!(actual, expected);
+        let result: bool = entry_map
+            .range(..14)
+            .unwrap()
+            .zip(expected_entries.iter())
+            .map(|(actual, expected)| *actual.unwrap() == *expected)
+            .fold(true, |accumulator, item| item & accumulator);
+
+        assert!(result);
     }
 
     #[test]
@@ -278,14 +318,60 @@ mod test {
         entry_map.insert(MapEntry { key: 13, value: 26 }).unwrap();
         entry_map.insert(MapEntry { key: 14, value: 28 }).unwrap();
 
-        let mut expected: Vec<MapEntry> = Vec::with_capacity(3);
-        entry_map
+        let expected_entries: Vec<MapEntry> = vec![MapEntry { key: 13, value: 26 }];
+
+        let result: bool = entry_map
             .range(13..14)
             .unwrap()
-            .for_each(|entry| expected.push(entry.unwrap()));
+            .zip(expected_entries.iter())
+            .map(|(actual, expected)| *actual.unwrap() == *expected)
+            .fold(true, |accumulator, item| item & accumulator);
 
-        let actual: Vec<MapEntry> = vec![MapEntry { key: 13, value: 26 }];
+        assert!(result);
+    }
 
-        assert_eq!(actual, expected);
+    #[test]
+    fn contains_wrong_entry() {
+        let store = Store::new(MapStore::new());
+        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone(), ()).unwrap();
+
+        entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
+
+        assert!(!entry_map.contains(MapEntry { key: 12, value: 13 }).unwrap());
+    }
+
+    #[test]
+    fn contains_removed_entry() {
+        let store = Store::new(MapStore::new());
+        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone(), ()).unwrap();
+
+        entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
+        entry_map.delete(MapEntry { key: 12, value: 24 }).unwrap();
+
+        assert!(!entry_map.contains(MapEntry { key: 12, value: 24 }).unwrap());
+    }
+
+    #[test]
+    fn contains_entry_key() {
+        let store = Store::new(MapStore::new());
+        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone(), ()).unwrap();
+
+        entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
+
+        assert!(entry_map
+            .contains_entry_key(MapEntry { key: 12, value: 24 })
+            .unwrap());
+    }
+
+    #[test]
+    fn contains_entry_key_value_non_match() {
+        let store = Store::new(MapStore::new());
+        let mut entry_map: EntryMap<MapEntry> = EntryMap::create(store.clone(), ()).unwrap();
+
+        entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
+
+        assert!(entry_map
+            .contains_entry_key(MapEntry { key: 12, value: 13 })
+            .unwrap());
     }
 }

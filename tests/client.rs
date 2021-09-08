@@ -1,200 +1,205 @@
-#![feature(specialization)]
-#![feature(trivial_bounds)]
+// #![feature(specialization)]
+// #![feature(trivial_bounds)]
 
-use failure::bail;
+// use failure::bail;
 
-use orga::client::{CreateClient, Mock};
-use orga::state::State;
-use orga::Result;
+// use orga::client::{CreateClient, Mock};
+// use orga::state::State;
+// use orga::Result;
+// use orga::collections::Map;
 
-#[derive(State, Debug)]
-pub struct Counter {
-    count: u32,
-    pub count2: u32,
-}
+// #[derive(State, /*Call, Query, CreateClient*/)]
+// pub struct Counter {
+//     count: u32,
+//     pub count2: u32,
+//     map: Map<u32, u32>,
+// }
 
-impl Counter {
-    pub fn increment(&mut self, n: u32) -> Result<()> {
-        if n != self.count {
-            bail!("Incorrect count");
-        }
+// impl Counter {
+//     // #[call]
+//     pub fn increment(&mut self, n: u32) -> Result<()> {
+//         if n != self.count {
+//             bail!("Incorrect count");
+//         }
 
-        self.count += 1;
+//         self.count += 1;
 
-        Ok(())
-    }
+//         Ok(())
+//     }
 
-    pub fn count(&self) -> u32 {
-        self.count
-    }
-}
+//     // #[query]
+//     pub fn count(&self) -> Result<Option<u32>> {
+//         Ok(Some(self.count))
+//     }
 
-// first expansion
+//     // #[query]
+//     pub fn map(&self) -> Result<&Map<u32, u32>> {
+//         Ok(&self.map)
+//     }
+// }
 
-pub struct Client<T: ::orga::client::Client<Counter>> {
-    client: T,
-    pub count2: <u32 as ::orga::client::CreateClient<Count2Client<T>>>::Client,
-}
+// // first expansion
 
-impl<T: ::orga::client::Client<Counter>> From<T> for Client<T> {
-    fn from(client: T) -> Self {
-        Client {
-            client: client.clone(),
-            count2: u32::create_client(Count2Client {
-                client: client.clone(),
-            }),
-        }
-    }
-}
+// pub struct Client<C: ::orga::client::ClientFor<Counter>> {
+//     client: C,
+//     state: Option<Counter>,
+//     pub count2: <u32 as ::orga::client::CreateClient<Count2Client<C>>>::Client,
+// }
 
-impl<T: ::orga::client::Client<Counter>> CreateClient<T> for Counter {
-    type Client = Client<T>;
-}
+// impl<C: ::orga::client::ClientFor<Counter>> From<C> for Client<C> {
+//     fn from(client: C) -> Self {
+//         Client {
+//             client: client.clone(),
+//             state: None,
+//             count2: Count2Client {
+//                 client: client.clone(),
+//             }.into(),
+//         }
+//     }
+// }
 
-#[derive(Clone)]
-pub struct Count2Client<T> {
-    client: T,
-}
-impl<T: ::orga::client::Client<Counter>> ::orga::client::Client<u32> for Count2Client<T> {
-    fn query<F, R>(&self, query: <u32 as ::orga::query::Query>::Query, check: F) -> Result<R>
-    where
-        F: Fn(<u32 as ::orga::query::Query>::Res) -> Result<R>,
-    {
-        self.client.query(
-            ::orga::query::Item::Field(FieldQuery::Count2(query)),
-            |res| match res {
-                ::orga::query::Item::Field(FieldRes::Count2(res)) => check(res),
-                _ => bail!("Unexpected result"),
-            },
-        )
-    }
+// impl<C: ::orga::client::ClientFor<Counter>> CreateClient<C> for Counter {
+//     type Client = Client<C>;
+// }
 
-    fn call(&mut self, call: <u32 as ::orga::call::Call>::Call) -> Result<()> {
-        self.client
-            .call(::orga::call::Item::Field(FieldCall::Count2(call)))
-    }
-}
+// #[derive(Clone)]
+// pub struct Count2Client<C: ::orga::client::ClientFor<Counter>> {
+//     client: C,
+// }
+// impl<C: ::orga::client::ClientFor<Counter>> ::orga::client::Client for Count2Client<C> {
+//     type Query = <u32 as ::orga::query::Query>::Query;
+//     type QueryRes = u32;
 
-#[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
-pub enum FieldCall {
-    Count2(<u32 as ::orga::call::Call>::Call),
-}
-impl ::orga::call::FieldCall for Counter {
-    type Call = FieldCall;
+//     type Call = <u32 as ::orga::call::Call>::Call;
 
-    fn field_call(&mut self, call: FieldCall) -> ::orga::Result<()> {
-        use ::orga::call::Call;
-        match call {
-            FieldCall::Count2(subcall) => self.count2.call(subcall)?,
-        };
+//     fn query<F, R>(&self, query: Self::Query, check: F) -> Result<R>
+//     where
+//         F: Fn(&Self::QueryRes) -> Result<R>,
+//     {
+//         self.client.query(
+//             ::orga::query::Item::Field(FieldQuery::Count2(query)),
+//             |parent| check(&parent.count2),
+//         )
+//     }
 
-        Ok(())
-    }
-}
+//     fn call(&mut self, call: Self::Call) -> Result<()> {
+//         self.client
+//             .call(::orga::call::Item::Field(FieldCall::Count2(call)))
+//     }
+// }
 
-#[derive(Debug, ::orga::encoding::Encode, ::orga::encoding::Decode)]
-pub enum MethodCall {
-    Increment(u32),
-}
-impl ::orga::call::MethodCall for Counter {
-    type Call = MethodCall;
+// #[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
+// pub enum FieldCall {
+//     Count2(<u32 as ::orga::call::Call>::Call),
+// }
+// impl ::orga::call::FieldCall for Counter {
+//     type Call = FieldCall;
 
-    fn method_call(&mut self, call: MethodCall) -> ::orga::Result<()> {
-        match call {
-            MethodCall::Increment(n) => self.increment(n)?,
-        };
+//     fn field_call(&mut self, call: FieldCall) -> ::orga::Result<()> {
+//         use ::orga::call::Call;
+//         match call {
+//             FieldCall::Count2(subcall) => self.count2.call(subcall)?,
+//         };
 
-        Ok(())
-    }
-}
+//         Ok(())
+//     }
+// }
 
-#[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
-pub enum FieldQuery {
-    Count2(<u32 as ::orga::query::Query>::Query),
-}
-#[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
-pub enum FieldRes {
-    Count2(<u32 as ::orga::query::Query>::Res),
-}
-impl ::orga::query::FieldQuery for Counter {
-    type Query = FieldQuery;
-    type Res = FieldRes;
+// #[derive(Debug, ::orga::encoding::Encode, ::orga::encoding::Decode)]
+// pub enum MethodCall {
+//     Increment(u32),
+// }
+// impl ::orga::call::MethodCall for Counter {
+//     type Call = MethodCall;
 
-    fn field_query(&self, query: FieldQuery) -> ::orga::Result<FieldRes> {
-        use ::orga::query::Query;
-        Ok(match query {
-            FieldQuery::Count2(subquery) => FieldRes::Count2(self.count2.query(subquery)?),
-        })
-    }
-}
+//     fn method_call(&mut self, call: MethodCall) -> ::orga::Result<()> {
+//         match call {
+//             MethodCall::Increment(n) => self.increment(n)?,
+//         };
 
-#[derive(Debug, ::orga::encoding::Encode, ::orga::encoding::Decode)]
-pub enum MethodQuery {
-    Count,
-}
-#[derive(Debug, ::orga::encoding::Encode, ::orga::encoding::Decode)]
-pub enum MethodRes {
-    Count(u32),
-}
-impl ::orga::query::MethodQuery for Counter {
-    type Query = MethodQuery;
-    type Res = MethodRes;
+//         Ok(())
+//     }
+// }
 
-    fn method_query(&self, query: MethodQuery) -> ::orga::Result<MethodRes> {
-        Ok(match query {
-            MethodQuery::Count => MethodRes::Count(self.count()),
-        })
-    }
-}
+// #[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
+// pub enum Query {
+//     This,
 
-impl<T: ::orga::client::Client<Counter>> Client<T> {
-    fn increment(&mut self, n: u32) -> ::orga::Result<()> {
-        self.client
-            .call(::orga::call::Item::Method(MethodCall::Increment(n)))
-    }
+//     // fields
+//     Count2(<u32 as ::orga::query::Query>::Query),
 
-    fn count(&self) -> Result<u32> {
-        self.client.query(
-            ::orga::query::Item::Method(MethodQuery::Count),
-            |res| match res {
-                ::orga::query::Item::Method(MethodRes::Count(a)) => Ok(a),
-                _ => bail!("Unexpected result"),
-            },
-        )
-    }
-}
+//     // methods
+//     Count(<u32 as ::orga::query::Query>::Query),
+//     Map(<Map<u32, u32> as ::orga::query::Query>::Query),
+// }
+// impl ::orga::query::Query for Counter {
+//     type Query = Query;
 
-#[test]
-fn client() {
-    let counter = Counter {
-        count: 0,
-        count2: 0,
-    };
-    let (backing_client, counter) = Mock::new(counter);
-    let mut client = Counter::create_client(backing_client);
+//     fn query(&self, query: Self::Query) -> ::orga::Result<()> {
+//         use ::orga::query::Query;
+//         match query {
+//             Query::Count2(subquery) => self.count2.query(subquery),
+//             Query::Count(query) => self.count().query(query),
+//             Query::Map(query) => self.map().query(query),
+//         }
+//     }
+// }
 
-    assert_eq!(client.count().unwrap(), 0);
-    assert_eq!(client.count2.get().unwrap(), 0);
-    // client.count().await?;
-    // client.count2.await?;
+// impl<C: ::orga::client::ClientFor<Counter>> Client<C> {
+//     // fn increment(&mut self, n: u32) -> ::orga::Result<()> {
+//     //     self.client
+//     //         .call(Call::Increment(n))
+//     // }
 
-    assert_eq!(
-        client.increment(123).unwrap_err().to_string(),
-        "Incorrect count",
-    );
-    // client.increment(123).await?;
+//     fn count(&self) -> Result<Option<u32>> {
+//         self.client.query(
+//             Query::Count(()),
+//             |this| this.count(),
+//         )
+//     }
 
-    client.increment(0).unwrap();
-    assert_eq!(counter.borrow().count, 1);
-    assert_eq!(counter.borrow().count2, 0);
-    assert_eq!(client.count().unwrap(), 1);
-    assert_eq!(client.count2.get().unwrap(), 0);
+//     fn map(&self) -> Result<&Map<u32, u32>> {
+//         todo!();
 
-    counter.borrow_mut().increment(1).unwrap();
-    assert_eq!(counter.borrow().count, 2);
-    assert_eq!(counter.borrow().count2, 0);
-    assert_eq!(client.count().unwrap(), 2);
-    assert_eq!(client.count2.get().unwrap(), 0);
+//         // self.client.query(
+//         //     Query::Map(...),
+//         //     |this| this.map(),
+//         // )?;
+//     }
+// }
 
-    println!("{:?}", &counter);
-}
+// // #[test]
+// // fn client() {
+// //     use orga::state::State;
+
+// //     let store = orga::store::Shared::new(orga::store::MapStore::new());
+// //     let store = orga::store::Store::new(store);
+// //     let counter = Counter::create(store.clone(), ()).unwrap();
+
+// //     let (backing_client, counter) = Mock::new(counter);
+// //     let mut client = Counter::create_client(backing_client);
+// //     assert_eq!(client.count().unwrap(), Some(0));
+// //     assert_eq!(client.count2.get().unwrap(), 0);
+// //     // client.count().await?;
+// //     // client.count2.await?;
+
+// //     assert_eq!(
+// //         client.increment(123).unwrap_err().to_string(),
+// //         "Incorrect count",
+// //     );
+// //     // client.increment(123).await?;
+
+// //     client.increment(0).unwrap();
+// //     assert_eq!(counter.borrow().count, 1);
+// //     assert_eq!(counter.borrow().count2, 0);
+// //     assert_eq!(client.count().unwrap(), Some(1));
+// //     assert_eq!(client.count2.get().unwrap(), 0);
+
+// //     counter.borrow_mut().increment(1).unwrap();
+// //     assert_eq!(counter.borrow().count, 2);
+// //     assert_eq!(counter.borrow().count2, 0);
+// //     assert_eq!(client.count().unwrap(), Some(2));
+// //     assert_eq!(client.count2.get().unwrap(), 0);
+
+// //     println!("{:?}", &counter);
+// // }

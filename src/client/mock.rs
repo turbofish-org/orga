@@ -1,5 +1,6 @@
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::ops::Deref;
 
 use crate::Result;
 use crate::call::Call;
@@ -29,11 +30,16 @@ impl<T: State> Mock<T> {
     // }
 }
 
-impl<T: Call + Query> Client<T> for Mock<T> {
-    fn query<F, R>(&self, query: <T as Query>::Query, check: F) -> Result<R>
-    where F: Fn(<T as Query>::Res) -> Result<R> {
+impl<T: Call + Query> Client for Mock<T> {
+    type Query = T::Query;
+    type QueryRes = T;
+
+    type Call = T::Call;
+
+    fn query<F, R>(&self, query: Self::Query, check: F) -> Result<R>
+    where F: Fn(&Self::QueryRes) -> Result<R>{
         let state = self.state.borrow();
-        check((*state).query(query)?)
+        check(&*state)
     }
 
     fn call(&mut self, call: T::Call) -> Result<()> {

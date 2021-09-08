@@ -1,9 +1,13 @@
 #![feature(map_first_last)]
 #![feature(entry_insert)]
-#![feature(specialization)]
-#![feature(associated_type_defaults)]
+#![feature(bound_map)]
 #![feature(once_cell)]
+#![feature(associated_type_defaults)]
 #![feature(trivial_bounds)]
+#![allow(incomplete_features)]
+#![feature(specialization)]
+
+extern crate self as orga;
 
 /// Integration with ABCI (gated by `abci` feature).
 #[cfg(feature = "abci")]

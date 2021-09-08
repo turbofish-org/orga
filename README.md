@@ -2,6 +2,7 @@
 
 *Deterministic state machine engine written in Rust*
 
+![CI](https://github.com/nomic-io/orga/actions/workflows/ci.yml/badge.svg)
 [![codecov](https://codecov.io/gh/nomic-io/orga/branch/develop/graph/badge.svg?token=ZYA7B56825)](https://codecov.io/gh/nomic-io/orga)
 [![Crate](https://img.shields.io/crates/v/orga.svg)](https://crates.io/crates/orga)
 [![API](https://docs.rs/orga/badge.svg)](https://docs.rs/orga)
