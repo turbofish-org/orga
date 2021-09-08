@@ -8,7 +8,7 @@ use std::sync::Mutex;
 static CONTEXT_MAP: SyncLazy<Mutex<ManuallyDrop<HashMap<TypeId, Box<()>>>>> =
     SyncLazy::new(|| Mutex::new(ManuallyDrop::new(HashMap::new())));
 
-pub(super) struct Context<I> {
+pub struct Context<I> {
     _inner: I,
 }
 
