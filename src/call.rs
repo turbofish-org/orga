@@ -1,3 +1,6 @@
+use std::cell::RefCell;
+use std::ops::Deref;
+use std::rc::Rc;
 use crate::encoding::{Decode, Encode};
 use crate::Result;
 
@@ -15,6 +18,22 @@ impl<T: Call> Call for &mut T {
 
     fn call(&mut self, call: Self::Call) -> Result<()> {
         (*self).call(call)
+    }
+}
+
+impl<T: Call> Call for Rc<RefCell<T>> {
+    type Call = T::Call;
+
+    fn call(&mut self, call: Self::Call) -> Result<()> {
+        self.borrow_mut().call(call)
+    }
+}
+
+impl<T: Call> Call for RefCell<T> {
+    type Call = T::Call;
+
+    fn call(&mut self, call: Self::Call) -> Result<()> {
+        self.borrow_mut().call(call)
     }
 }
 
