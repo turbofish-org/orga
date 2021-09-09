@@ -1,4 +1,4 @@
-use super::{Read, Shared, Write, KV};
+use super::{MapStore, Read, Shared, Write, KV};
 use crate::Result;
 
 // TODO: figure out how to let users set DefaultBackingStore, similar to setting
@@ -10,7 +10,7 @@ use crate::Result;
 #[cfg(feature = "merk")]
 pub type DefaultBackingStore = crate::merk::BackingStore;
 #[cfg(not(feature = "merk"))]
-pub type DefaultBackingStore = super::MapStore;
+pub type DefaultBackingStore = Shared<MapStore>;
 
 /// Wraps a "backing store" (an implementation of `Read` and possibly `Write`),
 /// and applies all operations to a certain part of the backing store's keyspace
