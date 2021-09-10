@@ -6,11 +6,7 @@ use crate::encoding::{Decode, Encode};
 use crate::query::{self, Query};
 use crate::Result;
 
-
-// mod mock;
-// pub use mock::Mock;
-
-pub trait CreateClient<T> {
+pub trait Client<T> {
     type Client;
     
     fn create_client(parent: T) -> Self::Client;
@@ -18,7 +14,63 @@ pub trait CreateClient<T> {
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::Debug;
+
     use super::*;
+
+    #[derive(Debug)]
+    pub struct Signer<T> {
+        inner: T,
+    }
+    impl<T: Call> Call for Signer<T>
+    where T::Call: Debug,
+    {
+        type Call = (u32, T::Call);
+
+        fn call(&mut self, call: Self::Call) -> Result<()> {
+            println!("Called call({:?} on Signer", &call);
+
+            let (signature, subcall) = call;
+            if signature != 123 {
+                failure::bail!("Invalid signature");
+            }
+
+            self.inner.call(subcall)
+        }
+    }
+    impl<T: Client<SignerClient<T, U>>, U: Clone> Client<U> for Signer<T> {
+        type Client = T::Client;
+
+        fn create_client(parent: U) -> Self::Client {
+            T::create_client(SignerClient {
+                parent: parent.clone(),
+                marker: std::marker::PhantomData
+            })
+        }
+    }
+    pub struct SignerClient<T, U: Clone>
+    {
+        parent: U,
+        marker: std::marker::PhantomData<T>,
+    }
+    impl<T, U: Clone> Clone for SignerClient<T, U> {
+        fn clone(&self) -> Self {
+            SignerClient {
+                parent: self.parent.clone(),
+                marker: std::marker::PhantomData,
+            }
+        }
+    }
+    impl<T: Call, U: Call<Call = (u32, T::Call)> + Clone> Call for SignerClient<T, U>
+    where T::Call: Debug,
+    {
+        type Call = T::Call;
+
+        fn call(&mut self, call: Self::Call) -> Result<()> {
+            println!("called call({:?}) on SignerClient, adding signature", &call);
+            self.parent.call((123, call))
+        }
+    }
 
     #[derive(Debug)]
     pub struct Foo {
@@ -41,7 +93,7 @@ mod tests {
             }
         }
     }
-    impl<T: Clone> CreateClient<T> for Foo {
+    impl<T: Clone> Client<T> for Foo {
         type Client = FooClient<T>;
 
         fn create_client(parent: T) -> Self::Client {
@@ -54,6 +106,7 @@ mod tests {
             }
         }
     }
+    #[derive(Clone)]
     pub struct FooClient<T> {
         parent: T,
         // instance: Option<Foo>,
@@ -61,6 +114,7 @@ mod tests {
         pub bar2: BarClient<Bar2Adapter<T>>,
     }
 
+    #[derive(Clone)]
     pub struct BarAdapter<T> {
         parent: T,
     }
@@ -73,6 +127,7 @@ mod tests {
         }
     }
 
+    #[derive(Clone)]
     pub struct Bar2Adapter<T> {
         parent: T,
     }
@@ -108,7 +163,7 @@ mod tests {
             Ok(())
         }
     }
-    impl<T> CreateClient<T> for Bar {
+    impl<T> Client<T> for Bar {
         type Client = BarClient<T>;
 
         fn create_client(parent: T) -> Self::Client {
@@ -116,6 +171,7 @@ mod tests {
         }
     }
 
+    #[derive(Clone)]
     pub struct BarClient<T> {
         parent: T,
         // instance: Option<Bar>,
@@ -129,11 +185,11 @@ mod tests {
 
     #[test]
     fn client() {
-        let mut state = Rc::new(RefCell::new(Foo {
+        let mut state = Rc::new(RefCell::new(Signer { inner: Foo {
             bar: Bar(0),
             bar2: Bar(0),
-        }));
-        let mut client = Foo::create_client(state.clone());
+        }}));
+        let mut client = Signer::<Foo>::create_client(state.clone());
 
         client.bar.increment().unwrap();
         println!("{:?}\n", &state.borrow());
