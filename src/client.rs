@@ -8,8 +8,32 @@ use crate::Result;
 
 pub trait Client<T> {
     type Client;
-    
+
     fn create_client(parent: T) -> Self::Client;
+}
+
+impl<T: Client<U>, U> Client<U> for Result<T> {
+    type Client = T::Client;
+
+    fn create_client(parent: U) -> Self::Client {
+        T::create_client(parent)
+    }
+}
+
+impl<T: Client<U>, U> Client<U> for &T {
+    type Client = T::Client;
+
+    fn create_client(parent: U) -> Self::Client {
+        T::create_client(parent)
+    }
+}
+
+impl<T: Client<U>, U> Client<U> for &mut T {
+    type Client = T::Client;
+
+    fn create_client(parent: U) -> Self::Client {
+        T::create_client(parent)
+    }
 }
 
 #[cfg(test)]
@@ -17,18 +41,20 @@ mod tests {
     use std::fmt::Debug;
 
     use super::*;
+    use crate::collections::{ChildMut, Map};
 
     #[derive(Debug)]
     pub struct Signer<T> {
         inner: T,
     }
     impl<T: Call> Call for Signer<T>
-    where T::Call: Debug,
+    where
+        T::Call: Debug,
     {
         type Call = (u32, T::Call);
 
         fn call(&mut self, call: Self::Call) -> Result<()> {
-            println!("Called call({:?} on Signer", &call);
+            println!("Called call({:?}) on Signer", &call);
 
             let (signature, subcall) = call;
             if signature != 123 {
@@ -44,12 +70,11 @@ mod tests {
         fn create_client(parent: U) -> Self::Client {
             T::create_client(SignerClient {
                 parent: parent.clone(),
-                marker: std::marker::PhantomData
+                marker: std::marker::PhantomData,
             })
         }
     }
-    pub struct SignerClient<T, U: Clone>
-    {
+    pub struct SignerClient<T, U: Clone> {
         parent: U,
         marker: std::marker::PhantomData<T>,
     }
@@ -62,7 +87,8 @@ mod tests {
         }
     }
     impl<T: Call, U: Call<Call = (u32, T::Call)> + Clone> Call for SignerClient<T, U>
-    where T::Call: Debug,
+    where
+        T::Call: Debug,
     {
         type Call = T::Call;
 
@@ -77,10 +103,21 @@ mod tests {
         pub bar: Bar,
         pub bar2: Bar,
     }
+    impl Foo {
+        pub fn get_bar_mut(&mut self, id: u8) -> Result<&mut Bar> {
+            println!("Called get_bar_mut({}) on Foo", id);
+            match id {
+                0 => Ok(&mut self.bar),
+                1 => Ok(&mut self.bar2),
+                _ => failure::bail!("Invalid id"),
+            }
+        }
+    }
     #[derive(Debug, Encode, Decode)]
     pub enum FooCall {
         Bar(BarCall),
         Bar2(BarCall),
+        GetBar(u8, BarCall),
     }
     impl Call for Foo {
         type Call = FooCall;
@@ -90,6 +127,9 @@ mod tests {
             match call {
                 FooCall::Bar(call) => self.bar.call(call),
                 FooCall::Bar2(call) => self.bar2.call(call),
+                FooCall::GetBar(id, call) => {
+                    self.get_bar_mut(id)?.call(call)
+                }
             }
         }
     }
@@ -97,8 +137,12 @@ mod tests {
         type Client = FooClient<T>;
 
         fn create_client(parent: T) -> Self::Client {
-            let bar_adapter = BarAdapter { parent: parent.clone() };
-            let bar2_adapter = Bar2Adapter { parent: parent.clone() };
+            let bar_adapter = BarAdapter {
+                parent: parent.clone(),
+            };
+            let bar2_adapter = Bar2Adapter {
+                parent: parent.clone(),
+            };
             FooClient {
                 parent,
                 bar: Bar::create_client(bar_adapter),
@@ -113,6 +157,16 @@ mod tests {
         pub bar: BarClient<BarAdapter<T>>,
         pub bar2: BarClient<Bar2Adapter<T>>,
     }
+    impl<T: Call<Call = FooCall> + Clone> FooClient<T> {
+        pub fn get_bar_mut(&mut self, id: u8) -> <Result<&mut Bar> as Client<GetBarAdapter<T>>>::Client {
+            println!("called get_bar_mut({}) on FooClient", id);
+            let adapter = GetBarAdapter {
+                args: (id,),
+                parent: self.parent.clone(),
+            };
+            <Result<&mut Bar> as Client<GetBarAdapter<T>>>::create_client(adapter)
+        }
+    }
 
     #[derive(Clone)]
     pub struct BarAdapter<T> {
@@ -122,7 +176,10 @@ mod tests {
         type Call = BarCall;
 
         fn call(&mut self, call: Self::Call) -> Result<()> {
-            println!("called call({:?}) on BarAdapter, wrapping with FooCall::Bar(..)", call);
+            println!(
+                "called call({:?}) on BarAdapter, wrapping with FooCall::Bar(..)",
+                call
+            );
             self.parent.call(FooCall::Bar(call))
         }
     }
@@ -135,8 +192,28 @@ mod tests {
         type Call = BarCall;
 
         fn call(&mut self, call: Self::Call) -> Result<()> {
-            println!("called call({:?}) on Bar2Adapter, wrapping with FooCall::Bar2(..)", call);
+            println!(
+                "called call({:?}) on Bar2Adapter, wrapping with FooCall::Bar2(..)",
+                call
+            );
             self.parent.call(FooCall::Bar2(call))
+        }
+    }
+
+    #[derive(Clone)]
+    pub struct GetBarAdapter<T> {
+        args: (u8,),
+        parent: T,
+    }
+    impl<T: Call<Call = FooCall>> Call for GetBarAdapter<T> {
+        type Call = BarCall;
+
+        fn call(&mut self, call: Self::Call) -> Result<()> {
+            println!(
+                "called call({:?}) on GetBarAdapter, wrapping with FooCall::GetBar({}, ..)",
+                &call, self.args.0
+            );
+            self.parent.call(FooCall::GetBar(self.args.0, call))
         }
     }
 
@@ -185,16 +262,18 @@ mod tests {
 
     #[test]
     fn client() {
-        let mut state = Rc::new(RefCell::new(Signer { inner: Foo {
-            bar: Bar(0),
-            bar2: Bar(0),
-        }}));
+        let mut state = Rc::new(RefCell::new(Signer {
+            inner: Foo {
+                bar: Bar(0),
+                bar2: Bar(0),
+            },
+        }));
         let mut client = Signer::<Foo>::create_client(state.clone());
 
         client.bar.increment().unwrap();
         println!("{:?}\n", &state.borrow());
 
-        client.bar2.increment().unwrap();
+        client.get_bar_mut(1).increment().unwrap();
         println!("{:?}", &state.borrow());
     }
 }
