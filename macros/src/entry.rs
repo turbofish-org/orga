@@ -190,10 +190,10 @@ fn derive_named_struct(data: syn::DataStruct, ident: syn::Ident) -> TokenStream 
     }
 }
 
-fn generate_unnamed_struct_body(
+fn generate_unnamed_struct_from_body(
     keys: Vec<(syn::Index, syn::Type)>,
     values: Vec<(syn::Index, syn::Type)>,
-) -> std::vec::IntoIter<TokenStream2> {
+) -> Vec<TokenStream2> {
     let mut field_key_status = BTreeMap::new();
 
     for key in keys {
@@ -223,22 +223,17 @@ fn generate_unnamed_struct_body(
             }
         })
         .collect();
-
-    output.into_iter()
+    output
 }
 
-fn derive_unnamed_struct(data: syn::DataStruct, ident: syn::Ident) -> TokenStream {
-    let keys = parse_unnamed_struct(data.clone(), true);
-    let values = parse_unnamed_struct(data, false);
-
-    let key_field_types: Vec<syn::Type> = keys.iter().map(|key| key.1.clone()).collect();
-    let key_field_indices: Vec<syn::Index> = keys.iter().map(|key| key.0.clone()).collect();
-
-    let value_field_types: Vec<syn::Type> = values.iter().map(|value| value.1.clone()).collect();
-    let value_field_indices: Vec<syn::Index> = values.iter().map(|value| value.0.clone()).collect();
-
-    let self_body = generate_unnamed_struct_body(keys, values);
-
+fn generate_unnamed_impl_block(
+    ident: syn::Ident,
+    key_field_indices: Vec<syn::Index>,
+    key_field_types: Vec<syn::Type>,
+    value_field_indices: Vec<syn::Index>,
+    value_field_types: Vec<syn::Type>,
+    from_body: Vec<TokenStream2>,
+) -> TokenStream {
     let output = quote! {
         impl ::orga::collections::Entry for #ident {
             type Key = (
@@ -261,12 +256,73 @@ fn derive_unnamed_struct(data: syn::DataStruct, ident: syn::Ident) -> TokenStrea
             }
 
             fn from_entry(item: (Self::Key, Self::Value)) -> Self {
-                Self(#(#self_body,)*)
+                Self(#(#from_body,)*)
             }
         }
     };
 
     output.into()
+}
+
+fn generate_unnamed_one_tuple_from_body(
+    key_field_index: &syn::Index,
+    value_field_indices: &Vec<syn::Index>,
+) -> Vec<TokenStream2> {
+    let output = quote! {};
+    vec![output]
+}
+
+fn generate_unnamed_one_tuple_impl_block(
+    ident: syn::Ident,
+    key_field_index: &syn::Index,
+    key_field_type: &syn::Type,
+    value_field_indices: Vec<syn::Index>,
+    value_field_types: Vec<syn::Type>,
+    from_body: Vec<TokenStream2>,
+) -> TokenStream {
+    let output = quote! {};
+    output.into()
+}
+
+fn derive_unnamed_struct(data: syn::DataStruct, ident: syn::Ident) -> TokenStream {
+    let keys = parse_unnamed_struct(data.clone(), true);
+    let values = parse_unnamed_struct(data, false);
+
+    let key_field_types: Vec<syn::Type> = keys.iter().map(|key| key.1.clone()).collect();
+    let key_field_indices: Vec<syn::Index> = keys.iter().map(|key| key.0.clone()).collect();
+
+    let value_field_types: Vec<syn::Type> = values.iter().map(|value| value.1.clone()).collect();
+    let value_field_indices: Vec<syn::Index> = values.iter().map(|value| value.0.clone()).collect();
+
+    match key_field_types.len() {
+        0 => panic!("Entry derivation requires at least one key field to be specified."),
+        1 => {
+            let key_field_index = key_field_indices.get(0).unwrap();
+            let key_field_type = key_field_types.get(0).unwrap();
+
+            let from_body =
+                generate_unnamed_one_tuple_from_body(key_field_index, &value_field_indices);
+            generate_unnamed_one_tuple_impl_block(
+                ident,
+                key_field_index,
+                key_field_type,
+                value_field_indices,
+                value_field_types,
+                from_body,
+            )
+        }
+        _ => {
+            let from_body = generate_unnamed_struct_from_body(keys, values);
+            generate_unnamed_impl_block(
+                ident,
+                key_field_indices,
+                key_field_types,
+                value_field_indices,
+                value_field_types,
+                from_body,
+            )
+        }
+    }
 }
 
 pub fn derive(input: TokenStream) -> TokenStream {
