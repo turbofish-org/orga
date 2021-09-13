@@ -137,8 +137,8 @@ where
         let state_bytes = store.get(&[])?.unwrap();
         let data: <ABCIProvider<A> as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
         let mut state = <ABCIProvider<A> as State>::create(store.clone(), data)?;
-        state.height.replace(req.header.unwrap().height as u64);
-        state.call(ABCICall::BeginBlock)?;
+        let height = req.header.unwrap().height as u64;
+        state.call(ABCICall::BeginBlock { height })?;
         let flushed = state.flush()?;
         store.put(vec![], flushed.encode()?)?;
 
@@ -151,9 +151,19 @@ where
         let data: <ABCIProvider<A> as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
         let mut state = <ABCIProvider<A> as State>::create(store.clone(), data)?;
         state.call(ABCICall::EndBlock)?;
+        let mut updates = state
+            .validator_updates
+            .take()
+            .expect("ABCI Provider did not create validator update map");
+
+        // Prepare validator updates
+        let mut res: ResponseEndBlock = Default::default();
+        updates.drain().for_each(|(_key, update)| {
+            res.validator_updates.push(update);
+        });
+
         let flushed = state.flush()?;
         store.put(vec![], flushed.encode()?)?;
-        let res: ResponseEndBlock = Default::default();
 
         Ok(res)
     }
