@@ -131,12 +131,13 @@ where
     fn begin_block(
         &self,
         store: WrappedMerk,
-        _req: RequestBeginBlock,
+        req: RequestBeginBlock,
     ) -> Result<ResponseBeginBlock> {
         let mut store = Store::new(store.into());
         let state_bytes = store.get(&[])?.unwrap();
         let data: <ABCIProvider<A> as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
         let mut state = <ABCIProvider<A> as State>::create(store.clone(), data)?;
+        state.height.replace(req.header.unwrap().height as u64);
         state.call(ABCICall::BeginBlock)?;
         let flushed = state.flush()?;
         store.put(vec![], flushed.encode()?)?;

@@ -1,3 +1,4 @@
+use super::Context;
 use crate::abci::App;
 use crate::call::Call;
 use crate::encoding::{Decode, Encode};
@@ -8,9 +9,12 @@ use crate::Result;
 
 pub struct ABCIProvider<T> {
     inner: T,
+    pub height: Option<u64>,
 }
 
-pub struct ABCI {}
+pub struct BeginBlockCtx {
+    pub height: u64,
+}
 
 #[derive(Encode, Decode)]
 pub enum ABCICall<C> {
@@ -27,7 +31,12 @@ impl<T: State + App> Call for ABCIProvider<T> {
         use ABCICall::*;
         match call {
             InitChain => self.inner.init_chain(),
-            BeginBlock => self.inner.begin_block(),
+            BeginBlock => {
+                Context::add(BeginBlockCtx {
+                    height: self.height.unwrap(),
+                });
+                self.inner.begin_block()
+            }
             EndBlock => self.inner.end_block(),
             DeliverTx(inner_call) => self.inner.call(inner_call),
             CheckTx(inner_call) => self.inner.call(inner_call),
@@ -51,6 +60,7 @@ where
     fn create(store: Store, data: Self::Encoding) -> Result<Self> {
         Ok(Self {
             inner: T::create(store, data.0)?,
+            height: None,
         })
     }
 
