@@ -1,4 +1,4 @@
-use super::Context;
+use super::{BeginBlockCtx, Context, EndBlockCtx, InitChainCtx};
 use crate::abci::{BeginBlock, EndBlock, InitChain};
 use crate::call::Call;
 use crate::encoding::{Decode, Encode};
@@ -94,8 +94,8 @@ impl<T> BeginBlock for SignerProvider<T>
 where
     T: BeginBlock + State,
 {
-    fn begin_block(&mut self) -> Result<()> {
-        self.inner.begin_block()
+    fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
+        self.inner.begin_block(ctx)
     }
 }
 
@@ -103,8 +103,8 @@ impl<T> EndBlock for SignerProvider<T>
 where
     T: EndBlock + State,
 {
-    fn end_block(&mut self) -> Result<()> {
-        self.inner.end_block()
+    fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
+        self.inner.end_block(ctx)
     }
 }
 
@@ -112,7 +112,7 @@ impl<T> InitChain for SignerProvider<T>
 where
     T: InitChain + State,
 {
-    fn init_chain(&mut self) -> Result<()> {
-        self.inner.init_chain()
+    fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
+        self.inner.init_chain(ctx)
     }
 }
