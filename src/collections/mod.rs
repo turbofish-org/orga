@@ -131,4 +131,41 @@ mod test {
         let key: [u8; 3] = [255, 255, 255];
         assert_eq!(key.next(), None);
     }
+
+    #[test]
+    fn two_tuple_next() {
+        let key: (u8, u32) = (0, 0);
+        assert_eq!(key.next().unwrap(), (0, 1));
+    }
+
+    #[test]
+    fn two_tuple_next_last_max() {
+        let key: (u8, u8) = (0, 255);
+        assert_eq!(key.next().unwrap(), (1, 0));
+    }
+
+    #[test]
+    fn two_tuple_next_all_max() {
+        let key: (u8, u8) = (255, 255);
+        assert!(key.next().is_none());
+    }
+
+    #[test]
+    fn single_tuple_next() {
+        let key: (u8,) = (0,);
+        assert_eq!(key.next().unwrap(), (1,));
+    }
+
+    #[test]
+    fn single_tuple_max() {
+        let key: (u8,) = (255,);
+        assert!(key.next().is_none());
+    }
+
+    #[test]
+    fn max_tuple_next() {
+        let key: (u8, u8, u8, u8, u8, u8, u8, u8, u8, u8, u8, u8) =
+            (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        assert_eq!(key.next().unwrap(), (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1));
+    }
 }
