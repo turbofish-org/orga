@@ -157,26 +157,11 @@ mod test {
     #[allow(dead_code)]
     type EntryMap<T> = OrgaEntryMap<T, MapStore>;
 
-    #[derive(Debug, Eq, PartialEq)]
+    #[derive(Entry, Debug, Eq, PartialEq)]
     pub struct MapEntry {
+        #[key]
         key: u32,
         value: u32,
-    }
-
-    impl Entry for MapEntry {
-        type Key = u32;
-        type Value = u32;
-
-        fn into_entry(self) -> (Self::Key, Self::Value) {
-            (self.key, self.value)
-        }
-
-        fn from_entry(entry: (Self::Key, Self::Value)) -> Self {
-            MapEntry {
-                key: entry.0,
-                value: entry.1,
-            }
-        }
     }
 
     #[test]
