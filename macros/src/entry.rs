@@ -96,43 +96,6 @@ fn generate_named_impl_block(
     output.into()
 }
 
-fn generate_unnamed_struct_body(
-    keys: Vec<(syn::Index, syn::Type)>,
-    values: Vec<(syn::Index, syn::Type)>,
-) -> std::vec::IntoIter<TokenStream2> {
-    let mut field_key_status = BTreeMap::new();
-
-    for key in keys {
-        let key_index = key.0;
-        field_key_status.insert(key_index.index, true);
-    }
-    for value in values {
-        let val_index = value.0;
-        field_key_status.insert(val_index.index, false);
-    }
-
-    let mut num_keys = 0;
-    let mut num_vals = 0;
-
-    let output: Vec<TokenStream2> = field_key_status
-        .iter()
-        .map(|(_, is_key)| match is_key {
-            true => {
-                let j = syn::Index::from(num_keys);
-                num_keys += 1;
-                quote! { item.0.#j}
-            }
-            false => {
-                let j = syn::Index::from(num_vals);
-                num_vals += 1;
-                quote! { item.1.#j}
-            }
-        })
-        .collect();
-
-    output.into_iter()
-}
-
 fn generate_named_one_tuple_from_body(
     key_field_name: &syn::Ident,
     value_field_names: &Vec<syn::Ident>,
@@ -225,6 +188,43 @@ fn derive_named_struct(data: syn::DataStruct, ident: syn::Ident) -> TokenStream 
             )
         }
     }
+}
+
+fn generate_unnamed_struct_body(
+    keys: Vec<(syn::Index, syn::Type)>,
+    values: Vec<(syn::Index, syn::Type)>,
+) -> std::vec::IntoIter<TokenStream2> {
+    let mut field_key_status = BTreeMap::new();
+
+    for key in keys {
+        let key_index = key.0;
+        field_key_status.insert(key_index.index, true);
+    }
+    for value in values {
+        let val_index = value.0;
+        field_key_status.insert(val_index.index, false);
+    }
+
+    let mut num_keys = 0;
+    let mut num_vals = 0;
+
+    let output: Vec<TokenStream2> = field_key_status
+        .iter()
+        .map(|(_, is_key)| match is_key {
+            true => {
+                let j = syn::Index::from(num_keys);
+                num_keys += 1;
+                quote! { item.0.#j}
+            }
+            false => {
+                let j = syn::Index::from(num_vals);
+                num_vals += 1;
+                quote! { item.1.#j}
+            }
+        })
+        .collect();
+
+    output.into_iter()
 }
 
 fn derive_unnamed_struct(data: syn::DataStruct, ident: syn::Ident) -> TokenStream {
