@@ -153,13 +153,37 @@ fn generate_named_one_tuple_from_body(
 
 fn generate_named_one_tuple_impl_block(
     ident: syn::Ident,
-    key_field_names: Vec<syn::Ident>,
-    key_field_types: Vec<syn::Type>,
+    key_field_name: &syn::Ident,
+    key_field_type: &syn::Type,
     value_field_names: Vec<syn::Ident>,
     value_field_types: Vec<syn::Type>,
     from_body: Vec<TokenStream2>,
 ) -> TokenStream {
-    let output = quote! {};
+    let output = quote! {
+        impl ::orga::collections::Entry for #ident {
+            type Key = #key_field_type;
+
+            type Value = (
+                #(#value_field_types,)*
+            );
+
+            fn into_entry(self) -> (Self::Key, Self::Value) {
+                (
+                    self.#key_field_name,
+                    (#(
+                        self.#value_field_names,
+                    )*),
+                )
+            }
+
+            fn from_entry(item: (Self::Key, Self::Value)) -> Self {
+                Self {
+                    #(#from_body)*
+                }
+            }
+        }
+    };
+
     output.into()
 }
 
