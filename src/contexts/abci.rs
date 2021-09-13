@@ -9,9 +9,10 @@ use crate::Result;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use tendermint_proto::abci::{
-    RequestBeginBlock, RequestEndBlock, RequestInitChain, ValidatorUpdate,
+    Evidence, LastCommitInfo, RequestBeginBlock, RequestEndBlock, RequestInitChain, ValidatorUpdate,
 };
 use tendermint_proto::crypto::{public_key::Sum, PublicKey};
+use tendermint_proto::google::protobuf::Timestamp;
 use tendermint_proto::types::Header;
 
 pub struct ABCIProvider<T> {
@@ -19,24 +20,46 @@ pub struct ABCIProvider<T> {
     pub(crate) validator_updates: Option<HashMap<[u8; 32], ValidatorUpdate>>,
 }
 
-pub struct InitChainCtx {}
+pub struct InitChainCtx {
+    pub time: Option<Timestamp>,
+    pub chain_id: String,
+    pub validators: Vec<ValidatorUpdate>,
+    pub app_state_bytes: Vec<u8>,
+    pub initial_height: i64,
+}
 
 impl From<RequestInitChain> for InitChainCtx {
-    fn from(_: RequestInitChain) -> Self {
-        InitChainCtx {}
+    fn from(req: RequestInitChain) -> Self {
+        Self {
+            time: req.time,
+            chain_id: req.chain_id,
+            validators: req.validators,
+            app_state_bytes: req.app_state_bytes,
+            initial_height: req.initial_height,
+        }
     }
 }
 
 pub struct BeginBlockCtx {
+    pub hash: Vec<u8>,
     pub height: u64,
     pub header: Header,
+    pub last_commit_info: Option<LastCommitInfo>,
+    pub byzantine_validators: Vec<Evidence>,
 }
 
 impl From<RequestBeginBlock> for BeginBlockCtx {
     fn from(req: RequestBeginBlock) -> Self {
         let header = req.header.expect("Missing header in BeginBlock");
         let height = header.height as u64;
-        BeginBlockCtx { height, header }
+
+        BeginBlockCtx {
+            header,
+            height,
+            hash: req.hash,
+            last_commit_info: req.last_commit_info,
+            byzantine_validators: req.byzantine_validators,
+        }
     }
 }
 
