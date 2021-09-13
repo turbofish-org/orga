@@ -32,10 +32,10 @@ fn parse_unnamed_struct(data: syn::DataStruct, keys: bool) -> Vec<(syn::Index, s
         .collect()
 }
 
-fn generate_named_struct_body(
+fn generate_named_struct_from_body(
     key_field_names: &Vec<syn::Ident>,
     value_field_names: &Vec<syn::Ident>,
-) -> std::vec::IntoIter<TokenStream2> {
+) -> Vec<TokenStream2> {
     let self_body: Vec<TokenStream2> = key_field_names
         .iter()
         .enumerate()
@@ -53,7 +53,47 @@ fn generate_named_struct_body(
         })
         .collect();
 
-    self_body.into_iter()
+    self_body
+}
+
+fn generate_named_impl_block(
+    ident: syn::Ident,
+    key_field_names: Vec<syn::Ident>,
+    key_field_types: Vec<syn::Type>,
+    value_field_names: Vec<syn::Ident>,
+    value_field_types: Vec<syn::Type>,
+    from_body: Vec<TokenStream2>,
+) -> TokenStream {
+    let output = quote! {
+        impl ::orga::collections::Entry for #ident {
+            type Key = (
+                #(#key_field_types,)*
+            );
+
+            type Value = (
+                #(#value_field_types,)*
+            );
+
+            fn into_entry(self) -> (Self::Key, Self::Value) {
+                (
+                    (#(
+                        self.#key_field_names,
+                    )*),
+                    (#(
+                        self.#value_field_names,
+                    )*),
+                )
+            }
+
+            fn from_entry(item: (Self::Key, Self::Value)) -> Self {
+                Self {
+                    #(#from_body)*
+                }
+            }
+        }
+    };
+
+    output.into()
 }
 
 fn generate_unnamed_struct_body(
@@ -93,6 +133,26 @@ fn generate_unnamed_struct_body(
     output.into_iter()
 }
 
+fn generate_named_one_tuple_from_body(
+    key_field_names: &Vec<syn::Ident>,
+    value_field_names: &Vec<syn::Ident>,
+) -> Vec<TokenStream2> {
+    let output = quote! {};
+    vec![output.into()]
+}
+
+fn generate_named_one_tuple_impl_block(
+    ident: syn::Ident,
+    key_field_names: Vec<syn::Ident>,
+    key_field_types: Vec<syn::Type>,
+    value_field_names: Vec<syn::Ident>,
+    value_field_types: Vec<syn::Type>,
+    from_body: Vec<TokenStream2>,
+) -> TokenStream {
+    let output = quote! {};
+    output.into()
+}
+
 fn derive_named_struct(data: syn::DataStruct, ident: syn::Ident) -> TokenStream {
     let keys = parse_named_struct(data.clone(), true);
     let values = parse_named_struct(data, false);
@@ -103,38 +163,32 @@ fn derive_named_struct(data: syn::DataStruct, ident: syn::Ident) -> TokenStream 
     let value_field_types: Vec<syn::Type> = values.iter().map(|value| value.1.clone()).collect();
     let value_field_names: Vec<syn::Ident> = values.iter().map(|value| value.0.clone()).collect();
 
-    let self_body = generate_named_struct_body(&key_field_names, &value_field_names);
-
-    let output = quote! {
-        impl ::orga::collections::Entry for #ident {
-            type Key = (
-                #(#key_field_types,)*
-            );
-
-            type Value = (
-                #(#value_field_types,)*
-            );
-
-            fn into_entry(self) -> (Self::Key, Self::Value) {
-                (
-                    (#(
-                        self.#key_field_names,
-                    )*),
-                    (#(
-                        self.#value_field_names,
-                    )*),
-                )
-            }
-
-            fn from_entry(item: (Self::Key, Self::Value)) -> Self {
-                Self {
-                    #(#self_body)*
-                }
-            }
+    match key_field_types.len() {
+        0 => panic!("Entry derivation requires at least one key field to be specified."),
+        1 => {
+            let from_body =
+                generate_named_one_tuple_from_body(&key_field_names, &value_field_names);
+            generate_named_one_tuple_impl_block(
+                ident,
+                key_field_names,
+                key_field_types,
+                value_field_names,
+                value_field_types,
+                from_body,
+            )
         }
-    };
-
-    output.into()
+        _ => {
+            let from_body = generate_named_struct_from_body(&key_field_names, &value_field_names);
+            generate_named_impl_block(
+                ident,
+                key_field_names,
+                key_field_types,
+                value_field_names,
+                value_field_types,
+                from_body,
+            )
+        }
+    }
 }
 
 fn derive_unnamed_struct(data: syn::DataStruct, ident: syn::Ident) -> TokenStream {
