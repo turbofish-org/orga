@@ -134,11 +134,21 @@ fn generate_unnamed_struct_body(
 }
 
 fn generate_named_one_tuple_from_body(
-    key_field_names: &Vec<syn::Ident>,
+    key_field_name: &syn::Ident,
     value_field_names: &Vec<syn::Ident>,
 ) -> Vec<TokenStream2> {
-    let output = quote! {};
-    vec![output.into()]
+    let key_quote = quote! { #key_field_name: item.0, };
+    let mut value_quote: Vec<TokenStream2> = value_field_names
+        .iter()
+        .enumerate()
+        .map(|(i, name)| {
+            let index = syn::Index::from(i);
+            quote! { #name: item.1.#index,}
+        })
+        .collect();
+    value_quote.push(key_quote);
+
+    value_quote
 }
 
 fn generate_named_one_tuple_impl_block(
