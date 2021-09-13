@@ -16,6 +16,8 @@ use crate::Result;
 mod node;
 pub use node::*;
 
+pub mod prost;
+
 use messages::*;
 pub use tendermint_proto::abci as messages;
 use tendermint_proto::abci::request::Value as Req;

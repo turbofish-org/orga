@@ -107,7 +107,7 @@ where
     A: App,
     <A as State>::Encoding: Default,
 {
-    fn init_chain(&self, store: WrappedMerk, _req: RequestInitChain) -> Result<ResponseInitChain> {
+    fn init_chain(&self, store: WrappedMerk, req: RequestInitChain) -> Result<ResponseInitChain> {
         let mut store = Store::new(store.into());
 
         let state_bytes = match store.get(&[])? {
@@ -121,7 +121,7 @@ where
         };
         let data: <ABCIProvider<A> as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
         let mut state = <ABCIProvider<A> as State>::create(store.clone(), data)?;
-        state.call(ABCICall::InitChain)?;
+        state.call(req.into())?;
         let flushed = state.flush()?;
         store.put(vec![], flushed.encode()?)?;
 
@@ -137,20 +137,19 @@ where
         let state_bytes = store.get(&[])?.unwrap();
         let data: <ABCIProvider<A> as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
         let mut state = <ABCIProvider<A> as State>::create(store.clone(), data)?;
-        let height = req.header.unwrap().height as u64;
-        state.call(ABCICall::BeginBlock { height })?;
+        state.call(req.into())?;
         let flushed = state.flush()?;
         store.put(vec![], flushed.encode()?)?;
 
         Ok(Default::default())
     }
 
-    fn end_block(&self, store: WrappedMerk, _req: RequestEndBlock) -> Result<ResponseEndBlock> {
+    fn end_block(&self, store: WrappedMerk, req: RequestEndBlock) -> Result<ResponseEndBlock> {
         let mut store = Store::new(store.into());
         let state_bytes = store.get(&[])?.unwrap();
         let data: <ABCIProvider<A> as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
         let mut state = <ABCIProvider<A> as State>::create(store.clone(), data)?;
-        state.call(ABCICall::EndBlock)?;
+        state.call(req.into())?;
         let mut updates = state
             .validator_updates
             .take()

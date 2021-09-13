@@ -1,4 +1,4 @@
-#![feature(specialization)]
+#![feature(min_specialization)]
 #![feature(trivial_bounds)]
 #![feature(associated_type_defaults)]
 use orga::prelude::*;
