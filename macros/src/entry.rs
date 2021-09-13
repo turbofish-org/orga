@@ -200,12 +200,14 @@ fn derive_named_struct(data: syn::DataStruct, ident: syn::Ident) -> TokenStream 
     match key_field_types.len() {
         0 => panic!("Entry derivation requires at least one key field to be specified."),
         1 => {
-            let from_body =
-                generate_named_one_tuple_from_body(&key_field_names, &value_field_names);
+            let key_field_name = key_field_names.get(0).unwrap();
+            let key_field_type = key_field_types.get(0).unwrap();
+
+            let from_body = generate_named_one_tuple_from_body(&key_field_name, &value_field_names);
             generate_named_one_tuple_impl_block(
                 ident,
-                key_field_names,
-                key_field_types,
+                key_field_name,
+                key_field_type,
                 value_field_names,
                 value_field_types,
                 from_body,
