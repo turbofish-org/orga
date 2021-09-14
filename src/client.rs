@@ -1,9 +1,3 @@
-use std::cell::RefCell;
-use std::rc::{Rc, Weak};
-
-use crate::call::Call;
-use crate::encoding::{Decode, Encode};
-use crate::query::{self, Query};
 use crate::Result;
 
 pub trait Client<T> {
@@ -49,7 +43,10 @@ mod tests {
     use std::fmt::Debug;
 
     use super::*;
-    use crate::collections::{ChildMut, Map};
+    use crate::call::Call;
+    use crate::encoding::{Decode, Encode};
+    use std::cell::RefCell;
+    use std::rc::Rc;
 
     #[derive(Debug)]
     pub struct Signer<T> {
@@ -271,7 +268,7 @@ mod tests {
 
     #[test]
     fn client() {
-        let mut state = Rc::new(RefCell::new(Signer {
+        let state = Rc::new(RefCell::new(Signer {
             inner: Foo {
                 bar: Bar(0),
                 bar2: Bar(0),

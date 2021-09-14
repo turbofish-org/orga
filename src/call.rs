@@ -1,7 +1,6 @@
 use crate::encoding::{Decode, Encode};
 use crate::Result;
 use std::cell::RefCell;
-use std::ops::Deref;
 use std::rc::Rc;
 
 pub use orga_macros::{call, Call};
