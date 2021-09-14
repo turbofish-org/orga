@@ -20,6 +20,14 @@ impl<T: Client<U>, U> Client<U> for Result<T> {
     }
 }
 
+impl<T: Client<U>, U> Client<U> for Option<T> {
+    type Client = T::Client;
+
+    fn create_client(parent: U) -> Self::Client {
+        T::create_client(parent)
+    }
+}
+
 impl<T: Client<U>, U> Client<U> for &T {
     type Client = T::Client;
 
