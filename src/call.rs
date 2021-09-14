@@ -1,8 +1,8 @@
+use crate::encoding::{Decode, Encode};
+use crate::Result;
 use std::cell::RefCell;
 use std::ops::Deref;
 use std::rc::Rc;
-use crate::encoding::{Decode, Encode};
-use crate::Result;
 
 pub use orga_macros::{call, Call};
 

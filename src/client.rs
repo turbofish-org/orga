@@ -135,9 +135,7 @@ mod tests {
             match call {
                 FooCall::Bar(call) => self.bar.call(call),
                 FooCall::Bar2(call) => self.bar2.call(call),
-                FooCall::GetBar(id, call) => {
-                    self.get_bar_mut(id)?.call(call)
-                }
+                FooCall::GetBar(id, call) => self.get_bar_mut(id)?.call(call),
             }
         }
     }
@@ -166,7 +164,10 @@ mod tests {
         pub bar2: BarClient<Bar2Adapter<T>>,
     }
     impl<T: Call<Call = FooCall> + Clone> FooClient<T> {
-        pub fn get_bar_mut(&mut self, id: u8) -> <Result<&mut Bar> as Client<GetBarAdapter<T>>>::Client {
+        pub fn get_bar_mut(
+            &mut self,
+            id: u8,
+        ) -> <Result<&mut Bar> as Client<GetBarAdapter<T>>>::Client {
             println!("called get_bar_mut({}) on FooClient", id);
             let adapter = GetBarAdapter {
                 args: (id,),
