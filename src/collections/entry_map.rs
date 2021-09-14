@@ -164,6 +164,9 @@ mod test {
         value: u32,
     }
 
+    #[derive(Entry, Debug, Eq, PartialEq)]
+    pub struct TupleMapEntry(#[key] u32, u32);
+
     #[test]
     fn insert() {
         let store = Store::new(MapStore::new());
@@ -358,5 +361,55 @@ mod test {
         assert!(entry_map
             .contains_entry_key(MapEntry { key: 12, value: 13 })
             .unwrap());
+    }
+
+    #[test]
+    fn iter_tuple_struct() {
+        let store = Store::new(MapStore::new());
+        let mut entry_map: EntryMap<TupleMapEntry> = EntryMap::create(store.clone(), ()).unwrap();
+
+        entry_map.insert(TupleMapEntry(12, 24)).unwrap();
+        entry_map.insert(TupleMapEntry(13, 26)).unwrap();
+        entry_map.insert(TupleMapEntry(14, 28)).unwrap();
+
+        let actual: Vec<TupleMapEntry> = vec![
+            TupleMapEntry(12, 24),
+            TupleMapEntry(13, 26),
+            TupleMapEntry(14, 28),
+        ];
+
+        let result: bool = entry_map
+            .iter()
+            .unwrap()
+            .zip(actual.iter())
+            .map(|(actual, expected)| *actual.unwrap() == *expected)
+            .fold(true, |accumulator, item| item & accumulator);
+
+        assert!(result);
+    }
+
+    #[test]
+    fn range_full_tuple_struct() {
+        let store = Store::new(MapStore::new());
+        let mut entry_map: EntryMap<TupleMapEntry> = EntryMap::create(store.clone(), ()).unwrap();
+
+        entry_map.insert(TupleMapEntry(12, 24)).unwrap();
+        entry_map.insert(TupleMapEntry(13, 26)).unwrap();
+        entry_map.insert(TupleMapEntry(14, 28)).unwrap();
+
+        let expected_entries: Vec<TupleMapEntry> = vec![
+            TupleMapEntry(12, 24),
+            TupleMapEntry(13, 26),
+            TupleMapEntry(14, 28),
+        ];
+
+        let result: bool = entry_map
+            .range(..)
+            .unwrap()
+            .zip(expected_entries.iter())
+            .map(|(actual, expected)| *actual.unwrap() == *expected)
+            .fold(true, |accumulator, item| item & accumulator);
+
+        assert!(result);
     }
 }
