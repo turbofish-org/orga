@@ -191,18 +191,16 @@ fn derive_named_struct(data: syn::DataStruct, ident: syn::Ident) -> TokenStream 
 }
 
 fn generate_unnamed_struct_from_body(
-    keys: Vec<(syn::Index, syn::Type)>,
-    values: Vec<(syn::Index, syn::Type)>,
+    keys: &Vec<syn::Index>,
+    values: &Vec<syn::Index>,
 ) -> Vec<TokenStream2> {
     let mut field_key_status = BTreeMap::new();
 
     for key in keys {
-        let key_index = key.0;
-        field_key_status.insert(key_index.index, true);
+        field_key_status.insert(key.index, true);
     }
     for value in values {
-        let val_index = value.0;
-        field_key_status.insert(val_index.index, false);
+        field_key_status.insert(value.index, false);
     }
 
     let mut num_keys = 0;
@@ -228,9 +226,9 @@ fn generate_unnamed_struct_from_body(
 
 fn generate_unnamed_impl_block(
     ident: syn::Ident,
-    key_field_indices: Vec<syn::Index>,
+    key_field_indices: &Vec<syn::Index>,
     key_field_types: Vec<syn::Type>,
-    value_field_indices: Vec<syn::Index>,
+    value_field_indices: &Vec<syn::Index>,
     value_field_types: Vec<syn::Type>,
     from_body: Vec<TokenStream2>,
 ) -> TokenStream {
@@ -356,12 +354,13 @@ fn derive_unnamed_struct(data: syn::DataStruct, ident: syn::Ident) -> TokenStrea
             )
         }
         _ => {
-            let from_body = generate_unnamed_struct_from_body(keys, values);
+            let from_body =
+                generate_unnamed_struct_from_body(&key_field_indices, &value_field_indices);
             generate_unnamed_impl_block(
                 ident,
-                key_field_indices,
+                &key_field_indices,
                 key_field_types,
-                value_field_indices,
+                &value_field_indices,
                 value_field_types,
                 from_body,
             )
