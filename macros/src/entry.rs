@@ -345,8 +345,7 @@ fn derive_unnamed_struct(data: syn::DataStruct, ident: syn::Ident) -> TokenStrea
             let key_field_index = key_field_indices.get(0).unwrap();
             let key_field_type = key_field_types.get(0).unwrap();
 
-            let from_body =
-                generate_unnamed_one_tuple_from_body(key_field_index, &value_field_indices);
+            let from_body = generate_unnamed_one_tuple_from_body(keys, values);
             generate_unnamed_one_tuple_impl_block(
                 ident,
                 key_field_index,
