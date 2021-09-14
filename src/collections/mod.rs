@@ -2,6 +2,7 @@ use crate::encoding::{Decode, Encode};
 
 pub use crate::macros::{Entry, Next};
 
+pub mod bitcoin_spv;
 pub mod deque;
 pub mod entry_map;
 pub mod map;
