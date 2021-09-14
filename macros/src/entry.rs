@@ -265,16 +265,15 @@ fn generate_unnamed_impl_block(
 }
 
 fn generate_unnamed_one_tuple_from_body(
-    key: Vec<(syn::Index, syn::Type)>,
-    values: Vec<(syn::Index, syn::Type)>,
+    key: &syn::Index,
+    values: &Vec<syn::Index>,
 ) -> Vec<TokenStream2> {
     let mut field_key_status = BTreeMap::new();
 
-    field_key_status.insert(key.get(0).unwrap().0.index, true);
+    field_key_status.insert(key.index, true);
 
     for value in values {
-        let val_index = value.0;
-        field_key_status.insert(val_index.index, false);
+        field_key_status.insert(value.index, false);
     }
 
     let mut num_vals = 0;
@@ -299,7 +298,7 @@ fn generate_unnamed_one_tuple_impl_block(
     ident: syn::Ident,
     key_field_index: &syn::Index,
     key_field_type: &syn::Type,
-    value_field_indices: Vec<syn::Index>,
+    value_field_indices: &Vec<syn::Index>,
     value_field_types: Vec<syn::Type>,
     from_body: Vec<TokenStream2>,
 ) -> TokenStream {
@@ -345,12 +344,13 @@ fn derive_unnamed_struct(data: syn::DataStruct, ident: syn::Ident) -> TokenStrea
             let key_field_index = key_field_indices.get(0).unwrap();
             let key_field_type = key_field_types.get(0).unwrap();
 
-            let from_body = generate_unnamed_one_tuple_from_body(keys, values);
+            let from_body =
+                generate_unnamed_one_tuple_from_body(key_field_index, &value_field_indices);
             generate_unnamed_one_tuple_impl_block(
                 ident,
                 key_field_index,
                 key_field_type,
-                value_field_indices,
+                &value_field_indices,
                 value_field_types,
                 from_body,
             )
