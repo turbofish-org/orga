@@ -265,11 +265,34 @@ fn generate_unnamed_impl_block(
 }
 
 fn generate_unnamed_one_tuple_from_body(
-    key_field_index: &syn::Index,
-    value_field_indices: &Vec<syn::Index>,
+    key: Vec<(syn::Index, syn::Type)>,
+    values: Vec<(syn::Index, syn::Type)>,
 ) -> Vec<TokenStream2> {
-    let output = quote! {};
-    vec![output]
+    let mut field_key_status = BTreeMap::new();
+
+    field_key_status.insert(key.get(0).unwrap().0.index, true);
+
+    for value in values {
+        let val_index = value.0;
+        field_key_status.insert(val_index.index, false);
+    }
+
+    let mut num_vals = 0;
+
+    let output: Vec<TokenStream2> = field_key_status
+        .iter()
+        .map(|(_, is_key)| match is_key {
+            true => {
+                quote! { item.0}
+            }
+            false => {
+                let j = syn::Index::from(num_vals);
+                num_vals += 1;
+                quote! { item.1.#j}
+            }
+        })
+        .collect();
+    output
 }
 
 fn generate_unnamed_one_tuple_impl_block(
