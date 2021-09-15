@@ -1,5 +1,4 @@
 use crate::error::Result;
-use datetime::LocalTime;
 use failure::bail;
 use flate2::read::GzDecoder;
 use hex_literal::hex;
@@ -109,7 +108,7 @@ impl Tendermint {
     pub fn new<T: Into<PathBuf> + Clone>(home_path: T) -> Tendermint {
         let path: PathBuf = home_path.clone().into();
         if !path.exists() {
-            fs::create_dir(path.clone()).expect("Failed to create Tendermint home directory");
+            fs::create_dir(path).expect("Failed to create Tendermint home directory");
         }
         let tendermint = Tendermint {
             process: ProcessHandler::new("tendermint"),
@@ -336,7 +335,7 @@ impl Tendermint {
                 return;
             }
         };
-        let file_name = path.file_name().unwrap().clone();
+        let file_name = path.file_name().unwrap();
         if file_name != "genesis.json" {
             //TODO: more sophisticated method to ensure that the file is a valid genesis.json
             panic!("Provided file is not a genesis.json.");
@@ -367,7 +366,7 @@ impl Tendermint {
 
     fn read_config_toml(&mut self) {
         let config_path = self.home.join("config/config.toml");
-        let contents = fs::read_to_string(config_path.clone()).unwrap();
+        let contents = fs::read_to_string(config_path).unwrap();
         let document = contents
             .parse::<Document>()
             .expect("Invalid config.toml contents");
