@@ -40,7 +40,7 @@ impl SignerCall {
     }
 }
 
-impl<T: Call + State> Call for SignerProvider<T> {
+impl<T: Call> Call for SignerProvider<T> {
     type Call = SignerCall;
     fn call(&mut self, call: Self::Call) -> Result<()> {
         let signer_ctx = Signer {
@@ -55,6 +55,7 @@ impl<T: Call + State> Call for SignerProvider<T> {
 
 impl<T: Query> Query for SignerProvider<T> {
     type Query = T::Query;
+
     fn query(&self, query: Self::Query) -> Result<()> {
         self.inner.query(query)
     }
@@ -63,7 +64,6 @@ impl<T: Query> Query for SignerProvider<T> {
 impl<T> State for SignerProvider<T>
 where
     T: State,
-    T::Encoding: From<T>,
 {
     type Encoding = (T::Encoding,);
     fn create(store: Store, data: Self::Encoding) -> Result<Self> {
@@ -80,7 +80,6 @@ where
 impl<T> From<SignerProvider<T>> for (T::Encoding,)
 where
     T: State,
-    T::Encoding: From<T>,
 {
     fn from(provider: SignerProvider<T>) -> Self {
         (provider.inner.into(),)
