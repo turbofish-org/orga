@@ -26,6 +26,7 @@ tar = "0.4.33"
 ed = "0.2.2"
 toml_edit = "0.2.0"
 datetime = "0.5.2"
+bitcoin = "0.27.0"
 
 [dev-dependencies]
 tempdir = "0.3.7"
