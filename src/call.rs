@@ -1,5 +1,7 @@
 use crate::encoding::{Decode, Encode};
 use crate::Result;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 pub use orga_macros::{call, Call};
 
@@ -15,6 +17,22 @@ impl<T: Call> Call for &mut T {
 
     fn call(&mut self, call: Self::Call) -> Result<()> {
         (*self).call(call)
+    }
+}
+
+impl<T: Call> Call for Rc<RefCell<T>> {
+    type Call = T::Call;
+
+    fn call(&mut self, call: Self::Call) -> Result<()> {
+        self.borrow_mut().call(call)
+    }
+}
+
+impl<T: Call> Call for RefCell<T> {
+    type Call = T::Call;
+
+    fn call(&mut self, call: Self::Call) -> Result<()> {
+        self.borrow_mut().call(call)
     }
 }
 
