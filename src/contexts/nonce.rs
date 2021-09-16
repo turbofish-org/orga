@@ -1,12 +1,14 @@
 use super::{BeginBlockCtx, EndBlockCtx, GetContext, InitChainCtx, Signer};
 use crate::abci::{BeginBlock, EndBlock, InitChain};
 use crate::call::Call;
+use crate::client::Client;
 use crate::collections::Map;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::Result;
+use std::path::PathBuf;
 
 type NonceMap = Map<[u8; 32], u64>;
 
@@ -60,6 +62,48 @@ impl<T: Query> Query for NonceProvider<T> {
     }
 }
 
+pub struct NonceClient<T, U: Clone> {
+    parent: U,
+    marker: std::marker::PhantomData<T>,
+}
+
+impl<T, U: Clone> Clone for NonceClient<T, U> {
+    fn clone(&self) -> Self {
+        NonceClient {
+            parent: self.parent.clone(),
+            marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<T: Call, U: Call<Call = NonceCall<T::Call>> + Clone> Call for NonceClient<T, U> {
+    type Call = NonceCall<T::Call>;
+
+    fn call(&mut self, call: Self::Call) -> Result<()> {
+        // Load nonce from file
+        let nonce = load_nonce()?;
+        let res = self.parent.call(NonceCall {
+            inner_call: call.inner_call,
+            nonce: Some(nonce),
+        })?;
+
+        // Increment the local nonce
+        write_nonce(nonce + 1)?;
+        Ok(res)
+    }
+}
+
+impl<T: Client<NonceClient<T, U>>, U: Clone> Client<U> for NonceProvider<T> {
+    type Client = T::Client;
+
+    fn create_client(parent: U) -> Self::Client {
+        T::create_client(NonceClient {
+            parent,
+            marker: std::marker::PhantomData,
+        })
+    }
+}
+
 impl<T> State for NonceProvider<T>
 where
     T: State,
@@ -76,6 +120,31 @@ where
     fn flush(self) -> Result<Self::Encoding> {
         Ok((self.map.flush()?, self.inner.flush()?))
     }
+}
+
+fn nonce_path() -> Result<PathBuf> {
+    let orga_home = home::home_dir()
+        .expect("No home directory set")
+        .join(".orga");
+
+    std::fs::create_dir_all(&orga_home)?;
+    Ok(orga_home.join("nonce"))
+}
+fn load_nonce() -> Result<u64> {
+    let nonce_path = nonce_path()?;
+    if nonce_path.exists() {
+        let bytes = std::fs::read(&nonce_path)?;
+        Ok(Decode::decode(bytes.as_slice())?)
+    } else {
+        let bytes = 0.encode()?;
+        std::fs::write(&nonce_path, bytes)?;
+        Ok(0)
+    }
+}
+
+fn write_nonce(nonce: u64) -> Result<()> {
+    let nonce_path = nonce_path()?;
+    Ok(std::fs::write(&nonce_path, nonce.encode()?)?)
 }
 
 impl<T> From<NonceProvider<T>> for (<NonceMap as State>::Encoding, T::Encoding)
@@ -124,11 +193,11 @@ mod tests {
     use crate::store::{MapStore, Shared, Store};
 
     #[derive(State)]
-    struct CounterApp {
+    struct Counter {
         pub count: u64,
     }
 
-    impl CounterApp {
+    impl Counter {
         fn increment(&mut self) -> Result<()> {
             self.count += 1;
 
@@ -136,25 +205,30 @@ mod tests {
         }
     }
 
-    impl Call for CounterApp {
-        type Call = ();
+    #[derive(Encode, Decode)]
+    enum CounterCall {
+        Increment,
+    }
+
+    impl Call for Counter {
+        type Call = CounterCall;
 
         fn call(&mut self, _call: Self::Call) -> Result<()> {
             self.increment()
         }
     }
 
-    fn nonced_call(n: u64) -> NonceCall<()> {
+    fn nonced_call(n: u64) -> NonceCall<CounterCall> {
         NonceCall {
             nonce: Some(n),
-            inner_call: (),
+            inner_call: CounterCall::Increment,
         }
     }
 
-    fn unnonced_call() -> NonceCall<()> {
+    fn unnonced_call() -> NonceCall<CounterCall> {
         NonceCall {
             nonce: None,
-            inner_call: (),
+            inner_call: CounterCall::Increment,
         }
     }
 
@@ -162,8 +236,7 @@ mod tests {
     fn nonced_calls() {
         let store = Shared::new(MapStore::new());
         let mut state =
-            NonceProvider::<CounterApp>::create(Store::new(store.into()), Default::default())
-                .unwrap();
+            NonceProvider::<Counter>::create(Store::new(store.into()), Default::default()).unwrap();
 
         // Fails if the signer context isn't available.
         assert!(state.call(unnonced_call()).is_err());
