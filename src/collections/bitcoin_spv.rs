@@ -1,6 +1,5 @@
 use super::Deque;
 use crate::state::State;
-use crate::store::DefaultBackingStore;
 use crate::store::Store;
 use crate::Result;
 use bitcoin::consensus::{Decodable, Encodable};
@@ -59,10 +58,10 @@ impl From<BitcoinSPV> for () {
     fn from(_spv: BitcoinSPV) {}
 }
 
-impl State<DefaultBackingStore> for BitcoinSPV {
+impl State for BitcoinSPV {
     type Encoding = ();
 
-    fn create(store: Store<DefaultBackingStore>, data: Self::Encoding) -> Result<Self> {
+    fn create(store: Store, data: Self::Encoding) -> Result<Self> {
         Ok(BitcoinSPV {
             deque: Deque::create(store, Default::default())?,
         })
