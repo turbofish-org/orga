@@ -1,5 +1,4 @@
 use crate::error::Result;
-use datetime::LocalTime;
 use failure::bail;
 use flate2::read::GzDecoder;
 use hex_literal::hex;
@@ -109,7 +108,7 @@ impl Tendermint {
     pub fn new<T: Into<PathBuf> + Clone>(home_path: T) -> Tendermint {
         let path: PathBuf = home_path.clone().into();
         if !path.exists() {
-            fs::create_dir(path.clone()).expect("Failed to create Tendermint home directory");
+            fs::create_dir(path).expect("Failed to create Tendermint home directory");
         }
         let tendermint = Tendermint {
             process: ProcessHandler::new("tendermint"),
@@ -135,7 +134,6 @@ impl Tendermint {
             .copy_to(&mut buf)
             .expect("Failed to read bytes from zip file");
 
-        info!("Downloaded Tendermint binary");
         verify_hash(&buf);
 
         let cursor = std::io::Cursor::new(buf.clone());
@@ -144,8 +142,8 @@ impl Tendermint {
 
         for item in archive.entries().unwrap() {
             if item.as_ref().unwrap().path().unwrap().to_str().unwrap() == "tendermint" {
-                let tendermint_bytes: Vec<u8> =
-                    item.unwrap().bytes().map(|byte| byte.unwrap()).collect();
+                let mut tendermint_bytes = vec![];
+                item.unwrap().read_to_end(&mut tendermint_bytes).unwrap();
 
                 let mut f = fs::File::create(tendermint_path)
                     .expect("Could not create Tendermint binary on file system");
@@ -336,7 +334,7 @@ impl Tendermint {
                 return;
             }
         };
-        let file_name = path.file_name().unwrap().clone();
+        let file_name = path.file_name().unwrap();
         if file_name != "genesis.json" {
             //TODO: more sophisticated method to ensure that the file is a valid genesis.json
             panic!("Provided file is not a genesis.json.");
@@ -367,7 +365,7 @@ impl Tendermint {
 
     fn read_config_toml(&mut self) {
         let config_path = self.home.join("config/config.toml");
-        let contents = fs::read_to_string(config_path.clone()).unwrap();
+        let contents = fs::read_to_string(config_path).unwrap();
         let document = contents
             .parse::<Document>()
             .expect("Invalid config.toml contents");
@@ -545,6 +543,7 @@ impl Tendermint {
         self.install();
         self.process.set_arg("unsafe_reset_all");
         self.process.spawn().unwrap();
+        self.process.wait().unwrap();
     }
 }
 

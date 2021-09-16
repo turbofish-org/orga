@@ -4,7 +4,7 @@ use orga::collections::Entry;
 use orga::collections::Next;
 use orga::encoding::{Decode, Encode};
 use orga::state::State;
-use orga::store::{MapStore, Store};
+use orga::store::{MapStore, Shared, Store};
 
 #[derive(Encode, Decode, PartialEq, Debug)]
 struct Foo<T> {
@@ -39,10 +39,10 @@ struct MyStruct2(u32, u32);
 
 #[test]
 fn struct_state() {
-    let mapstore = MapStore::new();
-    let store = Store::new(mapstore);
+    let mapstore = Shared::new(MapStore::new());
+    let store = Store::new(mapstore.into());
 
-    let mut state = MyStruct::create(store.clone(), Default::default()).unwrap();
+    let mut state = MyStruct::create(store, Default::default()).unwrap();
 
     assert_eq!(state.a, 0);
     assert_eq!(state.c.0, 0);

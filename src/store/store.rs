@@ -10,7 +10,7 @@ use crate::Result;
 #[cfg(feature = "merk")]
 pub type DefaultBackingStore = crate::merk::BackingStore;
 #[cfg(not(feature = "merk"))]
-pub type DefaultBackingStore = super::MapStore;
+pub type DefaultBackingStore = Shared<super::MapStore>;
 
 /// Wraps a "backing store" (an implementation of `Read` and possibly `Write`),
 /// and applies all operations to a certain part of the backing store's keyspace

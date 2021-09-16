@@ -45,6 +45,8 @@ pub mod store;
 /// Tendermint process handler.
 pub mod tendermint;
 
+pub mod contexts;
+
 mod error;
 
 // re-exports
@@ -54,7 +56,10 @@ pub use orga_macros as macros;
 pub mod prelude {
     #[cfg(feature = "abci")]
     pub use crate::abci::*;
+    pub use crate::call::*;
     pub use crate::collections::*;
+    pub use crate::contexts::*;
+    pub use crate::query::*;
     pub use crate::state::*;
     pub use crate::store::*;
     pub use crate::Result;

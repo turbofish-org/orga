@@ -43,3 +43,8 @@ lto = true
 name = "counter"
 required-features = ["merk", "abci"]
 
+[[example]]
+name = "contexts"
+required-features = ["merk", "abci"]
+
+

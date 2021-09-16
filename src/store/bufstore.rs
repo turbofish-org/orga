@@ -238,24 +238,24 @@ mod tests {
         store.put(vec![1], vec![101]).unwrap();
 
         let mut wrapped = BufStore::wrap_with_map(store.clone(), Default::default());
-        assert_eq!(wrapped.get(&vec![0]).unwrap().unwrap(), vec![100]);
+        assert_eq!(wrapped.get(&[0]).unwrap().unwrap(), vec![100]);
 
         wrapped.put(vec![0], vec![102]).unwrap();
-        wrapped.delete(&vec![1]).unwrap();
+        wrapped.delete(&[1]).unwrap();
         wrapped.put(vec![2], vec![103]).unwrap();
 
-        assert_eq!(wrapped.get(&vec![0]).unwrap().unwrap(), vec![102]);
-        assert!(wrapped.get(&vec![1]).unwrap().is_none());
-        assert_eq!(wrapped.get(&vec![2]).unwrap().unwrap(), vec![103]);
-        assert_eq!(store.get(&vec![0]).unwrap().unwrap(), vec![100]);
-        assert_eq!(store.get(&vec![1]).unwrap().unwrap(), vec![101]);
-        assert!(store.get(&vec![2]).unwrap().is_none());
+        assert_eq!(wrapped.get(&[0]).unwrap().unwrap(), vec![102]);
+        assert!(wrapped.get(&[1]).unwrap().is_none());
+        assert_eq!(wrapped.get(&[2]).unwrap().unwrap(), vec![103]);
+        assert_eq!(store.get(&[0]).unwrap().unwrap(), vec![100]);
+        assert_eq!(store.get(&[1]).unwrap().unwrap(), vec![101]);
+        assert!(store.get(&[2]).unwrap().is_none());
 
         wrapped.flush().unwrap();
 
-        assert_eq!(store.get(&vec![0]).unwrap().unwrap(), vec![102]);
-        assert!(store.get(&vec![1]).unwrap().is_none());
-        assert_eq!(store.get(&vec![2]).unwrap().unwrap(), vec![103]);
+        assert_eq!(store.get(&[0]).unwrap().unwrap(), vec![102]);
+        assert!(store.get(&[1]).unwrap().is_none());
+        assert_eq!(store.get(&[2]).unwrap().unwrap(), vec![103]);
     }
 
     #[test]

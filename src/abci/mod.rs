@@ -7,21 +7,21 @@ use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use failure::bail;
 use log::info;
 
+use crate::call::Call;
 use crate::merk::MerkStore;
+use crate::query::Query;
 use crate::state::State;
 use crate::store::{BufStore, BufStoreMap, MapStore, Read, Shared, Write, KV};
 use crate::Result;
 mod node;
 pub use node::*;
-mod context;
-pub use context::*;
 
 use messages::*;
 pub use tendermint_proto::abci as messages;
 use tendermint_proto::abci::request::Value as Req;
 use tendermint_proto::abci::response::Value as Res;
 
-mod tendermint_client;
+// mod tendermint_client;
 // pub use tendermint_client::TendermintClient;
 
 /// Top-level struct for running an ABCI application. Maintains an ABCI server,
@@ -523,12 +523,8 @@ impl<S: State> InitChain for S {
 }
 
 // TODO: add Call and Query
-pub trait App: BeginBlock + EndBlock + InitChain + State {
-    fn context(&self) -> Context {
-        CONTEXT
-            .lock()
-            .expect("Failed to acquire context lock")
-            .clone()
-    }
+pub trait App: BeginBlock + EndBlock + InitChain + State + Call + Query {}
+impl<T: BeginBlock + EndBlock + InitChain + State + Call + Query> App for T where
+    <T as State>::Encoding: Default
+{
 }
-impl<T: BeginBlock + EndBlock + InitChain + State> App for T where <T as State>::Encoding: Default {}
