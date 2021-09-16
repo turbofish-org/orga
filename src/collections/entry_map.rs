@@ -4,7 +4,6 @@ use super::map::ReadOnly;
 
 use crate::encoding::{Decode, Encode};
 use crate::store::DefaultBackingStore;
-use std::hash::Hash;
 use std::ops::RangeBounds;
 
 use super::{Entry, Next};
@@ -26,7 +25,7 @@ impl<T: Entry, S> From<EntryMap<T, S>> for () {
 
 impl<T: Entry, S> State<S> for EntryMap<T, S>
 where
-    T::Key: Encode + Terminated + Eq + Hash + Ord,
+    T::Key: Encode + Terminated,
     T::Value: State<S>,
 {
     type Encoding = ();
@@ -54,20 +53,13 @@ where
 impl<T, S> EntryMap<T, S>
 where
     T: Entry,
-    T::Key: Encode + Terminated + Eq + Hash + Ord + Clone,
+    T::Key: Encode + Terminated,
     T::Value: State<S>,
     S: Read,
 {
     pub fn insert(&mut self, entry: T) -> Result<()> {
         let (key, value) = entry.into_entry();
         self.map.insert(key, value.into())
-    }
-
-    pub fn delete(&mut self, entry: T) -> Result<()> {
-        let (key, _) = entry.into_entry();
-        self.map.remove(key)?;
-
-        Ok(())
     }
 
     #[query]
@@ -80,7 +72,22 @@ where
 impl<T, S> EntryMap<T, S>
 where
     T: Entry,
-    T::Key: Encode + Terminated + Eq + Hash + Ord + Clone,
+    T::Key: Encode + Terminated + Clone,
+    T::Value: State<S>,
+    S: Read,
+{
+    pub fn delete(&mut self, entry: T) -> Result<()> {
+        let (key, _) = entry.into_entry();
+        self.map.remove(key)?;
+
+        Ok(())
+    }
+}
+
+impl<T, S> EntryMap<T, S>
+where
+    T: Entry,
+    T::Key: Encode + Terminated + Clone,
     T::Value: State<S> + Eq,
     S: Read,
 {
@@ -106,7 +113,7 @@ where
 
 impl<'a, T: Entry, S> EntryMap<T, S>
 where
-    T::Key: Next<T::Key> + Decode + Encode + Terminated + Hash + Eq + Ord + Clone,
+    T::Key: Next<T::Key> + Decode + Encode + Terminated + Clone,
     T::Value: State<S> + Clone,
     S: Read,
 {
@@ -116,7 +123,7 @@ where
         })
     }
 
-    pub fn range<B: RangeBounds<T::Key> + Clone>(&'a mut self, range: B) -> Result<Iter<'a, T, S>> {
+    pub fn range<B: RangeBounds<T::Key>>(&'a mut self, range: B) -> Result<Iter<'a, T, S>> {
         Ok(Iter {
             map_iter: self.map.range(range)?,
         })
@@ -125,7 +132,7 @@ where
 
 pub struct Iter<'a, T: Entry, S>
 where
-    T::Key: Next<T::Key> + Decode + Encode + Terminated + Hash + Eq,
+    T::Key: Next<T::Key> + Decode + Encode + Terminated + Clone,
     T::Value: State<S> + Clone,
     S: Read,
 {
@@ -134,7 +141,7 @@ where
 
 impl<'a, T: Entry, S> Iterator for Iter<'a, T, S>
 where
-    T::Key: Next<T::Key> + Decode + Encode + Terminated + Hash + Eq + Ord + Clone,
+    T::Key: Next<T::Key> + Decode + Encode + Terminated + Clone,
     T::Value: State<S> + Clone,
     S: Read,
 {
