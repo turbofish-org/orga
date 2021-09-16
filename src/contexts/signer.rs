@@ -1,13 +1,13 @@
 use super::{BeginBlockCtx, Context, EndBlockCtx, InitChainCtx};
 use crate::abci::{BeginBlock, EndBlock, InitChain};
 use crate::call::Call;
+use crate::client::Client;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::Result;
-use tendermint::public_key::Ed25519;
-use tendermint::signature::Ed25519Signature;
+use ed25519_dalek::{Keypair, PublicKey, Signature, Signer as Ed25519Signer};
 
 pub struct SignerProvider<T> {
     inner: T,
@@ -28,8 +28,8 @@ impl SignerCall {
     fn verify(&self) -> Result<Option<[u8; 32]>> {
         match (self.pubkey, self.signature) {
             (Some(pubkey_bytes), Some(signature)) => {
-                let pubkey = Ed25519::from_bytes(&pubkey_bytes)?;
-                let signature = Ed25519Signature::new(signature);
+                let pubkey = PublicKey::from_bytes(&pubkey_bytes)?;
+                let signature = Signature::new(signature);
                 pubkey.verify_strict(&self.call_bytes, &signature)?;
 
                 Ok(Some(pubkey_bytes))
@@ -61,6 +61,50 @@ impl<T: Query> Query for SignerProvider<T> {
     }
 }
 
+pub struct SignerClient<T, U: Clone> {
+    parent: U,
+    marker: std::marker::PhantomData<T>,
+    keypair: Keypair,
+}
+
+impl<T, U: Clone> Clone for SignerClient<T, U> {
+    fn clone(&self) -> Self {
+        SignerClient {
+            parent: self.parent.clone(),
+            marker: std::marker::PhantomData,
+            keypair: Keypair::from_bytes(&self.keypair.to_bytes()).unwrap(),
+        }
+    }
+}
+
+impl<T: Call, U: Call<Call = SignerCall> + Clone> Call for SignerClient<T, U> {
+    type Call = T::Call;
+
+    fn call(&mut self, call: Self::Call) -> Result<()> {
+        let call_bytes = Encode::encode(&call)?;
+        let signature = self.keypair.sign(call_bytes.as_slice()).to_bytes();
+        let pubkey = self.keypair.public.to_bytes();
+
+        self.parent.call(SignerCall {
+            call_bytes,
+            pubkey: Some(pubkey),
+            signature: Some(signature),
+        })
+    }
+}
+
+impl<T: Client<SignerClient<T, U>>, U: Clone> Client<U> for SignerProvider<T> {
+    type Client = T::Client;
+
+    fn create_client(parent: U) -> Self::Client {
+        T::create_client(SignerClient {
+            parent,
+            marker: std::marker::PhantomData,
+            keypair: load_keypair().expect("Failed to load keypair"),
+        })
+    }
+}
+
 impl<T> State for SignerProvider<T>
 where
     T: State,
@@ -83,6 +127,29 @@ where
 {
     fn from(provider: SignerProvider<T>) -> Self {
         (provider.inner.into(),)
+    }
+}
+
+fn load_keypair() -> Result<Keypair> {
+    use rand_core::OsRng;
+    // Ensure orga home directory exists
+
+    let orga_home = home::home_dir()
+        .expect("No home directory set")
+        .join(".orga");
+
+    std::fs::create_dir_all(&orga_home)?;
+    let keypair_path = orga_home.join("privkey");
+    if keypair_path.exists() {
+        // Load existing key
+        let bytes = std::fs::read(&keypair_path)?;
+        Ok(Keypair::from_bytes(bytes.as_slice())?)
+    } else {
+        // Create and save a new key
+        let mut csprng = OsRng {};
+        let keypair = Keypair::generate(&mut csprng);
+        std::fs::write(&keypair_path, keypair.to_bytes())?;
+        Ok(keypair)
     }
 }
 
@@ -113,5 +180,81 @@ where
 {
     fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
         self.inner.init_chain(ctx)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    use super::*;
+    use crate::call::Call;
+    use crate::contexts::GetContext;
+    use crate::state::State;
+
+    #[derive(State, Clone)]
+    struct Counter {
+        pub count: u64,
+        pub last_signer: Option<[u8; 32]>,
+    }
+
+    impl Counter {
+        fn increment(&mut self) -> Result<()> {
+            self.count += 1;
+            let signer = self.context::<Signer>().unwrap().signer.unwrap();
+            self.last_signer.replace(signer);
+
+            Ok(())
+        }
+    }
+
+    #[derive(Encode, Decode)]
+    pub enum CounterCall {
+        Increment,
+    }
+
+    impl Call for Counter {
+        type Call = CounterCall;
+
+        fn call(&mut self, call: Self::Call) -> Result<()> {
+            match call {
+                CounterCall::Increment => self.increment(),
+            }
+        }
+    }
+
+    #[derive(Clone)]
+    struct CounterClient<T> {
+        parent: T,
+    }
+
+    impl<T: Call<Call = CounterCall> + Clone> CounterClient<T> {
+        pub fn increment(&mut self) -> Result<()> {
+            self.parent.call(CounterCall::Increment)
+        }
+    }
+
+    impl<T: Clone> Client<T> for Counter {
+        type Client = CounterClient<T>;
+
+        fn create_client(parent: T) -> Self::Client {
+            CounterClient { parent }
+        }
+    }
+
+    #[test]
+    fn signed_increment() {
+        let state = Rc::new(RefCell::new(SignerProvider {
+            inner: Counter {
+                count: 0,
+                last_signer: None,
+            },
+        }));
+        let mut client = SignerProvider::<Counter>::create_client(state.clone());
+        client.increment().unwrap();
+        assert_eq!(state.borrow().inner.count, 1);
+        let pub_key = load_keypair().unwrap().public.to_bytes();
+        assert_eq!(state.borrow().inner.last_signer, Some(pub_key));
     }
 }
