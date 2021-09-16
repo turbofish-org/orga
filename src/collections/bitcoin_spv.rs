@@ -50,26 +50,9 @@ impl Decode for SPVBlockHeader {
     }
 }
 
+#[derive(State)]
 pub struct BitcoinSPV {
     deque: Deque<SPVBlockHeader>,
-}
-
-impl From<BitcoinSPV> for () {
-    fn from(_spv: BitcoinSPV) {}
-}
-
-impl State for BitcoinSPV {
-    type Encoding = ();
-
-    fn create(store: Store, data: Self::Encoding) -> Result<Self> {
-        Ok(BitcoinSPV {
-            deque: Deque::create(store, Default::default())?,
-        })
-    }
-
-    fn flush(self) -> Result<Self::Encoding> {
-        Ok(())
-    }
 }
 
 impl BitcoinSPV {}
