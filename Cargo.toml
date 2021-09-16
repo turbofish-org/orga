@@ -26,6 +26,7 @@ tar = "0.4.33"
 ed = "0.2.2"
 toml_edit = "0.2.0"
 datetime = "0.5.2"
+prost = {version = "0.7", optional = true}
 
 [dev-dependencies]
 tempdir = "0.3.7"
@@ -34,7 +35,7 @@ tempdir = "0.3.7"
 features = ["abci", "merk"]
 
 [features]
-abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto"]
+abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto", "prost"]
 
 [profile.release]
 lto = true

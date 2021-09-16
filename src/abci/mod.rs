@@ -16,6 +16,8 @@ use crate::Result;
 mod node;
 pub use node::*;
 
+pub mod prost;
+
 use messages::*;
 pub use tendermint_proto::abci as messages;
 use tendermint_proto::abci::request::Value as Req;
@@ -494,35 +496,35 @@ impl ABCIStore for MemStore {
     }
 }
 
+use crate::contexts::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
 pub trait BeginBlock {
-    fn begin_block(&mut self) -> Result<()>;
+    fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()>;
 }
 
 impl<S: State> BeginBlock for S {
-    default fn begin_block(&mut self) -> Result<()> {
+    default fn begin_block(&mut self, _req: &BeginBlockCtx) -> Result<()> {
         Ok(())
     }
 }
 pub trait EndBlock {
-    fn end_block(&mut self) -> Result<()>;
+    fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()>;
 }
 
 impl<S: State> EndBlock for S {
-    default fn end_block(&mut self) -> Result<()> {
+    default fn end_block(&mut self, _ctx: &EndBlockCtx) -> Result<()> {
         Ok(())
     }
 }
 pub trait InitChain {
-    fn init_chain(&mut self) -> Result<()>;
+    fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()>;
 }
 
 impl<S: State> InitChain for S {
-    default fn init_chain(&mut self) -> Result<()> {
+    default fn init_chain(&mut self, _ctx: &InitChainCtx) -> Result<()> {
         Ok(())
     }
 }
 
-// TODO: add Call and Query
 pub trait App: BeginBlock + EndBlock + InitChain + State + Call + Query {}
 impl<T: BeginBlock + EndBlock + InitChain + State + Call + Query> App for T where
     <T as State>::Encoding: Default

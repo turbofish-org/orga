@@ -7,7 +7,7 @@ pub struct Counter {
 }
 
 impl BeginBlock for Counter {
-    fn begin_block(&mut self) -> Result<()> {
+    fn begin_block(&mut self, _ctx: &BeginBlockCtx) -> Result<()> {
         self.num_blocks += 1;
         println!("num_blocks is {}", self.num_blocks);
         Ok(())
