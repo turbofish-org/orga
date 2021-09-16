@@ -12,30 +12,6 @@ pub struct SPVBlockHeader {
     inner: BlockHeader,
 }
 
-// impl SPVBlockHeader {
-//     fn refresh_encoding_data(&mut self) -> Result<()> {
-//         let mut dest: Vec<u8> = Vec::new();
-//         match self.inner.consensus_encode(dest) {
-//             Ok(length) => {
-//                 self.encoding_length = length;
-//                 self.encoded_bytes = dest;
-//                 Ok(())
-//             }
-//             Err(e) => Err(e.into()),
-//         }
-//     }
-
-//     fn encoded_bytes(&self) -> Result<Vec<u8>> {
-//         self.refresh_encoding_data()?;
-//         Ok(self.encoded_bytes)
-//     }
-
-//     fn encoding_length(&self) -> Result<usize> {
-//         self.refresh_encoding_data()?;
-//         Ok(self.encoding_length)
-//     }
-// }
-
 impl Encode for SPVBlockHeader {
     fn encode(&self) -> ed::Result<Vec<u8>> {
         let mut dest: Vec<u8> = Vec::new();
