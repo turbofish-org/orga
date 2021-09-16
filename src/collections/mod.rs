@@ -55,6 +55,40 @@ impl_next!(i32);
 impl_next!(i64);
 impl_next!(i128);
 
+macro_rules! tuple_next {
+    ($($type:ident),*; $($length:tt),*) => {
+        impl<$($type: Next<$type> + Default,)*> Next<($($type,)*)> for ($($type,)*) {
+            fn next(&self) -> Option<Self> {
+                    let mut return_tuple: ($($type,)*)  = Default::default();
+
+                    $(match self.$length.next() {
+                        Some(value) => {
+                            return_tuple.$length = value;
+                            return Some(return_tuple);
+                        }
+                        None => {
+                            return_tuple.$length = Default::default();
+                        }
+                    })*
+                None
+            }
+        }
+    }
+}
+
+tuple_next!(A; 0);
+tuple_next!(A, B; 1, 0);
+tuple_next!(A, B, C; 2, 1, 0);
+tuple_next!(A, B, C, D; 3, 2, 1, 0);
+tuple_next!(A, B, C, D, E; 4, 3, 2, 1, 0);
+tuple_next!(A, B, C, D, E, F; 5, 4, 3, 2, 1, 0);
+tuple_next!(A, B, C, D, E, F, G; 6, 5, 4, 3, 2, 1, 0);
+tuple_next!(A, B, C, D, E, F, G, H; 7, 6, 5, 4, 3, 2, 1, 0);
+tuple_next!(A, B, C, D, E, F, G, H, I; 8, 7, 6, 5, 4, 3, 2, 1, 0);
+tuple_next!(A, B, C, D, E, F, G, H, I, J; 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
+tuple_next!(A, B, C, D, E, F, G, H, I, J, K; 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
+tuple_next!(A, B, C, D, E, F, G, H, I, J, K, L; 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
+
 impl<T, const N: usize> Next<[T; N]> for [T; N]
 where
     T: Default + Next<T> + Copy,
@@ -96,5 +130,42 @@ mod test {
     fn u8_next_all_max() {
         let key: [u8; 3] = [255, 255, 255];
         assert_eq!(key.next(), None);
+    }
+
+    #[test]
+    fn two_tuple_next() {
+        let key: (u8, u32) = (0, 0);
+        assert_eq!(key.next().unwrap(), (0, 1));
+    }
+
+    #[test]
+    fn two_tuple_next_last_max() {
+        let key: (u8, u8) = (0, 255);
+        assert_eq!(key.next().unwrap(), (1, 0));
+    }
+
+    #[test]
+    fn two_tuple_next_all_max() {
+        let key: (u8, u8) = (255, 255);
+        assert!(key.next().is_none());
+    }
+
+    #[test]
+    fn single_tuple_next() {
+        let key: (u8,) = (0,);
+        assert_eq!(key.next().unwrap(), (1,));
+    }
+
+    #[test]
+    fn single_tuple_max() {
+        let key: (u8,) = (255,);
+        assert!(key.next().is_none());
+    }
+
+    #[test]
+    fn max_tuple_next() {
+        let key: (u8, u8, u8, u8, u8, u8, u8, u8, u8, u8, u8, u8) =
+            (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        assert_eq!(key.next().unwrap(), (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1));
     }
 }
