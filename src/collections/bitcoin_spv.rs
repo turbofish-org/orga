@@ -77,7 +77,7 @@ pub struct BitcoinSPV {
 }
 
 impl BitcoinSPV {
-    fn add(&mut self, header: BlockHeader) -> Result<()> {
+    fn add(&mut self, header: SPVBlockHeader) -> Result<()> {
         Ok(())
     }
 
