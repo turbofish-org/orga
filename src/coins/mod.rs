@@ -12,3 +12,5 @@ pub use give::*;
 
 pub mod take;
 pub use take::*;
+
+pub type Address = [u8; 32];
