@@ -10,6 +10,12 @@ pub struct SPVBlockHeader {
     inner: BlockHeader,
 }
 
+impl From<BlockHeader> for SPVBlockHeader {
+    fn from(inner: BlockHeader) -> Self {
+        Self { inner }
+    }
+}
+
 impl Encode for SPVBlockHeader {
     fn encode(&self) -> ed::Result<Vec<u8>> {
         let mut dest: Vec<u8> = Vec::new();
