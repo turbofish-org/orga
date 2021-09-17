@@ -1,29 +1,37 @@
 #![feature(min_specialization)]
+#![feature(trivial_bounds)]
 use orga::coins::*;
+use orga::encoding::{Decode, Encode};
 use orga::prelude::*;
 
-#[derive(Clone, Default, Copy)]
-struct BTC;
-impl Symbol for BTC {}
+#[derive(Encode, Decode)]
+pub struct Simp;
+impl Symbol for Simp {}
 
 #[derive(State, Call, Query)]
 pub struct SimpleCoin {
-    btc: Map<[u8; 32], Coin<BTC>>,
+    balances: Map<Address, Coin<Simp>>,
 }
 
 impl SimpleCoin {
-    pub fn transfer(&mut self, to: [u8; 32], amount: Amount<BTC>) -> Result<()> {
+    #[call]
+    pub fn transfer(&mut self, to: Address, amount: Amount<Simp>) -> Result<()> {
         let signer = self
             .context::<Signer>()
-            .ok_or_else(|| failure::format_err!("No signer context available"))?;
+            .ok_or_else(|| failure::format_err!("No signer context available"))?
+            .signer
+            .ok_or_else(|| failure::format_err!("Transfer calls must be signed"))?;
 
-        let sender = self.btc.entry(&signer.signer)?.or_default()?;
-        let receiver = self.btc.entry(&to)?.or_default()?;
+        let mut sender = self.balances.entry(signer)?.or_default()?;
+        let coins = sender.take(amount)?;
+        let mut receiver = self.balances.entry(to)?.or_default()?;
+        receiver.give(coins);
 
         Ok(())
     }
 }
 
+type CoinApp = SignerProvider<NonceProvider<SimpleCoin>>;
 fn main() {
-    Node::<SimpleCoin>::new("simp_coin").reset().run();
+    Node::<CoinApp>::new("simple_coin").reset().run();
 }
