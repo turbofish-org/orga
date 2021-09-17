@@ -77,15 +77,7 @@ pub struct BitcoinSPV {
 }
 
 impl BitcoinSPV {
-    fn add(&mut self, header: SPVBlockHeader) -> Result<()> {
-        Ok(())
-    }
-
-    fn add_all<const N: usize>(&mut self, headers: [SPVBlockHeader; N]) -> Result<()> {
-        Ok(())
-    }
-
-    fn add_iter<T: IntoIterator<Item = SPVBlockHeader>>(&mut self, iter: T) -> Result<()> {
+    fn add<const N: usize>(&mut self, headers: [SPVBlockHeader; N]) -> Result<()> {
         Ok(())
     }
 
@@ -102,13 +94,6 @@ impl BitcoinSPV {
     }
 
     fn verify_headers<const N: usize>(&self, headers: [SPVBlockHeader; N]) -> Result<()> {
-        Ok(())
-    }
-
-    fn verify_header_collection<T: IntoIterator<Item = SPVBlockHeader>>(
-        &self,
-        iter: T,
-    ) -> Result<()> {
         Ok(())
     }
 }
