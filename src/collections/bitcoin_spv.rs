@@ -7,11 +7,11 @@ use ed::{Decode, Encode};
 use std::io::{Read, Write};
 use std::ops::{Deref, DerefMut};
 
-struct BitcoinTypeAdaptor<T> {
+struct BitcoinTypeAdapter<T> {
     inner: T,
 }
 
-impl<T> Deref for BitcoinTypeAdaptor<T> {
+impl<T> Deref for BitcoinTypeAdapter<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -19,13 +19,13 @@ impl<T> Deref for BitcoinTypeAdaptor<T> {
     }
 }
 
-impl<T> DerefMut for BitcoinTypeAdaptor<T> {
+impl<T> DerefMut for BitcoinTypeAdapter<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }
 }
 
-impl<T: Encodable> Encode for BitcoinTypeAdaptor<T> {
+impl<T: Encodable> Encode for BitcoinTypeAdapter<T> {
     fn encode(&self) -> ed::Result<Vec<u8>> {
         let mut dest: Vec<u8> = Vec::new();
         self.encode_into(&mut dest)?;
@@ -51,7 +51,7 @@ impl<T: Encodable> Encode for BitcoinTypeAdaptor<T> {
     }
 }
 
-impl<T: Decodable> Decode for BitcoinTypeAdaptor<T> {
+impl<T: Decodable> Decode for BitcoinTypeAdapter<T> {
     fn decode<R: Read>(input: R) -> ed::Result<Self> {
         let decoded_bytes = Decodable::consensus_decode(input);
         match decoded_bytes {
@@ -68,7 +68,7 @@ impl<T: Decodable> Decode for BitcoinTypeAdaptor<T> {
 #[derive(Encode, Decode)]
 pub struct SPVBlockHeader {
     height: u32,
-    inner: BitcoinTypeAdaptor<BlockHeader>,
+    inner: BitcoinTypeAdapter<BlockHeader>,
 }
 
 #[derive(State)]
