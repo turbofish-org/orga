@@ -8,12 +8,7 @@ use std::io::{Read, Write};
 
 pub struct SPVBlockHeader {
     inner: BlockHeader,
-}
-
-impl From<BlockHeader> for SPVBlockHeader {
-    fn from(inner: BlockHeader) -> Self {
-        Self { inner }
-    }
+    height: u32,
 }
 
 impl Encode for SPVBlockHeader {
@@ -64,19 +59,19 @@ impl BitcoinSPV {
         Ok(())
     }
 
-    fn add_all<const N: usize>(&mut self, headers: [BlockHeader; N]) -> Result<()> {
+    fn add_all<const N: usize>(&mut self, headers: [SPVBlockHeader; N]) -> Result<()> {
         Ok(())
     }
 
-    fn add_iter<T: IntoIterator<Item = BlockHeader>>(&mut self, iter: T) -> Result<()> {
+    fn add_iter<T: IntoIterator<Item = SPVBlockHeader>>(&mut self, iter: T) -> Result<()> {
         Ok(())
     }
 
-    fn get_by_height(&self, height: u32) -> Option<BlockHeader> {
+    fn get_by_height(&self, height: u32) -> Option<SPVBlockHeader> {
         None
     }
 
-    fn get_by_hash(&self, hash: [u8; 32]) -> Option<BlockHeader> {
+    fn get_by_hash(&self, hash: [u8; 32]) -> Option<SPVBlockHeader> {
         None
     }
 
@@ -84,11 +79,14 @@ impl BitcoinSPV {
         42
     }
 
-    fn verify_headers<const N: usize>(&self, headers: [BlockHeader; N]) -> Result<()> {
+    fn verify_headers<const N: usize>(&self, headers: [SPVBlockHeader; N]) -> Result<()> {
         Ok(())
     }
 
-    fn verify_header_collection<T: IntoIterator<Item = BlockHeader>>(&self, iter: T) -> Result<()> {
+    fn verify_header_collection<T: IntoIterator<Item = SPVBlockHeader>>(
+        &self,
+        iter: T,
+    ) -> Result<()> {
         Ok(())
     }
 }
