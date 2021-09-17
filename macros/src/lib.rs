@@ -3,6 +3,7 @@
 use proc_macro::TokenStream;
 
 mod call;
+mod client;
 mod entry;
 mod next;
 mod query;
@@ -36,6 +37,11 @@ pub fn derive_call(item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn call(args: TokenStream, input: TokenStream) -> TokenStream {
     call::attr(args, input)
+}
+
+#[proc_macro_derive(Client)]
+pub fn derive_client(item: TokenStream) -> TokenStream {
+    client::derive(item)
 }
 
 #[proc_macro_derive(Next)]
