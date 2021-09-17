@@ -35,8 +35,7 @@ impl Encode for SPVBlockHeader {
 
 impl Decode for SPVBlockHeader {
     fn decode<R: Read>(input: R) -> ed::Result<Self> {
-        let decoded_bytes: std::result::Result<BlockHeader, bitcoin::consensus::encode::Error> =
-            Decodable::consensus_decode(input);
+        let decoded_bytes = Decodable::consensus_decode(input);
         match decoded_bytes {
             Ok(header) => Ok(Self { inner: header }),
             Err(e) => {
