@@ -1,7 +1,5 @@
 use super::Deque;
 use crate::state::State;
-use crate::store::Store;
-use crate::Result;
 use bitcoin::consensus::{Decodable, Encodable};
 use bitcoin::BlockHeader;
 use ed::{Decode, Encode};
