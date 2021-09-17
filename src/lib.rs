@@ -47,6 +47,8 @@ pub mod tendermint;
 
 pub mod contexts;
 
+pub mod coins;
+
 mod error;
 
 // re-exports
