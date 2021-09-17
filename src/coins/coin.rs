@@ -1,10 +1,19 @@
 use super::{Amount, Give, Symbol, Take};
+use crate::encoding::{Decode, Encode};
 use crate::Result;
 
 #[must_use = "If these coins are meant to be discarded, explicitly call the `burn` method"]
-#[derive(Default)]
+#[derive(Encode, Decode)]
 pub struct Coin<S: Symbol> {
     pub amount: Amount<S>,
+}
+
+impl<S: Symbol> Default for Coin<S> {
+    fn default() -> Self {
+        Self {
+            amount: Default::default(),
+        }
+    }
 }
 
 impl<S: Symbol> Coin<S> {

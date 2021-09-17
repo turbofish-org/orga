@@ -1,1 +1,1 @@
-pub trait Symbol: Default + Copy {}
+pub trait Symbol {}

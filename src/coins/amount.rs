@@ -1,21 +1,43 @@
 use super::Symbol;
+use crate::encoding::{Decode, Encode};
 use crate::Result;
 use failure::bail;
+use std::marker::PhantomData;
 use std::ops::{Add, Div, Mul, Sub};
 
 const PRECISION: u64 = 1_000_000_000;
 
-#[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq, Default)]
+#[derive(Debug, PartialOrd, Ord, PartialEq, Eq, Encode, Decode)]
 pub struct Amount<S: Symbol> {
     value: u64,
-    symbol: S,
+    symbol: PhantomData<S>,
 }
 
-impl<S: Symbol + Default> Amount<S> {
+impl<S: Symbol> Default for Amount<S> {
+    fn default() -> Self {
+        Self {
+            value: 0,
+            symbol: PhantomData,
+        }
+    }
+}
+
+impl<S: Symbol> Clone for Amount<S> {
+    fn clone(&self) -> Self {
+        Self {
+            value: self.value,
+            symbol: PhantomData,
+        }
+    }
+}
+
+impl<S: Symbol> Copy for Amount<S> {}
+
+impl<S: Symbol> Amount<S> {
     pub fn new(value: u64) -> Self {
         Amount {
             value,
-            symbol: S::default(),
+            symbol: PhantomData,
         }
     }
 
@@ -28,7 +50,7 @@ impl<S: Symbol + Default> Amount<S> {
     }
 }
 
-impl<S: Symbol + Default> From<u64> for Amount<S> {
+impl<S: Symbol> From<u64> for Amount<S> {
     fn from(value: u64) -> Self {
         Amount::new(value)
     }
@@ -40,7 +62,7 @@ impl<S: Symbol> PartialEq<u64> for Amount<S> {
     }
 }
 
-impl<S: Symbol + Default, I: Into<Self>> Add<I> for Amount<S> {
+impl<S: Symbol, I: Into<Self>> Add<I> for Amount<S> {
     type Output = Self;
 
     fn add(self, other: I) -> Self {
@@ -49,7 +71,7 @@ impl<S: Symbol + Default, I: Into<Self>> Add<I> for Amount<S> {
     }
 }
 
-impl<S: Symbol + Default, I: Into<Self>> Mul<I> for Amount<S> {
+impl<S: Symbol, I: Into<Self>> Mul<I> for Amount<S> {
     type Output = Result<Self>;
 
     fn mul(self, other: I) -> Result<Self> {
