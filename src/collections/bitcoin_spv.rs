@@ -7,6 +7,8 @@ use ed::{Decode, Encode};
 use std::io::{Read, Write};
 use std::ops::{Deref, DerefMut};
 
+const MAX_REORG_DEPTH: u32 = 2016;
+
 struct BitcoinAdapter<T> {
     inner: T,
 }
@@ -78,6 +80,29 @@ pub struct BitcoinSPV {
 
 impl BitcoinSPV {
     fn add<const N: usize>(&mut self, headers: [SPVBlockHeader; N]) -> Result<()> {
+        if headers[0].height > self.height() {
+            failure::bail!("Start of headers is ahead of chain tip.");
+        }
+
+        if headers[N - 1].height <= self.height() {
+            failure::bail!("New tip is behind current tip.");
+        }
+
+        if headers[0].height < self.height() - MAX_REORG_DEPTH {
+            failure::bail!("Reorg deeper than {} blocks", MAX_REORG_DEPTH);
+        }
+
+        let remove_index = headers[0].height - self.deque.get(0)?.unwrap().height;
+
+        for i in self.deque.len() - 1..=remove_index.into() {
+            self.deque.pop_back()?;
+        }
+
+        headers.iter().try_for_each(move |header| {
+            let res: Result<()> = Ok(self.deque.push_front(*header)?);
+            return res;
+        })?;
+
         Ok(())
     }
 
