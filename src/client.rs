@@ -197,7 +197,7 @@ mod tests {
         }));
         let mut client = Foo::create_client(state.clone());
 
-        client.foo();
+        client.bar;
         // client.bar.increment().unwrap();
         // println!("{:?}\n\n", &state.borrow());
 
