@@ -60,30 +60,22 @@ pub struct BitcoinSPV {
 }
 
 impl BitcoinSPV {
-    //this is just a sigle Header
     fn add(&mut self, header: BlockHeader) -> Result<()> {
-        //this should either just take a BlockHeader
-        //or I should implement From<BlockHeader> for SPVBlockHeader
         Ok(())
     }
 
-    //this add a list of headers
-    //wish I could extend this to a collection of headers as well, that would be nice
     fn add_all<const N: usize>(&mut self, headers: [BlockHeader; N]) -> Result<()> {
         Ok(())
     }
 
-    //this maybe should be IntoIterator as the trait here
     fn add_iter<T: IntoIterator<Item = BlockHeader>>(&mut self, iter: T) -> Result<()> {
         Ok(())
     }
 
-    //this might need to just return BlockHeader
     fn get_by_height(&self, height: u32) -> Option<BlockHeader> {
         None
     }
 
-    //this might need to just return BlockHeader
     fn get_by_hash(&self, hash: [u8; 32]) -> Option<BlockHeader> {
         None
     }
