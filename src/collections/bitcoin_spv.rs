@@ -1,5 +1,6 @@
 use super::Deque;
 use crate::state::State;
+use crate::Result;
 use bitcoin::consensus::{Decodable, Encodable};
 use bitcoin::BlockHeader;
 use ed::{Decode, Encode};
@@ -52,4 +53,44 @@ pub struct BitcoinSPV {
     deque: Deque<SPVBlockHeader>,
 }
 
-impl BitcoinSPV {}
+impl BitcoinSPV {
+    //this is just a sigle Header
+    fn add(header: SPVBlockHeader) -> Result<()> {
+        //this should either just take a BlockHeader
+        //or I should implement From<BlockHeader> for SPVBlockHeader
+        Ok(())
+    }
+
+    //this add a list of headers
+    //wish I could extend this to a collection of headers as well, that would be nice
+    fn add_all<const N: usize>(headers: [SPVBlockHeader; N]) -> Result<()> {
+        Ok(())
+    }
+
+    //this maybe should be IntoIterator as the trait here
+    fn add_iter<T: Iterator>(iter: T) -> Result<()> {
+        Ok(())
+    }
+
+    //this might need to just return BlockHeader
+    fn get_by_height(height: u32) -> Option<SPVBlockHeader> {
+        None
+    }
+
+    //this might need to just return BlockHeader
+    fn get_by_hash(hash: [u8; 32]) -> Option<SPVBlockHeader> {
+        None
+    }
+
+    fn height() -> u32 {
+        42
+    }
+
+    fn verify_headers<const N: usize>(headers: [SPVBlockHeader; N]) -> Result<()> {
+        Ok(())
+    }
+
+    fn verify_header_collection<T: Iterator>(iter: T) -> Result<()> {
+        Ok(())
+    }
+}
