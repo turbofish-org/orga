@@ -14,6 +14,7 @@ pub trait Client<T: Clone> {
     fn create_client(parent: T) -> Self::Client;
 }
 
+#[must_use]
 #[derive(Clone)]
 pub struct PrimitiveClient<T, U: Clone> {
     parent: U,

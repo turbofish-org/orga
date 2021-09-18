@@ -224,6 +224,7 @@ fn create_client_struct(
             });
 
     quote! {
+        #[must_use]
         #[derive(Clone)]
         pub struct Client<#generic_params #parent_ty: Clone> {
             pub(super) parent: #parent_ty,
