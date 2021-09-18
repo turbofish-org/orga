@@ -64,7 +64,7 @@ macro_rules! noop_impl {
             type Call = ();
 
             fn call(&mut self, _: ()) -> Result<()> {
-                failure::bail!("not callable")
+                Ok(())
             }
         }
     };
