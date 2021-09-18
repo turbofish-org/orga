@@ -136,8 +136,8 @@ fn create_client_struct(
             .into_iter()
             .map(|(method, impl_item)| {
                 let method_name = &method.sig.ident;
-                let method_inputs = &method.sig.inputs;
 
+                let method_inputs = &method.sig.inputs;
                 let arg_types: Vec<_> = method_inputs
                     .iter()
                     .filter_map(|arg| match arg {
@@ -150,6 +150,13 @@ fn create_client_struct(
                     let i = Literal::usize_unsuffixed(i);
                     quote!(self.args.#i)
                 });
+                let method_input_names = method_inputs
+                    .iter()
+                    .filter_map(|arg| match arg {
+                        FnArg::Typed(arg) => Some(arg.pat.clone()),
+                        _ => None,
+                    })
+                    .map(|pat| quote!(#pat));
 
                 let adapter_name = Ident::new(
                     format!("Method{}Adapter", method_name.to_string().to_camel_case()).as_str(),
@@ -206,7 +213,11 @@ fn create_client_struct(
                         #impl_preds
                     {
                         pub fn #method_name(#method_inputs) -> #method_output {
-                            todo!()
+                            let adapter = #adapter_name {
+                                parent: self.parent.clone(),
+                                args: (#(#method_input_names,)*),
+                            };
+                            <#output_ty as ::orga::client::Client<#adapter_name<#parent_ty>>>::create_client(adapter)
                         }
                     }
                 }
