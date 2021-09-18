@@ -8,6 +8,7 @@ mod entry;
 mod next;
 mod query;
 mod state;
+mod utils;
 
 #[proc_macro_derive(State)]
 pub fn derive_state(item: TokenStream) -> TokenStream {

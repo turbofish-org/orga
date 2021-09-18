@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::marker::PhantomData;
 use std::rc::Rc;
 
 use crate::Result;
@@ -13,11 +14,20 @@ pub trait Client<T: Clone> {
     fn create_client(parent: T) -> Self::Client;
 }
 
+#[derive(Clone)]
+pub struct PrimitiveClient<T, U: Clone> {
+    parent: U,
+    marker: PhantomData<T>,
+}
+
 impl<T: Clone> Client<T> for () {
-    type Client = T;
+    type Client = PrimitiveClient<(), T>;
 
     fn create_client(parent: T) -> Self::Client {
-        parent
+        PrimitiveClient {
+            parent,
+            marker: PhantomData,
+        }
     }
 }
 
@@ -52,8 +62,6 @@ impl<T: Client<U>, U: Clone> Client<U> for Option<T> {
         T::create_client(parent)
     }
 }
-
-
 
 #[derive(Debug, Call, Client)]
 pub struct Foo {
@@ -167,21 +175,12 @@ impl Bar {
         println!("called increment() on Bar");
         self.0 += 1;
     }
-
-    pub fn count(&self) -> u32 {
-        println!("called count() on Bar");
-        self.0
-    }
 }
 
-// #[derive(Clone)]
-// pub struct BarClient<T> {
-//     parent: T,
-// }
-// impl<T: Call<Call = BarCall>> BarClient<T> {
+// impl<T: Call<Call = <Bar as Call>::Call> + Clone> bar_client::Client<T> {
 //     pub fn increment(&mut self) -> Result<()> {
-//         println!("called increment() on BarClient");
-//         self.parent.call(BarCall::Increment)
+//         println!("called increment() on Bar::Client");
+//         self.parent.call(<Bar as Call>::Call::MethodIncrement(vec![]))
 //     }
 // }
 
@@ -195,14 +194,14 @@ mod tests {
             bar: Bar(0),
             bar2: Bar(0),
         }));
+
         let mut client = Foo::create_client(state.clone());
 
-        client.bar;
-        // client.bar.increment().unwrap();
-        // println!("{:?}\n\n", &state.borrow());
+        client.bar.increment();
+        println!("{:?}\n\n", &state.borrow());
 
-        // client.get_bar_mut(1).increment().unwrap();
-        // println!("{:?}\n\n", &state.borrow());
+        client.get_bar_mut(1).increment();
+        println!("{:?}\n\n", &state.borrow());
 
         // println!("{:?}\n\n", client.bar.count());
 

@@ -1,11 +1,14 @@
-use heck::{SnakeCase, CamelCase};
+use heck::{CamelCase, SnakeCase};
 use proc_macro::TokenStream;
 use proc_macro2::{Literal, Span, TokenStream as TokenStream2};
 use quote::quote;
 use syn::*;
 
+use super::utils::*;
+
 pub fn derive(item: TokenStream) -> TokenStream {
     let item = parse_macro_input!(item as DeriveInput);
+    let source = parse_parent();
 
     let name = &item.ident;
     let modname = Ident::new(
@@ -15,7 +18,7 @@ pub fn derive(item: TokenStream) -> TokenStream {
 
     let field_adapters = create_field_adapters(&item);
     let client_impl = create_client_impl(&item, &modname);
-    let client_struct = create_client_struct(&item, field_adapters.1);
+    let client_struct = create_client_struct(&item, field_adapters.1, &source);
 
     let field_adapters = field_adapters.0;
 
@@ -30,7 +33,7 @@ pub fn derive(item: TokenStream) -> TokenStream {
     };
 
     println!("{}\n\n\n\n", &output);
-    
+
     output.into()
 }
 
@@ -65,17 +68,22 @@ fn create_client_impl(item: &DeriveInput, modname: &Ident) -> TokenStream2 {
     }
 }
 
-fn create_client_struct(item: &DeriveInput, field_adapters: Vec<(&Field, ItemStruct)>) -> TokenStream2 {
+fn create_client_struct(
+    item: &DeriveInput,
+    field_adapters: Vec<(&Field, ItemStruct)>,
+    source: &File,
+) -> TokenStream2 {
     let name = &item.ident;
     let generics = &item.generics;
+
     let mut generics_sanitized = generics.clone();
     generics_sanitized.params.iter_mut().for_each(|g| {
         if let GenericParam::Type(ref mut t) = g {
             t.default = None;
-            t.bounds = Default::default();
         }
     });
     let generic_params = gen_param_input(generics, false);
+    let generic_params_bracketed = gen_param_input(generics, true);
     let where_preds = item.generics.where_clause.as_ref().map(|w| &w.predicates);
 
     let parent_ty: GenericParam = syn::parse2(quote!(__Parent)).unwrap();
@@ -123,15 +131,96 @@ fn create_client_struct(item: &DeriveInput, field_adapters: Vec<(&Field, ItemStr
             quote!(#field_name: #field_ty::create_client(#adapter_name::new(parent.clone())))
         });
 
+    let method_impls_and_adapters =
+        relevant_methods(name, "call", source)
+            .into_iter()
+            .map(|(method, impl_item)| {
+                let method_name = &method.sig.ident;
+                let method_inputs = &method.sig.inputs;
+
+                let arg_types: Vec<_> = method_inputs
+                    .iter()
+                    .filter_map(|arg| match arg {
+                        FnArg::Typed(arg) => Some(arg.ty.clone()),
+                        _ => None,
+                    })
+                    .map(|ty| quote!(#ty))
+                    .collect();
+                let unrolled_args = (0..arg_types.len()).map(|i| {
+                    let i = Literal::usize_unsuffixed(i);
+                    quote!(self.args.#i)
+                });
+
+                let adapter_name = Ident::new(
+                    format!("Method{}Adapter", method_name.to_string().to_camel_case()).as_str(),
+                    Span::call_site(),
+                );
+                let call_variant_name = Ident::new(
+                    format!("Method{}", method_name.to_string().to_camel_case()).as_str(),
+                    Span::call_site(),
+                );
+
+                let output_ty = match method.sig.output.clone() {
+                    ReturnType::Default => quote!(()),
+                    ReturnType::Type(_, mut ty) => {
+                        add_static_lifetimes(&mut ty);
+                        quote!(#ty)
+                    },
+                };
+                let method_output = quote!(
+                    <#output_ty as ::orga::client::Client<#adapter_name<#parent_ty>>>::Client
+                );
+
+                let impl_preds = impl_item
+                    .generics
+                    .where_clause
+                    .as_ref()
+                    .map(|w| &w.predicates);
+
+                quote! {
+                    #[derive(Clone)]
+                    pub struct #adapter_name<#parent_ty: Clone> {
+                        pub(super) parent: #parent_ty,
+                        args: (#(#arg_types,)*),
+                    }
+                    impl<#parent_ty: Clone> ::orga::call::Call for #adapter_name<#parent_ty>
+                    where
+                        #parent_ty: ::orga::call::Call<Call = <#name as ::orga::call::Call>::Call>,
+                    {
+                        type Call = <#output_ty as ::orga::call::Call>::Call;
+
+                        fn call(&mut self, call: Self::Call) -> ::orga::Result<()> {
+                            let call_bytes = ::ed::Encode::encode(&call)?;
+                            let parent_call = <#name as ::orga::call::Call>::Call::#call_variant_name(
+                                #(#unrolled_args,)*
+                                call_bytes
+                            );
+                            self.parent.call(parent_call)
+                        }
+                    }
+
+                    impl<#generics_sanitized #parent_ty> Client<#generic_params #parent_ty>
+                    where
+                        #parent_ty: Clone,
+                        #where_preds
+                        #impl_preds
+                    {
+                        pub fn #method_name(#method_inputs) -> #method_output {
+                            todo!()
+                        }
+                    }
+                }
+            });
+
     quote! {
         #[derive(Clone)]
         pub struct Client<#generic_params #parent_ty: Clone> {
             pub(super) parent: #parent_ty,
-            _marker: std::marker::PhantomData<#name#generics_sanitized>,
+            _marker: std::marker::PhantomData<#name#generic_params_bracketed>,
             #(#field_fields,)*
         }
 
-        impl<#parent_ty> Client<#parent_ty>
+        impl<#generics_sanitized #parent_ty> Client<#generic_params #parent_ty>
         where
             #parent_ty: Clone,
             #where_preds
@@ -145,13 +234,15 @@ fn create_client_struct(item: &DeriveInput, field_adapters: Vec<(&Field, ItemStr
                 }
             }
         }
+
+        #(#method_impls_and_adapters)*
     }
 }
 
 fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, ItemStruct)>) {
-    let fields: Vec<_> = struct_fields(&item).filter(|field| {
-        matches!(field.vis, Visibility::Public(_))
-    }).collect();
+    let fields: Vec<_> = struct_fields(&item)
+        .filter(|field| matches!(field.vis, Visibility::Public(_)))
+        .collect();
 
     let item_name = &item.ident;
     let item_generics = &item.generics;
@@ -168,13 +259,17 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
         .map(|f| *f)
         .zip(adapters.into_iter().map(|a| a.1))
         .collect();
-    
+
     let output = quote!(#(#adapter_outputs)*);
 
     (output, adapter_items)
 }
 
-fn create_field_adapter(parent_ty: &TokenStream2, field: &Field, i: usize) -> (TokenStream2, ItemStruct) {
+fn create_field_adapter(
+    parent_ty: &TokenStream2,
+    field: &Field,
+    i: usize,
+) -> (TokenStream2, ItemStruct) {
     let struct_name = field.ident.as_ref().map_or(
         Ident::new(format!("Field{}Adapter", i).as_str(), Span::call_site()),
         |f| {
@@ -275,5 +370,26 @@ fn struct_fields(item: &DeriveInput) -> impl Iterator<Item = &Field> {
         Fields::Named(ref fields) => fields.named.iter(),
         Fields::Unnamed(ref fields) => fields.unnamed.iter(),
         Fields::Unit => panic!("Unit structs are not supported"),
+    }
+}
+
+fn add_static_lifetimes(ty: &mut Type) {
+    match ty {
+        Type::Path(path) => {
+            if let Some(last_segment) = path.path.segments.last_mut() {
+                if let PathArguments::AngleBracketed(args) = &mut last_segment.arguments {
+                    args.args.iter_mut().for_each(|arg| {
+                        if let GenericArgument::Type(ty) = arg {
+                            add_static_lifetimes(ty);
+                        }
+                    });
+                }
+            }
+        }
+        Type::Reference(ref mut ref_) => {
+            ref_.lifetime = Some(Lifetime::new("'static", Span::call_site()));
+            add_static_lifetimes(&mut ref_.elem);
+        }
+        _ => {}
     }
 }
