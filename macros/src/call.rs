@@ -240,7 +240,7 @@ fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> 
 
             fn call(&mut self, call: Self::Call) -> ::orga::Result<()> {
                 match call {
-                    Noop => failure::bail!("not callable"),
+                    #call_type::Noop => failure::bail!("not callable",),
                     #(#field_call_arms),*
                     #(#method_call_arms),*
                 }
