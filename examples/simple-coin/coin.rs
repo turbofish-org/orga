@@ -1,5 +1,3 @@
-#![feature(min_specialization)]
-#![feature(trivial_bounds)]
 use orga::coins::*;
 use orga::encoding::{Decode, Encode};
 use orga::prelude::*;
@@ -29,9 +27,4 @@ impl SimpleCoin {
 
         Ok(())
     }
-}
-
-type CoinApp = SignerProvider<NonceProvider<SimpleCoin>>;
-fn main() {
-    Node::<CoinApp>::new("simple_coin").reset().run();
 }
