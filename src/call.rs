@@ -7,7 +7,6 @@ pub use orga_macros::{call, Call};
 
 pub trait Call {
     type Call: Encode + Decode;
-    // TODO: type Res: Encode + Decode;
 
     fn call(&mut self, call: Self::Call) -> Result<()>;
 }

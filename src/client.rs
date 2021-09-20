@@ -1,5 +1,7 @@
 use std::cell::RefCell;
+use std::future::Future;
 use std::marker::PhantomData;
+use std::pin::Pin;
 use std::rc::Rc;
 
 use crate::Result;
@@ -9,25 +11,45 @@ use crate::query::Query;
 use crate::macros::Client;
 
 pub trait Client<T: Clone> {
-    type Client: Clone;
+    type Client;
 
     fn create_client(parent: T) -> Self::Client;
 }
 
 #[must_use]
-#[derive(Clone)]
-pub struct PrimitiveClient<T, U: Clone> {
+pub struct PrimitiveClient<T, U: Clone + AsyncCall> {
     parent: U,
+    fut: Option<Pin<Box<U::Future>>>,
     marker: PhantomData<T>,
 }
 
-impl<T: Clone> Client<T> for () {
+impl<T: Clone + AsyncCall> Client<T> for () {
     type Client = PrimitiveClient<(), T>;
 
     fn create_client(parent: T) -> Self::Client {
         PrimitiveClient {
             parent,
+            fut: None,
             marker: PhantomData,
+        }
+    }
+}
+
+impl<T, U: Clone + AsyncCall<Call = ()>> Future for PrimitiveClient<T, U> {
+    type Output = Result<()>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
+        unsafe {
+            let this = self.get_unchecked_mut();
+
+            if this.fut.is_none() {
+                // TODO: is this ok? we're creating the future then moving it
+                let res = this.parent.call(());
+                this.fut = Some(Box::pin(res));
+            }
+
+            let fut = this.fut.as_mut().unwrap().as_mut();
+            fut.poll(cx)
         }
     }
 }
@@ -64,6 +86,38 @@ impl<T: Client<U>, U: Clone> Client<U> for Option<T> {
     }
 }
 
+// TODO: move to call module? or will this always be client-specific?
+pub trait AsyncCall {
+    type Call;
+    type Future: Future<Output = Result<()>>;
+
+    fn call(&mut self, call: Self::Call) -> Self::Future;
+}
+
+#[cfg(test)]
+pub mod mock {
+    use super::*;
+    use futures_lite::future;
+
+    pub struct Mock<T>(pub Rc<RefCell<T>>);
+
+    impl<T> Clone for Mock<T> {
+        fn clone(&self) -> Self {
+            Mock(self.0.clone())
+        }
+    }
+
+    impl<T: Call> AsyncCall for Mock<T> {
+        type Call = T::Call;
+        type Future = future::Ready<Result<()>>;
+
+        fn call(&mut self, call: Self::Call) -> Self::Future {
+            let res = self.0.borrow_mut().call(call);
+            future::ready(res)
+        }
+    }
+}
+
 #[derive(Debug, Call, Client)]
 pub struct Foo {
     pub bar: Bar,
@@ -82,93 +136,7 @@ impl Foo {
     }
 }
 
-// impl<T: Clone> Client<T> for Foo {
-//     type Client = FooClient<T>;
-
-//     fn create_client(parent: T) -> Self::Client {
-//         let bar_adapter = BarAdapter {
-//             parent: parent.clone(),
-//         };
-//         let bar2_adapter = Bar2Adapter {
-//             parent: parent.clone(),
-//         };
-//         FooClient {
-//             parent,
-//             bar: Bar::create_client(bar_adapter),
-//             bar2: Bar::create_client(bar2_adapter),
-//         }
-//     }
-// }
-// #[derive(Clone)]
-// pub struct FooClient<T> {
-//     parent: T,
-//     pub bar: BarClient<BarAdapter<T>>,
-//     pub bar2: BarClient<Bar2Adapter<T>>,
-// }
-// impl<T: Call<Call = FooCall> + Clone> FooClient<T> {
-//     pub fn get_bar_mut(
-//         &mut self,
-//         id: u8,
-//     ) -> <Result<&mut Bar> as Client<GetBarMutAdapter<T>>>::Client {
-//         println!("called get_bar_mut({}) on FooClient", id);
-//         let adapter = GetBarMutAdapter {
-//             args: (id,),
-//             parent: self.parent.clone(),
-//         };
-//         <Result<&mut Bar> as Client<GetBarMutAdapter<T>>>::create_client(adapter)
-//     }
-// }
-
-// #[derive(Clone)]
-// pub struct BarAdapter<T> {
-//     parent: T,
-// }
-// impl<T: Call<Call = FooCall>> Call for BarAdapter<T> {
-//     type Call = BarCall;
-
-//     fn call(&mut self, call: Self::Call) -> Result<()> {
-//         println!(
-//             "called call({:?}) on BarAdapter, wrapping with FooCall::Bar(..)",
-//             call
-//         );
-//         self.parent.call(FooCall::Bar(call))
-//     }
-// }
-
-// #[derive(Clone)]
-// pub struct Bar2Adapter<T> {
-//     parent: T,
-// }
-// impl<T: Call<Call = FooCall>> Call for Bar2Adapter<T> {
-//     type Call = BarCall;
-
-//     fn call(&mut self, call: Self::Call) -> Result<()> {
-//         println!(
-//             "called call({:?}) on Bar2Adapter, wrapping with FooCall::Bar2(..)",
-//             call
-//         );
-//         self.parent.call(FooCall::Bar2(call))
-//     }
-// }
-
-// #[derive(Clone)]
-// pub struct GetBarMutAdapter<T> {
-//     args: (u8,),
-//     parent: T,
-// }
-// impl<T: Call<Call = FooCall>> Call for GetBarMutAdapter<T> {
-//     type Call = BarCall;
-
-//     fn call(&mut self, call: Self::Call) -> Result<()> {
-//         println!(
-//             "called call({:?}) on GetBarMutAdapter, wrapping with FooCall::GetBarMut({}, ..)",
-//             &call, self.args.0
-//         );
-//         self.parent.call(FooCall::GetBarMut(self.args.0, call))
-//     }
-// }
-
-#[derive(Debug, Client, Call)]
+#[derive(Debug, Call, Client)]
 pub struct Bar(u32);
 impl Bar {
     #[call]
@@ -178,16 +146,10 @@ impl Bar {
     }
 }
 
-// impl<T: Call<Call = <Bar as Call>::Call> + Clone> bar_client::Client<T> {
-//     pub fn increment(&mut self) -> Result<()> {
-//         println!("called increment() on Bar::Client");
-//         self.parent.call(<Bar as Call>::Call::MethodIncrement(vec![]))
-//     }
-// }
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures_lite::future::block_on;
     
     #[test]
     fn client() {
@@ -196,13 +158,15 @@ mod tests {
             bar2: Bar(0),
         }));
 
-        let mut client = Foo::create_client(state.clone());
+        let mut client = Foo::create_client(mock::Mock(state.clone()));
 
-        client.bar.increment();
-        println!("{:?}\n\n", &state.borrow());
+        block_on(async {
+            client.bar.increment().await.unwrap();
+            println!("{:?}\n\n", &state.borrow());
 
-        client.get_bar_mut(1).increment();
-        println!("{:?}\n\n", &state.borrow());
+            client.get_bar_mut(1).increment().await.unwrap();
+            println!("{:?}\n\n", &state.borrow());
+        });
 
         // println!("{:?}\n\n", client.bar.count());
 
