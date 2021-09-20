@@ -21,7 +21,7 @@ impl<S: Symbol> Coin<S> {
         Coin { amount: 0.into() }
     }
 
-    pub fn mint<A>(amount: A, _symbol: S) -> Self
+    pub fn mint<A>(amount: A) -> Self
     where
         A: Into<Amount<S>>,
     {
@@ -30,7 +30,7 @@ impl<S: Symbol> Coin<S> {
         }
     }
 
-    pub fn transfer<G: Give<S>>(self, dest: &mut G) -> G::Res {
+    pub fn transfer<G: Give<S>>(self, dest: &mut G) -> Result<()> {
         dest.add(self.amount)
     }
 
@@ -47,18 +47,19 @@ impl<S: Symbol> Take<S> for Coin<S> {
         Ok(())
     }
 
-    fn amount(&self) -> Amount<S> {
-        self.amount
+    fn amount(&self) -> Result<Amount<S>> {
+        Ok(self.amount)
     }
 }
 
 impl<S: Symbol> Give<S> for Coin<S> {
-    type Res = ();
-    fn add<A>(&mut self, amount: A)
+    fn add<A>(&mut self, amount: A) -> Result<()>
     where
         A: Into<Amount<S>>,
     {
         let amount = amount.into();
-        self.amount = self.amount + amount;
+        self.amount += amount;
+
+        Ok(())
     }
 }

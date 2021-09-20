@@ -1,14 +1,14 @@
 use orga::coins::*;
-use orga::encoding::{Decode, Encode};
+use orga::encoding::{Decode, Encode, Terminated};
 use orga::prelude::*;
 
 #[derive(Encode, Decode)]
 pub struct Simp;
 impl Symbol for Simp {}
 
-#[derive(State, Call, Query)]
+#[derive(State)]
 pub struct SimpleCoin {
-    balances: Map<Address, Coin<Simp>>,
+    pub balances: Map<Address, Coin<Simp>>,
 }
 
 impl SimpleCoin {
@@ -26,5 +26,9 @@ impl SimpleCoin {
         receiver.give(coins);
 
         Ok(())
+    }
+
+    pub fn balances(&mut self) -> &mut Map<Address, Coin<Simp>> {
+        &mut self.balances
     }
 }

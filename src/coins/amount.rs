@@ -3,13 +3,13 @@ use crate::encoding::{Decode, Encode};
 use crate::Result;
 use failure::bail;
 use std::marker::PhantomData;
-use std::ops::{Add, Div, Mul, Sub};
+use std::ops::{Add, AddAssign, Div, Mul, Sub};
 
 const PRECISION: u64 = 1_000_000_000;
 
 #[derive(Debug, PartialOrd, Ord, PartialEq, Eq, Encode, Decode)]
 pub struct Amount<S: Symbol> {
-    value: u64,
+    pub value: u64,
     symbol: PhantomData<S>,
 }
 
@@ -68,6 +68,13 @@ impl<S: Symbol, I: Into<Self>> Add<I> for Amount<S> {
     fn add(self, other: I) -> Self {
         let other = other.into();
         Amount::new(self.value + other.value)
+    }
+}
+
+impl<S: Symbol, I: Into<Self>> AddAssign<I> for Amount<S> {
+    fn add_assign(&mut self, other: I) {
+        let other = other.into();
+        *self = *self + other;
     }
 }
 

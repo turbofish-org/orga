@@ -3,7 +3,7 @@
 mod client;
 mod coin;
 mod staking;
-use coin::SimpleCoin;
+use coin::{Simp, SimpleCoin};
 
 use orga::prelude::*;
 
@@ -16,9 +16,9 @@ fn main() {
         .as_slice()
     {
         [_, "node"] => {
-            Node::<SignerProvider<NonceProvider<SimpleCoin>>>::new("simple_coin")
-                .reset()
-                .run();
+            // Node::<SignerProvider<NonceProvider<SimpleCoin>>>::new("simple_coin")
+            //     .reset()
+            //     .run();
         }
         [_, "client"] => {
             println!("ran client");

@@ -6,7 +6,7 @@ pub trait Take<S: Symbol> {
     where
         A: Into<Amount<S>>;
 
-    fn amount(&self) -> Amount<S>;
+    fn amount(&self) -> Result<Amount<S>>;
 
     fn take<A>(&mut self, amount: A) -> Result<Coin<S>>
     where
