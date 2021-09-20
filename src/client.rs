@@ -152,34 +152,33 @@ impl Bar {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures_lite::future::block_on;
     use std::cell::RefCell;
     use std::rc::Rc;
 
-    #[test]
-    fn client() {
+    #[tokio::test]
+    async fn client() {
         let state = Rc::new(RefCell::new(Foo {
             bar: Bar(0),
             bar2: Bar(0),
         }));
 
-        let mut client = Foo::create_client(mock::Mock(state.clone()));
+        use crate::abci::TendermintClient;
+        let rpc: TendermintClient<Foo> = TendermintClient::new("http://localhost:26657").unwrap();
+        let mut client = Foo::create_client(rpc);
+        
+        client.bar.increment().await.unwrap();
+        println!("{:?}\n\n", &state.borrow());
 
-        block_on(async {
-            client.bar.increment().await.unwrap();
-            println!("{:?}\n\n", &state.borrow());
+        // client.get_bar_mut(1).increment().await.unwrap();
+        // println!("{:?}\n\n", &state.borrow());
 
-            client.get_bar_mut(1).increment().await.unwrap();
-            println!("{:?}\n\n", &state.borrow());
+        // println!("{:?}\n\n", client.bar.count().await.unwrap());
 
-            // println!("{:?}\n\n", client.bar.count().await.unwrap());
-
-            // println!("{:?}\n\n", client.get_bar_count(1).await.unwrap());
-            // println!(
-            //     "{:?}\n\n",
-            //     client.get_bar(1).await.unwrap().count(1).await.unwrap()
-            // );
-            // println!("{:?}\n\n", client.get_bar(1).count().await.unwrap());
-        });
+        // println!("{:?}\n\n", client.get_bar_count(1).await.unwrap());
+        // println!(
+        //     "{:?}\n\n",
+        //     client.get_bar(1).await.unwrap().count(1).await.unwrap()
+        // );
+        // println!("{:?}\n\n", client.get_bar(1).count().await.unwrap());
     }
 }

@@ -29,6 +29,7 @@ datetime = "0.5.2"
 [dev-dependencies]
 futures-lite = "1.12.0"
 tempdir = "0.3.7"
+tokio = "1.11.0"
 
 [package.metadata.docs.rs]
 features = ["abci", "merk"]

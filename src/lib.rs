@@ -6,6 +6,7 @@
 #![feature(trivial_bounds)]
 #![allow(incomplete_features)]
 #![feature(specialization)]
+#![feature(generic_associated_types)]
 
 extern crate self as orga;
 
