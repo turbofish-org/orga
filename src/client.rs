@@ -1,11 +1,8 @@
-use std::cell::RefCell;
 use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
-use std::rc::Rc;
 
 use crate::call::Call;
-use crate::query::Query;
 use crate::Result;
 
 use crate::macros::Client;
@@ -101,6 +98,8 @@ pub trait AsyncCall {
 pub mod mock {
     use super::*;
     use futures_lite::future;
+    use std::cell::RefCell;
+    use std::rc::Rc;
 
     pub struct Mock<T>(pub Rc<RefCell<T>>);
 
@@ -154,6 +153,8 @@ impl Bar {
 mod tests {
     use super::*;
     use futures_lite::future::block_on;
+    use std::cell::RefCell;
+    use std::rc::Rc;
 
     #[test]
     fn client() {
