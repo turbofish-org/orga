@@ -55,6 +55,7 @@ fn create_client_impl(item: &DeriveInput, modname: &Ident) -> TokenStream2 {
         impl#generics_sanitized ::orga::client::Client<#parent_ty> for #name#generic_params
         where
             #parent_ty: Clone,
+            #parent_ty: ::orga::client::AsyncCall<Call = <#name as ::orga::call::Call>::Call>,
             #where_preds
         {
             type Client = #modname::Client<#parent_ty>;
@@ -230,15 +231,20 @@ fn create_client_struct(
     quote! {
         #[must_use]
         #[derive(Clone)]
-        pub struct Client<#generic_params #parent_ty: Clone> {
+        pub struct Client<#generic_params #parent_ty: Clone>
+        where
+            #parent_ty: ::orga::client::AsyncCall<Call = <#name as ::orga::call::Call>::Call>,
+        {
             pub(super) parent: #parent_ty,
             _marker: std::marker::PhantomData<#name#generic_params_bracketed>,
             #(#field_fields,)*
+            fut: Option<Pin<Box<#parent_ty::Future>>>
         }
 
         impl<#generics_sanitized #parent_ty> Client<#generic_params #parent_ty>
         where
             #parent_ty: Clone,
+            #parent_ty: ::orga::client::AsyncCall<Call = <#name as ::orga::call::Call>::Call>,
             #where_preds
         {
             pub fn new(parent: #parent_ty) -> Self {
@@ -247,6 +253,35 @@ fn create_client_struct(
                     _marker: std::marker::PhantomData,
                     #(#field_constructors,)*
                     parent,
+                    fut: None,
+                }
+            }
+        }
+
+        impl<#generics_sanitized #parent_ty> Future for Client<#generic_params #parent_ty>
+        where
+            #parent_ty: Clone,
+            #parent_ty: ::orga::client::AsyncCall<Call = <#name as ::orga::call::Call>::Call>,
+            <#name as ::orga::call::Call>::Call: Default,
+            #where_preds
+        {
+            type Output = Result<()>;
+
+            fn poll(
+                self: Pin<&mut Self>,
+                cx: &mut std::task::Context<'_>,
+            ) -> std::task::Poll<Self::Output> {
+                unsafe {
+                    let this = self.get_unchecked_mut();
+
+                    if this.fut.is_none() {
+                        // TODO: is this ok? we're creating the future then moving it
+                        let res = this.parent.call(Default::default());
+                        this.fut = Some(Box::pin(res));
+                    }
+
+                    let fut = this.fut.as_mut().unwrap().as_mut();
+                    fut.poll(cx)
                 }
             }
         }

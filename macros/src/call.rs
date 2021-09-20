@@ -17,7 +17,7 @@ pub fn derive(item: TokenStream) -> TokenStream {
         Span::call_site(),
     );
 
-    let call_enum = create_call_enum(&item, &source);
+    let (call_enum_tokens, call_enum) = create_call_enum(&item, &source);
     let call_impl = create_call_impl(&item, &source, &call_enum);
 
     let output = quote!(
@@ -25,7 +25,7 @@ pub fn derive(item: TokenStream) -> TokenStream {
 
         pub mod #modname {
             use super::*;
-            #call_enum
+            #call_enum_tokens
             #call_impl
         }
     );
@@ -252,7 +252,7 @@ fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> 
     }
 }
 
-fn create_call_enum(item: &DeriveInput, source: &File) -> ItemEnum {
+fn create_call_enum(item: &DeriveInput, source: &File) -> (TokenStream2, ItemEnum) {
     let name = &item.ident;
     let generics = &item.generics;
 
@@ -336,7 +336,7 @@ fn create_call_enum(item: &DeriveInput, source: &File) -> ItemEnum {
 
     let call_preds = quote!(#(#call_params: ::orga::call::Call),*);
 
-    let output = quote! {
+    let struct_output = quote! {
         #[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
         pub enum Call#generic_params
         where #call_preds
@@ -347,7 +347,19 @@ fn create_call_enum(item: &DeriveInput, source: &File) -> ItemEnum {
         }
     };
 
-    syn::parse2(output).unwrap()
+    let output = quote! {
+        #struct_output
+
+        impl#generic_params Default for Call#generic_params
+        where #call_preds
+        {
+            fn default() -> Self {
+                Call::Noop
+            }
+        }
+    };
+
+    (output, syn::parse2(struct_output).unwrap())
 }
 
 fn gen_param_input(generics: &Generics, bracketed: bool) -> TokenStream2 {

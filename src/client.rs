@@ -4,9 +4,9 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use std::rc::Rc;
 
-use crate::Result;
 use crate::call::Call;
 use crate::query::Query;
+use crate::Result;
 
 use crate::macros::Client;
 
@@ -38,7 +38,10 @@ impl<T: Clone + AsyncCall> Client<T> for () {
 impl<T, U: Clone + AsyncCall<Call = ()>> Future for PrimitiveClient<T, U> {
     type Output = Result<()>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
         unsafe {
             let this = self.get_unchecked_mut();
 
@@ -138,6 +141,7 @@ impl Foo {
 
 #[derive(Debug, Call, Client)]
 pub struct Bar(u32);
+
 impl Bar {
     #[call]
     pub fn increment(&mut self) {
@@ -150,7 +154,7 @@ impl Bar {
 mod tests {
     use super::*;
     use futures_lite::future::block_on;
-    
+
     #[test]
     fn client() {
         let state = Rc::new(RefCell::new(Foo {
@@ -166,11 +170,15 @@ mod tests {
 
             client.get_bar_mut(1).increment().await.unwrap();
             println!("{:?}\n\n", &state.borrow());
+
+            // println!("{:?}\n\n", client.bar.count().await.unwrap());
+
+            // println!("{:?}\n\n", client.get_bar_count(1).await.unwrap());
+            // println!(
+            //     "{:?}\n\n",
+            //     client.get_bar(1).await.unwrap().count(1).await.unwrap()
+            // );
+            // println!("{:?}\n\n", client.get_bar(1).count().await.unwrap());
         });
-
-        // println!("{:?}\n\n", client.bar.count());
-
-        // // println!("{:?}\n\n", client.get_bar_count(1));
-        // println!("{:?}\n\n", client.get_bar(1).count());
     }
 }
