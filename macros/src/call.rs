@@ -209,7 +209,7 @@ fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> 
                 where #where_preds #encoding_bounds #call_bounds #parent_where_preds
                 {
                     fn maybe_call(&mut self #full_inputs) -> ::orga::Result<()> {
-                        let output = self.get_mut(var1);
+                        let output = self.#method_name(#(#inputs),*);
                         ::orga::call::maybe_call(output, subcall)
                     }
                 }
