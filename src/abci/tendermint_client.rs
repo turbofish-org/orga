@@ -45,9 +45,8 @@ where
     fn call(&mut self, call: Self::Call) -> Self::Future {
         let tx = call.encode().unwrap().into();
         let fut = self.client.broadcast_tx_commit(tx);
-        let fut2: Pin<Box<dyn Future<Output = tm::Result<TxResponse>> + 'static>> = unsafe {
-            std::mem::transmute(fut)
-        };
+        let fut2: Pin<Box<dyn Future<Output = tm::Result<TxResponse>> + 'static>> =
+            unsafe { std::mem::transmute(fut) };
         NoReturn(fut2)
     }
 }

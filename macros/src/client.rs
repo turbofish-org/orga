@@ -366,7 +366,7 @@ fn create_field_adapter(
                 }
             }
         }
-        
+
         impl#adapter_generics ::orga::client::AsyncCall for #struct_name<#parent_client_ty>
         where
             #parent_client_ty: ::orga::client::AsyncCall<Call = <#parent_ty as ::orga::call::Call>::Call>,
