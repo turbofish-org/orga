@@ -85,7 +85,7 @@ impl<K> Eq for MapKey<K> {}
 /// When values in the map are mutated, inserted, or deleted, they are retained
 /// in an in-memory map until the call to `State::flush` which writes the
 /// changes to the backing store.
-#[derive(Query)]
+#[derive(Query, Call)]
 pub struct Map<K, V, S = DefaultBackingStore> {
     store: Store<S>,
     children: BTreeMap<MapKey<K>, Option<V>>,
