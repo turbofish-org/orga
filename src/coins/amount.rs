@@ -7,7 +7,7 @@ use std::ops::{Add, AddAssign, Div, Mul, Sub};
 
 const PRECISION: u64 = 1_000_000_000;
 
-#[derive(Debug, PartialOrd, Ord, PartialEq, Eq, Encode, Decode)]
+#[derive(Debug, Encode, Decode)]
 pub struct Amount<S: Symbol> {
     pub value: u64,
     symbol: PhantomData<S>,
@@ -30,6 +30,26 @@ impl<S: Symbol> Clone for Amount<S> {
         }
     }
 }
+
+impl<S: Symbol> PartialOrd for Amount<S> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.value.cmp(&other.value))
+    }
+}
+
+impl<S: Symbol> Ord for Amount<S> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+
+impl<S: Symbol> PartialEq for Amount<S> {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
+
+impl<S: Symbol> Eq for Amount<S> {}
 
 impl<S: Symbol> Copy for Amount<S> {}
 

@@ -4,10 +4,13 @@ mod client;
 mod coin;
 mod staking;
 use coin::{Simp, SimpleCoin};
+use orga::client::{AsyncCall, Client};
+use std::sync::Arc;
 
 use orga::prelude::*;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let args: Vec<String> = std::env::args().collect();
     match args
         .iter()
@@ -16,13 +19,23 @@ fn main() {
         .as_slice()
     {
         [_, "node"] => {
-            // Node::<SignerProvider<NonceProvider<SimpleCoin>>>::new("simple_coin")
-            //     .reset()
-            //     .run();
+            tokio::task::spawn_blocking(|| {
+                Node::<SignerProvider<NonceProvider<SimpleCoin>>>::new("simple_coin")
+                    .reset()
+                    .run()
+            })
+            .await;
         }
         [_, "client"] => {
-            println!("ran client");
+            type WholeApp = SignerProvider<NonceProvider<SimpleCoin>>;
+            let client: TendermintClient<WholeApp> =
+                TendermintClient::new("http://localhost:26657").unwrap();
+            let mut client = WholeApp::create_client(client);
+            // let my_address = load_keypair().unwrap().public.to_bytes();
+            client.transfer([123; 32], 5.into()).await.unwrap();
         }
-        _ => {}
+        _ => {
+            println!("hit catchall")
+        }
     };
 }

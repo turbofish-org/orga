@@ -264,7 +264,7 @@ impl<A: Application> ABCIStateMachine<A> {
                 let res_check_tx = {
                     let owned_store = store.take().unwrap();
                     let flush_store = Shared::new(BufStore::wrap(owned_store.clone()));
-                    let res = app.check_tx(flush_store.clone(), req)?;
+                    let res = app.check_tx(flush_store.clone(), req)?; // TODO: don't return error, handle it.
                     let mut unwrapped_fs = flush_store.into_inner();
                     unwrapped_fs.flush()?;
                     store.replace(owned_store);

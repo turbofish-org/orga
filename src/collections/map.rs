@@ -46,8 +46,8 @@ impl<K> Encode for MapKey<K> {
 
 //implement deref for MapKey to deref into the inner type
 //implement Encode for MapKey that just returns the inner_bytes
-impl<K> MapKey<K> {
-    pub fn new<E: Encode>(key: E) -> Result<MapKey<E>> {
+impl<K: Encode> MapKey<K> {
+    pub fn new(key: K) -> Result<MapKey<K>> {
         let inner_bytes = Encode::encode(&key)?;
         Ok(MapKey {
             inner: key,
@@ -129,7 +129,7 @@ where
 {
     #[query]
     pub fn contains_key(&self, key: K) -> Result<bool> {
-        let map_key = MapKey::<K>::new(key)?;
+        let map_key = MapKey::new(key)?;
         let child_contains = self.children.contains_key(&map_key);
 
         if child_contains {
@@ -178,7 +178,7 @@ where
     /// was flushed.
     #[query]
     pub fn get(&self, key: K) -> Result<Option<Ref<V>>> {
-        let map_key = MapKey::<K>::new(key)?;
+        let map_key = MapKey::new(key)?;
         Ok(if self.children.contains_key(&map_key) {
             // value is already retained in memory (was modified)
             self.children
@@ -190,6 +190,27 @@ where
             // value is not in memory, try to get from store
             self.get_from_store(&map_key.inner)?.map(Ref::Owned)
         })
+    }
+}
+
+impl<K, V, S> Map<K, V, S>
+where
+    K: Encode + Terminated + Clone,
+    V: State<S>,
+    V::Encoding: Default,
+    S: Read,
+{
+    pub fn get_or_default(&self, key: K) -> Result<Ref<V>> {
+        let child = self.get(key.clone())?;
+        match child {
+            Some(child) => Ok(child),
+            None => {
+                let map_key = MapKey::new(key)?;
+                let value_store = self.store.sub(map_key.inner_bytes.as_slice());
+                let default_value = V::create(value_store, Default::default())?;
+                Ok(Ref::Owned(default_value))
+            }
+        }
     }
 }
 

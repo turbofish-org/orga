@@ -1,7 +1,7 @@
 use super::{BeginBlockCtx, EndBlockCtx, GetContext, InitChainCtx, Signer};
 use crate::abci::{BeginBlock, EndBlock, InitChain};
 use crate::call::Call;
-use crate::client::Client;
+use crate::client::{AsyncCall, Client};
 use crate::collections::Map;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
@@ -76,20 +76,21 @@ impl<T, U: Clone> Clone for NonceClient<T, U> {
     }
 }
 
-impl<T: Call, U: Call<Call = NonceCall<T::Call>> + Clone> Call for NonceClient<T, U> {
-    type Call = NonceCall<T::Call>;
+impl<T: Call, U: AsyncCall<Call = NonceCall<T::Call>> + Clone> AsyncCall for NonceClient<T, U> {
+    type Call = T::Call;
+    type Future = U::Future;
 
-    fn call(&mut self, call: Self::Call) -> Result<()> {
+    fn call(&mut self, call: Self::Call) -> Self::Future {
         // Load nonce from file
-        let nonce = load_nonce()?;
+        let nonce = load_nonce().unwrap();
         let res = self.parent.call(NonceCall {
-            inner_call: call.inner_call,
+            inner_call: call,
             nonce: Some(nonce),
-        })?;
+        });
 
         // Increment the local nonce
-        write_nonce(nonce + 1)?;
-        Ok(res)
+        write_nonce(nonce + 1).unwrap();
+        res
     }
 }
 

@@ -8,14 +8,50 @@ use crate::state::State;
 use crate::store::Store;
 use crate::Result;
 use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 
 pub struct Pool<K, V, S>
 where
     S: Symbol,
 {
-    rate: Amount<S>,
+    coins_per_share: Amount<S>,
     shares: Amount<S>,
-    map: Map<K, V>,
+    map: Map<K, Child<V, S>>,
+}
+
+pub struct Child<T, S: Symbol> {
+    ps_per_share: Amount<S>,
+    value: T,
+}
+
+impl<T, S: Symbol> Child<T, S> {
+    fn new(value: T) -> Self {
+        Child {
+            ps_per_share: Amount::one(),
+            value,
+        }
+    }
+}
+
+impl<T: State, S: Symbol> State for Child<T, S> {
+    type Encoding = (<Amount<S> as State>::Encoding, T::Encoding);
+
+    fn create(store: Store, data: Self::Encoding) -> Result<Self> {
+        Ok(Self {
+            ps_per_share: data.0,
+            value: T::create(store, data.1)?,
+        })
+    }
+
+    fn flush(self) -> Result<Self::Encoding> {
+        Ok((self.ps_per_share, self.value.flush()?))
+    }
+}
+
+impl<T: State, S: Symbol> From<Child<T, S>> for <Child<T, S> as State>::Encoding {
+    fn from(child: Child<T, S>) -> Self {
+        (child.ps_per_share, child.value.into())
+    }
 }
 
 impl<K, V, S> State for Pool<K, V, S>
@@ -33,15 +69,15 @@ where
 
     fn create(store: Store, data: Self::Encoding) -> Result<Self> {
         Ok(Self {
-            rate: Amount::create(store.sub(&[0]), data.0)?,
+            coins_per_share: Amount::create(store.sub(&[0]), data.0)?,
             shares: Amount::create(store.sub(&[1]), data.1)?,
-            map: Map::<K, V>::create(store.sub(&[2]), data.2)?,
+            map: Map::create(store.sub(&[2]), data.2)?,
         })
     }
 
     fn flush(self) -> Result<Self::Encoding> {
         Ok((
-            <Amount<S> as State>::flush(self.rate)?,
+            <Amount<S> as State>::flush(self.coins_per_share)?,
             <Amount<S> as State>::flush(self.shares)?,
             self.map.flush()?,
         ))
@@ -55,7 +91,7 @@ where
     V: State,
 {
     fn from(pool: Pool<K, V, S>) -> Self {
-        (pool.rate, pool.shares, pool.map.into())
+        (pool.coins_per_share, pool.shares, pool.map.into())
     }
 }
 
@@ -64,23 +100,32 @@ where
     S: Symbol,
     K: Encode + Terminated + Clone,
     V: State + Give<S> + Take<S>,
+    V::Encoding: Default,
 {
-    pub fn insert(&mut self, key: K, value: V) -> Result<()> {
-        // TODO: check if already exists (should we error if it does, or return the
-        // existing value?)
-        self.shares += (value.amount()? / self.rate)?;
-        self.map.insert(key, value.into())
-    }
+    pub fn get_mut(&mut self, key: K) -> Result<ChildMut<K, V, S>> {
+        let mut child = self.map.entry(key.clone())?.or_insert_default()?;
 
-    pub fn get_mut(&mut self, key: K) -> Result<Option<ChildMut<K, V, S>>> {
-        match self.map.contains_key(key.clone())? {
-            true => Ok(Some(ChildMut {
-                parent: self,
-                key,
-                _symbol: PhantomData,
-            })),
-            false => Ok(None),
+        let child_shares = child.value.amount()?;
+        let coins = ((child_shares * child.ps_per_share)? * self.coins_per_share)?;
+        child.ps_per_share = (Amount::one() / self.coins_per_share)?;
+
+        use std::cmp::Ordering::*;
+        match coins.cmp(&child_shares) {
+            Greater => {
+                let adjustment = (coins - child_shares)?;
+                child.value.add(adjustment)?;
+            }
+            Less => {
+                let adjustment = (child_shares - coins)?;
+                child.value.deduct(adjustment)?;
+            }
+            Equal => {}
         }
+
+        Ok(ChildMut {
+            child,
+            _symbol: PhantomData,
+        })
     }
 }
 
@@ -89,13 +134,14 @@ where
     S: Symbol,
     K: Encode + Terminated + Clone,
     V: State,
+    V::Encoding: Default,
 {
     pub fn total_value(&self) -> Amount<S> {
-        (self.rate * self.shares).expect("Overflow")
+        (self.coins_per_share * self.shares).expect("Overflow")
     }
 
-    pub fn get(&self, key: K) -> Result<Option<Ref<V>>> {
-        self.map.get(key)
+    pub fn get(&self, key: K) -> Result<Ref<Child<V, S>>> {
+        self.map.get_or_default(key)
     }
 }
 
@@ -107,10 +153,11 @@ where
 {
     fn add<A: Into<Amount<S>>>(&mut self, amount: A) -> Result<()> {
         let amount = amount.into();
-        let total = (self.shares * self.rate).expect("Overflow");
+        let total = (self.shares * self.coins_per_share).expect("Overflow");
         match amount / total {
             Ok(added_rate) => {
-                self.rate = (self.rate * (Amount::one() + added_rate)).expect("Overflow")
+                self.coins_per_share =
+                    (self.coins_per_share * (Amount::one() + added_rate)).expect("Overflow")
             }
             Err(_) => panic!("Cannot pay to empty pool"),
         };
@@ -123,42 +170,57 @@ pub struct ChildMut<'a, K, V, S>
 where
     S: Symbol,
     K: Encode + Terminated,
-    V: State + Take<S> + Give<S>,
+    V: State + Give<S>,
 {
     parent: &'a mut Pool<K, V, S>,
     key: K,
     _symbol: PhantomData<S>,
 }
 
-// impl<'a, K, B, V, S> Deref for ChildMut<'a, K, B, V, S>
-// where
-//   K: Hash + Eq,
-//   B: Borrow<K>,
-//   V: Take<S> + Give<S>,
-//   S: Symbol,
-// {
-//   type Target = V;
+impl<'a, K, V, S> Deref for ChildMut<'a, K, V, S>
+where
+    K: Encode + Terminated,
+    V: State + Give<S>,
+    S: Symbol,
+{
+    type Target = V;
 
-//   fn deref(&self) -> &'a V {
-//     self.parent.map.get(self.key.borrow()).unwrap()
-//   }
-// }
+    fn deref(&self) -> &'a V {
+        todo!()
+    }
+}
+
+impl<'a, K, V, S> DerefMut for ChildMut<'a, K, V, S>
+where
+    K: Encode + Terminated,
+    V: State + Give<S>,
+    S: Symbol,
+{
+    fn deref_mut(&mut self) -> &'a mut V {
+        self.parent.map.get_(&self.key).unwrap()
+    }
+}
 
 impl<'a, K, V, S> Give<S> for ChildMut<'a, K, V, S>
 where
     S: Symbol,
     K: Encode + Terminated + Clone,
-    V: State + Take<S> + Give<S>,
+    V: State + Give<S>,
+    V::Encoding: Default,
 {
     fn add<A: Into<Amount<S>>>(&mut self, amount: A) -> Result<()> {
         let amount = amount.into();
-        let shares = (amount / self.parent.rate).expect("Cannot divide by zero");
-        self.parent.shares += shares;
-        self.parent
+
+        let pool_shares = (amount / self.parent.coins_per_share).expect("Cannot divide by zero");
+        self.parent.shares += pool_shares;
+
+        let mut child = self
+            .parent
             .map
-            .get_mut(self.key.clone())?
-            .ok_or_else(|| format_err!("Could not add to pool child"))?
-            .add(shares)
+            .entry(self.key.clone())?
+            .or_insert_default()?;
+        let child_shares = (pool_shares / child.ps_per_share).expect("Cannot divide by zero");
+        child.value.add(child_shares)
     }
 }
 
@@ -167,25 +229,30 @@ where
     S: Symbol,
     K: Encode + Terminated + Clone,
     V: State + Take<S> + Give<S>,
+    V::Encoding: Default,
 {
     fn deduct<A>(&mut self, amount: A) -> Result<()>
     where
         A: Into<Amount<S>>,
     {
         let amount = amount.into();
-        let shares = (amount / self.parent.rate).expect("Cannot divide by zero");
-        self.parent.shares =
-            (self.parent.shares - shares).expect("Cannot pay more than is available");
-        Ok(())
+
+        let pool_shares = (amount / self.parent.coins_per_share)?;
+        self.parent.shares = (self.parent.shares - pool_shares)?;
+
+        let mut child = self
+            .parent
+            .map
+            .entry(self.key.clone())?
+            .or_insert_default()?;
+        let child_shares = (amount / child.ps_per_share)?;
+
+        child.value.deduct(child_shares)
     }
 
     fn amount(&self) -> Result<Amount<S>> {
-        let amount = self
-            .parent
-            .map
-            .get(self.key.clone())?
-            .ok_or_else(|| failure::format_err!("Failed to take amount from child"))?
-            .amount()?;
-        Ok((amount * self.parent.rate).expect("Overflow"))
+        let child = self.parent.map.get_or_default(self.key.clone())?;
+        let pool_shares = (child.value.amount()? * child.ps_per_share)?;
+        pool_shares * self.parent.coins_per_share
     }
 }
