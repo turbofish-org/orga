@@ -167,7 +167,7 @@ fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> 
                 })
                 .collect();
             let full_inputs = quote! {
-                #(, #inputs: #input_types)*
+                #(, #inputs: #input_types)*, subcall: Vec<u8>
             };
 
             let unit_tuple: Type = parse2(quote!(())).unwrap();
@@ -198,18 +198,19 @@ fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> 
             );
             maybe_call_defs.push(quote! {
                 trait #trait_name#generic_reqs {
-                    fn maybe_call(&mut self #full_inputs) -> ::orga::Result<#output_type>;
+                    fn maybe_call(&mut self #full_inputs) -> ::orga::Result<()>;
                 }
                 impl<__Self, #(#requirements),*> #trait_name#generic_reqs for __Self {
-                    default fn maybe_call(&mut self #full_inputs) -> ::orga::Result<#output_type> {
+                    default fn maybe_call(&mut self #full_inputs) -> ::orga::Result<()> {
                         failure::bail!("This call cannot be called because not all bounds are met")
                     }
                 }
                 impl#parent_generics #trait_name#generic_reqs for #name#generic_params
                 where #where_preds #encoding_bounds #call_bounds #parent_where_preds
                 {
-                    fn maybe_call(&mut self #full_inputs) -> ::orga::Result<#output_type> {
-                        Ok(self.#method_name(#(#inputs),*))
+                    fn maybe_call(&mut self #full_inputs) -> ::orga::Result<()> {
+                        let output = self.get_mut(var1);
+                        ::orga::call::maybe_call(output, subcall)
                     }
                 }
             });
@@ -222,11 +223,7 @@ fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> 
 
             quote! {
                 Call::#variant_name(#(#inputs,)* subcall) => {
-                    let subcall = ::orga::encoding::Decode::decode(subcall.as_slice())?;
-                    ::orga::call::Call::call(
-                        &mut #trait_name#dotted_generic_reqs::maybe_call(self, #(#inputs),*),
-                        subcall,
-                    )
+                    #trait_name#dotted_generic_reqs::maybe_call(self, #(#inputs,)* subcall)
                 }
             }
         })
@@ -407,7 +404,8 @@ where
                 requirements.push(param.ident.clone());
             });
     }
-    requirements
+    let req_set: HashSet<_> = requirements.into_iter().collect();
+    req_set.into_iter().collect()
 }
 
 fn relevant_impls(name: &Ident, source: &File) -> Vec<ItemImpl> {
