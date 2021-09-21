@@ -191,3 +191,26 @@ impl<T: Call, const N: usize> Call for [T; N] {
         self[index].call(subcall)
     }
 }
+
+pub fn maybe_call<T>(value: T, subcall: Vec<u8>) -> Result<()> {
+    MaybeCallWrapper(value).maybe_call(subcall)
+}
+
+trait MaybeCall {
+    fn maybe_call(&mut self, call_bytes: Vec<u8>) -> Result<()>;
+}
+
+impl<T> MaybeCall for T {
+    default fn maybe_call(&mut self, _call_bytes: Vec<u8>) -> Result<()> {
+        failure::bail!("Call is not implemented")
+    }
+}
+
+struct MaybeCallWrapper<T>(T);
+
+impl<T: Call> MaybeCall for MaybeCallWrapper<T> {
+    fn maybe_call(&mut self, call_bytes: Vec<u8>) -> Result<()> {
+        let call = Decode::decode(call_bytes.as_slice())?;
+        self.0.call(call)
+    }
+}
