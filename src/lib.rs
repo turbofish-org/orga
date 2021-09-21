@@ -60,6 +60,7 @@ pub mod prelude {
     #[cfg(feature = "abci")]
     pub use crate::abci::*;
     pub use crate::call::*;
+    pub use crate::client::{AsyncCall, Client};
     pub use crate::collections::*;
     pub use crate::contexts::*;
     pub use crate::query::*;

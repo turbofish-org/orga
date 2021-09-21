@@ -168,21 +168,32 @@ where
     }
 
     fn deliver_tx(&self, store: WrappedMerk, req: RequestDeliverTx) -> Result<ResponseDeliverTx> {
-        self.run(store, move |state| -> Result<_> {
+        let run_res = self.run(store, move |state| -> Result<_> {
             let inner_call = Decode::decode(req.tx.as_slice())?;
             state.call(ABCICall::DeliverTx(inner_call))
-        })??;
+        })?;
 
-        Ok(Default::default())
+        let mut deliver_tx_res = ResponseDeliverTx::default();
+        if let Err(err) = run_res {
+            deliver_tx_res.code = 1;
+            deliver_tx_res.log = err.to_string();
+        }
+
+        Ok(deliver_tx_res)
     }
 
     fn check_tx(&self, store: WrappedMerk, req: RequestCheckTx) -> Result<ResponseCheckTx> {
-        self.run(store, move |state| -> Result<_> {
+        let run_res = self.run(store, move |state| -> Result<_> {
             let inner_call = Decode::decode(req.tx.as_slice())?;
             state.call(ABCICall::CheckTx(inner_call))
-        })??;
+        })?;
+        let mut check_tx_res = ResponseCheckTx::default();
+        if let Err(err) = run_res {
+            check_tx_res.code = 1;
+            check_tx_res.log = err.to_string();
+        }
 
-        Ok(Default::default())
+        Ok(check_tx_res)
     }
 
     fn query(&self, store: Shared<MerkStore>, req: RequestQuery) -> Result<ResponseQuery> {

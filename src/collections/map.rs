@@ -91,6 +91,129 @@ pub struct Map<K, V, S = DefaultBackingStore> {
     children: BTreeMap<MapKey<K>, Option<V>>,
 }
 
+pub mod map_call {
+    use super::*;
+    pub enum Call<K> {
+        Noop,
+        MethodGetMut(K, Vec<u8>),
+    }
+    impl<K> ::ed::Encode for Call<K>
+    where
+        K: ::ed::Terminated + ::ed::Encode,
+        Vec<u8>: ::ed::Encode,
+    {
+        #[inline]
+        fn encode_into<__W: std::io::Write>(&self, mut dest: &mut __W) -> ::ed::Result<()> {
+            match self {
+                Self::Noop => {
+                    dest.write_all(&[0u8][..])?;
+                }
+                Self::MethodGetMut(var0, var1) => {
+                    dest.write_all(&[1u8][..])?;
+                    var0.encode_into(&mut dest)?;
+                    var1.encode_into(&mut dest)?;
+                }
+            }
+            Ok(())
+        }
+        #[inline]
+        fn encoding_length(&self) -> ::ed::Result<usize> {
+            Ok(1 + match self {
+                Self::Noop => 0,
+                Self::MethodGetMut(var0, var1) => {
+                    0 + var0.encoding_length()? + var1.encoding_length()?
+                }
+            })
+        }
+    }
+    impl<K> ::ed::Terminated for Call<K>
+    where
+        K: ::ed::Terminated,
+        Vec<u8>: ::ed::Terminated,
+    {
+    }
+    impl<K> ::ed::Decode for Call<K>
+    where
+        K: ::ed::Terminated + ::ed::Decode,
+        Vec<u8>: ::ed::Decode,
+    {
+        #[inline]
+        fn decode<__R: std::io::Read>(mut input: __R) -> ::ed::Result<Self> {
+            let mut variant = [0; 1];
+            input.read_exact(&mut variant[..])?;
+            let variant = variant[0];
+            Ok(match variant {
+                0u8 => Self::Noop {},
+                1u8 => Self::MethodGetMut {
+                    0: ::ed::Decode::decode(&mut input)?,
+                    1: ::ed::Decode::decode(&mut input)?,
+                },
+                n => return Err(::ed::Error::UnexpectedByte(n)),
+            })
+        }
+    }
+    impl<K> Default for Call<K> {
+        fn default() -> Self {
+            Call::Noop
+        }
+    }
+    impl<K, V, S> ::orga::call::Call for Map<K, V, S>
+    where
+        K: ::orga::encoding::Encode + ::orga::encoding::Decode + ::orga::encoding::Terminated,
+        S: ::orga::call::Call,
+        K: ::orga::call::Call,
+        V: ::orga::call::Call,
+    {
+        type Call = Call<K>;
+        fn call(&mut self, call: Self::Call) -> ::orga::Result<()> {
+            match call {
+                Call::Noop => Ok(()),
+                Call::MethodGetMut(var1, subcall) => {
+                    MaybeCallMethodGetMut::<V, K, S>::maybe_call(self, var1, subcall)
+                }
+            }
+        }
+    }
+    trait MaybeCallMethodGetMut<V, K, S> {
+        fn maybe_call(&mut self, var1: K, subcall: Vec<u8>) -> Result<()>;
+    }
+    impl<__Self, V, K, S> MaybeCallMethodGetMut<V, K, S> for __Self {
+        default fn maybe_call(&mut self, var1: K, subcall: Vec<u8>) -> Result<()> {
+            Err(::failure::err_msg(
+                "This call cannot be called because not all bounds are met",
+            ))
+        }
+    }
+    impl<K, V, S> MaybeCallMethodGetMut<V, K, S> for Map<K, V, S>
+    where
+        K: ::orga::encoding::Encode + ::orga::encoding::Decode + ::orga::encoding::Terminated,
+        K: Encode + Terminated + Clone,
+        V: State<S>,
+        S: Read,
+    {
+        fn maybe_call(&mut self, var1: K, subcall: Vec<u8>) -> Result<()> {
+            let mut output = self.get_mut(var1);
+            MaybeCall::maybe_call(&mut MaybeCaller(output), subcall)
+        }
+    }
+
+    trait MaybeCall {
+        fn maybe_call(&mut self, subcall: Vec<u8>) -> Result<()>;
+    }
+    impl<T> MaybeCall for T {
+        default fn maybe_call(&mut self, subcall: Vec<u8>) -> Result<()> {
+            failure::bail!("lol no call")
+        }
+    }
+    struct MaybeCaller<T>(T);
+    impl<T: orga::call::Call> MaybeCall for MaybeCaller<T> {
+        fn maybe_call(&mut self, subcall: Vec<u8>) -> Result<()> {
+            let subcall = ::orga::encoding::Decode::decode(subcall.as_slice())?;
+            ::orga::call::Call::call(&mut self.0, subcall)
+        }
+    }
+}
+
 impl<K, V, S> From<Map<K, V, S>> for () {
     fn from(_map: Map<K, V, S>) {}
 }

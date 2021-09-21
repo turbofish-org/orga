@@ -213,7 +213,7 @@ fn create_client_struct(
                     impl<#generics_sanitized #parent_ty> Client<#generic_params #parent_ty>
                     where
                         #parent_ty: Clone,
-                        #parent_ty: AsyncCall<Call = <#name as ::orga::call::Call>::Call>,
+                        #parent_ty: ::orga::client::AsyncCall<Call = <#name as ::orga::call::Call>::Call>,
                         #where_preds
                         #impl_preds
                     {
@@ -238,7 +238,7 @@ fn create_client_struct(
             pub(super) parent: #parent_ty,
             _marker: std::marker::PhantomData<#name#generic_params_bracketed>,
             #(#field_fields,)*
-            fut: Option<Pin<Box<#parent_ty::Future>>>
+            fut: Option<std::pin::Pin<Box<#parent_ty::Future>>>
         }
 
         impl<#generics_sanitized #parent_ty> Client<#generic_params #parent_ty>
@@ -258,7 +258,7 @@ fn create_client_struct(
             }
         }
 
-        impl<#generics_sanitized #parent_ty> Future for Client<#generic_params #parent_ty>
+        impl<#generics_sanitized #parent_ty> std::future::Future for Client<#generic_params #parent_ty>
         where
             #parent_ty: Clone,
             #parent_ty: ::orga::client::AsyncCall<Call = <#name as ::orga::call::Call>::Call>,
@@ -268,7 +268,7 @@ fn create_client_struct(
             type Output = Result<()>;
 
             fn poll(
-                self: Pin<&mut Self>,
+                self: std::pin::Pin<&mut Self>,
                 cx: &mut std::task::Context<'_>,
             ) -> std::task::Poll<Self::Output> {
                 unsafe {

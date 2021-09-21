@@ -199,10 +199,14 @@ fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> 
                 Span::call_site(),
             );
             maybe_call_defs.push(quote! {
-                trait #trait_name#generic_reqs {
+                trait #trait_name#generic_reqs
+                where #parent_where_preds
+                {
                     fn maybe_call(&mut self #full_inputs) -> ::orga::Result<#output_type>;
                 }
-                impl<__Self, #(#requirements),*> #trait_name#generic_reqs for __Self {
+                impl<__Self, #(#requirements),*> #trait_name#generic_reqs for __Self
+                where #parent_where_preds
+                {
                     default fn maybe_call(&mut self #full_inputs) -> ::orga::Result<#output_type> {
                         failure::bail!("This call cannot be called because not all bounds are met")
                     }

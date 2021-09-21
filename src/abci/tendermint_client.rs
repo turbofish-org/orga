@@ -1,4 +1,4 @@
-use failure::bail;
+use failure::{bail, format_err};
 use tendermint_rpc as tm;
 use tm::Client as _;
 
@@ -56,12 +56,25 @@ impl Future for NoReturn {
     type Output = Result<()>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut std::task::Context) -> std::task::Poll<Self::Output> {
-        // TODO: check txresponse
         unsafe {
             let mut_ref = self.get_unchecked_mut();
             let res = mut_ref.0.as_mut().poll(cx);
             match res {
-                std::task::Poll::Ready(Ok(_)) => std::task::Poll::Ready(Ok(())),
+                std::task::Poll::Ready(Ok(tx_res)) => {
+                    if tx_res.check_tx.code.is_err() {
+                        std::task::Poll::Ready(Err(format_err!(
+                            "CheckTx failed: {}",
+                            tx_res.check_tx.log
+                        )))
+                    } else if tx_res.deliver_tx.code.is_err() {
+                        std::task::Poll::Ready(Err(format_err!(
+                            "DeliverTx failed: {}",
+                            tx_res.deliver_tx.log
+                        )))
+                    } else {
+                        std::task::Poll::Ready(Ok(()))
+                    }
+                }
                 std::task::Poll::Ready(Err(e)) => std::task::Poll::Ready(Err(e.into())),
                 std::task::Poll::Pending => std::task::Poll::Pending,
             }
