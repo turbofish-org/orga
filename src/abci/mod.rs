@@ -7,14 +7,16 @@ use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use failure::bail;
 use log::info;
 
+use crate::call::Call;
 use crate::merk::MerkStore;
+use crate::query::Query;
 use crate::state::State;
 use crate::store::{BufStore, BufStoreMap, MapStore, Read, Shared, Write, KV};
 use crate::Result;
 mod node;
 pub use node::*;
-mod context;
-pub use context::*;
+
+pub mod prost;
 
 use messages::*;
 pub use tendermint_proto::abci as messages;
@@ -494,41 +496,37 @@ impl ABCIStore for MemStore {
     }
 }
 
+use crate::contexts::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
 pub trait BeginBlock {
-    fn begin_block(&mut self) -> Result<()>;
+    fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()>;
 }
 
 impl<S: State> BeginBlock for S {
-    default fn begin_block(&mut self) -> Result<()> {
+    default fn begin_block(&mut self, _req: &BeginBlockCtx) -> Result<()> {
         Ok(())
     }
 }
 pub trait EndBlock {
-    fn end_block(&mut self) -> Result<()>;
+    fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()>;
 }
 
 impl<S: State> EndBlock for S {
-    default fn end_block(&mut self) -> Result<()> {
+    default fn end_block(&mut self, _ctx: &EndBlockCtx) -> Result<()> {
         Ok(())
     }
 }
 pub trait InitChain {
-    fn init_chain(&mut self) -> Result<()>;
+    fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()>;
 }
 
 impl<S: State> InitChain for S {
-    default fn init_chain(&mut self) -> Result<()> {
+    default fn init_chain(&mut self, _ctx: &InitChainCtx) -> Result<()> {
         Ok(())
     }
 }
 
-// TODO: add Call and Query
-pub trait App: BeginBlock + EndBlock + InitChain + State {
-    fn context(&self) -> Context {
-        CONTEXT
-            .lock()
-            .expect("Failed to acquire context lock")
-            .clone()
-    }
+pub trait App: BeginBlock + EndBlock + InitChain + State + Call + Query {}
+impl<T: BeginBlock + EndBlock + InitChain + State + Call + Query> App for T where
+    <T as State>::Encoding: Default
+{
 }
-impl<T: BeginBlock + EndBlock + InitChain + State> App for T where <T as State>::Encoding: Default {}

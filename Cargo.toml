@@ -25,6 +25,10 @@ tar = "0.4.33"
 ed = "0.2.2"
 toml_edit = "0.2.0"
 datetime = "0.5.2"
+prost = {version = "0.7", optional = true}
+home = "0.5.3"
+rand_core = { version = "0.5", optional = true}
+ed25519-dalek = {version = "1", optional = true}
 
 [dev-dependencies]
 futures-lite = "1.12.0"
@@ -35,7 +39,7 @@ tokio = "1.11.0"
 features = ["abci", "merk"]
 
 [features]
-abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto"]
+abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto", "prost", "rand_core", "ed25519-dalek"]
 
 [profile.release]
 lto = true
@@ -43,4 +47,9 @@ lto = true
 [[example]]
 name = "counter"
 required-features = ["merk", "abci"]
+
+[[example]]
+name = "contexts"
+required-features = ["merk", "abci"]
+
 
