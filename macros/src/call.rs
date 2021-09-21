@@ -257,7 +257,6 @@ fn create_call_enum(item: &DeriveInput, source: &File) -> (TokenStream2, ItemEnu
     let generics = &item.generics;
 
     let mut generic_params = vec![];
-    let mut call_params = vec![];
 
     let fields = match &item.data {
         Data::Struct(data) => data.fields.iter(),
@@ -283,7 +282,6 @@ fn create_call_enum(item: &DeriveInput, source: &File) -> (TokenStream2, ItemEnu
                 generics.params.iter().cloned(),
             );
             generic_params.extend(requirements.clone());
-            call_params.extend(requirements);
 
             let ty = &field.ty;
 
@@ -334,13 +332,9 @@ fn create_call_enum(item: &DeriveInput, source: &File) -> (TokenStream2, ItemEnu
         quote!(<#(#params),*>)
     };
 
-    let call_preds = quote!(#(#call_params: ::orga::call::Call),*);
-
     let struct_output = quote! {
         #[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
-        pub enum Call#generic_params
-        where #call_preds
-        {
+        pub enum Call#generic_params {
             Noop,
             #(#field_variants,)*
             #(#method_variants,)*
@@ -350,9 +344,7 @@ fn create_call_enum(item: &DeriveInput, source: &File) -> (TokenStream2, ItemEnu
     let output = quote! {
         #struct_output
 
-        impl#generic_params Default for Call#generic_params
-        where #call_preds
-        {
+        impl#generic_params Default for Call#generic_params {
             fn default() -> Self {
                 Call::Noop
             }

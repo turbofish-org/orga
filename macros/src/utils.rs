@@ -1,4 +1,5 @@
 use syn::*;
+use std::collections::HashSet;
 
 pub fn parse_parent() -> File {
     let path = proc_macro::Span::call_site().source_file().path();
@@ -59,7 +60,8 @@ where
                 requirements.push(param.ident.clone());
             });
     }
-    requirements
+    let req_set: HashSet<_> = requirements.into_iter().collect();
+    req_set.into_iter().collect()
 }
 
 pub fn relevant_impls(name: &Ident, source: &File) -> Vec<ItemImpl> {

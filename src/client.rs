@@ -5,7 +5,7 @@ use std::pin::Pin;
 use crate::call::Call;
 use crate::Result;
 
-use crate::macros::Client;
+pub use crate::macros::Client;
 
 pub trait Client<T: Clone> {
     type Client;

@@ -32,6 +32,8 @@ pub fn derive(item: TokenStream) -> TokenStream {
         #client_impl
     };
 
+    println!("\n\n\n\n\n{}\n\n\n", &output);
+
     output.into()
 }
 
@@ -48,17 +50,18 @@ fn create_client_impl(item: &DeriveInput, modname: &Ident) -> TokenStream2 {
     let parent_ty: GenericParam = syn::parse2(quote!(__Parent)).unwrap();
     generics_sanitized.params.push(parent_ty.clone());
 
-    let generic_params = gen_param_input(generics, true);
+    let generic_params = gen_param_input(generics, false);
+    let generic_params_bracketed = gen_param_input(generics, true);
     let where_preds = item.generics.where_clause.as_ref().map(|w| &w.predicates);
 
     quote! {
-        impl#generics_sanitized ::orga::client::Client<#parent_ty> for #name#generic_params
+        impl#generics_sanitized ::orga::client::Client<#parent_ty> for #name#generic_params_bracketed
         where
             #parent_ty: Clone,
-            #parent_ty: ::orga::client::AsyncCall<Call = <#name as ::orga::call::Call>::Call>,
+            #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call>,
             #where_preds
         {
-            type Client = #modname::Client<#parent_ty>;
+            type Client = #modname::Client<#generic_params #parent_ty>;
 
             fn create_client(parent: #parent_ty) -> Self::Client {
                 #modname::Client::new(parent)
@@ -75,17 +78,22 @@ fn create_client_struct(
     let name = &item.ident;
     let generics = &item.generics;
 
+    let parent_ty: GenericParam = syn::parse2(quote!(__Parent)).unwrap();
+
     let mut generics_sanitized = generics.clone();
     generics_sanitized.params.iter_mut().for_each(|g| {
         if let GenericParam::Type(ref mut t) = g {
             t.default = None;
         }
     });
+    generics_sanitized.params.push(parent_ty.clone());
+
+    let mut generics_sanitized_with_return = generics_sanitized.clone();
+    generics_sanitized_with_return.params.push(syn::parse_quote!(__Return));
+
     let generic_params = gen_param_input(generics, false);
     let generic_params_bracketed = gen_param_input(generics, true);
     let where_preds = item.generics.where_clause.as_ref().map(|w| &w.predicates);
-
-    let parent_ty: GenericParam = syn::parse2(quote!(__Parent)).unwrap();
 
     let field_fields = field_adapters
         .iter()
@@ -174,7 +182,7 @@ fn create_client_struct(
                     },
                 };
                 let method_output = quote!(
-                    <#output_ty as ::orga::client::Client<#adapter_name<#parent_ty>>>::Client
+                    <#output_ty as ::orga::client::Client<#adapter_name<#generic_params #output_ty, #parent_ty>>>::Client
                 );
 
                 let impl_preds = impl_item
@@ -185,19 +193,17 @@ fn create_client_struct(
 
                 quote! {
                     #[derive(Clone)]
-                    pub struct #adapter_name<#parent_ty: Clone>
-                    where
-                        #parent_ty: ::orga::client::AsyncCall<Call = <#name as ::orga::call::Call>::Call>,
-                    {
+                    pub struct #adapter_name<#generic_params __Return, #parent_ty: Clone> {
                         pub(super) parent: #parent_ty,
                         args: (#(#arg_types,)*),
+                        _marker: std::marker::PhantomData<(#name#generic_params_bracketed, __Return)>,
                     }
 
-                    impl<#parent_ty: Clone> ::orga::client::AsyncCall for #adapter_name<#parent_ty>
+                    impl#generics_sanitized_with_return ::orga::client::AsyncCall for #adapter_name<#generic_params __Return, #parent_ty>
                     where
-                        #parent_ty: ::orga::client::AsyncCall<Call = <#name as ::orga::call::Call>::Call>,
+                        #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call>,
                     {
-                        type Call = <#output_ty as ::orga::call::Call>::Call;
+                        type Call = <__Return as ::orga::call::Call>::Call;
                         type Future = #parent_ty::Future;
 
                         fn call(&mut self, call: Self::Call) -> Self::Future {
@@ -210,10 +216,10 @@ fn create_client_struct(
                         }
                     }
 
-                    impl<#generics_sanitized #parent_ty> Client<#generic_params #parent_ty>
+                    impl#generics_sanitized Client<#generic_params #parent_ty>
                     where
                         #parent_ty: Clone,
-                        #parent_ty: AsyncCall<Call = <#name as ::orga::call::Call>::Call>,
+                        #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call>,
                         #where_preds
                         #impl_preds
                     {
@@ -221,8 +227,9 @@ fn create_client_struct(
                             let adapter = #adapter_name {
                                 parent: self.parent.clone(),
                                 args: (#(#method_input_names,)*),
+                                _marker: std::marker::PhantomData,
                             };
-                            <#output_ty as ::orga::client::Client<#adapter_name<#parent_ty>>>::create_client(adapter)
+                            <#output_ty as ::orga::client::Client<#adapter_name<#generic_params _, #parent_ty>>>::create_client(adapter)
                         }
                     }
                 }
@@ -233,18 +240,19 @@ fn create_client_struct(
         #[derive(Clone)]
         pub struct Client<#generic_params #parent_ty: Clone>
         where
-            #parent_ty: ::orga::client::AsyncCall<Call = <#name as ::orga::call::Call>::Call>,
+            #parent_ty: ::orga::client::AsyncCall,
+            #where_preds
         {
             pub(super) parent: #parent_ty,
             _marker: std::marker::PhantomData<#name#generic_params_bracketed>,
             #(#field_fields,)*
-            fut: Option<Pin<Box<#parent_ty::Future>>>
+            fut: Option<std::pin::Pin<Box<#parent_ty::Future>>>
         }
 
-        impl<#generics_sanitized #parent_ty> Client<#generic_params #parent_ty>
+        impl#generics_sanitized Client<#generic_params #parent_ty>
         where
             #parent_ty: Clone,
-            #parent_ty: ::orga::client::AsyncCall<Call = <#name as ::orga::call::Call>::Call>,
+            #parent_ty: ::orga::client::AsyncCall,
             #where_preds
         {
             pub fn new(parent: #parent_ty) -> Self {
@@ -258,17 +266,17 @@ fn create_client_struct(
             }
         }
 
-        impl<#generics_sanitized #parent_ty> Future for Client<#generic_params #parent_ty>
+        impl#generics_sanitized std::future::Future for Client<#generic_params #parent_ty>
         where
             #parent_ty: Clone,
-            #parent_ty: ::orga::client::AsyncCall<Call = <#name as ::orga::call::Call>::Call>,
-            <#name as ::orga::call::Call>::Call: Default,
+            #parent_ty: ::orga::client::AsyncCall,
+            #parent_ty::Call: Default,
             #where_preds
         {
             type Output = Result<()>;
 
             fn poll(
-                self: Pin<&mut Self>,
+                self: std::pin::Pin<&mut Self>,
                 cx: &mut std::task::Context<'_>,
             ) -> std::task::Poll<Self::Output> {
                 unsafe {
