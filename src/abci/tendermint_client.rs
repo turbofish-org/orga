@@ -61,12 +61,12 @@ impl Future for NoReturn {
             match res {
                 std::task::Poll::Ready(Ok(tx_res)) => {
                     if tx_res.check_tx.code.is_err() {
-                        std::task::Poll::Ready(Err(format_err!(
+                        std::task::Poll::Ready(Err(failure::format_err!(
                             "CheckTx failed: {}",
                             tx_res.check_tx.log
                         )))
                     } else if tx_res.deliver_tx.code.is_err() {
-                        std::task::Poll::Ready(Err(format_err!(
+                        std::task::Poll::Ready(Err(failure::format_err!(
                             "DeliverTx failed: {}",
                             tx_res.deliver_tx.log
                         )))

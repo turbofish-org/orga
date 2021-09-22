@@ -47,8 +47,8 @@ impl<K> Encode for MapKey<K> {
 
 //implement deref for MapKey to deref into the inner type
 //implement Encode for MapKey that just returns the inner_bytes
-impl<K: Encode> MapKey<K> {
-    pub fn new(key: K) -> Result<MapKey<K>> {
+impl<K> MapKey<K> {
+    pub fn new<E: Encode>(key: E) -> Result<MapKey<E>> {
         let inner_bytes = Encode::encode(&key)?;
         Ok(MapKey {
             inner: key,
@@ -90,129 +90,6 @@ impl<K> Eq for MapKey<K> {}
 pub struct Map<K, V, S = DefaultBackingStore> {
     store: Store<S>,
     children: BTreeMap<MapKey<K>, Option<V>>,
-}
-
-pub mod map_call {
-    use super::*;
-    pub enum Call<K> {
-        Noop,
-        MethodGetMut(K, Vec<u8>),
-    }
-    impl<K> ::ed::Encode for Call<K>
-    where
-        K: ::ed::Terminated + ::ed::Encode,
-        Vec<u8>: ::ed::Encode,
-    {
-        #[inline]
-        fn encode_into<__W: std::io::Write>(&self, mut dest: &mut __W) -> ::ed::Result<()> {
-            match self {
-                Self::Noop => {
-                    dest.write_all(&[0u8][..])?;
-                }
-                Self::MethodGetMut(var0, var1) => {
-                    dest.write_all(&[1u8][..])?;
-                    var0.encode_into(&mut dest)?;
-                    var1.encode_into(&mut dest)?;
-                }
-            }
-            Ok(())
-        }
-        #[inline]
-        fn encoding_length(&self) -> ::ed::Result<usize> {
-            Ok(1 + match self {
-                Self::Noop => 0,
-                Self::MethodGetMut(var0, var1) => {
-                    0 + var0.encoding_length()? + var1.encoding_length()?
-                }
-            })
-        }
-    }
-    impl<K> ::ed::Terminated for Call<K>
-    where
-        K: ::ed::Terminated,
-        Vec<u8>: ::ed::Terminated,
-    {
-    }
-    impl<K> ::ed::Decode for Call<K>
-    where
-        K: ::ed::Terminated + ::ed::Decode,
-        Vec<u8>: ::ed::Decode,
-    {
-        #[inline]
-        fn decode<__R: std::io::Read>(mut input: __R) -> ::ed::Result<Self> {
-            let mut variant = [0; 1];
-            input.read_exact(&mut variant[..])?;
-            let variant = variant[0];
-            Ok(match variant {
-                0u8 => Self::Noop {},
-                1u8 => Self::MethodGetMut {
-                    0: ::ed::Decode::decode(&mut input)?,
-                    1: ::ed::Decode::decode(&mut input)?,
-                },
-                n => return Err(::ed::Error::UnexpectedByte(n)),
-            })
-        }
-    }
-    impl<K> Default for Call<K> {
-        fn default() -> Self {
-            Call::Noop
-        }
-    }
-    impl<K, V, S> ::orga::call::Call for Map<K, V, S>
-    where
-        K: ::orga::encoding::Encode + ::orga::encoding::Decode + ::orga::encoding::Terminated,
-        S: ::orga::call::Call,
-        K: ::orga::call::Call,
-        V: ::orga::call::Call,
-    {
-        type Call = Call<K>;
-        fn call(&mut self, call: Self::Call) -> ::orga::Result<()> {
-            match call {
-                Call::Noop => Ok(()),
-                Call::MethodGetMut(var1, subcall) => {
-                    MaybeCallMethodGetMut::<V, K, S>::maybe_call(self, var1, subcall)
-                }
-            }
-        }
-    }
-    trait MaybeCallMethodGetMut<V, K, S> {
-        fn maybe_call(&mut self, var1: K, subcall: Vec<u8>) -> Result<()>;
-    }
-    impl<__Self, V, K, S> MaybeCallMethodGetMut<V, K, S> for __Self {
-        default fn maybe_call(&mut self, var1: K, subcall: Vec<u8>) -> Result<()> {
-            Err(::failure::err_msg(
-                "This call cannot be called because not all bounds are met",
-            ))
-        }
-    }
-    impl<K, V, S> MaybeCallMethodGetMut<V, K, S> for Map<K, V, S>
-    where
-        K: ::orga::encoding::Encode + ::orga::encoding::Decode + ::orga::encoding::Terminated,
-        K: Encode + Terminated + Clone,
-        V: State<S>,
-        S: Read,
-    {
-        fn maybe_call(&mut self, var1: K, subcall: Vec<u8>) -> Result<()> {
-            let mut output = self.get_mut(var1);
-            MaybeCall::maybe_call(&mut MaybeCaller(output), subcall)
-        }
-    }
-
-    trait MaybeCall {
-        fn maybe_call(&mut self, subcall: Vec<u8>) -> Result<()>;
-    }
-    impl<T> MaybeCall for T {
-        default fn maybe_call(&mut self, subcall: Vec<u8>) -> Result<()> {
-            failure::bail!("lol no call")
-        }
-    }
-    struct MaybeCaller<T>(T);
-    impl<T: orga::call::Call> MaybeCall for MaybeCaller<T> {
-        fn maybe_call(&mut self, subcall: Vec<u8>) -> Result<()> {
-            let subcall = ::orga::encoding::Decode::decode(subcall.as_slice())?;
-            ::orga::call::Call::call(&mut self.0, subcall)
-        }
-    }
 }
 
 impl<K, V, S> From<Map<K, V, S>> for () {
@@ -308,7 +185,7 @@ where
 {
     #[query]
     pub fn contains_key(&self, key: K) -> Result<bool> {
-        let map_key = MapKey::new(key)?;
+        let map_key = MapKey::<K>::new(key)?;
         let child_contains = self.children.contains_key(&map_key);
 
         if child_contains {
@@ -357,7 +234,7 @@ where
     /// was flushed.
     #[query]
     pub fn get(&self, key: K) -> Result<Option<Ref<V>>> {
-        let map_key = MapKey::new(key)?;
+        let map_key = MapKey::<K>::new(key)?;
         Ok(if self.children.contains_key(&map_key) {
             // value is already retained in memory (was modified)
             self.children
@@ -369,27 +246,6 @@ where
             // value is not in memory, try to get from store
             self.get_from_store(&map_key.inner)?.map(Ref::Owned)
         })
-    }
-}
-
-impl<K, V, S> Map<K, V, S>
-where
-    K: Encode + Terminated + Clone,
-    V: State<S>,
-    V::Encoding: Default,
-    S: Read,
-{
-    pub fn get_or_default(&self, key: K) -> Result<Ref<V>> {
-        let child = self.get(key.clone())?;
-        match child {
-            Some(child) => Ok(child),
-            None => {
-                let map_key = MapKey::new(key)?;
-                let value_store = self.store.sub(map_key.inner_bytes.as_slice());
-                let default_value = V::create(value_store, Default::default())?;
-                Ok(Ref::Owned(default_value))
-            }
-        }
     }
 }
 

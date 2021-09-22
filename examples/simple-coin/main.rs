@@ -24,7 +24,8 @@ async fn main() {
                     .reset()
                     .run()
             })
-            .await;
+            .await
+            .unwrap();
         }
         [_, "client"] => {
             type WholeApp = SignerProvider<NonceProvider<SimpleCoin>>;

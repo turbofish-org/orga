@@ -39,10 +39,10 @@ where
             // Happy paths:
             (Some(pub_key), Some(nonce)) => {
                 let mut expected_nonce = self.map.entry(pub_key)?.or_default()?;
-                if nonce != *expected_nonce {
+                if nonce < *expected_nonce {
                     failure::bail!("Nonce is not valid.");
                 }
-                *expected_nonce += 1;
+                *expected_nonce = nonce;
                 self.inner.call(call.inner_call)
             }
             (None, None) => self.inner.call(call.inner_call),

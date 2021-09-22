@@ -22,8 +22,6 @@ impl InitChain for SimpleCoin {
         let my_address = load_keypair().unwrap().public.to_bytes();
         println!("my address: {:?}", my_address);
         self.balances.insert(my_address, Simp::mint(100))?;
-        // self.balances.insert()
-        // self.balances.
         Ok(())
     }
 }

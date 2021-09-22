@@ -12,7 +12,7 @@ use multicounter::*;
 use node::run_node;
 use orga::prelude::*;
 
-pub type CounterApp = Counter;
+pub type CounterApp = SignerProvider<NonceProvider<MultiCounter>>;
 
 #[tokio::main]
 async fn main() {

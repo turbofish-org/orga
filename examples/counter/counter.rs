@@ -19,4 +19,8 @@ impl Counter {
     pub fn increment(&mut self) {
         self.count += 1;
     }
+
+    pub fn count(&self) -> u64 {
+        self.count
+    }
 }

@@ -30,6 +30,8 @@ pub fn derive(item: TokenStream) -> TokenStream {
         }
     );
 
+    // println!("{}", output);
+
     output.into()
 }
 
@@ -353,40 +355,7 @@ pub(super) fn create_call_enum(item: &DeriveInput, source: &File) -> (TokenStrea
             fn default() -> Self {
                 Call::Noop
             }
-            if path.path.segments.len() != 1 {
-                return false;
-            }
-            if path.path.segments[0].ident != *name {
-                return false;
-            }
-
-            true
-        })
-        .cloned()
-        .collect()
-}
-
-fn relevant_methods(name: &Ident, attr: &str, source: &File) -> Vec<(ImplItemMethod, ItemImpl)> {
-    let get_methods = |item: ItemImpl| -> Vec<_> {
-        item.items
-            .iter()
-            .filter_map(|item| match item {
-                ImplItem::Method(method) => Some(method),
-                _ => None,
-            })
-            .filter(|method| {
-                method
-                    .attrs
-                    .iter()
-                    .find(|a| a.path.is_ident(&attr))
-                    .is_some()
-            })
-            .filter(|method| matches!(method.vis, Visibility::Public(_)))
-            .filter(|method| method.sig.unsafety.is_none())
-            .filter(|method| method.sig.asyncness.is_none())
-            .filter(|method| method.sig.abi.is_none())
-            .map(|method| (method.clone(), item.clone()))
-            .collect()
+        }
     };
 
     (output, syn::parse2(struct_output).unwrap())

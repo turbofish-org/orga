@@ -32,6 +32,8 @@ pub fn derive(item: TokenStream) -> TokenStream {
         #client_impl
     };
 
+    println!("{}", output);
+
     output.into()
 }
 
@@ -155,6 +157,25 @@ fn create_client_struct(
                 |f| quote!(#f),
             );
             let field_ty = &field.ty;
+            let field_ty = if let Type::Path(ref ty) = field_ty {
+                let mut without_params = ty.clone();
+                let params = without_params
+                    .path
+                    .segments
+                    .last()
+                    .unwrap()
+                    .arguments
+                    .clone();
+                if let PathArguments::AngleBracketed(ref params) = params {
+                    without_params.path.segments.last_mut().unwrap().arguments =
+                        PathArguments::None;
+                    quote!(#without_params::#params)
+                } else {
+                    quote!(#field_ty)
+                }
+            } else {
+                quote!(#field_ty)
+            };
 
             let adapter_name = &adapter.ident;
 
