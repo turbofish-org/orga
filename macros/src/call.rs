@@ -18,7 +18,7 @@ pub fn derive(item: TokenStream) -> TokenStream {
     );
 
     let (call_enum_tokens, call_enum) = create_call_enum(&item, &source);
-    let call_impl = create_call_impl(&item, &source, &call_enum);
+    let (call_impl_tokens, _)  = create_call_impl(&item, &source, &call_enum);
 
     let output = quote!(
         use ::orga::macros::*;
@@ -26,7 +26,7 @@ pub fn derive(item: TokenStream) -> TokenStream {
         pub mod #modname {
             use super::*;
             #call_enum_tokens
-            #call_impl
+            #call_impl_tokens
         }
     );
 
@@ -55,7 +55,7 @@ pub fn attr(_args: TokenStream, input: TokenStream) -> TokenStream {
     quote!(#method).into()
 }
 
-fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> TokenStream2 {
+pub(super) fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> (TokenStream2, ItemImpl) {
     let name = &item.ident;
     let generics = &item.generics;
     let mut generics_sanitized = generics.clone();
@@ -231,9 +231,9 @@ fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> 
         })
         .collect();
 
-    quote! {
+    let impl_output = quote! {
         impl#generics_sanitized ::orga::call::Call for #name#generic_params
-        where #where_preds #encoding_bounds #call_bounds
+        where #where_preds #encoding_bounds
         {
             type Call = #call_type#call_generics;
 
@@ -245,11 +245,17 @@ fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> 
                 }
             }
         }
+    };
+
+    let output = quote! {
+        #impl_output
         #(#maybe_call_defs)*
-    }
+    };
+
+    (output, syn::parse2(impl_output).unwrap())
 }
 
-fn create_call_enum(item: &DeriveInput, source: &File) -> (TokenStream2, ItemEnum) {
+pub(super) fn create_call_enum(item: &DeriveInput, source: &File) -> (TokenStream2, ItemEnum) {
     let name = &item.ident;
     let generics = &item.generics;
 
