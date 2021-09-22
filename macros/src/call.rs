@@ -18,7 +18,7 @@ pub fn derive(item: TokenStream) -> TokenStream {
     );
 
     let (call_enum_tokens, call_enum) = create_call_enum(&item, &source);
-    let (call_impl_tokens, _)  = create_call_impl(&item, &source, &call_enum);
+    let (call_impl_tokens, _) = create_call_impl(&item, &source, &call_enum);
 
     let output = quote!(
         use ::orga::macros::*;
@@ -55,7 +55,11 @@ pub fn attr(_args: TokenStream, input: TokenStream) -> TokenStream {
     quote!(#method).into()
 }
 
-pub(super) fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> (TokenStream2, ItemImpl) {
+pub(super) fn create_call_impl(
+    item: &DeriveInput,
+    source: &File,
+    call_enum: &ItemEnum,
+) -> (TokenStream2, ItemImpl) {
     let name = &item.ident;
     let generics = &item.generics;
     let mut generics_sanitized = generics.clone();

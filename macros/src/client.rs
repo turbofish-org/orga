@@ -87,7 +87,9 @@ fn create_client_struct(
     generics_sanitized.params.push(parent_ty.clone());
 
     let mut generics_sanitized_with_return = generics_sanitized.clone();
-    generics_sanitized_with_return.params.push(syn::parse_quote!(__Return));
+    generics_sanitized_with_return
+        .params
+        .push(syn::parse_quote!(__Return));
 
     let generic_params = gen_param_input(generics, false);
     let generic_params_bracketed = gen_param_input(generics, true);

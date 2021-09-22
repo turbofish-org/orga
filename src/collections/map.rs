@@ -6,7 +6,7 @@ use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
 use super::Next;
 use crate::call::Call;
-use crate::client::{Client as ClientTrait, AsyncCall};
+use crate::client::{AsyncCall, Client as ClientTrait};
 use crate::query::Query;
 use crate::state::*;
 use crate::store::Iter as StoreIter;

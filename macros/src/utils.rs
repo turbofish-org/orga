@@ -1,5 +1,5 @@
-use syn::*;
 use std::collections::HashSet;
+use syn::*;
 
 pub fn parse_parent() -> File {
     let path = proc_macro::Span::call_site().source_file().path();
