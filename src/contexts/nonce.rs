@@ -2,6 +2,7 @@ use super::{BeginBlockCtx, EndBlockCtx, GetContext, InitChainCtx, Signer};
 use crate::abci::{BeginBlock, EndBlock, InitChain};
 use crate::call::Call;
 use crate::client::{AsyncCall, Client};
+use crate::coins::Address;
 use crate::collections::Map;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
@@ -10,7 +11,7 @@ use crate::store::Store;
 use crate::Result;
 use std::path::PathBuf;
 
-type NonceMap = Map<[u8; 32], u64>;
+type NonceMap = Map<Address, u64>;
 
 pub struct NonceProvider<T> {
     inner: T,
@@ -252,7 +253,7 @@ mod tests {
         assert_eq!(state.inner.count, 1);
         Context::remove::<Signer>();
         Context::add(Signer {
-            signer: Some([0; 32]),
+            signer: Some([0; 32].into()),
         });
 
         // Signed, correct nonce

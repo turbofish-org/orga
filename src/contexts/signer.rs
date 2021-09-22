@@ -2,6 +2,7 @@ use super::{BeginBlockCtx, Context, EndBlockCtx, InitChainCtx};
 use crate::abci::{BeginBlock, EndBlock, InitChain};
 use crate::call::Call;
 use crate::client::{AsyncCall, Client};
+use crate::coins::Address;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
@@ -14,7 +15,7 @@ pub struct SignerProvider<T> {
 }
 
 pub struct Signer {
-    pub signer: Option<[u8; 32]>,
+    pub signer: Option<Address>,
 }
 
 #[derive(Encode, Decode)]
@@ -25,14 +26,14 @@ pub struct SignerCall {
 }
 
 impl SignerCall {
-    fn verify(&self) -> Result<Option<[u8; 32]>> {
+    fn verify(&self) -> Result<Option<Address>> {
         match (self.pubkey, self.signature) {
             (Some(pubkey_bytes), Some(signature)) => {
                 let pubkey = PublicKey::from_bytes(&pubkey_bytes)?;
                 let signature = Signature::new(signature);
                 pubkey.verify_strict(&self.call_bytes, &signature)?;
 
-                Ok(Some(pubkey_bytes))
+                Ok(Some(pubkey_bytes.into()))
             }
             (None, None) => Ok(None),
             _ => failure::bail!("Malformed transaction"),
@@ -186,9 +187,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
-    use std::rc::Rc;
-
     use super::*;
     use crate::call::Call;
     use crate::contexts::GetContext;
@@ -197,7 +195,7 @@ mod tests {
     #[derive(State, Clone)]
     struct Counter {
         pub count: u64,
-        pub last_signer: Option<[u8; 32]>,
+        pub last_signer: Option<Address>,
     }
 
     impl Counter {

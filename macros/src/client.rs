@@ -276,7 +276,7 @@ fn create_client_struct(
                         type Future = #parent_ty::Future;
 
                         fn call(&mut self, call: Self::Call) -> Self::Future {
-                            let call_bytes = ::ed::Encode::encode(&call).unwrap(); // TODO: is this always infallible?
+                            let call_bytes = ::orga::encoding::Encode::encode(&call).unwrap(); // TODO: is this always infallible?
                             let parent_call = <#name as ::orga::call::Call>::Call::#call_variant_name(
                                 #(#unrolled_args,)*
                                 call_bytes
