@@ -186,8 +186,7 @@ mod tests {
         }));
 
         use crate::abci::TendermintClient;
-        let rpc: TendermintClient<Foo> = TendermintClient::new("http://localhost:26657").unwrap();
-        let mut client = Foo::create_client(rpc);
+        let mut client = TendermintClient::<Foo>::new("http://localhost:26657").unwrap();
 
         client.bar.increment().await.unwrap();
         println!("{:?}\n\n", &state.borrow());

@@ -2,7 +2,7 @@ use tendermint_rpc as tm;
 use tm::Client as _;
 
 use crate::call::Call;
-use crate::client::AsyncCall;
+use crate::client::{AsyncCall, Client};
 use crate::encoding::Encode;
 use crate::Result;
 
@@ -22,12 +22,12 @@ impl<T> Clone for TendermintClient<T> {
     }
 }
 
-impl<T> TendermintClient<T> {
-    pub fn new(addr: &str) -> Result<Self> {
-        Ok(TendermintClient {
+impl<T: Client<Self>> TendermintClient<T> {
+    pub fn new(addr: &str) -> Result<T::Client> {
+        Ok(T::create_client(TendermintClient {
             marker: std::marker::PhantomData,
             client: tm::HttpClient::new(addr)?,
-        })
+        }))
     }
 }
 
