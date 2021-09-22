@@ -20,8 +20,30 @@ pub struct PrimitiveClient<T, U: Clone + AsyncCall> {
     marker: PhantomData<T>,
 }
 
+impl<T, U: Clone + AsyncCall> Clone for PrimitiveClient<T, U> {
+    fn clone(&self) -> Self {
+        PrimitiveClient {
+            parent: self.parent.clone(),
+            fut: None,
+            marker: PhantomData,
+        }
+    }
+}
+
 impl<T: Clone + AsyncCall> Client<T> for () {
     type Client = PrimitiveClient<(), T>;
+
+    fn create_client(parent: T) -> Self::Client {
+        PrimitiveClient {
+            parent,
+            fut: None,
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<T: Clone + AsyncCall> Client<T> for u64 {
+    type Client = PrimitiveClient<u64, T>;
 
     fn create_client(parent: T) -> Self::Client {
         PrimitiveClient {

@@ -3,7 +3,7 @@ use orga::prelude::*;
 #[derive(State, Call, Query, Client)]
 pub struct Counter {
     num_blocks: u32,
-    count: u64,
+    pub count: u64,
 }
 
 impl BeginBlock for Counter {
@@ -18,9 +18,5 @@ impl Counter {
     #[call]
     pub fn increment(&mut self) {
         self.count += 1;
-    }
-
-    pub fn count(&self) -> u64 {
-        self.count
     }
 }
