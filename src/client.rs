@@ -169,8 +169,8 @@ mod tests {
         client.bar.increment().await.unwrap();
         println!("{:?}\n\n", &state.borrow());
 
-        // client.get_bar_mut(1).increment().await.unwrap();
-        // println!("{:?}\n\n", &state.borrow());
+        client.get_bar_mut(1).increment().await.unwrap();
+        println!("{:?}\n\n", &state.borrow());
 
         // println!("{:?}\n\n", client.bar.count().await.unwrap());
 

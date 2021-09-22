@@ -138,7 +138,7 @@ pub(super) fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &It
 
             quote! {
                 Call::#variant_name(subcall) => {
-                    ::orga::call::Call::call(&mut self.#field_name, subcall)
+                    ::orga::call::maybe_call(&mut self.#field_name, subcall)
                 }
             }
         })
@@ -286,9 +286,7 @@ pub(super) fn create_call_enum(item: &DeriveInput, source: &File) -> (TokenStrea
             );
             generic_params.extend(requirements.clone());
 
-            let ty = &field.ty;
-
-            quote!(#name(<#ty as ::orga::call::Call>::Call))
+            quote!(#name(Vec<u8>))
         })
         .collect();
 
