@@ -16,7 +16,7 @@ impl MultiCounter {
 }
 
 impl BeginBlock for MultiCounter {
-    fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
+    fn begin_block(&mut self, _ctx: &BeginBlockCtx) -> Result<()> {
         for counter in self.counters.iter()? {
             let (index, counter) = counter?;
             println!("index: {:?}, count: {}", *index, counter.count)

@@ -28,12 +28,12 @@ async fn main() {
             .unwrap();
         }
         [_, "client"] => {
-            type WholeApp = SignerProvider<NonceProvider<SimpleCoin>>;
-            let client: TendermintClient<WholeApp> =
-                TendermintClient::new("http://localhost:26657").unwrap();
-            let mut client = WholeApp::create_client(client);
-            // let my_address = load_keypair().unwrap().public.to_bytes();
-            client.transfer([123; 32], 5.into()).await.unwrap();
+            // type WholeApp = SignerProvider<NonceProvider<SimpleCoin>>;
+            // let client: TendermintClient<WholeApp> =
+            //     TendermintClient::new("http://localhost:26657").unwrap();
+            // let mut client = WholeApp::create_client(client);
+            // // let my_address = load_keypair().unwrap().public.to_bytes();
+            // client.transfer([123; 32], 5.into()).await.unwrap();
         }
         _ => {
             println!("hit catchall")
