@@ -30,8 +30,6 @@ pub fn derive(item: TokenStream) -> TokenStream {
         }
     );
 
-    // println!("{}", output);
-
     output.into()
 }
 
