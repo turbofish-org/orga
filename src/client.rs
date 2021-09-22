@@ -155,6 +155,7 @@ mod tests {
     use std::cell::RefCell;
     use std::rc::Rc;
 
+    #[ignore]
     #[tokio::test]
     async fn client() {
         let state = Rc::new(RefCell::new(Foo {

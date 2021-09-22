@@ -129,9 +129,7 @@ fn create_client_struct(
                 },
                 |f| quote!(#f),
             );
-            let field_ty = &field.ty;
 
-            let adapter_name = &adapter.ident;
             let mut adapter_generics = adapter.generics.clone();
             adapter_generics.params.iter_mut().for_each(|g| {
                 if let GenericParam::Type(ref mut t) = g {
