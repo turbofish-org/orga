@@ -60,8 +60,8 @@ where
                 requirements.push(param.ident.clone());
             });
     }
-    let req_map: HashSet<_> = requirements.into_iter().collect();
-    req_map.into_iter().collect()
+    let req_set: HashSet<_> = requirements.into_iter().collect();
+    req_set.into_iter().collect()
 }
 
 pub fn relevant_impls(name: &Ident, source: &File) -> Vec<ItemImpl> {

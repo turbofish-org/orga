@@ -1,4 +1,3 @@
-use failure::{bail, format_err};
 use tendermint_rpc as tm;
 use tm::Client as _;
 

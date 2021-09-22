@@ -18,7 +18,7 @@ pub fn derive(item: TokenStream) -> TokenStream {
     );
 
     let (call_enum_tokens, call_enum) = create_call_enum(&item, &source);
-    let call_impl = create_call_impl(&item, &source, &call_enum);
+    let (call_impl_tokens, _) = create_call_impl(&item, &source, &call_enum);
 
     let output = quote!(
         use ::orga::macros::*;
@@ -26,7 +26,7 @@ pub fn derive(item: TokenStream) -> TokenStream {
         pub mod #modname {
             use super::*;
             #call_enum_tokens
-            #call_impl
+            #call_impl_tokens
         }
     );
 
@@ -55,7 +55,11 @@ pub fn attr(_args: TokenStream, input: TokenStream) -> TokenStream {
     quote!(#method).into()
 }
 
-fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> TokenStream2 {
+pub(super) fn create_call_impl(
+    item: &DeriveInput,
+    source: &File,
+    call_enum: &ItemEnum,
+) -> (TokenStream2, ItemImpl) {
     let name = &item.ident;
     let generics = &item.generics;
     let mut generics_sanitized = generics.clone();
@@ -138,7 +142,7 @@ fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> 
 
             quote! {
                 Call::#variant_name(subcall) => {
-                    ::orga::call::Call::call(&mut self.#field_name, subcall)
+                    ::orga::call::maybe_call(&mut self.#field_name, subcall)
                 }
             }
         })
@@ -211,7 +215,7 @@ fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> 
                 where #where_preds #encoding_bounds #call_bounds #parent_where_preds
                 {
                     fn maybe_call(&mut self #full_inputs) -> ::orga::Result<()> {
-                        let output = self.get_mut(var1);
+                        let output = self.#method_name(#(#inputs),*);
                         ::orga::call::maybe_call(output, subcall)
                     }
                 }
@@ -231,9 +235,9 @@ fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> 
         })
         .collect();
 
-    quote! {
+    let impl_output = quote! {
         impl#generics_sanitized ::orga::call::Call for #name#generic_params
-        where #where_preds #encoding_bounds #call_bounds
+        where #where_preds #encoding_bounds
         {
             type Call = #call_type#call_generics;
 
@@ -245,16 +249,21 @@ fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> 
                 }
             }
         }
+    };
+
+    let output = quote! {
+        #impl_output
         #(#maybe_call_defs)*
-    }
+    };
+
+    (output, syn::parse2(impl_output).unwrap())
 }
 
-fn create_call_enum(item: &DeriveInput, source: &File) -> (TokenStream2, ItemEnum) {
+pub(super) fn create_call_enum(item: &DeriveInput, source: &File) -> (TokenStream2, ItemEnum) {
     let name = &item.ident;
     let generics = &item.generics;
 
     let mut generic_params = vec![];
-    let mut call_params = vec![];
 
     let fields = match &item.data {
         Data::Struct(data) => data.fields.iter(),
@@ -280,11 +289,8 @@ fn create_call_enum(item: &DeriveInput, source: &File) -> (TokenStream2, ItemEnu
                 generics.params.iter().cloned(),
             );
             generic_params.extend(requirements.clone());
-            call_params.extend(requirements);
 
-            let ty = &field.ty;
-
-            quote!(#name(<#ty as ::orga::call::Call>::Call))
+            quote!(#name(Vec<u8>))
         })
         .collect();
 
@@ -331,13 +337,9 @@ fn create_call_enum(item: &DeriveInput, source: &File) -> (TokenStream2, ItemEnu
         quote!(<#(#params),*>)
     };
 
-    let call_preds = quote!(#(#call_params: ::orga::call::Call),*);
-
     let struct_output = quote! {
         #[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
-        pub enum Call#generic_params
-        where #call_preds
-        {
+        pub enum Call#generic_params {
             Noop,
             #(#field_variants,)*
             #(#method_variants,)*
@@ -347,50 +349,9 @@ fn create_call_enum(item: &DeriveInput, source: &File) -> (TokenStream2, ItemEnu
     let output = quote! {
         #struct_output
 
-        impl#generic_params Default for Call#generic_params
-        where #call_preds
-        {
+        impl#generic_params Default for Call#generic_params {
             fn default() -> Self {
                 Call::Noop
-            }
-            add_arguments(&path, &mut paths);
-
-            paths
-        });
-    let mut requirements = vec![];
-    for input in maybe_generic_inputs {
-        params
-            .iter()
-            .filter_map(|param| match param {
-                GenericParam::Type(param) => Some(param),
-                _ => None,
-            })
-            .find(|param| param.ident == input.ident)
-            .map(|param| {
-                requirements.push(param.ident.clone());
-            });
-    }
-    let req_set: HashSet<_> = requirements.into_iter().collect();
-    req_set.into_iter().collect()
-}
-
-fn relevant_impls(name: &Ident, source: &File) -> Vec<ItemImpl> {
-    source
-        .items
-        .iter()
-        .filter_map(|item| match item {
-            Item::Impl(item) => Some(item),
-            _ => None,
-        })
-        .filter(|item| item.trait_.is_none())
-        .filter(|item| {
-            let path = match &*item.self_ty {
-                Type::Path(path) => path,
-                _ => return false,
-            };
-
-            if path.qself.is_some() {
-                return false;
             }
             if path.path.segments.len() != 1 {
                 return false;

@@ -6,6 +6,7 @@ use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
 use super::Next;
 use crate::call::Call;
+use crate::client::{AsyncCall, Client as ClientTrait};
 use crate::query::Query;
 use crate::state::*;
 use crate::store::Iter as StoreIter;
@@ -241,6 +242,61 @@ where
         }
 
         Ok(())
+    }
+}
+
+pub struct Client<K, V, U: Clone> {
+    parent: U,
+    key: Option<K>,
+    _marker: std::marker::PhantomData<V>,
+}
+
+impl<K, V, S, U: Clone> ClientTrait<U> for Map<K, V, S> {
+    type Client = Client<K, V, U>;
+
+    fn create_client(parent: U) -> Self::Client {
+        Client {
+            parent,
+            key: None,
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<K: Clone, V, U: Clone> Clone for Client<K, V, U> {
+    fn clone(&self) -> Self {
+        Client {
+            parent: self.parent.clone(),
+            key: self.key.clone(),
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<K: Clone, V: Call, U: Clone> Client<K, V, U>
+where
+    V: ClientTrait<Self>,
+{
+    pub fn get_mut(&mut self, key: K) -> V::Client {
+        let mut adapter = self.clone();
+        adapter.key = Some(key);
+        V::create_client(adapter)
+    }
+}
+
+impl<K: Clone, V: Call, U: Clone> AsyncCall for Client<K, V, U>
+where
+    U: AsyncCall<Call = <Map<K, V> as Call>::Call>,
+    K: Encode + Decode + Terminated,
+{
+    type Call = V::Call;
+    type Future = U::Future;
+
+    fn call(&mut self, subcall: Self::Call) -> Self::Future {
+        let key = self.key.as_ref().unwrap().clone();
+        let subcall_bytes = subcall.encode().unwrap(); // TODO: handle errors
+        let call = <Map<K, V> as Call>::Call::MethodGetMut(key, subcall_bytes);
+        self.parent.call(call)
     }
 }
 
@@ -723,6 +779,19 @@ where
 
     fn call(&mut self, call: Self::Call) -> Result<()> {
         (**self).call(call)
+    }
+}
+
+impl<'a, K, V, S, U> ClientTrait<U> for ChildMut<'a, K, V, S>
+where
+    V: ClientTrait<U>,
+    K: Encode,
+    U: Clone,
+{
+    type Client = V::Client;
+
+    fn create_client(parent: U) -> Self::Client {
+        V::create_client(parent)
     }
 }
 

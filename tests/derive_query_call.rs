@@ -137,9 +137,9 @@ fn _exhaustive_match_call<T: Call>(call: foo_call::Call<T>) {
     use foo_call::Call;
     match call {
         Call::Noop => {}
-        Call::FieldA(subcall) => _assert_type::<()>(subcall),
-        Call::FieldB(subcall) => _assert_type::<T::Call>(subcall),
-        Call::FieldBar(subcall) => _assert_type::<bar_call::Call>(subcall),
+        Call::FieldA(subcall) => _assert_type::<Vec<u8>>(subcall),
+        Call::FieldB(subcall) => _assert_type::<Vec<u8>>(subcall),
+        Call::FieldBar(subcall) => _assert_type::<Vec<u8>>(subcall),
         Call::MethodBasicCall(subcall) => _assert_type::<Vec<u8>>(subcall),
         Call::MethodInputAndOutputCall(n, subcall) => {
             _assert_type::<u32>(n);
