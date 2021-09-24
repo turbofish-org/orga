@@ -1,12 +1,9 @@
 // use orga::client::Client;
-use core::pin::Pin;
-use orga::client::AsyncCall;
 use orga::client::Client;
 use orga::coins::*;
 use orga::contexts::load_keypair;
-use orga::encoding::{Decode, Encode, Terminated};
+use orga::encoding::{Decode, Encode};
 use orga::prelude::*;
-use std::future::Future;
 
 #[derive(Encode, Decode)]
 pub struct Simp;
@@ -18,15 +15,15 @@ pub struct SimpleCoin {
 }
 
 impl InitChain for SimpleCoin {
-    fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
+    fn init_chain(&mut self, _ctx: &InitChainCtx) -> Result<()> {
         let my_address = load_keypair().unwrap().public.to_bytes();
         println!("my address: {:?}", my_address);
-        self.balances.insert(my_address, Simp::mint(100))?;
+        self.balances.insert(my_address.into(), Simp::mint(100))?;
         Ok(())
     }
 }
 impl BeginBlock for SimpleCoin {
-    fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
+    fn begin_block(&mut self, _ctx: &BeginBlockCtx) -> Result<()> {
         for entry in self.balances.iter()? {
             let (key, balance) = entry?;
             println!("{:?} has {}", *key, balance.amount.value);

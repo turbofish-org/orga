@@ -249,6 +249,29 @@ where
     }
 }
 
+impl<K, V, S, D> Map<K, V, S>
+where
+    K: Encode + Terminated,
+    V: State<S, Encoding = D>,
+    S: Read,
+    D: Default,
+{
+    pub fn get_or_default(&self, key: K) -> Result<Ref<V>> {
+        let key_bytes = key.encode()?;
+        let maybe_value = self.get(key)?;
+
+        let value = match maybe_value {
+            Some(value) => value,
+            None => Ref::Owned(V::create(
+                self.store.sub(key_bytes.as_slice()),
+                D::default(),
+            )?),
+        };
+
+        Ok(value)
+    }
+}
+
 impl<K, V, S> Map<K, V, S>
 where
     K: Encode + Terminated + Clone,

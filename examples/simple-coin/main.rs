@@ -4,8 +4,6 @@ mod client;
 mod coin;
 mod staking;
 use coin::{Simp, SimpleCoin};
-use orga::client::{AsyncCall, Client};
-use std::sync::Arc;
 
 use orga::prelude::*;
 
