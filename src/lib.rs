@@ -61,8 +61,10 @@ pub mod prelude {
     pub use crate::abci::*;
     pub use crate::call::*;
     pub use crate::client::{AsyncCall, Client};
+    pub use crate::coins::*;
     pub use crate::collections::*;
     pub use crate::contexts::*;
+    pub use crate::encoding::*;
     pub use crate::query::*;
     pub use crate::state::*;
     pub use crate::store::*;
