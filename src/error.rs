@@ -6,6 +6,8 @@ pub enum Error {
     ABCI(String),
     #[error("Call Error: {0}")]
     Call(String),
+    #[error("Client Error: {0}")]
+    Client(String),
     #[error("Downcast Error: {0}")]
     Downcast(String),
     #[error("Nonce Error: {0}")]

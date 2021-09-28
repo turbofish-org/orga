@@ -45,6 +45,7 @@ mod tests {
     use super::*;
     use crate::call::Call;
     use crate::encoding::{Decode, Encode};
+    use crate::Error;
     use std::cell::RefCell;
     use std::rc::Rc;
 
@@ -63,7 +64,7 @@ mod tests {
 
             let (signature, subcall) = call;
             if signature != 123 {
-                failure::bail!("Invalid signature");
+                return Err(Error::Client("Invalid signature".into()));
             }
 
             self.inner.call(subcall)
@@ -114,7 +115,7 @@ mod tests {
             match id {
                 0 => Ok(&mut self.bar),
                 1 => Ok(&mut self.bar2),
-                _ => failure::bail!("Invalid id"),
+                _ => Err(Error::Client("Invalid ID".into())),
             }
         }
     }
