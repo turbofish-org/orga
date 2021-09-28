@@ -1,5 +1,5 @@
 use crate::encoding::{Decode, Encode};
-use crate::Result;
+use crate::{Error, Result};
 
 pub use orga_macros::{query, Query};
 
@@ -23,7 +23,7 @@ impl<T: Query> Query for Result<T> {
     fn query(&self, query: Self::Query) -> Result<()> {
         match self {
             Ok(inner) => inner.query(query),
-            Err(err) => Err(failure::format_err!("{}", err)),
+            Err(err) => Err(Error::Query(err.to_string())),
         }
     }
 }
@@ -170,7 +170,7 @@ impl<T: Query, const N: usize> Query for [T; N] {
         let index = index as usize;
 
         if index >= N {
-            return Err(failure::format_err!("index out of bounds"));
+            return Err(Error::Query("Query index out of bounds".into()));
         }
 
         self[index].query(subquery)

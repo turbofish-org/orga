@@ -26,6 +26,8 @@ pub enum Error {
     Store(String),
     #[error("Test Error: {0}")]
     Test(String),
+    #[error("Query Error: {0}")]
+    Query(String),
     #[error("Unknown Error")]
     Unknown,
 }
