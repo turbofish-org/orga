@@ -18,6 +18,8 @@ pub enum Error {
     Signer(String),
     #[error("Store Error: {0}")]
     Store(String),
+    #[error("Test Error: {0}")]
+    Test(String),
     #[error("Unknown Error")]
     Unknown,
 }
