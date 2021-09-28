@@ -74,7 +74,7 @@ impl ProcessHandler {
         match &mut self.process {
             Some(process) => process.wait()?,
             None => {
-                return Err(Error::Tendermint("Child process not yet spawned"));
+                return Err(Error::Tendermint("Child process not yet spawned".into()));
             }
         };
         Ok(())
@@ -86,7 +86,8 @@ impl ProcessHandler {
             Some(inner) => inner,
             None => {
                 return Err(Error::Tendermint(
-                    "Child process is not yet spawned. How do you kill that which has no life?",
+                    "Child process is not yet spawned. How do you kill that which has no life?"
+                        .into(),
                 ));
             }
         };

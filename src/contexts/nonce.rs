@@ -33,7 +33,9 @@ where
         let signer = match self.context::<Signer>() {
             Some(signer) => signer,
             None => {
-                return Err(Error::Nonce("Nonce could not resolve the Signer context"));
+                return Err(Error::Nonce(
+                    "Nonce could not resolve the Signer context".into(),
+                ));
             }
         };
 
@@ -42,7 +44,7 @@ where
             (Some(pub_key), Some(nonce)) => {
                 let mut expected_nonce = self.map.entry(pub_key)?.or_default()?;
                 if nonce != *expected_nonce {
-                    return Err(Error::Nonce("Nonce is not valid"));
+                    return Err(Error::Nonce("Nonce is not valid".into()));
                 }
                 *expected_nonce += 1;
                 self.inner.call(call.inner_call)
