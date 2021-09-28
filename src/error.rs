@@ -4,6 +4,8 @@ use thiserror::Error;
 pub enum Error {
     #[error("ABCI Error: {0}")]
     ABCI(String),
+    #[error("Call Error: {0}")]
+    Call(String),
     #[error("Downcast Error: {0}")]
     Downcast(String),
     #[error("Nonce Error: {0}")]

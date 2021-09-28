@@ -1,5 +1,5 @@
 use crate::encoding::{Decode, Encode};
-use crate::Result;
+use crate::{Error, Result};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -42,7 +42,7 @@ impl<T: Call> Call for Result<T> {
     fn call(&mut self, call: Self::Call) -> Result<()> {
         match self {
             Ok(inner) => inner.call(call),
-            Err(err) => Err(failure::format_err!("{}", err)),
+            Err(err) => Err(Error::Call(err.to_string())),
         }
     }
 }
@@ -53,7 +53,7 @@ impl<T: Call> Call for Option<T> {
     fn call(&mut self, call: Self::Call) -> Result<()> {
         match self {
             Some(inner) => inner.call(call),
-            None => failure::bail!("option is None"),
+            None => return Err(Error::Call("Call option is None".into())),
         }
     }
 }
@@ -64,7 +64,7 @@ macro_rules! noop_impl {
             type Call = ();
 
             fn call(&mut self, _: ()) -> Result<()> {
-                failure::bail!("not callable")
+                Err(Error::Call("Not callable".into()))
             }
         }
     };
@@ -186,7 +186,7 @@ impl<T: Call, const N: usize> Call for [T; N] {
         let index = index as usize;
 
         if index >= N {
-            failure::bail!("index out of bounds");
+            return Err(Error::Call("Call index out of bounds".into()));
         }
 
         self[index].call(subcall)
