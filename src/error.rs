@@ -6,6 +6,8 @@ pub enum Error {
     ABCI(String),
     #[error("Nonce Error: {0}")]
     Nonce(String),
+    #[error("Signer Error: {0}")]
+    Signer(String),
     #[error("Store Error: {0}")]
     Store(String),
     #[error("Unknown Error")]

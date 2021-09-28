@@ -6,7 +6,7 @@ use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
-use crate::Result;
+use crate::{Error, Result};
 use ed25519_dalek::{Keypair, PublicKey, Signature, Signer as Ed25519Signer};
 
 pub struct SignerProvider<T> {
@@ -35,7 +35,9 @@ impl SignerCall {
                 Ok(Some(pubkey_bytes))
             }
             (None, None) => Ok(None),
-            _ => failure::bail!("Malformed transaction"),
+            _ => {
+                return Err(Error::Signer("Malformed transaction".into()));
+            }
         }
     }
 }
