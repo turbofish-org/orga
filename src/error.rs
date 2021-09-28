@@ -16,6 +16,8 @@ pub enum Error {
     Ed(#[from] ed::Error),
     #[error(transparent)]
     IO(#[from] std::io::Error),
+    #[error(transparent)]
+    Merk(#[from] merk::Error),
     #[error("Nonce Error: {0}")]
     Nonce(String),
     #[error("Tendermint Error: {0}")]
