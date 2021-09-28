@@ -1,7 +1,6 @@
 use super::{MerkStore, ProofBuilder};
 use crate::store::{BufStore, MapStore, Read, Shared, Write, KV};
-use crate::Result;
-use failure::bail;
+use crate::{Error, Result};
 
 type WrappedMerkStore = Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>;
 #[derive(Clone)]
@@ -54,21 +53,33 @@ impl BackingStore {
     pub fn into_proof_builder(self) -> Result<ProofBuilder> {
         match self {
             BackingStore::ProofBuilder(builder) => Ok(builder),
-            _ => bail!("Failed to downcast backing store to proof builder"),
+            _ => {
+                return Err(Error::Downcast(
+                    "Failed to downcast backing store to proof builder".into(),
+                ));
+            }
         }
     }
 
     pub fn into_wrapped_merk(self) -> Result<WrappedMerkStore> {
         match self {
             BackingStore::WrappedMerk(store) => Ok(store),
-            _ => bail!("Failed to downcast backing store to wrapped merk"),
+            _ => {
+                return Err(Error::Downcast(
+                    "Failed to downcast backing store to wrapped merk".into(),
+                ));
+            }
         }
     }
 
     pub fn into_map_store(self) -> Result<Shared<MapStore>> {
         match self {
             BackingStore::MapStore(store) => Ok(store),
-            _ => bail!("Failed to downcast backing store to map store"),
+            _ => {
+                return Err(Error::Downcast(
+                    "Failed to downcast backing store to map store".into(),
+                ));
+            }
         }
     }
 }
