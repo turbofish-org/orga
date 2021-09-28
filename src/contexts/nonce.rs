@@ -7,7 +7,7 @@ use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
-use crate::Result;
+use crate::{Error, Result};
 use std::path::PathBuf;
 
 type NonceMap = Map<[u8; 32], u64>;
@@ -32,7 +32,9 @@ where
     fn call(&mut self, call: Self::Call) -> Result<()> {
         let signer = match self.context::<Signer>() {
             Some(signer) => signer,
-            None => failure::bail!("Nonce could not resolve the Signer context."),
+            None => {
+                return Err(Error::Nonce("Nonce could not resolve the Signer context"));
+            }
         };
 
         match (signer.signer, call.nonce) {
@@ -40,7 +42,7 @@ where
             (Some(pub_key), Some(nonce)) => {
                 let mut expected_nonce = self.map.entry(pub_key)?.or_default()?;
                 if nonce != *expected_nonce {
-                    failure::bail!("Nonce is not valid.");
+                    return Err(Error::Nonce("Nonce is not valid"));
                 }
                 *expected_nonce += 1;
                 self.inner.call(call.inner_call)
@@ -48,8 +50,14 @@ where
             (None, None) => self.inner.call(call.inner_call),
 
             // Unhappy paths:
-            (Some(_), None) => failure::bail!("Signed calls must include a nonce."),
-            (None, Some(_)) => failure::bail!("Unsigned calls must not include a nonce."),
+            (Some(_), None) => {
+                return Err(Error::Nonce("Signed calls must include a nonce".into()))
+            }
+            (None, Some(_)) => {
+                return Err(Error::Nonce(
+                    "Unsinged calls must not include a nonce".into(),
+                ))
+            }
         }
     }
 }
