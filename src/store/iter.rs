@@ -93,6 +93,7 @@ impl<'a, S: Read> Iterator for Iter<'a, S> {
 mod tests {
     use super::*;
     use crate::store::{MapStore, Write};
+    use crate::Error;
 
     fn test_store() -> MapStore {
         let mut store = MapStore::new();
@@ -174,11 +175,11 @@ mod tests {
         struct ErrorStore;
         impl Read for ErrorStore {
             fn get(&self, _key: &[u8]) -> Result<Option<Vec<u8>>> {
-                failure::bail!("get")
+                Err(Error::Store("get".into()))
             }
 
             fn get_next(&self, _key: &[u8]) -> Result<Option<KV>> {
-                failure::bail!("get_next")
+                Err(Error::Store("get".into()))
             }
         }
 
