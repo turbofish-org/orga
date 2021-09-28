@@ -1,4 +1,4 @@
-use crate::error::Result;
+use crate::error::{Error, Result};
 use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
 pub mod bufstore;
