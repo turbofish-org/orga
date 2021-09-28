@@ -10,6 +10,8 @@ pub enum Error {
     Downcast(String),
     #[error("Nonce Error: {0}")]
     Nonce(String),
+    #[error("Tendermint Error: {0}")]
+    Tendermint(String),
     #[error("Signer Error: {0}")]
     Signer(String),
     #[error("Store Error: {0}")]

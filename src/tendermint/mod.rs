@@ -1,5 +1,4 @@
-use crate::error::Result;
-use failure::bail;
+use crate::error::{Error, Result};
 use flate2::read::GzDecoder;
 use hex_literal::hex;
 use is_executable::IsExecutable;
@@ -63,7 +62,9 @@ impl ProcessHandler {
 
     pub fn spawn(&mut self) -> Result<()> {
         match self.process {
-            Some(_) => bail!("Child process already spawned"),
+            Some(_) => {
+                return Err(Error::Tendermint("Child process already spawned".into()));
+            }
             None => self.process = Some(self.command.spawn()?),
         };
         Ok(())
@@ -72,7 +73,9 @@ impl ProcessHandler {
     pub fn wait(&mut self) -> Result<()> {
         match &mut self.process {
             Some(process) => process.wait()?,
-            None => bail!("Child process not yet spawned."),
+            None => {
+                return Err(Error::Tendermint("Child process not yet spawned"));
+            }
         };
         Ok(())
     }
@@ -82,7 +85,9 @@ impl ProcessHandler {
         let mut child = match self.process {
             Some(inner) => inner,
             None => {
-                bail!("Child process is not yet spawned. How do you kill that which has no life?");
+                return Err(Error::Tendermint(
+                    "Child process is not yet spawned. How do you kill that which has no life?",
+                ));
             }
         };
         child.kill()?;
