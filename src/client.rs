@@ -14,40 +14,16 @@ pub trait Client<T: Clone> {
 }
 
 #[must_use]
-pub struct PrimitiveClient<T, U: Clone + AsyncCall> {
+pub struct PrimitiveClient<T, U: Clone + AsyncCall<Call = ()>> {
     parent: U,
     fut: Option<Pin<Box<U::Future>>>,
     marker: PhantomData<T>,
 }
 
-impl<T, U: Clone + AsyncCall> Clone for PrimitiveClient<T, U> {
+impl<T, U: Clone + AsyncCall<Call = ()>> Clone for PrimitiveClient<T, U> {
     fn clone(&self) -> Self {
         PrimitiveClient {
             parent: self.parent.clone(),
-            fut: None,
-            marker: PhantomData,
-        }
-    }
-}
-
-impl<T: Clone + AsyncCall> Client<T> for () {
-    type Client = PrimitiveClient<(), T>;
-
-    fn create_client(parent: T) -> Self::Client {
-        PrimitiveClient {
-            parent,
-            fut: None,
-            marker: PhantomData,
-        }
-    }
-}
-
-impl<T: Clone + AsyncCall> Client<T> for u64 {
-    type Client = PrimitiveClient<u64, T>;
-
-    fn create_client(parent: T) -> Self::Client {
-        PrimitiveClient {
-            parent,
             fut: None,
             marker: PhantomData,
         }
@@ -65,10 +41,12 @@ impl<T, U: Clone + AsyncCall<Call = ()>> Future for PrimitiveClient<T, U> {
             let this = self.get_unchecked_mut();
 
             if this.fut.is_none() {
-                // TODO: is this ok? we're creating the future then moving it
-                let res = this.parent.call(());
-                this.fut = Some(Box::pin(res));
+                // make call, populate future to maybe be polled later
+                this.fut = Some(Box::pin(this.parent.call(())));
             }
+
+            // TODO: if future is ready, should we clear the future field so
+            // consumer can make additional calls?
 
             let fut = this.fut.as_mut().unwrap().as_mut();
             fut.poll(cx)
@@ -76,37 +54,56 @@ impl<T, U: Clone + AsyncCall<Call = ()>> Future for PrimitiveClient<T, U> {
     }
 }
 
-impl<T: Client<U>, U: Clone> Client<U> for &T {
-    type Client = T::Client;
-
-    fn create_client(parent: U) -> Self::Client {
-        T::create_client(parent)
-    }
+macro_rules! primitive_impl {
+    ( $x:ty ) => {
+        impl<T: Clone + AsyncCall<Call = ()>> Client<T> for $x {
+            type Client = PrimitiveClient<$x, T>;
+        
+            fn create_client(parent: T) -> Self::Client {
+                PrimitiveClient {
+                    parent,
+                    fut: None,
+                    marker: PhantomData,
+                }
+            }
+        }
+    };
 }
 
-impl<T: Client<U>, U: Clone> Client<U> for &mut T {
-    type Client = T::Client;
+primitive_impl!(());
+primitive_impl!(bool);
+primitive_impl!(char);
+primitive_impl!(u8);
+primitive_impl!(u16);
+primitive_impl!(u32);
+primitive_impl!(u64);
+primitive_impl!(u128);
+primitive_impl!(i8);
+primitive_impl!(i16);
+primitive_impl!(i32);
+primitive_impl!(i64);
+primitive_impl!(i128);
 
-    fn create_client(parent: U) -> Self::Client {
-        T::create_client(parent)
-    }
+macro_rules! transparent_impl {
+    ( $x:ty ) => {
+        impl<T, U> Client<U> for $x
+        where
+            T: Client<U> + Call,
+            U: Clone + AsyncCall<Call = T::Call>,
+        {
+            type Client = T::Client;
+        
+            fn create_client(parent: U) -> Self::Client {
+                T::create_client(parent)
+            }
+        }
+    };
 }
 
-impl<T: Client<U>, U: Clone> Client<U> for Result<T> {
-    type Client = T::Client;
-
-    fn create_client(parent: U) -> Self::Client {
-        T::create_client(parent)
-    }
-}
-
-impl<T: Client<U>, U: Clone> Client<U> for Option<T> {
-    type Client = T::Client;
-
-    fn create_client(parent: U) -> Self::Client {
-        T::create_client(parent)
-    }
-}
+transparent_impl!(&T);
+transparent_impl!(&mut T);
+transparent_impl!(Result<T>);
+transparent_impl!(Option<T>);
 
 // TODO: move to call module? or will this always be client-specific?
 pub trait AsyncCall {
