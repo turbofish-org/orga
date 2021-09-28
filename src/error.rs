@@ -8,8 +8,14 @@ pub enum Error {
     Call(String),
     #[error("Client Error: {0}")]
     Client(String),
+    #[error(transparent)]
+    Dalek(#[from] ed25519_dalek::ed25519::Error),
     #[error("Downcast Error: {0}")]
     Downcast(String),
+    #[error(transparent)]
+    Ed(#[from] ed::Error),
+    #[error(transparent)]
+    IO(#[from] std::io::Error),
     #[error("Nonce Error: {0}")]
     Nonce(String),
     #[error("Tendermint Error: {0}")]
