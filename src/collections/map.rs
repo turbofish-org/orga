@@ -10,7 +10,7 @@ use crate::query::Query;
 use crate::state::*;
 use crate::store::Iter as StoreIter;
 use crate::store::*;
-use crate::Result;
+use crate::{Error, Result};
 use ed::*;
 
 #[derive(Clone)]
@@ -419,7 +419,9 @@ where
                 (true, true) => {
                     let map_key = self.map_iter.peek().unwrap().0;
                     let backing_key = match self.store_iter.peek().unwrap() {
-                        Err(err) => failure::bail!("{}", err),
+                        Err(_) => {
+                            return Err(Error::Store("Backing key does not exist".into()));
+                        }
                         Ok((ref key, _)) => key,
                     };
 
