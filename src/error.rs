@@ -2,6 +2,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("ABCI Error: {0}")]
+    ABCI(String),
     #[error("Unknown Error")]
     Unknown,
 }
