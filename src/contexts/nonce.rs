@@ -52,14 +52,10 @@ where
             (None, None) => self.inner.call(call.inner_call),
 
             // Unhappy paths:
-            (Some(_), None) => {
-                return Err(Error::Nonce("Signed calls must include a nonce".into()))
-            }
-            (None, Some(_)) => {
-                return Err(Error::Nonce(
-                    "Unsinged calls must not include a nonce".into(),
-                ))
-            }
+            (Some(_), None) => Err(Error::Nonce("Signed calls must include a nonce".into())),
+            (None, Some(_)) => Err(Error::Nonce(
+                "Unsinged calls must not include a nonce".into(),
+            )),
         }
     }
 }

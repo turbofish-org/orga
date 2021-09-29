@@ -35,9 +35,7 @@ impl SignerCall {
                 Ok(Some(pubkey_bytes))
             }
             (None, None) => Ok(None),
-            _ => {
-                return Err(Error::Signer("Malformed transaction".into()));
-            }
+            _ => Err(Error::Signer("Malformed transaction".into())),
         }
     }
 }

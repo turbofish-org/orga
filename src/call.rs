@@ -53,7 +53,7 @@ impl<T: Call> Call for Option<T> {
     fn call(&mut self, call: Self::Call) -> Result<()> {
         match self {
             Some(inner) => inner.call(call),
-            None => return Err(Error::Call("Call option is None".into())),
+            None => Err(Error::Call("Call option is None".into())),
         }
     }
 }
