@@ -3,6 +3,8 @@ use std::collections::btree_map::Entry::{Occupied, Vacant};
 use std::collections::{btree_map, BTreeMap};
 use std::iter::Peekable;
 use std::ops::{Bound, Deref, DerefMut, RangeBounds};
+use std::pin::Pin;
+use std::future::Future;
 
 use super::Next;
 use crate::call::Call;
@@ -161,19 +163,35 @@ where
     }
 }
 
+unsafe impl<K: Clone, V: Call, U: Clone> Send for Client<K, V, U>
+where
+    U: AsyncCall<Call = <Map<K, V> as Call>::Call>,
+    K: Encode + Decode + Terminated,
+    V::Call: Sync,
+    U: Send,
+    K: Send,
+{}
+
 impl<K: Clone, V: Call, U: Clone> AsyncCall for Client<K, V, U>
 where
     U: AsyncCall<Call = <Map<K, V> as Call>::Call>,
     K: Encode + Decode + Terminated,
+    V::Call: Sync,
+    U: Send,
+    K: Send,
 {
     type Call = V::Call;
-    type Future = U::Future;
+    type Future<'a> = Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>;
 
-    fn call(&mut self, subcall: Self::Call) -> Self::Future {
-        let key = self.key.as_ref().unwrap().clone();
-        let subcall_bytes = subcall.encode().unwrap(); // TODO: handle errors
-        let call = <Map<K, V> as Call>::Call::MethodGetMut(key, subcall_bytes);
-        self.parent.call(call)
+    fn call(&mut self, subcall: Self::Call) -> Self::Future<'_> {
+        Box::pin(async {
+            let key = self.key.as_ref().unwrap().clone();
+
+            let subcall_bytes = subcall.encode()?;
+
+            let call = <Map<K, V> as Call>::Call::MethodGetMut(key, subcall_bytes);
+            self.parent.call(call).await
+        })
     }
 }
 

@@ -80,9 +80,9 @@ impl<T, U: Clone> Clone for SignerClient<T, U> {
 
 impl<T: Call, U: AsyncCall<Call = SignerCall> + Clone> AsyncCall for SignerClient<T, U> {
     type Call = T::Call;
-    type Future = U::Future;
+    type Future<'a> = U::Future<'a>;
 
-    fn call(&mut self, call: Self::Call) -> Self::Future {
+    fn call(&mut self, call: Self::Call) -> Self::Future<'_> {
         let call_bytes = Encode::encode(&call).unwrap();
         let signature = self.keypair.sign(call_bytes.as_slice()).to_bytes();
         let pubkey = self.keypair.public.to_bytes();
@@ -235,9 +235,9 @@ mod tests {
     }
 
     impl<T: Clone> Client<T> for Counter {
-        type Client = CounterClient<T>;
+        type Client<'a> = CounterClient<T>;
 
-        fn create_client(parent: T) -> Self::Client {
+        fn create_client<'a>(parent: T) -> Self::Client<'a> {
             CounterClient { parent }
         }
     }

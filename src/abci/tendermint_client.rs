@@ -38,20 +38,18 @@ where
     T::Call: Send,
 {
     type Call = T::Call;
-    type Future = NoReturn;
+    type Future<'a> = NoReturn<'a>;
 
-    fn call(&mut self, call: Self::Call) -> Self::Future {
+    fn call(&mut self, call: Self::Call) -> Self::Future<'_> {
         let tx = call.encode().unwrap().into();
         let fut = self.client.broadcast_tx_commit(tx);
-        let fut2: Pin<Box<dyn Future<Output = tm::Result<TxResponse>> + 'static>> =
-            unsafe { std::mem::transmute(fut) };
-        NoReturn(fut2)
+        NoReturn(fut)
     }
 }
 
-pub struct NoReturn(Pin<Box<dyn Future<Output = tm::Result<TxResponse>> + 'static>>);
+pub struct NoReturn<'a>(Pin<Box<dyn Future<Output = tm::Result<TxResponse>> + Send + 'a>>);
 
-impl Future for NoReturn {
+impl<'a> Future for NoReturn<'a> {
     type Output = Result<()>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut std::task::Context) -> std::task::Poll<Self::Output> {

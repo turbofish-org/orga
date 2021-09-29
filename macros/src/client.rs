@@ -32,6 +32,8 @@ pub fn derive(item: TokenStream) -> TokenStream {
         #client_impl
     };
 
+    println!("\n\n\n\n\n{}\n\n", &output);
+
     output.into()
 }
 
@@ -46,6 +48,7 @@ fn create_client_impl(item: &DeriveInput, modname: &Ident) -> TokenStream2 {
         }
     });
     let parent_ty: GenericParam = syn::parse2(quote!(__Parent)).unwrap();
+    let self_lifetime: GenericParam = syn::parse2(quote!('__self)).unwrap();
     generics_sanitized.params.push(parent_ty.clone());
 
     let generic_params = gen_param_input(generics, false);
@@ -55,13 +58,13 @@ fn create_client_impl(item: &DeriveInput, modname: &Ident) -> TokenStream2 {
     quote! {
         impl#generics_sanitized ::orga::client::Client<#parent_ty> for #name#generic_params_bracketed
         where
-            #parent_ty: Clone,
+            #parent_ty: Clone + Send,
             #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call>,
             #where_preds
         {
-            type Client = #modname::Client<#generic_params #parent_ty>;
+            type Client<'a> = #modname::Client<'a, #generic_params #parent_ty>;
 
-            fn create_client(parent: #parent_ty) -> Self::Client {
+            fn create_client<'a>(parent: #parent_ty) -> Self::Client<'a> {
                 #modname::Client::new(parent)
             }
         }
@@ -77,6 +80,7 @@ fn create_client_struct(
     let generics = &item.generics;
 
     let parent_ty: GenericParam = syn::parse2(quote!(__Parent)).unwrap();
+    let self_lifetime: GenericParam = syn::parse2(quote!('__self)).unwrap();
 
     let mut generics_sanitized = generics.clone();
     generics_sanitized.params.iter_mut().for_each(|g| {
@@ -85,6 +89,7 @@ fn create_client_struct(
         }
     });
     generics_sanitized.params.push(parent_ty.clone());
+    generics_sanitized.params.insert(0, self_lifetime);
 
     let mut generics_sanitized_with_return = generics_sanitized.clone();
     generics_sanitized_with_return
@@ -117,7 +122,7 @@ fn create_client_struct(
                 }
             });
 
-            quote!(pub #field_name: <#field_ty as ::orga::client::Client<#adapter_name#adapter_generics>>::Client)
+            quote!(pub #field_name: <#field_ty as ::orga::client::Client<#adapter_name#adapter_generics>>::Client<'__self>)
         });
 
     let field_clones = field_adapters
@@ -224,7 +229,7 @@ fn create_client_struct(
                     },
                 };
                 let method_output = quote!(
-                    <#output_ty as ::orga::client::Client<#adapter_name<#generic_params #output_ty, #parent_ty>>>::Client
+                    <#output_ty as ::orga::client::Client<#adapter_name<#generic_params #output_ty, #parent_ty>>>::Client<'__self>
                 );
 
                 let impl_preds = impl_item
@@ -241,16 +246,23 @@ fn create_client_struct(
                 quote! {
                     pub struct #adapter_name<#generic_params __Return, #parent_ty: Clone>
                     where
-                        #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call>,
+                        #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call> + Send,
                     {
                         pub(super) parent: #parent_ty,
                         args: (#(#arg_types,)*),
                         _marker: std::marker::PhantomData<(#name#generic_params_bracketed, __Return)>,
                     }
 
+                    unsafe impl#generics_sanitized_with_return Send for #adapter_name<#generic_params __Return, #parent_ty>
+                    where
+                        #parent_ty: Clone + Send,
+                        #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call>,
+                        #call_preds
+                    {}
+
                     impl#generics_sanitized_with_return Clone for #adapter_name<#generic_params __Return, #parent_ty>
                     where
-                        #parent_ty: Clone,
+                        #parent_ty: Clone + Send,
                         #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call>,
                         #call_preds
                     {
@@ -267,27 +279,31 @@ fn create_client_struct(
 
                     impl#generics_sanitized_with_return ::orga::client::AsyncCall for #adapter_name<#generic_params __Return, #parent_ty>
                     where
-                        #parent_ty: Clone,
+                        #parent_ty: Clone + Send,
                         #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call>,
+                        for<'a> #parent_ty::Future<'a>: Send,
                         __Return: ::orga::call::Call,
+                        __Return::Call: Send + Sync,
                         #call_preds
                     {
                         type Call = <__Return as ::orga::call::Call>::Call;
-                        type Future = #parent_ty::Future;
+                        type Future<'a> = std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>>;
 
-                        fn call(&mut self, call: Self::Call) -> Self::Future {
-                            let call_bytes = ::orga::encoding::Encode::encode(&call).unwrap(); // TODO: is this always infallible?
-                            let parent_call = <#name as ::orga::call::Call>::Call::#call_variant_name(
-                                #(#unrolled_args,)*
-                                call_bytes
-                            );
-                            self.parent.call(parent_call)
+                        fn call(&mut self, call: Self::Call) -> Self::Future<'_> {
+                            Box::pin(async {
+                                let call_bytes = ::orga::encoding::Encode::encode(&call)?;
+                                let parent_call = <#name as ::orga::call::Call>::Call::#call_variant_name(
+                                    #(#unrolled_args,)*
+                                    call_bytes
+                                );
+                                self.parent.call(parent_call).await
+                            })
                         }
                     }
 
-                    impl#generics_sanitized Client<#generic_params #parent_ty>
+                    impl#generics_sanitized Client<'__self, #generic_params #parent_ty>
                     where
-                        #parent_ty: Clone,
+                        #parent_ty: Clone + Send,
                         #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call>,
                         #where_preds
                         #impl_preds
@@ -307,20 +323,20 @@ fn create_client_struct(
 
     quote! {
         #[must_use]
-        pub struct Client<#generic_params #parent_ty: Clone>
+        pub struct Client<'__self, #generic_params #parent_ty: Clone>
         where
-            #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call>,
+            #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call> + Send,
             #where_preds
         {
             pub(super) parent: #parent_ty,
             _marker: std::marker::PhantomData<#name#generic_params_bracketed>,
             #(#field_fields,)*
-            fut: Option<std::pin::Pin<Box<#parent_ty::Future>>>
+            fut: Option<std::pin::Pin<Box<#parent_ty::Future<'__self>>>>
         }
 
-        impl<#generic_params #parent_ty: Clone> Clone for Client<#generic_params #parent_ty>
+        impl<'__self, #generic_params #parent_ty: Clone> Clone for Client<'__self, #generic_params #parent_ty>
         where
-            #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call>,
+            #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call> + Send,
             #where_preds
         {
             fn clone(&self) -> Self {
@@ -333,10 +349,10 @@ fn create_client_struct(
             }
         }
 
-        impl#generics_sanitized Client<#generic_params #parent_ty>
+        impl#generics_sanitized Client<'__self, #generic_params #parent_ty>
         where
-            #parent_ty: Clone,
-            #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call>,
+            #parent_ty: Clone + Send,
+            #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call> + Send,
             #where_preds
         {
             pub fn new(parent: #parent_ty) -> Self {
@@ -350,9 +366,9 @@ fn create_client_struct(
             }
         }
 
-        impl#generics_sanitized std::future::Future for Client<#generic_params #parent_ty>
+        impl#generics_sanitized std::future::Future for Client<'__self, #generic_params #parent_ty>
         where
-            #parent_ty: Clone,
+            #parent_ty: Clone + Send,
             #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call>,
             #parent_ty::Call: Default,
             #where_preds
@@ -438,7 +454,7 @@ fn create_field_adapter(
         #[derive(Clone)]
         pub struct #struct_name<#parent_client_ty: Clone>
         where
-            #parent_client_ty: ::orga::client::AsyncCall<Call = <#parent_ty as ::orga::call::Call>::Call>,
+            #parent_client_ty: ::orga::client::AsyncCall<Call = <#parent_ty as ::orga::call::Call>::Call> + Send,
         {
             pub(super) parent: #parent_client_ty,
         }
@@ -456,7 +472,7 @@ fn create_field_adapter(
         #struct_def
         impl#adapter_generics #struct_name<#parent_client_ty>
         where
-            #parent_client_ty: ::orga::client::AsyncCall<Call = <#parent_ty as ::orga::call::Call>::Call>,
+            #parent_client_ty: ::orga::client::AsyncCall<Call = <#parent_ty as ::orga::call::Call>::Call> + Send,
         {
             pub fn new(parent: #parent_client_ty) -> Self {
                 Self {
@@ -467,16 +483,20 @@ fn create_field_adapter(
 
         impl#adapter_generics ::orga::client::AsyncCall for #struct_name<#parent_client_ty>
         where
-            #parent_client_ty: ::orga::client::AsyncCall<Call = <#parent_ty as ::orga::call::Call>::Call>,
+            #parent_client_ty: ::orga::client::AsyncCall<Call = <#parent_ty as ::orga::call::Call>::Call> + Send,
+            for<'a> #parent_client_ty::Future<'a>: Send,
         {
             type Call = <#field_ty as ::orga::call::Call>::Call;
-            type Future = #parent_client_ty::Future;
+            type Future<'a> = std::pin::Pin<Box<dyn std::future::Future<Output = ::orga::Result<()>> + Send + 'a>>;
 
-            fn call(&mut self, call: Self::Call) -> Self::Future {
+            fn call(&mut self, call: Self::Call) -> Self::Future<'_> {
                 // assumes that the call has a tuple variant called "Field" +
                 // the camel-cased name as the field
-                let subcall_bytes = ::orga::encoding::Encode::encode(&call).unwrap(); // TODO: error handling
-                self.parent.call(<#parent_ty as ::orga::call::Call>::Call::#variant_name(subcall_bytes))
+                Box::pin(async {
+                    let subcall_bytes = ::orga::encoding::Encode::encode(&call)?; // TODO: error handling
+                    let subcall = <#parent_ty as ::orga::call::Call>::Call::#variant_name(subcall_bytes);
+                    self.parent.call(subcall).await
+                })
             }
         }
     };

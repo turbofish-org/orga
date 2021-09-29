@@ -68,6 +68,8 @@ pub struct NonceClient<T, U: Clone> {
     marker: std::marker::PhantomData<T>,
 }
 
+unsafe impl<T, U: Send + Clone> Send for NonceClient<T, U> {}
+
 impl<T, U: Clone> Clone for NonceClient<T, U> {
     fn clone(&self) -> Self {
         NonceClient {
@@ -77,21 +79,30 @@ impl<T, U: Clone> Clone for NonceClient<T, U> {
     }
 }
 
-impl<T: Call, U: AsyncCall<Call = NonceCall<T::Call>> + Clone> AsyncCall for NonceClient<T, U> {
+impl<T: Call, U: AsyncCall<Call = NonceCall<T::Call>> + Clone> AsyncCall for NonceClient<T, U>
+where
+    T::Call: Send,
+    U: Send,
+    for<'a> U::Future<'a>: Send,
+{
     type Call = T::Call;
-    type Future = U::Future;
+    type Future<'a> = std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>>;
 
-    fn call(&mut self, call: Self::Call) -> Self::Future {
-        // Load nonce from file
-        let nonce = load_nonce().unwrap();
-        let res = self.parent.call(NonceCall {
-            inner_call: call,
-            nonce: Some(nonce),
-        });
+    fn call(&mut self, call: Self::Call) -> Self::Future<'_> {
+        Box::pin(async {
+            // Load nonce from file
+            let nonce = load_nonce()?;
+            
+            let res = self.parent.call(NonceCall {
+                inner_call: call,
+                nonce: Some(nonce),
+            });
 
-        // Increment the local nonce
-        write_nonce(nonce + 1).unwrap();
-        res
+            // Increment the local nonce
+            write_nonce(nonce + 1)?;
+
+            res.await
+        })
     }
 }
 

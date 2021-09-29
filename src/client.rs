@@ -14,13 +14,13 @@ pub trait Client<T: Clone> {
 }
 
 #[must_use]
-pub struct PrimitiveClient<T, U: Clone + AsyncCall<Call = ()>> {
+pub struct PrimitiveClient<'a, T, U: Clone + AsyncCall<Call = ()>> {
     parent: U,
-    fut: Option<Pin<Box<U::Future>>>,
+    fut: Option<Pin<Box<U::Future<'a>>>>,
     marker: PhantomData<T>,
 }
 
-impl<T, U: Clone + AsyncCall<Call = ()>> Clone for PrimitiveClient<T, U> {
+impl<'a, T, U: Clone + AsyncCall<Call = ()>> Clone for PrimitiveClient<'a, T, U> {
     fn clone(&self) -> Self {
         PrimitiveClient {
             parent: self.parent.clone(),
@@ -30,13 +30,13 @@ impl<T, U: Clone + AsyncCall<Call = ()>> Clone for PrimitiveClient<T, U> {
     }
 }
 
-impl<T, U: Clone + AsyncCall<Call = ()>> Future for PrimitiveClient<T, U> {
+impl<'a, T, U: Clone + AsyncCall<Call = ()>> Future for PrimitiveClient<'a, T, U> {
     type Output = Result<()>;
 
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Self::Output> {
+    ) -> std::task::Poll<Self::Output>{
         unsafe {
             let this = self.get_unchecked_mut();
 
@@ -57,7 +57,7 @@ impl<T, U: Clone + AsyncCall<Call = ()>> Future for PrimitiveClient<T, U> {
 macro_rules! primitive_impl {
     ( $x:ty ) => {
         impl<T: Clone + AsyncCall<Call = ()>> Client<T> for $x {
-            type Client = PrimitiveClient<$x, T>;
+            type Client = PrimitiveClient<'static, $x, T>;
         
             fn create_client(parent: T) -> Self::Client {
                 PrimitiveClient {
@@ -108,9 +108,9 @@ transparent_impl!(Option<T>);
 // TODO: move to call module? or will this always be client-specific?
 pub trait AsyncCall {
     type Call;
-    type Future: Future<Output = Result<()>>;
+    type Future<'a>: Future<Output = Result<()>> + Send;
 
-    fn call(&mut self, call: Self::Call) -> Self::Future;
+    fn call(&mut self, call: Self::Call) -> Self::Future<'_>;
 }
 
 #[cfg(test)]
@@ -130,9 +130,9 @@ pub mod mock {
 
     impl<T: Call> AsyncCall for Mock<T> {
         type Call = T::Call;
-        type Future = future::Ready<Result<()>>;
+        type Future<'a> = future::Ready<Result<()>>;
 
-        fn call(&mut self, call: Self::Call) -> Self::Future {
+        fn call(&mut self, call: Self::Call) -> Self::Future<'_> {
             let res = self.0.borrow_mut().call(call);
             future::ready(res)
         }
