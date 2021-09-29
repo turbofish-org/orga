@@ -33,30 +33,26 @@ impl<T: Client<Self>> TendermintClient<T> {
 
 unsafe impl<T> Send for TendermintClient<T> {}
 
-use std::future::Future;
-use std::pin::Pin;
+#[async_trait::async_trait]
 impl<T: Call> AsyncCall for TendermintClient<T>
 where
     T::Call: Send,
 {
     type Call = T::Call;
-    type Future<'a> = Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>;
 
-    fn call(&mut self, call: Self::Call) -> Self::Future<'_> {
-        Box::pin(async move {
-            let tx = call.encode()?.into();
-            let fut = self.client.broadcast_tx_commit(tx);
-            NoReturn(fut).await
-        })
+    async fn call(&mut self, call: Self::Call) -> Result<()> {
+        let tx = call.encode()?.into();
+        let fut = self.client.broadcast_tx_commit(tx);
+        NoReturn(fut).await
     }
 }
 
-pub struct NoReturn<'a>(Pin<Box<dyn Future<Output = tm::Result<TxResponse>> + Send + 'a>>);
+pub struct NoReturn<'a>(std::pin::Pin<Box<dyn std::future::Future<Output = tm::Result<TxResponse>> + Send + 'a>>);
 
-impl<'a> Future for NoReturn<'a> {
+impl<'a> std::future::Future for NoReturn<'a> {
     type Output = Result<()>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut std::task::Context) -> std::task::Poll<Self::Output> {
+    fn poll(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context) -> std::task::Poll<Self::Output> {
         unsafe {
             let mut_ref = self.get_unchecked_mut();
             let res = mut_ref.0.as_mut().poll(cx);

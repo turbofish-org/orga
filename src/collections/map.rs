@@ -172,6 +172,7 @@ where
     K: Send,
 {}
 
+#[async_trait::async_trait]
 impl<K: Clone, V: Call, U: Clone> AsyncCall for Client<K, V, U>
 where
     U: AsyncCall<Call = <Map<K, V> as Call>::Call>,
@@ -181,17 +182,14 @@ where
     K: Send,
 {
     type Call = V::Call;
-    type Future<'a> = Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>;
 
-    fn call(&mut self, subcall: Self::Call) -> Self::Future<'_> {
-        Box::pin(async move {
-            let key = self.key.as_ref().unwrap().clone();
+    async fn call(&mut self, subcall: Self::Call) -> Result<()> {
+        let key = self.key.as_ref().unwrap().clone();
 
-            let subcall_bytes = subcall.encode()?;
+        let subcall_bytes = subcall.encode()?;
 
-            let call = <Map<K, V> as Call>::Call::MethodGetMut(key, subcall_bytes);
-            self.parent.call(call).await
-        })
+        let call = <Map<K, V> as Call>::Call::MethodGetMut(key, subcall_bytes);
+        self.parent.call(call).await
     }
 }
 

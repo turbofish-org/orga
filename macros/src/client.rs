@@ -274,27 +274,24 @@ fn create_client_struct(
                         }
                     }
 
+                    #[::orga::async_trait]
                     impl#generics_sanitized_with_return ::orga::client::AsyncCall for #adapter_name<#generic_params __Return, #parent_ty>
                     where
                         #parent_ty: Clone + Send,
                         #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call>,
-                        for<'a> #parent_ty::Future<'a>: Send,
                         __Return: ::orga::call::Call,
                         __Return::Call: Send + Sync,
                         #call_preds
                     {
                         type Call = <__Return as ::orga::call::Call>::Call;
-                        type Future<'a> = std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>>;
 
-                        fn call(&mut self, call: Self::Call) -> Self::Future<'_> {
-                            Box::pin(async move {
-                                let call_bytes = ::orga::encoding::Encode::encode(&call)?;
-                                let parent_call = <#name as ::orga::call::Call>::Call::#call_variant_name(
-                                    #(#unrolled_args,)*
-                                    call_bytes
-                                );
-                                self.parent.call(parent_call).await
-                            })
+                        async fn call(&mut self, call: Self::Call) -> Result<()> {
+                            let call_bytes = ::orga::encoding::Encode::encode(&call)?;
+                            let parent_call = <#name as ::orga::call::Call>::Call::#call_variant_name(
+                                #(#unrolled_args,)*
+                                call_bytes
+                            );
+                            self.parent.call(parent_call).await
                         }
                     }
 
@@ -328,7 +325,7 @@ fn create_client_struct(
             pub(super) parent: #parent_ty,
             _marker: std::marker::PhantomData<#name#generic_params_bracketed>,
             #(#field_fields,)*
-            fut: Option<std::pin::Pin<Box<#parent_ty::Future<'static>>>>
+            fut: Option<::orga::BoxFuture<Result<()>>>
         }
 
         impl<#generic_params #parent_ty: Clone> Clone for Client<#generic_params #parent_ty>
@@ -380,9 +377,8 @@ fn create_client_struct(
                     let this = self.get_unchecked_mut();
 
                     if this.fut.is_none() {
-                        let res = this.parent.call(Default::default());
-                        let fut = Box::pin(res);
-                        let fut2: std::pin::Pin<Box<#parent_ty::Future<'static>>> = unsafe {
+                        let fut = this.parent.call(Default::default());
+                        let fut2: ::orga::BoxFuture<Result<()>> = unsafe {
                             std::mem::transmute(fut)
                         };
                         this.fut = Some(fut2);
@@ -481,22 +477,19 @@ fn create_field_adapter(
             }
         }
 
+        #[::orga::async_trait]
         impl#adapter_generics ::orga::client::AsyncCall for #struct_name<#parent_client_ty>
         where
             #parent_client_ty: ::orga::client::AsyncCall<Call = <#parent_ty as ::orga::call::Call>::Call> + Send,
-            for<'a> #parent_client_ty::Future<'a>: Send,
         {
             type Call = <#field_ty as ::orga::call::Call>::Call;
-            type Future<'a> = std::pin::Pin<Box<dyn std::future::Future<Output = ::orga::Result<()>> + Send + 'a>>;
 
-            fn call(&mut self, call: Self::Call) -> Self::Future<'_> {
+            async fn call(&mut self, call: Self::Call) -> Result<()> {
                 // assumes that the call has a tuple variant called "Field" +
                 // the camel-cased name as the field
-                Box::pin(async move {
-                    let subcall_bytes = ::orga::encoding::Encode::encode(&call)?; // TODO: error handling
-                    let subcall = <#parent_ty as ::orga::call::Call>::Call::#variant_name(subcall_bytes);
-                    self.parent.call(subcall).await
-                })
+                let subcall_bytes = ::orga::encoding::Encode::encode(&call)?; // TODO: error handling
+                let subcall = <#parent_ty as ::orga::call::Call>::Call::#variant_name(subcall_bytes);
+                self.parent.call(subcall).await
             }
         }
     };

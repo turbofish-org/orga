@@ -79,29 +79,27 @@ impl<T, U: Clone> Clone for NonceClient<T, U> {
     }
 }
 
+#[async_trait::async_trait]
 impl<T: Call, U: AsyncCall<Call = NonceCall<T::Call>> + Clone> AsyncCall for NonceClient<T, U>
 where
     T::Call: Send,
     U: Send,
 {
     type Call = T::Call;
-    type Future<'a> = std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>>;
 
-    fn call(&mut self, call: Self::Call) -> Self::Future<'_> {
-        Box::pin(async move {
-            // Load nonce from file
-            let nonce = load_nonce()?;
-            
-            let res = self.parent.call(NonceCall {
-                inner_call: call,
-                nonce: Some(nonce),
-            });
+    async fn call(&mut self, call: Self::Call) -> Result<()> {
+        // Load nonce from file
+        let nonce = load_nonce()?;
+        
+        let res = self.parent.call(NonceCall {
+            inner_call: call,
+            nonce: Some(nonce),
+        });
 
-            // Increment the local nonce
-            write_nonce(nonce + 1)?;
+        // Increment the local nonce
+        write_nonce(nonce + 1)?;
 
-            res.await
-        })
+        res.await
     }
 }
 

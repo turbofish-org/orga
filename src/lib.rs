@@ -55,6 +55,8 @@ mod error;
 // re-exports
 pub use error::*;
 pub use orga_macros as macros;
+pub use async_trait::async_trait;
+pub use futures_lite::future::Boxed as BoxFuture;
 
 pub mod prelude {
     #[cfg(feature = "abci")]

@@ -80,26 +80,24 @@ impl<T, U: Clone> Clone for SignerClient<T, U> {
 
 unsafe impl<T, U: Clone + Send> Send for SignerClient<T, U> {}
 
+#[async_trait::async_trait]
 impl<T: Call, U: AsyncCall<Call = SignerCall> + Clone> AsyncCall for SignerClient<T, U>
 where
     T::Call: Send,
     U: Send,
 {
     type Call = T::Call;
-    type Future<'a> = std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>>;
 
-    fn call(&mut self, call: Self::Call) -> Self::Future<'_> {
-        Box::pin(async move {
-            let call_bytes = Encode::encode(&call)?;
-            let signature = self.keypair.sign(call_bytes.as_slice()).to_bytes();
-            let pubkey = self.keypair.public.to_bytes();
+    async fn call(&mut self, call: Self::Call) -> Result<()> {
+        let call_bytes = Encode::encode(&call)?;
+        let signature = self.keypair.sign(call_bytes.as_slice()).to_bytes();
+        let pubkey = self.keypair.public.to_bytes();
 
-            self.parent.call(SignerCall {
-                call_bytes,
-                pubkey: Some(pubkey),
-                signature: Some(signature),
-            }).await
-        })
+        self.parent.call(SignerCall {
+            call_bytes,
+            pubkey: Some(pubkey),
+            signature: Some(signature),
+        }).await
     }
 }
 

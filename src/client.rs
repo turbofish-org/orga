@@ -1,6 +1,7 @@
 use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
+use futures_lite::future;
 
 use crate::call::Call;
 use crate::Result;
@@ -16,7 +17,7 @@ pub trait Client<T: Clone> {
 #[must_use]
 pub struct PrimitiveClient<T, U: Clone + AsyncCall<Call = ()>> {
     parent: U,
-    fut: Option<Pin<Box<U::Future<'static>>>>,
+    fut: Option<future::Boxed<Result<()>>>,
     marker: PhantomData<T>,
 }
 
@@ -42,9 +43,8 @@ impl<T, U: Clone + AsyncCall<Call = ()>> Future for PrimitiveClient<T, U> {
 
             if this.fut.is_none() {
                 // make call, populate future to maybe be polled later
-                let res = this.parent.call(());
-                let fut = Box::pin(res);
-                let fut2: std::pin::Pin<Box<U::Future<'static>>> = std::mem::transmute(fut);
+                let fut = this.parent.call(());
+                let fut2: future::Boxed<Result<()>> = std::mem::transmute(fut);
                 this.fut = Some(fut2);
             }
 
@@ -109,36 +109,33 @@ transparent_impl!(Result<T>);
 transparent_impl!(Option<T>);
 
 // TODO: move to call module? or will this always be client-specific?
+#[async_trait::async_trait]
 pub trait AsyncCall {
     type Call;
-    type Future<'a>: Future<Output = Result<()>> + Send;
 
-    fn call(&mut self, call: Self::Call) -> Self::Future<'_>;
+    async fn call(&mut self, call: Self::Call) -> Result<()>;
 }
 
-#[cfg(test)]
-pub mod mock {
-    use super::*;
-    use futures_lite::future;
-    use std::cell::RefCell;
-    use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
-    pub struct Mock<T>(pub Rc<RefCell<T>>);
+pub struct Mock<T>(pub Arc<Mutex<T>>);
 
-    impl<T> Clone for Mock<T> {
-        fn clone(&self) -> Self {
-            Mock(self.0.clone())
-        }
+impl<T> Clone for Mock<T> {
+    fn clone(&self) -> Self {
+        Mock(self.0.clone())
     }
+}
 
-    impl<T: Call> AsyncCall for Mock<T> {
-        type Call = T::Call;
-        type Future<'a> = future::Ready<Result<()>>;
+#[async_trait::async_trait]
+impl<T: Call> AsyncCall for Mock<T>
+where
+    T: Send + Sync,
+    T::Call: Send,
+{
+    type Call = T::Call;
 
-        fn call(&mut self, call: Self::Call) -> Self::Future<'_> {
-            let res = self.0.borrow_mut().call(call);
-            future::ready(res)
-        }
+    async fn call(&mut self, call: Self::Call) -> Result<()> {
+        self.0.lock().unwrap().call(call)
     }
 }
 
@@ -174,25 +171,41 @@ impl Bar {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::RefCell;
-    use std::rc::Rc;
+    use std::sync::{Arc, Mutex};
 
-    #[ignore]
     #[tokio::test]
     async fn client() {
-        let state = Rc::new(RefCell::new(Foo {
+        let state = Arc::new(Mutex::new(Foo {
             bar: Bar(0),
             bar2: Bar(0),
         }));
 
+        let mut client = Foo::create_client(Mock(state.clone()));
+
+        client.bar.increment().await.unwrap();
+        println!("{:?}\n\n", &state.lock().unwrap());
+
+        client.get_bar_mut(1).increment().await.unwrap();
+        println!("{:?}\n\n", &state.lock().unwrap());
+
+        // println!("{:?}\n\n", client.bar.count().await.unwrap());
+
+        // println!("{:?}\n\n", client.get_bar_count(1).await.unwrap());
+        // println!(
+        //     "{:?}\n\n",
+        //     client.get_bar(1).await.unwrap().count(1).await.unwrap()
+        // );
+        // println!("{:?}\n\n", client.get_bar(1).count().await.unwrap());
+    }
+
+    #[ignore]
+    #[tokio::test]
+    async fn rpc_client() {
         use crate::abci::TendermintClient;
         let mut client = TendermintClient::<Foo>::new("http://localhost:26657").unwrap();
 
         client.bar.increment().await.unwrap();
-        println!("{:?}\n\n", &state.borrow());
-
         client.get_bar_mut(1).increment().await.unwrap();
-        println!("{:?}\n\n", &state.borrow());
 
         // println!("{:?}\n\n", client.bar.count().await.unwrap());
 
