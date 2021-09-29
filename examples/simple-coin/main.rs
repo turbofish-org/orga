@@ -1,6 +1,5 @@
 #![feature(trivial_bounds)]
 #![feature(min_specialization)]
-#![feature(generic_associated_types)]
 
 mod client;
 mod coin;
