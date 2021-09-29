@@ -111,7 +111,7 @@ transparent_impl!(&mut T);
 transparent_impl!(Result<T>);
 transparent_impl!(Option<T>);
 
-// TODO: move to call module? or will this always be client-specific?
+// TODO: move to call module? or will these always be client-specific?
 #[async_trait::async_trait]
 pub trait AsyncCall {
     type Call;
@@ -119,6 +119,18 @@ pub trait AsyncCall {
     async fn call(&mut self, call: Self::Call) -> Result<()>;
 }
 
+#[async_trait::async_trait]
+pub trait AsyncQuery {
+    type Query;
+    type Response;
+
+    async fn query<F, R>(&self, query: Self::Query, check: F) -> Result<Self::Response>
+    where
+        F: Fn(Self::Response) -> Result<R>;
+}
+
+// TODO: support deriving for types inside module in macros, then move this into
+// tests module
 #[derive(Debug, Call, Client)]
 pub struct Foo {
     pub bar: Bar,
