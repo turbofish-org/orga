@@ -24,6 +24,8 @@ pub enum Error {
     Nonce(String),
     #[error("Tendermint Error: {0}")]
     Tendermint(String),
+    #[error(transparent)]
+    RocksDB(#[from] merk::rocksdb::Error),
     #[error("Signer Error: {0}")]
     Signer(String),
     #[error("Store Error: {0}")]
