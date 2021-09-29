@@ -32,8 +32,6 @@ pub fn derive(item: TokenStream) -> TokenStream {
         #client_impl
     };
 
-    println!("\n\n\n\n\n{}\n\n", &output);
-
     output.into()
 }
 
