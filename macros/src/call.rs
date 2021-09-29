@@ -202,7 +202,7 @@ fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> 
                 }
                 impl<__Self, #(#requirements),*> #trait_name#generic_reqs for __Self {
                     default fn maybe_call(&mut self #full_inputs) -> ::orga::Result<#output_type> {
-                        failure::bail!("This call cannot be called because not all bounds are met")
+                        Err(::orga::Error::Call("This call cannot be called because not all bounds are met".into()))
                     }
                 }
                 impl#parent_generics #trait_name#generic_reqs for #name#generic_params
@@ -240,7 +240,9 @@ fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> 
 
             fn call(&mut self, call: Self::Call) -> ::orga::Result<()> {
                 match call {
-                    Noop => failure::bail!("not callable"),
+                    Noop => {
+                        return Err(::orga::Error::Call("Not callable".into()))
+                    }
                     #(#field_call_arms),*
                     #(#method_call_arms),*
                 }
