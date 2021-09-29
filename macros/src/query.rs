@@ -202,7 +202,7 @@ fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -
                 }
                 impl<__Self, #(#requirements),*> #trait_name#generic_reqs for __Self {
                     default fn maybe_call(&self #full_inputs) -> ::orga::Result<#output_type> {
-                        failure::bail!("This query cannot be called because not all bounds are met")
+                        Err(::orga::Error::Query("This query cannot be called because not all bounds are met".into()))
                     }
                 }
                 impl#parent_generics #trait_name#generic_reqs for #name#generic_params
