@@ -224,7 +224,10 @@ fn create_client_struct(
                     },
                 };
                 let method_output = quote!(
-                    <#output_ty as ::orga::client::Client<#adapter_name<#generic_params #output_ty, #parent_ty>>>::Client
+                    ::orga::client::CallChain<
+                        <#output_ty as ::orga::client::Client<#adapter_name<#generic_params #output_ty, #parent_ty>>>::Client,
+                        #adapter_name<#generic_params #output_ty, #parent_ty>,
+                    > 
                 );
 
                 let impl_preds = impl_item
@@ -307,7 +310,8 @@ fn create_client_struct(
                                 args: (#(#method_input_names,)*),
                                 _marker: std::marker::PhantomData,
                             };
-                            <#output_ty as ::orga::client::Client<#adapter_name<#generic_params _, #parent_ty>>>::create_client(adapter)
+                            let client = <#output_ty as ::orga::client::Client<#adapter_name<#generic_params _, #parent_ty>>>::create_client(adapter.clone());
+                            ::orga::client::CallChain::new(client, adapter)
                         }
                     }
                 }

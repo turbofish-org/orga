@@ -18,23 +18,46 @@ pub trait Client<T: Clone> {
 }
 
 #[must_use]
-pub struct PrimitiveClient<T, U: Clone + AsyncCall<Call = ()>> {
+pub struct CallChain<T: Clone, U: Clone + AsyncCall>
+where
+    U::Call: Default,
+{
+    wrapped: T,
     parent: U,
     fut: Option<future::Boxed<Result<()>>>,
-    marker: PhantomData<T>,
 }
 
-impl<T, U: Clone + AsyncCall<Call = ()>> Clone for PrimitiveClient<T, U> {
-    fn clone(&self) -> Self {
-        PrimitiveClient {
-            parent: self.parent.clone(),
+
+impl<T: Clone, U: Clone + AsyncCall> CallChain<T, U>
+where
+    U::Call: Default,
+{
+    pub fn new(wrapped: T, parent: U) -> Self {
+        Self {
+            wrapped,
+            parent,
             fut: None,
-            marker: PhantomData,
         }
     }
 }
 
-impl<T, U: Clone + AsyncCall<Call = ()>> Future for PrimitiveClient<T, U> {
+impl<T: Clone, U: Clone + AsyncCall> Clone for CallChain<T, U>
+where
+    U::Call: Default,
+{
+    fn clone(&self) -> Self {
+        CallChain {
+            wrapped: self.wrapped.clone(),
+            parent: self.parent.clone(),
+            fut: None,
+        }
+    }
+}
+
+impl<T: Clone, U: Clone + AsyncCall> Future for CallChain<T, U>
+where
+    U::Call: Default,
+{
     type Output = Result<()>;
 
     fn poll(
@@ -46,23 +69,68 @@ impl<T, U: Clone + AsyncCall<Call = ()>> Future for PrimitiveClient<T, U> {
 
             if this.fut.is_none() {
                 // make call, populate future to maybe be polled later
-                let fut = this.parent.call(());
+                let fut = this.parent.call(Default::default());
                 let fut2: future::Boxed<Result<()>> = std::mem::transmute(fut);
                 this.fut = Some(fut2);
             }
 
-            // TODO: if future is ready, should we clear the future field so
-            // consumer can make additional calls?
+            let fut = this.fut.as_mut().unwrap().as_mut();
+            let res = fut.poll(cx);
+            if res.is_ready() {
+                this.fut = None;
+            }
+            res
+        }
+    }
+}
+
+#[must_use]
+pub struct PrimitiveClient<T, U: Clone> {
+    parent: U,
+    fut: Option<future::Boxed<Result<T>>>,
+    marker: PhantomData<T>,
+}
+
+impl<T, U: Clone> Clone for PrimitiveClient<T, U> {
+    fn clone(&self) -> Self {
+        PrimitiveClient {
+            parent: self.parent.clone(),
+            fut: None,
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<T, U: Clone + AsyncQuery<Query = (), Response = T>> Future for PrimitiveClient<T, U> {
+    type Output = Result<T>;
+
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
+        unsafe {
+            let this = self.get_unchecked_mut();
+
+            if this.fut.is_none() {
+                // make query, populate future to maybe be polled later
+                let fut = this.parent.query((), Ok);
+                let fut2: future::Boxed<Result<T>> = std::mem::transmute(fut);
+                this.fut = Some(fut2);
+            }
 
             let fut = this.fut.as_mut().unwrap().as_mut();
-            fut.poll(cx)
+            let res = fut.poll(cx);
+            if res.is_ready() {
+                this.fut = None;
+            }
+            res
         }
     }
 }
 
 macro_rules! primitive_impl {
     ( $x:ty ) => {
-        impl<T: Clone + AsyncCall<Call = ()>> Client<T> for $x {
+        impl<T: Clone> Client<T> for $x {
             type Client = PrimitiveClient<$x, T>;
 
             fn create_client(parent: T) -> Self::Client {
@@ -92,11 +160,7 @@ primitive_impl!(i128);
 
 macro_rules! transparent_impl {
     ( $x:ty ) => {
-        impl<T, U> Client<U> for $x
-        where
-            T: Client<U> + Call,
-            U: Clone + AsyncCall<Call = T::Call>,
-        {
+        impl<T: Client<U>, U: Clone> Client<U> for $x {
             type Client = T::Client;
 
             fn create_client(parent: U) -> Self::Client {
@@ -124,7 +188,7 @@ pub trait AsyncQuery {
     type Query;
     type Response;
 
-    async fn query<F, R>(&self, query: Self::Query, check: F) -> Result<Self::Response>
+    async fn query<F, R>(&self, query: Self::Query, check: F) -> Result<R>
     where
         F: Fn(Self::Response) -> Result<R>;
 }
@@ -179,8 +243,8 @@ mod tests {
         client.bar.increment().await.unwrap();
         println!("{:?}\n\n", &state.lock().unwrap());
 
-        client.get_bar_mut(1).increment().await.unwrap();
-        println!("{:?}\n\n", &state.lock().unwrap());
+        // client.get_bar_mut(1).increment().await.unwrap();
+        // println!("{:?}\n\n", &state.lock().unwrap());
 
         // println!("{:?}\n\n", client.bar.await.unwrap()); // queries state.bar
         // println!("{:?}\n\n", client.bar.count().await.unwrap()); // queries 'this' on return value of count method on state.bar
@@ -203,7 +267,7 @@ mod tests {
         let mut client = TendermintClient::<Foo>::new("http://localhost:26657").unwrap();
 
         client.bar.increment().await.unwrap();
-        client.get_bar_mut(1).increment().await.unwrap();
+        // client.get_bar_mut(1).increment().await.unwrap();
 
         // println!("{:?}\n\n", client.bar.count().await.unwrap());
 
