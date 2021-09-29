@@ -1,151 +1,21 @@
-use futures_lite::future;
-use std::future::Future;
 use std::marker::PhantomData;
-use std::pin::Pin;
 
 use crate::call::Call;
 use crate::Result;
 
-pub use mock::Mock;
 pub use crate::macros::Client;
+pub use call_chain::CallChain;
+pub use mock::Mock;
+pub use primitive_client::PrimitiveClient;
 
+mod call_chain;
 mod mock;
+mod primitive_client;
 
 pub trait Client<T: Clone> {
     type Client;
 
     fn create_client(parent: T) -> Self::Client;
-}
-
-#[must_use]
-pub struct CallChain<T: Clone, U: Clone + AsyncCall>
-where
-    U::Call: Default,
-{
-    wrapped: T,
-    parent: U,
-    fut: Option<future::Boxed<Result<()>>>,
-}
-
-
-impl<T: Clone, U: Clone + AsyncCall> CallChain<T, U>
-where
-    U::Call: Default,
-{
-    pub fn new(wrapped: T, parent: U) -> Self {
-        Self {
-            wrapped,
-            parent,
-            fut: None,
-        }
-    }
-}
-
-impl<T: Clone, U: Clone + AsyncCall> Clone for CallChain<T, U>
-where
-    U::Call: Default,
-{
-    fn clone(&self) -> Self {
-        CallChain {
-            wrapped: self.wrapped.clone(),
-            parent: self.parent.clone(),
-            fut: None,
-        }
-    }
-}
-
-impl<T: Clone, U: Clone + AsyncCall> Future for CallChain<T, U>
-where
-    U::Call: Default,
-{
-    type Output = Result<()>;
-
-    fn poll(
-        self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Self::Output> {
-        unsafe {
-            let this = self.get_unchecked_mut();
-
-            if this.fut.is_none() {
-                // make call, populate future to maybe be polled later
-                let fut = this.parent.call(Default::default());
-                let fut2: future::Boxed<Result<()>> = std::mem::transmute(fut);
-                this.fut = Some(fut2);
-            }
-
-            let fut = this.fut.as_mut().unwrap().as_mut();
-            let res = fut.poll(cx);
-            if res.is_ready() {
-                this.fut = None;
-            }
-            res
-        }
-    }
-}
-
-impl<T: Clone, U: Clone + AsyncCall> std::ops::Deref for CallChain<T, U>
-where
-    U::Call: Default,
-{
-    type Target = T;
-
-    fn deref(&self) -> &T {
-        &self.wrapped
-    }
-}
-
-impl<T: Clone, U: Clone + AsyncCall> std::ops::DerefMut for CallChain<T, U>
-where
-    U::Call: Default,
-{
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.wrapped
-    }
-}
-
-#[must_use]
-pub struct PrimitiveClient<T, U: Clone> {
-    parent: U,
-    fut: Option<future::Boxed<Result<T>>>,
-    marker: PhantomData<T>,
-}
-
-impl<T, U: Clone> Clone for PrimitiveClient<T, U> {
-    fn clone(&self) -> Self {
-        PrimitiveClient {
-            parent: self.parent.clone(),
-            fut: None,
-            marker: PhantomData,
-        }
-    }
-}
-
-impl<T, U: Clone + AsyncQuery<Query = (), Response = T>> Future for PrimitiveClient<T, U> {
-    type Output = Result<T>;
-
-    fn poll(
-        self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Self::Output> {
-        unsafe {
-            let this = self.get_unchecked_mut();
-
-            if this.fut.is_none() {
-                // make query, populate future to maybe be polled later
-                let fut = this.parent.query((), Ok);
-                let fut2: future::Boxed<Result<T>> = std::mem::transmute(fut);
-                this.fut = Some(fut2);
-            }
-
-            let fut = this.fut.as_mut().unwrap().as_mut();
-            let res = fut.poll(cx);
-            if res.is_ready() {
-                this.fut = None;
-            }
-            res
-        }
-    }
 }
 
 macro_rules! primitive_impl {
@@ -268,7 +138,7 @@ mod tests {
 
         // println!("{:?}\n\n", client.bar.await.unwrap()); // queries state.bar
         // println!("{:?}\n\n", client.bar.count().await.unwrap()); // queries 'this' on return value of count method on state.bar
-        // println!("{:?}\n\n", client.get_bar(1).count().await.unwrap()); // 
+        // println!("{:?}\n\n", client.get_bar(1).count().await.unwrap()); //
         // // XXX: client.get_bar(1).increment().await.unwrap(); - not possible,
         // // increment requires parent with AsyncCall, MethodGetBarAdapter does
         // // not implement AsyncCall
