@@ -90,7 +90,7 @@ where
     async fn call(&mut self, call: Self::Call) -> Result<()> {
         // Load nonce from file
         let nonce = load_nonce()?;
-        
+
         let res = self.parent.call(NonceCall {
             inner_call: call,
             nonce: Some(nonce),

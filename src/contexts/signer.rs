@@ -93,11 +93,13 @@ where
         let signature = self.keypair.sign(call_bytes.as_slice()).to_bytes();
         let pubkey = self.keypair.public.to_bytes();
 
-        self.parent.call(SignerCall {
-            call_bytes,
-            pubkey: Some(pubkey),
-            signature: Some(signature),
-        }).await
+        self.parent
+            .call(SignerCall {
+                call_bytes,
+                pubkey: Some(pubkey),
+                signature: Some(signature),
+            })
+            .await
     }
 }
 

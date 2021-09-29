@@ -1,7 +1,7 @@
+use futures_lite::future;
 use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
-use futures_lite::future;
 
 use crate::call::Call;
 use crate::Result;
@@ -37,7 +37,7 @@ impl<T, U: Clone + AsyncCall<Call = ()>> Future for PrimitiveClient<T, U> {
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Self::Output>{
+    ) -> std::task::Poll<Self::Output> {
         unsafe {
             let this = self.get_unchecked_mut();
 
@@ -61,7 +61,7 @@ macro_rules! primitive_impl {
     ( $x:ty ) => {
         impl<T: Clone + AsyncCall<Call = ()>> Client<T> for $x {
             type Client = PrimitiveClient<$x, T>;
-        
+
             fn create_client(parent: T) -> Self::Client {
                 PrimitiveClient {
                     parent,
@@ -95,7 +95,7 @@ macro_rules! transparent_impl {
             U: Clone + AsyncCall<Call = T::Call>,
         {
             type Client = T::Client;
-        
+
             fn create_client(parent: U) -> Self::Client {
                 T::create_client(parent)
             }

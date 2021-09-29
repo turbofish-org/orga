@@ -1,10 +1,10 @@
 use std::cmp::Ordering;
 use std::collections::btree_map::Entry::{Occupied, Vacant};
 use std::collections::{btree_map, BTreeMap};
+use std::future::Future;
 use std::iter::Peekable;
 use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 use std::pin::Pin;
-use std::future::Future;
 
 use super::Next;
 use crate::call::Call;
@@ -170,7 +170,8 @@ where
     V::Call: Sync,
     U: Send,
     K: Send,
-{}
+{
+}
 
 #[async_trait::async_trait]
 impl<K: Clone, V: Call, U: Clone> AsyncCall for Client<K, V, U>

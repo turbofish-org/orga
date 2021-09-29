@@ -47,12 +47,17 @@ where
     }
 }
 
-pub struct NoReturn<'a>(std::pin::Pin<Box<dyn std::future::Future<Output = tm::Result<TxResponse>> + Send + 'a>>);
+pub struct NoReturn<'a>(
+    std::pin::Pin<Box<dyn std::future::Future<Output = tm::Result<TxResponse>> + Send + 'a>>,
+);
 
 impl<'a> std::future::Future for NoReturn<'a> {
     type Output = Result<()>;
 
-    fn poll(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context) -> std::task::Poll<Self::Output> {
+    fn poll(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context,
+    ) -> std::task::Poll<Self::Output> {
         unsafe {
             let mut_ref = self.get_unchecked_mut();
             let res = mut_ref.0.as_mut().poll(cx);

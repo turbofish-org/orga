@@ -53,10 +53,10 @@ pub mod coins;
 mod error;
 
 // re-exports
-pub use error::*;
-pub use orga_macros as macros;
 pub use async_trait::async_trait;
+pub use error::*;
 pub use futures_lite::future::Boxed as BoxFuture;
+pub use orga_macros as macros;
 
 pub mod prelude {
     #[cfg(feature = "abci")]
