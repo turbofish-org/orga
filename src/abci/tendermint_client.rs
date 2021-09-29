@@ -16,7 +16,7 @@ pub struct TendermintClient<T> {
 impl<T> Clone for TendermintClient<T> {
     fn clone(&self) -> TendermintClient<T> {
         TendermintClient {
-            marker: self.marker.clone(),
+            marker: self.marker,
             client: self.client.clone(),
         }
     }
@@ -31,6 +31,8 @@ impl<T: Client<Self>> TendermintClient<T> {
     }
 }
 
+unsafe impl<T> Send for TendermintClient<T> {}
+
 use std::future::Future;
 use std::pin::Pin;
 impl<T: Call> AsyncCall for TendermintClient<T>
@@ -38,12 +40,14 @@ where
     T::Call: Send,
 {
     type Call = T::Call;
-    type Future<'a> = NoReturn<'a>;
+    type Future<'a> = Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>;
 
     fn call(&mut self, call: Self::Call) -> Self::Future<'_> {
-        let tx = call.encode().unwrap().into();
-        let fut = self.client.broadcast_tx_commit(tx);
-        NoReturn(fut)
+        Box::pin(async move {
+            let tx = call.encode()?.into();
+            let fut = self.client.broadcast_tx_commit(tx);
+            NoReturn(fut).await
+        })
     }
 }
 

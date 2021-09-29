@@ -83,13 +83,12 @@ impl<T: Call, U: AsyncCall<Call = NonceCall<T::Call>> + Clone> AsyncCall for Non
 where
     T::Call: Send,
     U: Send,
-    for<'a> U::Future<'a>: Send,
 {
     type Call = T::Call;
     type Future<'a> = std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>>;
 
     fn call(&mut self, call: Self::Call) -> Self::Future<'_> {
-        Box::pin(async {
+        Box::pin(async move {
             // Load nonce from file
             let nonce = load_nonce()?;
             

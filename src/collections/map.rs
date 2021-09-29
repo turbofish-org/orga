@@ -176,7 +176,7 @@ impl<K: Clone, V: Call, U: Clone> AsyncCall for Client<K, V, U>
 where
     U: AsyncCall<Call = <Map<K, V> as Call>::Call>,
     K: Encode + Decode + Terminated,
-    V::Call: Sync,
+    V::Call: Sync + Send,
     U: Send,
     K: Send,
 {
@@ -184,7 +184,7 @@ where
     type Future<'a> = Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>;
 
     fn call(&mut self, subcall: Self::Call) -> Self::Future<'_> {
-        Box::pin(async {
+        Box::pin(async move {
             let key = self.key.as_ref().unwrap().clone();
 
             let subcall_bytes = subcall.encode()?;

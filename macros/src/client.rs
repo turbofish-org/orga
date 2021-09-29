@@ -48,7 +48,6 @@ fn create_client_impl(item: &DeriveInput, modname: &Ident) -> TokenStream2 {
         }
     });
     let parent_ty: GenericParam = syn::parse2(quote!(__Parent)).unwrap();
-    let self_lifetime: GenericParam = syn::parse2(quote!('__self)).unwrap();
     generics_sanitized.params.push(parent_ty.clone());
 
     let generic_params = gen_param_input(generics, false);
@@ -62,9 +61,9 @@ fn create_client_impl(item: &DeriveInput, modname: &Ident) -> TokenStream2 {
             #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call>,
             #where_preds
         {
-            type Client<'a> = #modname::Client<'a, #generic_params #parent_ty>;
+            type Client = #modname::Client<#generic_params #parent_ty>;
 
-            fn create_client<'a>(parent: #parent_ty) -> Self::Client<'a> {
+            fn create_client(parent: #parent_ty) -> Self::Client {
                 #modname::Client::new(parent)
             }
         }
@@ -80,7 +79,6 @@ fn create_client_struct(
     let generics = &item.generics;
 
     let parent_ty: GenericParam = syn::parse2(quote!(__Parent)).unwrap();
-    let self_lifetime: GenericParam = syn::parse2(quote!('__self)).unwrap();
 
     let mut generics_sanitized = generics.clone();
     generics_sanitized.params.iter_mut().for_each(|g| {
@@ -89,7 +87,6 @@ fn create_client_struct(
         }
     });
     generics_sanitized.params.push(parent_ty.clone());
-    generics_sanitized.params.insert(0, self_lifetime);
 
     let mut generics_sanitized_with_return = generics_sanitized.clone();
     generics_sanitized_with_return
@@ -122,7 +119,7 @@ fn create_client_struct(
                 }
             });
 
-            quote!(pub #field_name: <#field_ty as ::orga::client::Client<#adapter_name#adapter_generics>>::Client<'__self>)
+            quote!(pub #field_name: <#field_ty as ::orga::client::Client<#adapter_name#adapter_generics>>::Client)
         });
 
     let field_clones = field_adapters
@@ -229,7 +226,7 @@ fn create_client_struct(
                     },
                 };
                 let method_output = quote!(
-                    <#output_ty as ::orga::client::Client<#adapter_name<#generic_params #output_ty, #parent_ty>>>::Client<'__self>
+                    <#output_ty as ::orga::client::Client<#adapter_name<#generic_params #output_ty, #parent_ty>>>::Client
                 );
 
                 let impl_preds = impl_item
@@ -290,7 +287,7 @@ fn create_client_struct(
                         type Future<'a> = std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>>;
 
                         fn call(&mut self, call: Self::Call) -> Self::Future<'_> {
-                            Box::pin(async {
+                            Box::pin(async move {
                                 let call_bytes = ::orga::encoding::Encode::encode(&call)?;
                                 let parent_call = <#name as ::orga::call::Call>::Call::#call_variant_name(
                                     #(#unrolled_args,)*
@@ -301,7 +298,7 @@ fn create_client_struct(
                         }
                     }
 
-                    impl#generics_sanitized Client<'__self, #generic_params #parent_ty>
+                    impl#generics_sanitized Client<#generic_params #parent_ty>
                     where
                         #parent_ty: Clone + Send,
                         #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call>,
@@ -323,7 +320,7 @@ fn create_client_struct(
 
     quote! {
         #[must_use]
-        pub struct Client<'__self, #generic_params #parent_ty: Clone>
+        pub struct Client<#generic_params #parent_ty: Clone>
         where
             #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call> + Send,
             #where_preds
@@ -331,10 +328,10 @@ fn create_client_struct(
             pub(super) parent: #parent_ty,
             _marker: std::marker::PhantomData<#name#generic_params_bracketed>,
             #(#field_fields,)*
-            fut: Option<std::pin::Pin<Box<#parent_ty::Future<'__self>>>>
+            fut: Option<std::pin::Pin<Box<#parent_ty::Future<'static>>>>
         }
 
-        impl<'__self, #generic_params #parent_ty: Clone> Clone for Client<'__self, #generic_params #parent_ty>
+        impl<#generic_params #parent_ty: Clone> Clone for Client<#generic_params #parent_ty>
         where
             #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call> + Send,
             #where_preds
@@ -349,7 +346,7 @@ fn create_client_struct(
             }
         }
 
-        impl#generics_sanitized Client<'__self, #generic_params #parent_ty>
+        impl#generics_sanitized Client<#generic_params #parent_ty>
         where
             #parent_ty: Clone + Send,
             #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call> + Send,
@@ -366,7 +363,7 @@ fn create_client_struct(
             }
         }
 
-        impl#generics_sanitized std::future::Future for Client<'__self, #generic_params #parent_ty>
+        impl#generics_sanitized std::future::Future for Client<#generic_params #parent_ty>
         where
             #parent_ty: Clone + Send,
             #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call>,
@@ -383,9 +380,12 @@ fn create_client_struct(
                     let this = self.get_unchecked_mut();
 
                     if this.fut.is_none() {
-                        // TODO: is this ok? we're creating the future then moving it
                         let res = this.parent.call(Default::default());
-                        this.fut = Some(Box::pin(res));
+                        let fut = Box::pin(res);
+                        let fut2: std::pin::Pin<Box<#parent_ty::Future<'static>>> = unsafe {
+                            std::mem::transmute(fut)
+                        };
+                        this.fut = Some(fut2);
                     }
 
                     let fut = this.fut.as_mut().unwrap().as_mut();
@@ -492,7 +492,7 @@ fn create_field_adapter(
             fn call(&mut self, call: Self::Call) -> Self::Future<'_> {
                 // assumes that the call has a tuple variant called "Field" +
                 // the camel-cased name as the field
-                Box::pin(async {
+                Box::pin(async move {
                     let subcall_bytes = ::orga::encoding::Encode::encode(&call)?; // TODO: error handling
                     let subcall = <#parent_ty as ::orga::call::Call>::Call::#variant_name(subcall_bytes);
                     self.parent.call(subcall).await

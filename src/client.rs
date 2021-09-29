@@ -14,13 +14,13 @@ pub trait Client<T: Clone> {
 }
 
 #[must_use]
-pub struct PrimitiveClient<'a, T, U: Clone + AsyncCall<Call = ()>> {
+pub struct PrimitiveClient<T, U: Clone + AsyncCall<Call = ()>> {
     parent: U,
-    fut: Option<Pin<Box<U::Future<'a>>>>,
+    fut: Option<Pin<Box<U::Future<'static>>>>,
     marker: PhantomData<T>,
 }
 
-impl<'a, T, U: Clone + AsyncCall<Call = ()>> Clone for PrimitiveClient<'a, T, U> {
+impl<T, U: Clone + AsyncCall<Call = ()>> Clone for PrimitiveClient<T, U> {
     fn clone(&self) -> Self {
         PrimitiveClient {
             parent: self.parent.clone(),
@@ -30,7 +30,7 @@ impl<'a, T, U: Clone + AsyncCall<Call = ()>> Clone for PrimitiveClient<'a, T, U>
     }
 }
 
-impl<'a, T, U: Clone + AsyncCall<Call = ()>> Future for PrimitiveClient<'a, T, U> {
+impl<T, U: Clone + AsyncCall<Call = ()>> Future for PrimitiveClient<T, U> {
     type Output = Result<()>;
 
     fn poll(
@@ -42,7 +42,10 @@ impl<'a, T, U: Clone + AsyncCall<Call = ()>> Future for PrimitiveClient<'a, T, U
 
             if this.fut.is_none() {
                 // make call, populate future to maybe be polled later
-                this.fut = Some(Box::pin(this.parent.call(())));
+                let res = this.parent.call(());
+                let fut = Box::pin(res);
+                let fut2: std::pin::Pin<Box<U::Future<'static>>> = std::mem::transmute(fut);
+                this.fut = Some(fut2);
             }
 
             // TODO: if future is ready, should we clear the future field so
@@ -57,7 +60,7 @@ impl<'a, T, U: Clone + AsyncCall<Call = ()>> Future for PrimitiveClient<'a, T, U
 macro_rules! primitive_impl {
     ( $x:ty ) => {
         impl<T: Clone + AsyncCall<Call = ()>> Client<T> for $x {
-            type Client = PrimitiveClient<'static, $x, T>;
+            type Client = PrimitiveClient<$x, T>;
         
             fn create_client(parent: T) -> Self::Client {
                 PrimitiveClient {

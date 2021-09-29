@@ -78,19 +78,27 @@ impl<T, U: Clone> Clone for SignerClient<T, U> {
     }
 }
 
-impl<T: Call, U: AsyncCall<Call = SignerCall> + Clone> AsyncCall for SignerClient<T, U> {
+unsafe impl<T, U: Clone + Send> Send for SignerClient<T, U> {}
+
+impl<T: Call, U: AsyncCall<Call = SignerCall> + Clone> AsyncCall for SignerClient<T, U>
+where
+    T::Call: Send,
+    U: Send,
+{
     type Call = T::Call;
-    type Future<'a> = U::Future<'a>;
+    type Future<'a> = std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>>;
 
     fn call(&mut self, call: Self::Call) -> Self::Future<'_> {
-        let call_bytes = Encode::encode(&call).unwrap();
-        let signature = self.keypair.sign(call_bytes.as_slice()).to_bytes();
-        let pubkey = self.keypair.public.to_bytes();
+        Box::pin(async move {
+            let call_bytes = Encode::encode(&call)?;
+            let signature = self.keypair.sign(call_bytes.as_slice()).to_bytes();
+            let pubkey = self.keypair.public.to_bytes();
 
-        self.parent.call(SignerCall {
-            call_bytes,
-            pubkey: Some(pubkey),
-            signature: Some(signature),
+            self.parent.call(SignerCall {
+                call_bytes,
+                pubkey: Some(pubkey),
+                signature: Some(signature),
+            }).await
         })
     }
 }
@@ -235,9 +243,9 @@ mod tests {
     }
 
     impl<T: Clone> Client<T> for Counter {
-        type Client<'a> = CounterClient<T>;
+        type Client = CounterClient<T>;
 
-        fn create_client<'a>(parent: T) -> Self::Client<'a> {
+        fn create_client(parent: T) -> Self::Client {
             CounterClient { parent }
         }
     }
