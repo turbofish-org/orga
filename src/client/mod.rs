@@ -84,6 +84,26 @@ where
     }
 }
 
+impl<T: Clone, U: Clone + AsyncCall> std::ops::Deref for CallChain<T, U>
+where
+    U::Call: Default,
+{
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        &self.wrapped
+    }
+}
+
+impl<T: Clone, U: Clone + AsyncCall> std::ops::DerefMut for CallChain<T, U>
+where
+    U::Call: Default,
+{
+    fn deref_mut(&mut self) -> &mut T {
+        &mut self.wrapped
+    }
+}
+
 #[must_use]
 pub struct PrimitiveClient<T, U: Clone> {
     parent: U,
@@ -243,8 +263,8 @@ mod tests {
         client.bar.increment().await.unwrap();
         println!("{:?}\n\n", &state.lock().unwrap());
 
-        // client.get_bar_mut(1).increment().await.unwrap();
-        // println!("{:?}\n\n", &state.lock().unwrap());
+        client.get_bar_mut(1).increment().await.unwrap();
+        println!("{:?}\n\n", &state.lock().unwrap());
 
         // println!("{:?}\n\n", client.bar.await.unwrap()); // queries state.bar
         // println!("{:?}\n\n", client.bar.count().await.unwrap()); // queries 'this' on return value of count method on state.bar
@@ -267,7 +287,7 @@ mod tests {
         let mut client = TendermintClient::<Foo>::new("http://localhost:26657").unwrap();
 
         client.bar.increment().await.unwrap();
-        // client.get_bar_mut(1).increment().await.unwrap();
+        client.get_bar_mut(1).increment().await.unwrap();
 
         // println!("{:?}\n\n", client.bar.count().await.unwrap());
 
