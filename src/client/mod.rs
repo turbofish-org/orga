@@ -6,7 +6,10 @@ use std::pin::Pin;
 use crate::call::Call;
 use crate::Result;
 
+pub use mock::Mock;
 pub use crate::macros::Client;
+
+mod mock;
 
 pub trait Client<T: Clone> {
     type Client;
@@ -116,29 +119,6 @@ pub trait AsyncCall {
     async fn call(&mut self, call: Self::Call) -> Result<()>;
 }
 
-use std::sync::{Arc, Mutex};
-
-pub struct Mock<T>(pub Arc<Mutex<T>>);
-
-impl<T> Clone for Mock<T> {
-    fn clone(&self) -> Self {
-        Mock(self.0.clone())
-    }
-}
-
-#[async_trait::async_trait]
-impl<T: Call> AsyncCall for Mock<T>
-where
-    T: Send + Sync,
-    T::Call: Send,
-{
-    type Call = T::Call;
-
-    async fn call(&mut self, call: Self::Call) -> Result<()> {
-        self.0.lock().unwrap().call(call)
-    }
-}
-
 #[derive(Debug, Call, Client)]
 pub struct Foo {
     pub bar: Bar,
@@ -182,20 +162,26 @@ mod tests {
 
         let mut client = Foo::create_client(Mock(state.clone()));
 
+        // calls increment on bar, 'increment()' returns a CallChain<u64> which
+        // calls on parent (MethodIncrementAdapter) once polled
         client.bar.increment().await.unwrap();
         println!("{:?}\n\n", &state.lock().unwrap());
 
         client.get_bar_mut(1).increment().await.unwrap();
         println!("{:?}\n\n", &state.lock().unwrap());
 
-        // println!("{:?}\n\n", client.bar.count().await.unwrap());
-
-        // println!("{:?}\n\n", client.get_bar_count(1).await.unwrap());
-        // println!(
-        //     "{:?}\n\n",
-        //     client.get_bar(1).await.unwrap().count(1).await.unwrap()
-        // );
-        // println!("{:?}\n\n", client.get_bar(1).count().await.unwrap());
+        // println!("{:?}\n\n", client.bar.await.unwrap()); // queries state.bar
+        // println!("{:?}\n\n", client.bar.count().await.unwrap()); // queries 'this' on return value of count method on state.bar
+        // println!("{:?}\n\n", client.get_bar(1).count().await.unwrap()); // 
+        // // XXX: client.get_bar(1).increment().await.unwrap(); - not possible,
+        // // increment requires parent with AsyncCall, MethodGetBarAdapter does
+        // // not implement AsyncCall
+        // // XXX: client.get_bar_mut(1).count().await.unwrap(); - not possible,
+        // // count requires parent with AsyncQuery, MethodGetBarMutAdapter does
+        // // not implement AsyncQuery
+        // let bar = client.get_bar(1).await.unwrap(); // queries 'this' on return value of get_bar method
+        // let count = bar.count().await.unwrap(); // queries 'this' on return value of count method on bar instance
+        // println!("{:?} {}\n\n", bar, count);
     }
 
     #[ignore]
