@@ -78,9 +78,9 @@ pub trait AsyncQuery {
     type Query;
     type Response;
 
-    async fn query<F, R>(&self, query: Self::Query, check: F) -> Result<R>
+    async fn query<F>(&self, query: Self::Query, check: F) -> Result<&Self::Response>
     where
-        F: Fn(Self::Response) -> Result<R>;
+        F: FnMut(&Self::Response) -> Result<()>;
 }
 
 // TODO: support deriving for types inside module in macros, then move this into
