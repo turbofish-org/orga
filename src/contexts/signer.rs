@@ -185,75 +185,75 @@ where
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::call::Call;
-    use crate::contexts::GetContext;
-    use crate::state::State;
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use crate::call::Call;
+//     use crate::contexts::GetContext;
+//     use crate::state::State;
 
-    #[derive(State, Clone)]
-    struct Counter {
-        pub count: u64,
-        pub last_signer: Option<Address>,
-    }
+//     #[derive(State, Clone)]
+//     struct Counter {
+//         pub count: u64,
+//         pub last_signer: Option<Address>,
+//     }
 
-    impl Counter {
-        fn increment(&mut self) -> Result<()> {
-            self.count += 1;
-            let signer = self.context::<Signer>().unwrap().signer.unwrap();
-            self.last_signer.replace(signer);
+//     impl Counter {
+//         fn increment(&mut self) -> Result<()> {
+//             self.count += 1;
+//             let signer = self.context::<Signer>().unwrap().signer.unwrap();
+//             self.last_signer.replace(signer);
 
-            Ok(())
-        }
-    }
+//             Ok(())
+//         }
+//     }
 
-    #[derive(Encode, Decode)]
-    pub enum CounterCall {
-        Increment,
-    }
+//     #[derive(Encode, Decode)]
+//     pub enum CounterCall {
+//         Increment,
+//     }
 
-    impl Call for Counter {
-        type Call = CounterCall;
+//     impl Call for Counter {
+//         type Call = CounterCall;
 
-        fn call(&mut self, call: Self::Call) -> Result<()> {
-            match call {
-                CounterCall::Increment => self.increment(),
-            }
-        }
-    }
+//         fn call(&mut self, call: Self::Call) -> Result<()> {
+//             match call {
+//                 CounterCall::Increment => self.increment(),
+//             }
+//         }
+//     }
 
-    #[derive(Clone)]
-    struct CounterClient<T> {
-        parent: T,
-    }
+//     #[derive(Clone)]
+//     struct CounterClient<T> {
+//         parent: T,
+//     }
 
-    impl<T: Call<Call = CounterCall> + Clone> CounterClient<T> {
-        pub fn increment(&mut self) -> Result<()> {
-            self.parent.call(CounterCall::Increment)
-        }
-    }
+//     impl<T: Call<Call = CounterCall> + Clone> CounterClient<T> {
+//         pub fn increment(&mut self) -> Result<()> {
+//             self.parent.call(CounterCall::Increment)
+//         }
+//     }
 
-    impl<T: Clone> Client<T> for Counter {
-        type Client = CounterClient<T>;
+//     impl<T: Clone> Client<T> for Counter {
+//         type Client = CounterClient<T>;
 
-        fn create_client(parent: T) -> Self::Client {
-            CounterClient { parent }
-        }
-    }
+//         fn create_client(parent: T) -> Self::Client {
+//             CounterClient { parent }
+//         }
+//     }
 
-    // #[test]
-    // fn signed_increment() {
-    //     let state = Rc::new(RefCell::new(SignerProvider {
-    //         inner: Counter {
-    //             count: 0,
-    //             last_signer: None,
-    //         },
-    //     }));
-    //     let mut client = SignerProvider::<Counter>::create_client(state.clone());
-    //     client.increment().unwrap();
-    //     assert_eq!(state.borrow().inner.count, 1);
-    //     let pub_key = load_keypair().unwrap().public.to_bytes();
-    //     assert_eq!(state.borrow().inner.last_signer, Some(pub_key));
-    // }
-}
+// #[test]
+// fn signed_increment() {
+//     let state = Rc::new(RefCell::new(SignerProvider {
+//         inner: Counter {
+//             count: 0,
+//             last_signer: None,
+//         },
+//     }));
+//     let mut client = SignerProvider::<Counter>::create_client(state.clone());
+//     client.increment().unwrap();
+//     assert_eq!(state.borrow().inner.count, 1);
+//     let pub_key = load_keypair().unwrap().public.to_bytes();
+//     assert_eq!(state.borrow().inner.last_signer, Some(pub_key));
+// }
+// }
