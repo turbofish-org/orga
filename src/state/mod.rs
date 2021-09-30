@@ -2,7 +2,7 @@ use crate::encoding::{Decode, Encode};
 use crate::store::*;
 use crate::Result;
 pub use orga_macros::State;
-use std::cell::RefCell;
+use std::cell::{RefCell, UnsafeCell};
 
 /// A trait for types which provide a higher-level API for data stored within a
 /// [`store::Store`](../store/trait.Store.html).
@@ -65,31 +65,57 @@ impl<T: Encode + Decode, S> State<S> for T {
     }
 }
 
-#[derive(Encode, Decode)]
-pub struct RefCellEncoding<T: Encode + Decode>(T);
+#[derive(Encode, Decode, Default)]
+pub struct EncodingWrapper<T: Encode + Decode>(T);
 
 impl<T> State for RefCell<T>
 where
     T: State,
     T::Encoding: From<T> + Encode + Decode,
 {
-    type Encoding = RefCellEncoding<T::Encoding>;
+    type Encoding = EncodingWrapper<T::Encoding>;
 
     fn create(store: Store, data: Self::Encoding) -> Result<Self> {
         Ok(RefCell::new(T::create(store, data.0)?))
     }
 
     fn flush(self) -> Result<Self::Encoding> {
-        Ok(RefCellEncoding(self.into_inner().flush()?))
+        Ok(EncodingWrapper(self.into_inner().flush()?))
     }
 }
 
-impl<T> From<RefCell<T>> for RefCellEncoding<T::Encoding>
+impl<T> From<RefCell<T>> for EncodingWrapper<T::Encoding>
 where
     T: State,
     T::Encoding: From<T> + Encode + Decode,
 {
     fn from(value: RefCell<T>) -> Self {
+        Self(value.into_inner().into())
+    }
+}
+
+impl<T> State for UnsafeCell<T>
+where
+    T: State,
+    T::Encoding: From<T> + Encode + Decode,
+{
+    type Encoding = EncodingWrapper<T::Encoding>;
+
+    fn create(store: Store, data: Self::Encoding) -> Result<Self> {
+        Ok(UnsafeCell::new(T::create(store, data.0)?))
+    }
+
+    fn flush(self) -> Result<Self::Encoding> {
+        Ok(EncodingWrapper(self.into_inner().flush()?))
+    }
+}
+
+impl<T> From<UnsafeCell<T>> for EncodingWrapper<T::Encoding>
+where
+    T: State,
+    T::Encoding: From<T> + Encode + Decode,
+{
+    fn from(value: UnsafeCell<T>) -> Self {
         Self(value.into_inner().into())
     }
 }
