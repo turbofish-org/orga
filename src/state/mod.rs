@@ -1,6 +1,7 @@
 use crate::store::*;
 use crate::Result;
 pub use orga_macros::State;
+use std::cell::RefCell;
 
 /// A trait for types which provide a higher-level API for data stored within a
 /// [`store::Store`](../store/trait.Store.html).
@@ -60,5 +61,13 @@ impl<T: ed::Encode + ed::Decode, S> State<S> for T {
     #[inline]
     fn flush(self) -> Result<Self::Encoding> {
         Ok(self)
+    }
+}
+
+impl<T: State<S>, S> State<S> for RefCell<T> {
+    type Encoding = T::Encoding;
+
+    fn create(store: Store<S>, data: Self::Encoding) -> Result<Self> {
+        Ok(RefCell::new(T::create(store, data)?))
     }
 }
