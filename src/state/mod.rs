@@ -1,3 +1,4 @@
+use crate::encoding::{Decode, Encode};
 use crate::store::*;
 use crate::Result;
 pub use orga_macros::State;
@@ -21,7 +22,7 @@ pub trait State<S = DefaultBackingStore>: Sized {
     ///
     /// For simple data types, this will often be `Self` since a separate type
     /// is not needed.
-    type Encoding: ed::Encode + ed::Decode + From<Self>;
+    type Encoding: Encode + Decode + From<Self>;
 
     /// Creates an instance of the type from a dedicated substore (`store`) and
     /// associated data (`data`).
@@ -50,7 +51,7 @@ pub trait State<S = DefaultBackingStore>: Sized {
         S: Write;
 }
 
-impl<T: ed::Encode + ed::Decode, S> State<S> for T {
+impl<T: Encode + Decode, S> State<S> for T {
     type Encoding = Self;
 
     #[inline]
@@ -64,10 +65,31 @@ impl<T: ed::Encode + ed::Decode, S> State<S> for T {
     }
 }
 
-impl<T: State<S>, S> State<S> for RefCell<T> {
-    type Encoding = T::Encoding;
+#[derive(Encode, Decode)]
+pub struct RefCellEncoding<T: Encode + Decode>(T);
 
-    fn create(store: Store<S>, data: Self::Encoding) -> Result<Self> {
-        Ok(RefCell::new(T::create(store, data)?))
+impl<T> State for RefCell<T>
+where
+    T: State,
+    T::Encoding: From<T> + Encode + Decode,
+{
+    type Encoding = RefCellEncoding<T::Encoding>;
+
+    fn create(store: Store, data: Self::Encoding) -> Result<Self> {
+        Ok(RefCell::new(T::create(store, data.0)?))
+    }
+
+    fn flush(self) -> Result<Self::Encoding> {
+        Ok(RefCellEncoding(self.into_inner().flush()?))
+    }
+}
+
+impl<T> From<RefCell<T>> for RefCellEncoding<T::Encoding>
+where
+    T: State,
+    T::Encoding: From<T> + Encode + Decode,
+{
+    fn from(value: RefCell<T>) -> Self {
+        Self(value.into_inner().into())
     }
 }
