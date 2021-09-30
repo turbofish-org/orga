@@ -5,6 +5,7 @@ use crate::encoding::{Encode, Terminated};
 use crate::state::State;
 use crate::store::Store;
 use crate::Result;
+use std::cell::UnsafeCell;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Drop};
 
@@ -14,7 +15,7 @@ where
 {
     multiplier: Amount<S>,
     total: Amount<S>,
-    map: Map<K, Entry<V, S>>,
+    map: Map<K, UnsafeCell<Entry<V, S>>>,
 }
 
 impl<K, V, S> Balance<S> for Pool<K, V, S>
@@ -115,8 +116,8 @@ where
     V::Encoding: Default,
 {
     pub fn get_mut(&mut self, key: K) -> Result<ChildMut<K, V, S>> {
-        let mut entry = self.map.entry(key)?.or_default()?;
-
+        let mut child = self.map.entry(key)?.or_default()?;
+        let mut entry = child.get_mut();
         if entry.last_multiplier == Amount::zero() {
             entry.last_multiplier = self.multiplier;
         }
@@ -130,20 +131,33 @@ where
 
         Ok(ChildMut {
             parent_total: &mut self.total,
-            entry,
+            entry: child,
             initial_balance,
             _symbol: PhantomData,
         })
     }
-}
 
-impl<K, V, S> Pool<K, V, S>
-where
-    S: Symbol,
-    K: Encode + Terminated + Clone,
-    V: State + Balance<S> + Adjust<S>,
-    V::Encoding: Default,
-{
+    pub fn get(&self, key: K) -> Result<Child<V, S>> {
+        let entry = self.map.get(key)?.unwrap();
+        {
+            let mut entry = unsafe { &mut *entry.get() };
+
+            if entry.last_multiplier == Amount::zero() {
+                entry.last_multiplier = self.multiplier;
+            }
+
+            if entry.last_multiplier != self.multiplier {
+                let adjustment = (self.multiplier / entry.last_multiplier)?;
+                entry.inner.adjust(adjustment)?;
+                entry.last_multiplier = self.multiplier;
+            }
+        }
+
+        Ok(Child {
+            entry,
+            _symbol: PhantomData,
+        })
+    }
 }
 
 impl<K, V, S> Give<S> for Pool<K, V, S>
@@ -190,12 +204,12 @@ where
 pub struct ChildMut<'a, K, V, S>
 where
     S: Symbol,
-    K: Encode + Terminated + Clone,
+    K: Encode + Clone,
     V: State + Balance<S> + Adjust<S>,
     V::Encoding: Default,
 {
     parent_total: &'a mut Amount<S>,
-    entry: MapChildMut<'a, K, Entry<V, S>>,
+    entry: MapChildMut<'a, K, UnsafeCell<Entry<V, S>>>,
     initial_balance: Amount<S>,
     _symbol: PhantomData<S>,
 }
@@ -203,14 +217,14 @@ where
 impl<'a, K, V, S> Drop for ChildMut<'a, K, V, S>
 where
     S: Symbol,
-    K: Encode + Terminated + Clone,
+    K: Encode + Clone,
     V: State + Balance<S> + Adjust<S>,
     V::Encoding: Default,
 {
     fn drop(&mut self) {
         use std::cmp::Ordering::*;
         let start_balance = self.initial_balance;
-        let end_balance = self.entry.inner.balance();
+        let end_balance = self.entry.get_mut().balance();
         match end_balance.value.cmp(&start_balance.value) {
             Greater => {
                 *self.parent_total += (end_balance - start_balance).expect("Overflow");
@@ -229,26 +243,51 @@ where
 impl<'a, K, V, S> Deref for ChildMut<'a, K, V, S>
 where
     S: Symbol,
-    K: Encode + Terminated + Clone,
+    K: Encode + Clone,
     V: State + Balance<S> + Adjust<S>,
     V::Encoding: Default,
 {
-    type Target = MapChildMut<'a, K, Entry<V, S>>;
+    type Target = V;
 
     fn deref(&self) -> &Self::Target {
-        &self.entry
+        let v = self.entry.get();
+        &unsafe { &*v }.inner
     }
 }
 
 impl<'a, K, V, S> DerefMut for ChildMut<'a, K, V, S>
 where
     S: Symbol,
-    K: Encode + Terminated + Clone,
+    K: Encode + Clone,
     V: State + Balance<S> + Adjust<S>,
     V::Encoding: Default,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.entry
+        self.entry.get_mut()
+    }
+}
+
+pub struct Child<'a, V, S>
+where
+    S: Symbol,
+    V: State + Balance<S> + Adjust<S>,
+    V::Encoding: Default,
+{
+    entry: MapRef<'a, UnsafeCell<Entry<V, S>>>,
+    _symbol: PhantomData<S>,
+}
+
+impl<'a, V, S> Deref for Child<'a, V, S>
+where
+    S: Symbol,
+    V: State + Balance<S> + Adjust<S>,
+    V::Encoding: Default,
+{
+    type Target = V;
+
+    fn deref(&self) -> &Self::Target {
+        let v = self.entry.get();
+        &unsafe { &*v }.inner
     }
 }
 
@@ -291,8 +330,9 @@ mod tests {
         }
 
         pool.add(12)?;
+
         {
-            let alice_child = pool.get_mut(alice)?;
+            let alice_child = pool.get(alice)?;
             assert_eq!(alice_child.balance().value, 20);
         }
 
