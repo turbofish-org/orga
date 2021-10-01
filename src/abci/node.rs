@@ -196,10 +196,10 @@ where
         Ok(check_tx_res)
     }
 
-    fn query(&self, store: Shared<MerkStore>, req: RequestQuery) -> Result<ResponseQuery> {
+    fn query(&self, merk_store: Shared<MerkStore>, req: RequestQuery) -> Result<ResponseQuery> {
         let query_bytes = req.data;
-        let backing_store: BackingStore = store.clone().into();
-        let store_height = store.borrow().height()?;
+        let backing_store: BackingStore = merk_store.clone().into();
+        let store_height = merk_store.borrow().height()?;
         let store = Store::new(backing_store.clone());
         let state_bytes = store.get(&[])?.unwrap();
         let data: <ABCIProvider<A> as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
@@ -209,12 +209,18 @@ where
         let query = Decode::decode(query_bytes.as_slice())?;
         state.query(query)?;
         let proof_builder = backing_store.into_proof_builder()?;
+        let root_hash = merk_store.borrow().root_hash()?;
         let proof_bytes = proof_builder.build()?;
+
+        // TODO: we shouldn't need to include the root hash in the response
+        let mut value = vec![];
+        value.extend(root_hash);
+        value.extend(proof_bytes);
 
         let res = ResponseQuery {
             code: 0,
             height: store_height as i64,
-            value: proof_bytes,
+            value,
             ..Default::default()
         };
 

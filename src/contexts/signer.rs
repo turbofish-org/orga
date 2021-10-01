@@ -1,3 +1,5 @@
+use std::ops::{Deref, DerefMut};
+
 use super::{BeginBlockCtx, Context, EndBlockCtx, InitChainCtx};
 use crate::abci::{BeginBlock, EndBlock, InitChain};
 use crate::call::Call;
@@ -12,6 +14,14 @@ use ed25519_dalek::{Keypair, PublicKey, Signature, Signer as Ed25519Signer};
 
 pub struct SignerProvider<T> {
     inner: T,
+}
+
+impl<T> Deref for SignerProvider<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
 }
 
 pub struct Signer {

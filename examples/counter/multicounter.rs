@@ -3,7 +3,7 @@ use orga::{coins::Address, prelude::*};
 
 #[derive(State, Call, Query, Client)]
 pub struct MultiCounter {
-    counters: Map<Address, Counter>,
+    pub counters: Map<Address, Counter>,
 }
 
 impl MultiCounter {

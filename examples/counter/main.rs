@@ -11,10 +11,41 @@ use tokio::task::spawn_blocking;
 
 pub type CounterApp = SignerProvider<NonceProvider<MultiCounter>>;
 
+type CounterQuery = counter_query::Query;
+type MultiCounterQuery = multi_counter_query::Query;
+
 pub async fn run_client() -> Result<()> {
     let mut client = TendermintClient::<CounterApp>::new("http://localhost:26657")?;
 
-    client.increment().await
+    println!(
+        "count before incrementing: {:?}",
+        client.query(
+            MultiCounterQuery::FieldCounters(
+                <Map<Address, Counter> as Query>::Query::MethodGet(
+                    [194, 42, 183, 160, 59, 68, 203, 90, 200, 61, 123, 126, 110, 150, 217, 245, 196, 90, 179, 178, 179, 193, 107, 118, 13, 117, 195, 236, 191, 213, 145, 148].into(),
+                    CounterQuery::FieldCount(()).encode()?,
+                ),
+            ),
+            |state| Ok(state.counters.get([194, 42, 183, 160, 59, 68, 203, 90, 200, 61, 123, 126, 110, 150, 217, 245, 196, 90, 179, 178, 179, 193, 107, 118, 13, 117, 195, 236, 191, 213, 145, 148].into())?.map(|c| c.count)),
+        ).await?,
+    );
+
+    client.increment().await?;
+
+    println!(
+        "count after incrementing: {:?}",
+        client.query(
+            MultiCounterQuery::FieldCounters(
+                <Map<Address, Counter> as Query>::Query::MethodGet(
+                    [194, 42, 183, 160, 59, 68, 203, 90, 200, 61, 123, 126, 110, 150, 217, 245, 196, 90, 179, 178, 179, 193, 107, 118, 13, 117, 195, 236, 191, 213, 145, 148].into(),
+                    CounterQuery::FieldCount(()).encode()?,
+                ),
+            ),
+            |state| Ok(state.counters.get([194, 42, 183, 160, 59, 68, 203, 90, 200, 61, 123, 126, 110, 150, 217, 245, 196, 90, 179, 178, 179, 193, 107, 118, 13, 117, 195, 236, 191, 213, 145, 148].into())?.map(|c| c.count)),
+        ).await?,
+    );
+
+    Ok(())
 }
 
 pub fn run_node() {

@@ -1,3 +1,6 @@
+use std::ops::{Deref, DerefMut};
+use std::convert::TryInto;
+
 use tendermint_rpc as tm;
 use tm::Client as _;
 
@@ -7,43 +10,52 @@ use crate::state::State;
 use crate::client::{AsyncCall, Client};
 use crate::encoding::{Encode, Decode};
 use crate::Result;
-use crate::merk::{BackingStore, ProofStore};
+use crate::merk::ProofStore;
 use crate::store::{Store, Shared};
 
 pub use tm::endpoint::broadcast::tx_commit::Response as TxResponse;
 
-pub struct TendermintClient<T> {
-    marker: std::marker::PhantomData<T>,
-    client: tm::HttpClient,
+pub struct TendermintClient<T: Client<TendermintAdapter<T>>> {
+    state_client: T::Client,
+    tm_client: tm::HttpClient,
 }
 
-impl<T> Clone for TendermintClient<T> {
-    fn clone(&self) -> TendermintClient<T> {
-        TendermintClient {
-            marker: self.marker,
-            client: self.client.clone(),
-        }
-    }
-}
-
-impl<T: Client<Self>> TendermintClient<T> {
-    pub fn new(addr: &str) -> Result<T::Client> {
-        Ok(T::create_client(TendermintClient {
+impl<T: Client<TendermintAdapter<T>>> TendermintClient<T> {
+    pub fn new(addr: &str) -> Result<Self> {
+        let tm_client = tm::HttpClient::new(addr)?;
+        let state_client = T::create_client(TendermintAdapter {
             marker: std::marker::PhantomData,
-            client: tm::HttpClient::new(addr)?,
-        }))
+            client: tm_client.clone(),
+        });
+        Ok(TendermintClient { state_client, tm_client })
     }
 }
 
-impl<T: Client<Self> + Query + State> TendermintClient<T> {
+impl<T: Client<TendermintAdapter<T>>> Deref for TendermintClient<T> {
+    type Target = T::Client;
+
+    fn deref(&self) -> &Self::Target {
+        &self.state_client
+    }
+}
+
+impl<T: Client<TendermintAdapter<T>>> DerefMut for TendermintClient<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.state_client
+    }
+}
+
+impl<T: Client<TendermintAdapter<T>> + Query + State> TendermintClient<T> {
     pub async fn query<F, R>(&self, query: T::Query, check: F) -> Result<R>
     where
         F: Fn(&T) -> Result<R>,
     {
         let query_bytes = query.encode()?;
-        let res = self.client.abci_query(None, query_bytes, None, true).await?;
+        let res = self.tm_client.abci_query(None, query_bytes, None, true).await?;
+        let root_hash = res.value[0..32].try_into()?;
+        let proof_bytes = &res.value[32..];
 
-        let map = merk::proofs::query::verify(&res.value, [0; 32])?;
+        let map = merk::proofs::query::verify(proof_bytes, root_hash)?;
         let root_value = match map.get(&[])? {
             Some(root_value) => root_value,
             None => return Err(failure::format_err!("missing root value")),
@@ -57,10 +69,24 @@ impl<T: Client<Self> + Query + State> TendermintClient<T> {
     }
 }
 
-unsafe impl<T> Send for TendermintClient<T> {}
+pub struct TendermintAdapter<T> {
+    marker: std::marker::PhantomData<T>,
+    client: tm::HttpClient,
+}
+
+impl<T> Clone for TendermintAdapter<T> {
+    fn clone(&self) -> TendermintAdapter<T> {
+        TendermintAdapter {
+            marker: self.marker,
+            client: self.client.clone(),
+        }
+    }
+}
+
+unsafe impl<T> Send for TendermintAdapter<T> {}
 
 #[async_trait::async_trait]
-impl<T: Call> AsyncCall for TendermintClient<T>
+impl<T: Call> AsyncCall for TendermintAdapter<T>
 where
     T::Call: Send,
 {

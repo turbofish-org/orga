@@ -10,12 +10,21 @@ use crate::state::State;
 use crate::store::Store;
 use crate::Result;
 use std::path::PathBuf;
+use std::ops::{Deref, DerefMut};
 
 type NonceMap = Map<Address, u64>;
 
 pub struct NonceProvider<T> {
     inner: T,
     map: NonceMap,
+}
+
+impl<T> Deref for NonceProvider<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
 }
 
 #[derive(Encode, Decode)]
