@@ -1,8 +1,8 @@
 use super::{MerkStore, ProofBuilder};
-use merk::proofs::query::Map as ProofMap;
 use crate::store::{BufStore, MapStore, Read, Shared, Write, KV};
 use crate::Result;
 use failure::bail;
+use merk::proofs::query::Map as ProofMap;
 use std::ops::Bound;
 
 type WrappedMerkStore = Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>;
@@ -130,4 +130,3 @@ impl Read for ProofStore {
         Ok(item.map(|(k, v)| (k.to_vec(), v.to_vec())))
     }
 }
-

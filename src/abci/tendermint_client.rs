@@ -1,17 +1,17 @@
-use std::ops::{Deref, DerefMut};
 use std::convert::TryInto;
+use std::ops::{Deref, DerefMut};
 
 use tendermint_rpc as tm;
 use tm::Client as _;
 
 use crate::call::Call;
+use crate::client::{AsyncCall, Client};
+use crate::encoding::{Decode, Encode};
+use crate::merk::ProofStore;
 use crate::query::Query;
 use crate::state::State;
-use crate::client::{AsyncCall, Client};
-use crate::encoding::{Encode, Decode};
+use crate::store::{Shared, Store};
 use crate::Result;
-use crate::merk::ProofStore;
-use crate::store::{Store, Shared};
 
 pub use tm::endpoint::broadcast::tx_commit::Response as TxResponse;
 
@@ -27,7 +27,10 @@ impl<T: Client<TendermintAdapter<T>>> TendermintClient<T> {
             marker: std::marker::PhantomData,
             client: tm_client.clone(),
         });
-        Ok(TendermintClient { state_client, tm_client })
+        Ok(TendermintClient {
+            state_client,
+            tm_client,
+        })
     }
 }
 
@@ -51,7 +54,10 @@ impl<T: Client<TendermintAdapter<T>> + Query + State> TendermintClient<T> {
         F: Fn(&T) -> Result<R>,
     {
         let query_bytes = query.encode()?;
-        let res = self.tm_client.abci_query(None, query_bytes, None, true).await?;
+        let res = self
+            .tm_client
+            .abci_query(None, query_bytes, None, true)
+            .await?;
         let root_hash = res.value[0..32].try_into()?;
         let proof_bytes = &res.value[32..];
 

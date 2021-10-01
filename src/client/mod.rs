@@ -146,7 +146,7 @@ mod tests {
         use bar_query::Query as BarQuery;
         use foo_query::Query as FooQuery;
         use orga::encoding::Encode;
-        
+
         let query = FooQuery::MethodGetBar(1, BarQuery::MethodCount(vec![]).encode().unwrap());
         let count = client
             .query(query, |state| Ok(state.get_bar(1)?.count()))

@@ -9,8 +9,8 @@ use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::Result;
-use std::path::PathBuf;
 use std::ops::Deref;
+use std::path::PathBuf;
 
 type NonceMap = Map<Address, u64>;
 

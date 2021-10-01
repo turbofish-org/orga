@@ -1,9 +1,9 @@
-use std::sync::{Arc, Mutex};
-use std::ops::{Deref, DerefMut};
 use super::{AsyncCall, Client};
 use crate::call::Call;
 use crate::query::Query;
 use crate::Result;
+use std::ops::{Deref, DerefMut};
+use std::sync::{Arc, Mutex};
 
 pub struct Mock<T: Client<Adapter<T>>>(T::Client, Arc<Mutex<T>>);
 

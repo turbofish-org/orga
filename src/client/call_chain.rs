@@ -1,8 +1,8 @@
-use std::future::Future;
-use std::pin::Pin;
-use futures_lite::future;
 use super::AsyncCall;
 use crate::Result;
+use futures_lite::future;
+use std::future::Future;
+use std::pin::Pin;
 
 #[must_use]
 pub struct CallChain<T: Clone, U: Clone + AsyncCall>

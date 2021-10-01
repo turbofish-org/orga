@@ -226,7 +226,7 @@ fn create_client_struct(
                     ::orga::client::CallChain<
                         <#output_ty as ::orga::client::Client<#adapter_name<#generic_params #output_ty, #parent_ty>>>::Client,
                         #adapter_name<#generic_params #output_ty, #parent_ty>,
-                    > 
+                    >
                 );
 
                 let impl_preds = impl_item
