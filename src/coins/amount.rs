@@ -7,10 +7,16 @@ use std::ops::{Add, AddAssign, Div, Mul, Sub};
 
 const PRECISION: u64 = 1_000_000_000;
 
-#[derive(Debug, Encode, Decode)]
+#[derive(Encode, Decode)]
 pub struct Amount<S: Symbol> {
     pub value: u64,
     symbol: PhantomData<S>,
+}
+
+impl<S: Symbol> std::fmt::Display for Amount<S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)
+    }
 }
 
 impl<S: Symbol> Default for Amount<S> {
@@ -67,6 +73,13 @@ impl<S: Symbol> Amount<S> {
 
     pub fn one() -> Self {
         Self::new(PRECISION)
+    }
+
+    pub fn units(value: u64) -> Self {
+        Amount {
+            value: value * PRECISION,
+            symbol: PhantomData,
+        }
     }
 }
 

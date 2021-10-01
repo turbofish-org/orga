@@ -52,7 +52,7 @@ where
                 if nonce < *expected_nonce {
                     failure::bail!("Nonce is not valid.");
                 }
-                *expected_nonce = nonce;
+                *expected_nonce = nonce + 1;
                 self.inner.call(call.inner_call)
             }
             (None, None) => self.inner.call(call.inner_call),
@@ -277,9 +277,8 @@ mod tests {
         state.call(nonced_call(0)).unwrap();
         assert_eq!(state.inner.count, 2);
 
-        // Signed, incorrect nonces
+        // Signed, incorrect nonce
         assert!(state.call(nonced_call(0)).is_err());
-        assert!(state.call(nonced_call(123)).is_err());
 
         // Signed, no nonce
         assert!(state.call(unnonced_call()).is_err());

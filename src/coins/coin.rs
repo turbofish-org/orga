@@ -1,4 +1,4 @@
-use super::{Amount, Give, Symbol, Take};
+use super::{Adjust, Amount, Balance, Give, Symbol, Take};
 use crate::encoding::{Decode, Encode};
 use crate::Result;
 
@@ -37,6 +37,12 @@ impl<S: Symbol> Coin<S> {
     pub fn burn(self) {}
 }
 
+impl<S: Symbol> Balance<S> for Coin<S> {
+    fn balance(&self) -> Amount<S> {
+        self.amount
+    }
+}
+
 impl<S: Symbol> Take<S> for Coin<S> {
     fn deduct<A>(&mut self, amount: A) -> Result<()>
     where
@@ -45,10 +51,6 @@ impl<S: Symbol> Take<S> for Coin<S> {
         let amount = amount.into();
         self.amount = (self.amount - amount)?;
         Ok(())
-    }
-
-    fn amount(&self) -> Result<Amount<S>> {
-        Ok(self.amount)
     }
 }
 
@@ -60,6 +62,13 @@ impl<S: Symbol> Give<S> for Coin<S> {
         let amount = amount.into();
         self.amount += amount;
 
+        Ok(())
+    }
+}
+
+impl<S: Symbol> Adjust<S> for Coin<S> {
+    fn adjust(&mut self, amount: Amount<S>) -> Result<()> {
+        self.amount = (self.amount * amount)?;
         Ok(())
     }
 }
