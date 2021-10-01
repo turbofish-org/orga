@@ -27,6 +27,18 @@ where
     }
 }
 
+impl<K, V, S> Adjust<S> for Pool<K, V, S>
+where
+    S: Symbol,
+{
+    fn adjust(&mut self, multiplier: Amount<S>) -> Result<()> {
+        self.multiplier = (self.multiplier * multiplier)?;
+        self.total = (self.total * multiplier)?;
+
+        Ok(())
+    }
+}
+
 pub struct Entry<T, S: Symbol> {
     last_multiplier: Amount<S>,
     inner: T,
@@ -357,6 +369,14 @@ mod tests {
         {
             let bob_child = pool.get_mut(bob)?;
             assert_eq!(bob_child.balance().value, 3);
+        }
+
+        pool.adjust(Amount::units(2))?;
+        assert_eq!(pool.balance().value, 28);
+
+        {
+            let bob_child = pool.get(bob)?;
+            assert_eq!(bob_child.balance().value, 6);
         }
 
         Ok(())

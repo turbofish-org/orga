@@ -42,7 +42,7 @@ impl EndBlock for AppWithStaking {
                 let validator_address = unbond.validator_address;
                 let validator = self.staking.validators.get(validator_address)?;
 
-                let new_voting_power = (*validator).value.total_value().value;
+                let new_voting_power = validator.balance().value;
                 ctx.set_voting_power(validator_address.bytes(), new_voting_power);
             }
         }

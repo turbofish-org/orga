@@ -74,6 +74,13 @@ impl<S: Symbol> Amount<S> {
     pub fn one() -> Self {
         Self::new(PRECISION)
     }
+
+    pub fn units(value: u64) -> Self {
+        Amount {
+            value: value * PRECISION,
+            symbol: PhantomData,
+        }
+    }
 }
 
 impl<S: Symbol> From<u64> for Amount<S> {
