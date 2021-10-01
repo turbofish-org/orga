@@ -10,7 +10,7 @@ use crate::state::State;
 use crate::store::Store;
 use crate::Result;
 use std::path::PathBuf;
-use std::ops::{Deref, DerefMut};
+use std::ops::Deref;
 
 type NonceMap = Map<Address, u64>;
 

@@ -1,4 +1,4 @@
-use std::ops::{Deref, DerefMut};
+use std::ops::Deref;
 
 use super::{BeginBlockCtx, Context, EndBlockCtx, InitChainCtx};
 use crate::abci::{BeginBlock, EndBlock, InitChain};

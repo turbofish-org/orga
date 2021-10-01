@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use crate::call::Call;
 use crate::query::Query;
 use crate::Result;
@@ -25,11 +23,7 @@ macro_rules! primitive_impl {
             type Client = PrimitiveClient<$x, T>;
 
             fn create_client(parent: T) -> Self::Client {
-                PrimitiveClient {
-                    parent,
-                    fut: None,
-                    marker: PhantomData,
-                }
+                PrimitiveClient::new(parent)
             }
         }
     };

@@ -1,10 +1,8 @@
 use std::cmp::Ordering;
 use std::collections::btree_map::Entry::{Occupied, Vacant};
 use std::collections::{btree_map, BTreeMap};
-use std::future::Future;
 use std::iter::Peekable;
 use std::ops::{Bound, Deref, DerefMut, RangeBounds};
-use std::pin::Pin;
 
 use super::Next;
 use crate::call::Call;
