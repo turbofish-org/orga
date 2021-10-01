@@ -326,7 +326,6 @@ fn create_client_struct(
         {
             pub(super) parent: #parent_ty,
             #(#field_fields,)*
-            fut: Option<::orga::BoxFuture<Result<&'static #name#generic_params_bracketed>>>
         }
 
         impl<#generic_params #parent_ty> Clone for Client<#generic_params #parent_ty>
@@ -338,7 +337,6 @@ fn create_client_struct(
                 Self {
                     parent: self.parent.clone(),
                     #(#field_clones,)*
-                    fut: None,
                 }
             }
         }
@@ -353,42 +351,9 @@ fn create_client_struct(
                 Client {
                     #(#field_constructors,)*
                     parent,
-                    fut: None,
                 }
             }
         }
-
-        // impl#generics_sanitized std::future::Future for Client<#generic_params #parent_ty>
-        // where
-        //     #parent_ty: Clone + Send,
-        //     #parent_ty: ::orga::client::AsyncQuery<Response = #name#generic_params_bracketed>,
-        //     #parent_ty::Query: Default,
-        //     #where_preds
-        // {
-        //     type Output = Result<&'static #name#generic_params_bracketed>;
-
-        //     fn poll(
-        //         self: std::pin::Pin<&mut Self>,
-        //         cx: &mut std::task::Context<'_>,
-        //     ) -> std::task::Poll<Self::Output> {
-        //         unsafe {
-        //             let this = self.get_unchecked_mut();
-
-        //             if this.fut.is_none() {
-        //                 let fut = this.parent.query(Default::default(), |x| Ok(x));
-        //                 let fut2: ::orga::BoxFuture<Result<&'static #name#generic_params_bracketed>> = std::mem::transmute(fut);
-        //                 this.fut = Some(fut2);
-        //             }
-
-        //             let fut = this.fut.as_mut().unwrap().as_mut();
-        //             let res = fut.poll(cx);
-        //             if res.is_ready() {
-        //                 this.fut = None;
-        //             }
-        //             res
-        //         }
-        //     }
-        // }
 
         #(#call_method_impls_and_adapters)*
     }
