@@ -23,7 +23,7 @@ impl<T, U: Clone> Clone for PrimitiveClient<T, U> {
 }
 
 // impl<T, U: Clone + AsyncQuery<Query = (), Response = T>> Future for PrimitiveClient<T, U> {
-//     type Output = Result<&T>;
+//     type Output = Result<T>;
 
 //     fn poll(
 //         self: Pin<&mut Self>,

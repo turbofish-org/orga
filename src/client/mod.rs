@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use crate::call::Call;
+use crate::query::Query;
 use crate::Result;
 
 pub use crate::macros::Client;
@@ -85,13 +86,22 @@ pub trait AsyncQuery {
 
 // TODO: support deriving for types inside module in macros, then move this into
 // tests module
-#[derive(Debug, Call, Client)]
+#[derive(Debug, Call, Client, Query)]
 pub struct Foo {
     pub bar: Bar,
     pub bar2: Bar,
 }
 
 impl Foo {
+    #[query]
+    pub fn get_bar(&self, id: u8) -> Result<&Bar> {
+        match id {
+            0 => Ok(&self.bar),
+            1 => Ok(&self.bar2),
+            _ => failure::bail!("Invalid id"),
+        }
+    }
+
     #[call]
     pub fn get_bar_mut(&mut self, id: u8) -> Result<&mut Bar> {
         println!("Called get_bar_mut({}) on Foo", id);
@@ -103,10 +113,15 @@ impl Foo {
     }
 }
 
-#[derive(Debug, Call, Client)]
+#[derive(Debug, Call, Client, Query)]
 pub struct Bar(u32);
 
 impl Bar {
+    #[query]
+    pub fn count(&self) -> u32 {
+        self.0
+    }
+
     #[call]
     pub fn increment(&mut self) {
         println!("called increment() on Bar");
@@ -126,28 +141,23 @@ mod tests {
             bar2: Bar(0),
         }));
 
-        let mut client = Foo::create_client(Mock(state.clone()));
+        let mut client = Mock::new(state.clone());
 
-        // calls increment on bar, 'increment()' returns a CallChain<u64> which
-        // calls on parent (MethodIncrementAdapter) once polled
         client.bar.increment().await.unwrap();
         println!("{:?}\n\n", &state.lock().unwrap());
 
         client.get_bar_mut(1).increment().await.unwrap();
         println!("{:?}\n\n", &state.lock().unwrap());
 
-        // println!("{:?}\n\n", client.bar.await.unwrap()); // queries state.bar
-        // println!("{:?}\n\n", client.bar.count().await.unwrap()); // queries 'this' on return value of count method on state.bar
-        // println!("{:?}\n\n", client.get_bar(1).count().await.unwrap()); //
-        // // XXX: client.get_bar(1).increment().await.unwrap(); - not possible,
-        // // increment requires parent with AsyncCall, MethodGetBarAdapter does
-        // // not implement AsyncCall
-        // // XXX: client.get_bar_mut(1).count().await.unwrap(); - not possible,
-        // // count requires parent with AsyncQuery, MethodGetBarMutAdapter does
-        // // not implement AsyncQuery
-        // let bar = client.get_bar(1).await.unwrap(); // queries 'this' on return value of get_bar method
-        // let count = bar.count().await.unwrap(); // queries 'this' on return value of count method on bar instance
-        // println!("{:?} {}\n\n", bar, count);
+        use bar_query::Query as BarQuery;
+        use foo_query::Query as FooQuery;
+        use orga::encoding::Encode;
+        
+        let query = FooQuery::MethodGetBar(1, BarQuery::MethodCount(vec![]).encode().unwrap());
+        let count = client
+            .query(query, |state| Ok(state.get_bar(1)?.count()))
+            .unwrap();
+        println!("{}\n\n", count);
     }
 
     #[ignore]

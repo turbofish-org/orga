@@ -2,9 +2,13 @@ use tendermint_rpc as tm;
 use tm::Client as _;
 
 use crate::call::Call;
+use crate::query::Query;
+use crate::state::State;
 use crate::client::{AsyncCall, Client};
-use crate::encoding::Encode;
+use crate::encoding::{Encode, Decode};
 use crate::Result;
+use crate::merk::{BackingStore, ProofStore};
+use crate::store::{Store, Shared};
 
 pub use tm::endpoint::broadcast::tx_commit::Response as TxResponse;
 
@@ -28,6 +32,28 @@ impl<T: Client<Self>> TendermintClient<T> {
             marker: std::marker::PhantomData,
             client: tm::HttpClient::new(addr)?,
         }))
+    }
+}
+
+impl<T: Client<Self> + Query + State> TendermintClient<T> {
+    pub async fn query<F, R>(&self, query: T::Query, check: F) -> Result<R>
+    where
+        F: Fn(&T) -> Result<R>,
+    {
+        let query_bytes = query.encode()?;
+        let res = self.client.abci_query(None, query_bytes, None, true).await?;
+
+        let map = merk::proofs::query::verify(&res.value, [0; 32])?;
+        let root_value = match map.get(&[])? {
+            Some(root_value) => root_value,
+            None => return Err(failure::format_err!("missing root value")),
+        };
+        let encoding = T::Encoding::decode(root_value)?;
+        let store: Shared<ProofStore> = Shared::new(ProofStore(map));
+        let state = T::create(Store::new(store.into()), encoding)?;
+
+        // TODO: retry logic
+        check(&state)
     }
 }
 
