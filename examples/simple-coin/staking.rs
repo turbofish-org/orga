@@ -26,7 +26,7 @@ impl AppWithStaking {
 }
 
 impl EndBlock for AppWithStaking {
-    fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
+    fn end_block(&mut self, _ctx: &EndBlockCtx) -> Result<()> {
         // Pop front of unbonding queue until we've paid out all the mature
         // unbonds
         while let Some(unbond) = self.staking.unbonding_queue.front()? {
@@ -42,8 +42,7 @@ impl EndBlock for AppWithStaking {
                 let validator_address = unbond.validator_address;
                 let validator = self.staking.validators.get(validator_address)?;
 
-                let new_voting_power = validator.balance().value;
-                ctx.set_voting_power(validator_address.bytes(), new_voting_power);
+                let _new_voting_power = validator.balance().value;
             }
         }
 
