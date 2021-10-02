@@ -74,3 +74,15 @@ state_impl!(u64);
 state_impl!(u128);
 state_impl!(bool);
 state_impl!(());
+
+impl<T: ed::Encode + ed::Decode + ed::Terminated, S, const N: usize> State<S> for [T; N] {
+    type Encoding = Self;
+
+    fn create(_: Store<S>, value: Self::Encoding) -> Result<Self> {
+        Ok(value)
+    }
+
+    fn flush(self) -> Result<Self::Encoding> {
+        Ok(self)
+    }
+}
