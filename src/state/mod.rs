@@ -49,16 +49,28 @@ pub trait State<S = DefaultBackingStore>: Sized {
         S: Write;
 }
 
-impl<T: ed::Encode + ed::Decode, S> State<S> for T {
-    type Encoding = Self;
+macro_rules! state_impl {
+    ($type:ty) => {
+        impl<S> State<S> for $type {
+            type Encoding = Self;
 
-    #[inline]
-    fn create(_: Store<S>, value: Self) -> Result<Self> {
-        Ok(value)
-    }
+            #[inline]
+            fn create(_: Store<S>, value: Self) -> Result<Self> {
+                Ok(value)
+            }
 
-    #[inline]
-    fn flush(self) -> Result<Self::Encoding> {
-        Ok(self)
-    }
+            #[inline]
+            fn flush(self) -> Result<Self::Encoding> {
+                Ok(self)
+            }
+        }
+    };
 }
+
+state_impl!(u8);
+state_impl!(u16);
+state_impl!(u32);
+state_impl!(u64);
+state_impl!(u128);
+state_impl!(bool);
+state_impl!(());
