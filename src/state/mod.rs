@@ -2,7 +2,6 @@ use crate::store::*;
 use crate::Result;
 use ed::{Decode, Encode};
 pub use orga_macros::State;
-use std::ops::Deref;
 
 /// A trait for types which provide a higher-level API for data stored within a
 /// [`store::Store`](../store/trait.Store.html).
@@ -130,3 +129,59 @@ impl<T: State<S>, S> State<S> for Option<T> {
         }
     }
 }
+
+macro_rules! state_tuple_impl {
+    ($($type:ident),*; $($length:tt),*; $new_type_name:tt) => {
+
+        #[derive(Encode, Decode)]
+        pub struct $new_type_name <$($type, )* S>
+        where
+            $($type: State<S>,)* {
+                inner: ($($type::Encoding,)*),
+
+        }
+
+        impl<$($type,)* S> From<($($type,)*)> for $new_type_name<$($type, )* S>
+        where
+            $($type: State<S>,)* {
+                fn from(value: ($($type,)*)) -> Self {
+                    $new_type_name {
+                        inner: ($(value.$length.into(),)*),
+                    }
+                }
+            }
+
+        impl<$($type: State<S>,)* S> State<S> for ($($type,)*)
+        where
+            $($type::Encoding: ed::Terminated,)*{
+            type Encoding = $new_type_name<$($type,)* S>;
+
+            fn create(store: Store<S>, data: Self::Encoding) -> Result<Self>
+            where
+                S: Read,
+            {
+                Ok(($($type::create(store.clone(), data.inner.$length)?,)*))
+            }
+
+            fn flush(self) -> Result<Self::Encoding> {
+                Ok($new_type_name {
+                    inner: ($(self.$length.into(),)*),
+                })
+            }
+
+        }
+    }
+}
+
+state_tuple_impl!(A; 0; Encoded1Tuple);
+state_tuple_impl!(A, B; 0, 1; Encoded2Tuple);
+state_tuple_impl!(A, B, C; 0, 1, 2; Encoded3Tuple);
+state_tuple_impl!(A, B, C, D; 0, 1, 2, 3; Encoded4Tuple);
+state_tuple_impl!(A, B, C, D, E; 0, 1, 2, 3, 4; Encoded5Tuple);
+state_tuple_impl!(A, B, C, D, E, F; 0, 1, 2, 3, 4, 5; Encoded6Tuple);
+state_tuple_impl!(A, B, C, D, E, F, G; 0, 1, 2, 3, 4, 5, 6; Encoded7Tuple);
+state_tuple_impl!(A, B, C, D, E, F, G, H; 0, 1, 2, 3, 4, 5, 6, 7; Encoded8Tuple);
+state_tuple_impl!(A, B, C, D, E, F, G, H, I; 0, 1, 2, 3, 4, 5, 6, 7, 8; Encoded9Tuple);
+state_tuple_impl!(A, B, C, D, E, F, G, H, I, J; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9; Encoded10Tuple);
+state_tuple_impl!(A, B, C, D, E, F, G, H, I, J, K; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10; Encoded11Tuple);
+state_tuple_impl!(A, B, C, D, E, F, G, H, I, J, K, L; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11; Encoded12Tuple);
