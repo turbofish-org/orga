@@ -1,6 +1,8 @@
 use crate::store::*;
 use crate::Result;
+use ed::{Decode, Encode};
 pub use orga_macros::State;
+use std::ops::Deref;
 
 /// A trait for types which provide a higher-level API for data stored within a
 /// [`store::Store`](../store/trait.Store.html).
@@ -84,5 +86,47 @@ impl<T: ed::Encode + ed::Decode + ed::Terminated, S, const N: usize> State<S> fo
 
     fn flush(self) -> Result<Self::Encoding> {
         Ok(self)
+    }
+}
+
+#[derive(Encode, Decode)]
+pub struct EncodedOption<T: State<S>, S> {
+    inner: Option<T::Encoding>,
+}
+
+impl<T: State<S>, S> From<Option<T>> for EncodedOption<T, S> {
+    fn from(option: Option<T>) -> Self {
+        match option {
+            Some(inner) => EncodedOption {
+                inner: Some(inner.into()),
+            },
+            None => EncodedOption { inner: None },
+        }
+    }
+}
+
+impl<T: State<S>, S> State<S> for Option<T> {
+    type Encoding = EncodedOption<T, S>;
+
+    fn create(store: Store<S>, value: Self::Encoding) -> Result<Self>
+    where
+        S: Read,
+    {
+        match value.inner {
+            Some(inner) => {
+                let upcast = T::create(store, inner)?;
+                Ok(Some(upcast))
+            }
+            None => Ok(None),
+        }
+    }
+
+    fn flush(self) -> Result<Self::Encoding> {
+        match self {
+            Some(inner) => Ok(EncodedOption {
+                inner: Some(inner.into()),
+            }),
+            None => Ok(EncodedOption { inner: None }),
+        }
     }
 }
