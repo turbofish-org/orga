@@ -95,8 +95,13 @@ where
     );
 
     fn create(store: Store, data: Self::Encoding) -> Result<Self> {
+        let mut multiplier = Amount::create(store.sub(&[0]), data.0)?;
+        if multiplier == Amount::zero() {
+            multiplier = Amount::one();
+        }
+        
         Ok(Self {
-            multiplier: Amount::create(store.sub(&[0]), data.0)?,
+            multiplier,
             total: Amount::create(store.sub(&[1]), data.1)?,
             map: Map::create(store.sub(&[2]), data.2)?,
         })
