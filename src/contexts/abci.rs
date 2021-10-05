@@ -81,7 +81,8 @@ pub struct Validators {
 }
 
 impl Validators {
-    pub fn set_voting_power(&mut self, pub_key: [u8; 32], power: u64) {
+    pub fn set_voting_power<A: Into<[u8; 32]>>(&mut self, pub_key: A, power: u64) {
+        let pub_key = pub_key.into();
         let sum = Some(Sum::Ed25519(pub_key.to_vec()));
         let key = PublicKey { sum };
         self.updates.insert(
@@ -176,6 +177,7 @@ impl<T: App> Call for ABCIProvider<T> {
 
 impl<T: Query> Query for ABCIProvider<T> {
     type Query = T::Query;
+
     fn query(&self, query: Self::Query) -> Result<()> {
         self.inner.query(query)
     }
