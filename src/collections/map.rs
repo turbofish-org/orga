@@ -355,7 +355,7 @@ where
 
 impl<'a, 'b, K, V, S> Map<K, V, S>
 where
-    K: Encode + Decode + Terminated + Next<K> + Clone,
+    K: Encode + Decode + Terminated + Next + Clone,
     V: State<S>,
     S: Read,
 {
@@ -452,7 +452,7 @@ where
 
 pub struct Iter<'a, K, V, S>
 where
-    K: Next<K> + Decode + Encode + Terminated,
+    K: Next + Decode + Encode + Terminated,
     V: State<S>,
     S: Read,
 {
@@ -463,7 +463,7 @@ where
 
 impl<'a, K, V, S> Iter<'a, K, V, S>
 where
-    K: Encode + Decode + Terminated + Next<K>,
+    K: Encode + Decode + Terminated + Next,
     V: State<S>,
     S: Read,
 {
@@ -558,7 +558,7 @@ where
 
 impl<'a, K, V, S> Iterator for Iter<'a, K, V, S>
 where
-    K: Next<K> + Decode + Encode + Terminated,
+    K: Next + Decode + Encode + Terminated,
     V: State<S>,
     S: Read,
 {

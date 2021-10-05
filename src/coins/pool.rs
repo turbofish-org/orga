@@ -181,7 +181,7 @@ pub type IterEntry<'a, K, V, S> = Result<(MapRef<'a, K>, Child<'a, V, S>)>;
 impl<K, V, S> Pool<K, V, S>
 where
     S: Symbol,
-    K: Encode + Decode + Terminated + Clone + Next<K>,
+    K: Encode + Decode + Terminated + Clone + Next,
     V: State + Adjust<S> + Balance<S>,
     V::Encoding: Default,
 {
