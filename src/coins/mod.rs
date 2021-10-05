@@ -24,10 +24,14 @@ pub use adjust::*;
 pub mod balance;
 pub use balance::*;
 
+use bech32::{self, encode_to_fmt, FromBase32, ToBase32, Variant};
+
 use crate::collections::Next;
 use crate::encoding::{Decode, Encode};
-use bech32::{self, encode_to_fmt, FromBase32, ToBase32, Variant};
-#[derive(Encode, Decode, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Copy, Next)]
+use crate::query::Query;
+
+#[derive(Encode, Decode, Next, Query)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Copy)]
 pub struct Address {
     bytes: [u8; 32],
 }
@@ -63,6 +67,12 @@ impl FromStr for Address {
 impl From<[u8; 32]> for Address {
     fn from(bytes: [u8; 32]) -> Self {
         Address { bytes }
+    }
+}
+
+impl From<Address> for [u8; 32] {
+    fn from(addr: Address) -> Self {
+        addr.bytes()
     }
 }
 

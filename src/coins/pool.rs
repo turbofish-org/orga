@@ -1,14 +1,16 @@
 use super::{Adjust, Amount, Balance, Give, Symbol, Take};
 use crate::collections::map::{ChildMut as MapChildMut, Ref as MapRef};
-use crate::collections::Map;
-use crate::encoding::{Encode, Terminated};
+use crate::collections::{Map, Next};
+use crate::encoding::{Decode, Encode, Terminated};
 use crate::state::State;
 use crate::store::Store;
+use crate::query::Query;
 use crate::Result;
 use std::cell::UnsafeCell;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Drop};
 
+#[derive(Query)]
 pub struct Pool<K, V, S>
 where
     S: Symbol,
