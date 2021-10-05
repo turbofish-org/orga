@@ -2,6 +2,7 @@ use crate::store::*;
 use crate::Result;
 use ed::{Decode, Encode};
 pub use orga_macros::State;
+use std::convert::TryInto;
 
 /// A trait for types which provide a higher-level API for data stored within a
 /// [`store::Store`](../store/trait.Store.html).
@@ -76,15 +77,57 @@ state_impl!(u128);
 state_impl!(bool);
 state_impl!(());
 
-impl<T: ed::Encode + ed::Decode + ed::Terminated, S, const N: usize> State<S> for [T; N] {
-    type Encoding = Self;
+#[derive(Encode, Decode)]
+pub struct EncodedArray<T: State<S>, S, const N: usize> {
+    inner: [T::Encoding; N],
+}
 
-    fn create(_: Store<S>, value: Self::Encoding) -> Result<Self> {
-        Ok(value)
+impl<T: State<S>, S, const N: usize> From<[T; N]> for EncodedArray<T, S, N> {
+    fn from(value: [T; N]) -> Self {
+        EncodedArray {
+            inner: value.map(|val| val.into()),
+        }
+    }
+}
+
+impl<T: State<S>, S, const N: usize> State<S> for [T; N]
+where
+    T::Encoding: ed::Terminated,
+{
+    type Encoding = EncodedArray<T, S, N>;
+
+    fn create(store: Store<S>, value: Self::Encoding) -> Result<Self>
+    where
+        S: Read,
+    {
+        let self_vec: Vec<T::Encoding> = value.inner.try_into()?;
+        let mut vec: Vec<Result<T>> = Vec::with_capacity(N);
+        self_vec
+            .into_iter()
+            .for_each(|x| vec.push(T::create(store.clone(), x)));
+        let result: Result<Vec<T>> = vec.into_iter().collect();
+
+        //since vec is directly created and populated from passed value, panic! will never be reached
+        let result_array: [T; N] = result?.try_into().unwrap_or_else(|v: Vec<T>| {
+            panic!("Expected Vec of length {}, but found length {}", N, v.len())
+        });
+        Ok(result_array)
     }
 
     fn flush(self) -> Result<Self::Encoding> {
-        Ok(self)
+        let self_vec: Vec<T> = self.try_into()?;
+        let mut vec: Vec<T::Encoding> = Vec::with_capacity(N);
+        self_vec.into_iter().for_each(|x| vec.push(x.into()));
+
+        //since vec is directly created and populated from passed value, panic! will never be reached
+        let result_array: [T::Encoding; N] =
+            vec.try_into().unwrap_or_else(|v: Vec<T::Encoding>| {
+                panic!("Expected Vec of length {}, but found length {}", N, v.len())
+            });
+
+        Ok(EncodedArray {
+            inner: result_array,
+        })
     }
 }
 
@@ -151,6 +194,7 @@ macro_rules! state_tuple_impl {
                 }
             }
 
+        //last one doesn't necessarily need to be terminated
         impl<$($type: State<S>,)* S> State<S> for ($($type,)*)
         where
             $($type::Encoding: ed::Terminated,)*{
