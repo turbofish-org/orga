@@ -106,7 +106,6 @@ where
             .into_iter()
             .for_each(|x| vec.push(T::create(store.clone(), x)));
         let result: Result<Vec<T>> = vec.into_iter().collect();
-
         //since vec is directly created and populated from passed value, panic! will never be reached
         let result_array: [T; N] = result?.try_into().unwrap_or_else(|v: Vec<T>| {
             panic!("Expected Vec of length {}, but found length {}", N, v.len())
@@ -173,43 +172,83 @@ impl<T: State<S>, S> State<S> for Option<T> {
     }
 }
 
+#[derive(Encode, Decode)]
+pub struct Encoded1Tuple<A, S>
+where
+    A: State<S>,
+{
+    inner: (A::Encoding,),
+}
+
+impl<A, S> From<(A,)> for Encoded1Tuple<A, S>
+where
+    A: State<S>,
+{
+    fn from(value: (A,)) -> Self {
+        Encoded1Tuple {
+            inner: (value.0.into(),),
+        }
+    }
+}
+
+impl<A, S> State<S> for (A,)
+where
+    A: State<S>,
+{
+    type Encoding = Encoded1Tuple<A, S>;
+
+    fn create(store: Store<S>, data: Self::Encoding) -> Result<Self>
+    where
+        S: Read,
+    {
+        Ok((A::create(store.clone(), data.inner.0)?,))
+    }
+
+    fn flush(self) -> Result<Self::Encoding> {
+        Ok(Encoded1Tuple {
+            inner: (self.0.into(),),
+        })
+    }
+}
+
 macro_rules! state_tuple_impl {
-    ($($type:ident),*; $($length:tt),*; $new_type_name:tt) => {
+    ($($type:ident),*; $last_type: ident; $($indices:tt),*; $length: tt; $new_type_name:tt) => {
 
         #[derive(Encode, Decode)]
-        pub struct $new_type_name <$($type, )* S>
+        pub struct $new_type_name <$($type, )* $last_type, S>
         where
-            $($type: State<S>,)* {
-                inner: ($($type::Encoding,)*),
+            $($type: State<S>,)* $last_type: State<S> {
+                inner: ($($type::Encoding,)* $last_type::Encoding),
 
         }
 
-        impl<$($type,)* S> From<($($type,)*)> for $new_type_name<$($type, )* S>
+        impl<$($type,)* $last_type, S> From<($($type,)* $last_type,)> for $new_type_name<$($type, )* $last_type, S>
         where
-            $($type: State<S>,)* {
-                fn from(value: ($($type,)*)) -> Self {
+            $($type: State<S>,)* $last_type: State<S> {
+                fn from(value: ($($type,)* $last_type),) -> Self {
                     $new_type_name {
-                        inner: ($(value.$length.into(),)*),
+                        inner: ($(value.$indices.into(),)* value.$length.into(),),
                     }
                 }
             }
 
         //last one doesn't necessarily need to be terminated
-        impl<$($type: State<S>,)* S> State<S> for ($($type,)*)
+        impl<$($type,)* $last_type, S> State<S> for ($($type,)* $last_type,)
         where
+            $($type: State<S>,)* $last_type: State<S>,
             $($type::Encoding: ed::Terminated,)*{
-            type Encoding = $new_type_name<$($type,)* S>;
+            type Encoding = $new_type_name<$($type,)* $last_type, S>;
 
             fn create(store: Store<S>, data: Self::Encoding) -> Result<Self>
             where
                 S: Read,
             {
-                Ok(($($type::create(store.clone(), data.inner.$length)?,)*))
+                Ok(($($type::create(store.clone(), data.inner.$indices)?,)* $last_type::create(store.clone(), data.inner.$length)?))
             }
 
             fn flush(self) -> Result<Self::Encoding> {
                 Ok($new_type_name {
-                    inner: ($(self.$length.into(),)*),
+                    inner: ($(self.$indices.into(),)* self.$length.into(),),
                 })
             }
 
@@ -217,15 +256,14 @@ macro_rules! state_tuple_impl {
     }
 }
 
-state_tuple_impl!(A; 0; Encoded1Tuple);
-state_tuple_impl!(A, B; 0, 1; Encoded2Tuple);
-state_tuple_impl!(A, B, C; 0, 1, 2; Encoded3Tuple);
-state_tuple_impl!(A, B, C, D; 0, 1, 2, 3; Encoded4Tuple);
-state_tuple_impl!(A, B, C, D, E; 0, 1, 2, 3, 4; Encoded5Tuple);
-state_tuple_impl!(A, B, C, D, E, F; 0, 1, 2, 3, 4, 5; Encoded6Tuple);
-state_tuple_impl!(A, B, C, D, E, F, G; 0, 1, 2, 3, 4, 5, 6; Encoded7Tuple);
-state_tuple_impl!(A, B, C, D, E, F, G, H; 0, 1, 2, 3, 4, 5, 6, 7; Encoded8Tuple);
-state_tuple_impl!(A, B, C, D, E, F, G, H, I; 0, 1, 2, 3, 4, 5, 6, 7, 8; Encoded9Tuple);
-state_tuple_impl!(A, B, C, D, E, F, G, H, I, J; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9; Encoded10Tuple);
-state_tuple_impl!(A, B, C, D, E, F, G, H, I, J, K; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10; Encoded11Tuple);
-state_tuple_impl!(A, B, C, D, E, F, G, H, I, J, K, L; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11; Encoded12Tuple);
+state_tuple_impl!(A; B; 0; 1; Encoded2Tuple);
+state_tuple_impl!(A, B; C; 0, 1; 2; Encoded3Tuple);
+state_tuple_impl!(A, B, C; D; 0, 1, 2; 3; Encoded4Tuple);
+state_tuple_impl!(A, B, C, D; E; 0, 1, 2, 3; 4; Encoded5Tuple);
+state_tuple_impl!(A, B, C, D, E; F; 0, 1, 2, 3, 4; 5; Encoded6Tuple);
+state_tuple_impl!(A, B, C, D, E, F; G; 0, 1, 2, 3, 4, 5; 6; Encoded7Tuple);
+state_tuple_impl!(A, B, C, D, E, F, G; H; 0, 1, 2, 3, 4, 5, 6; 7; Encoded8Tuple);
+state_tuple_impl!(A, B, C, D, E, F, G, H; I; 0, 1, 2, 3, 4, 5, 6, 7; 8; Encoded9Tuple);
+state_tuple_impl!(A, B, C, D, E, F, G, H, I; J; 0, 1, 2, 3, 4, 5, 6, 7, 8; 9; Encoded10Tuple);
+state_tuple_impl!(A, B, C, D, E, F, G, H, I, J; K; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9; 10; Encoded11Tuple);
+state_tuple_impl!(A, B, C, D, E, F, G, H, I, J, K; L; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10; 11; Encoded12Tuple);
