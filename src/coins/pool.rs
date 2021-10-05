@@ -8,7 +8,7 @@ use crate::query::Query;
 use crate::Result;
 use std::cell::UnsafeCell;
 use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut, Drop};
+use std::ops::{Deref, DerefMut, Drop, RangeBounds};
 
 #[derive(Query)]
 pub struct Pool<K, V, S>
@@ -172,10 +172,32 @@ where
             }
         }
 
-        Ok(Child {
-            entry,
-            _symbol: PhantomData,
-        })
+        Ok(Child::new(entry))
+    }
+}
+
+pub type IterEntry<'a, K, V, S> = Result<(MapRef<'a, K>, Child<'a, V, S>)>;
+
+impl<K, V, S> Pool<K, V, S>
+where
+    S: Symbol,
+    K: Encode + Decode + Terminated + Clone + Next<K>,
+    V: State + Adjust<S> + Balance<S>,
+    V::Encoding: Default,
+{
+    pub fn range<B>(&self, bounds: B) -> Result<impl Iterator<Item = IterEntry<K, V, S>>>
+    where
+        B: RangeBounds<K>,
+    {
+        Ok(self.map.range(bounds)?.map(|entry| {
+            let entry = entry?;
+            let child = Child::new(entry.1);
+            Ok((entry.0, child))
+        }))
+    }
+
+    pub fn iter(&self) -> Result<impl Iterator<Item = IterEntry<K, V, S>>> {
+        self.range(..)
     }
 }
 
@@ -295,6 +317,18 @@ where
     entry: MapRef<'a, UnsafeCell<Entry<V, S>>>,
     _symbol: PhantomData<S>,
 }
+
+impl<'a, V, S> Child<'a, V, S>
+where
+    S: Symbol,
+    V: State + Balance<S> + Adjust<S>,
+    V::Encoding: Default,
+{
+    pub fn new(entry: MapRef<'a, UnsafeCell<Entry<V, S>>>) -> Self {
+        Child { entry, _symbol: PhantomData }
+    }
+}
+
 
 impl<'a, V, S> Deref for Child<'a, V, S>
 where
