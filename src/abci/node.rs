@@ -62,7 +62,6 @@ where
         std::thread::spawn(move || {
             let mut tm_process = Tendermint::new(&tm_home)
                 .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
                 .p2p_laddr(format!("tcp://0.0.0.0:{}", p2p_port).as_str())
                 .rpc_laddr(format!("tcp://0.0.0.0:{}", rpc_port).as_str()); // Note: public by default
 
@@ -92,7 +91,6 @@ where
 
         Tendermint::new(&self.tm_home)
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
             .unsafe_reset_all();
 
         self
