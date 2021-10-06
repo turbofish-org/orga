@@ -1,11 +1,9 @@
 use crate::encoding::{Decode, Encode};
 use crate::store::*;
 use crate::Result;
-use ed::{Decode, Encode};
 pub use orga_macros::State;
-use std::convert::TryInto;
 use std::cell::{RefCell, UnsafeCell};
-
+use std::convert::TryInto;
 
 /// A trait for types which provide a higher-level API for data stored within a
 /// [`store::Store`](../store/trait.Store.html).
@@ -53,7 +51,6 @@ pub trait State<S = DefaultBackingStore>: Sized {
     where
         S: Write;
 }
-
 
 macro_rules! state_impl {
     ($type:ty) => {
