@@ -7,7 +7,10 @@ use orga::state::State;
 use orga::store::{MapStore, Shared, Store};
 
 #[derive(Encode, Decode, PartialEq, Debug)]
-struct Foo<T> {
+struct Foo<T>
+where
+    T: Default,
+{
     a: u8,
     b: Option<T>,
 }
@@ -54,6 +57,32 @@ fn struct_state() {
     let data = state.flush().unwrap();
     let bytes = data.encode().unwrap();
     assert_eq!(bytes, vec![0, 0, 0, 123, 0, 0, 0, 5, 0, 0, 0, 6]);
+}
+
+#[derive(State, PartialEq, Debug)]
+struct GenericStruct<T: State>
+where
+    T: Default,
+{
+    a: u8,
+    b: T,
+}
+
+#[test]
+fn generic_struct_state() {
+    let mapstore = Shared::new(MapStore::new());
+    let store = Store::new(mapstore.into());
+
+    let mut state = GenericStruct::<u64>::create(store, Default::default()).unwrap();
+
+    assert_eq!(state.a, 0);
+    assert_eq!(state.b, 0);
+
+    state.a = 123;
+    state.b = 5;
+
+    let data = state.flush().unwrap();
+    assert_eq!(data, (123, 5));
 }
 
 #[derive(Entry, Debug, PartialEq)]

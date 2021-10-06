@@ -1,3 +1,4 @@
+use super::utils::gen_param_input;
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
@@ -23,6 +24,10 @@ pub fn derive(item: TokenStream) -> TokenStream {
         || (0..field_names().count()).map(|i| TokenStream2::from_str(&i.to_string()).unwrap());
 
     let name = &item.ident;
+    let generics = &item.generics;
+    let where_clause = &generics.where_clause;
+    let generic_params = gen_param_input(&generics, true);
+
     let field_types_encoding = field_types();
     let seq_substore = seq();
     let seq_data = seq();
@@ -82,7 +87,9 @@ pub fn derive(item: TokenStream) -> TokenStream {
     };
 
     let output = quote! {
-        impl ::orga::state::State for #name {
+        impl#generics ::orga::state::State for #name#generic_params
+        #where_clause
+        {
             type Encoding = (
                 #(
                     <#field_types_encoding as ::orga::state::State>::Encoding,
@@ -101,8 +108,10 @@ pub fn derive(item: TokenStream) -> TokenStream {
             }
         }
 
-        impl From<#name> for <#name as ::orga::state::State>::Encoding {
-            fn from(value: #name) -> Self {
+        impl#generics From<#name#generic_params> for <#name#generic_params as ::orga::state::State>::Encoding
+        #where_clause
+        {
+            fn from(value: #name#generic_params) -> Self {
                 (#from_body)
             }
         }
