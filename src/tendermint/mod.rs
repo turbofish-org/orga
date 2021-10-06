@@ -227,7 +227,7 @@ impl Tendermint {
     ///
     /// Note: Using this configuration command with incompatible
     /// terminating methods will cause the tendermint process to fail
-    pub fn p2p_persistent_peers<const N: usize>(mut self, peers: [&str; N]) -> Self {
+    pub fn p2p_persistent_peers(mut self, peers: Vec<String>) -> Self {
         self.process.set_arg("--p2p.persistent_peers");
         let mut arg: String = "".to_string();
         peers.iter().for_each(|x| arg += &x.to_string());
