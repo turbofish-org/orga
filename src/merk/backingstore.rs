@@ -157,4 +157,3 @@ impl Read for ABCIPrefixedProofStore {
         self.0.get_next(key.as_slice())
     }
 }
-

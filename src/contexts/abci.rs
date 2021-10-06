@@ -53,10 +53,7 @@ impl From<ValidatorUpdate> for Validator {
 
 impl From<RequestInitChain> for InitChainCtx {
     fn from(req: RequestInitChain) -> Self {
-        let validators = req.validators
-            .into_iter()
-            .map(Into::into)
-            .collect();
+        let validators = req.validators.into_iter().map(Into::into).collect();
 
         Self {
             time: req.time,

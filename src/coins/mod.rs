@@ -30,8 +30,7 @@ use crate::collections::Next;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 
-#[derive(Encode, Decode, Next, Query)]
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Copy)]
+#[derive(Encode, Decode, Next, Query, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Copy)]
 pub struct Address {
     bytes: [u8; 32],
 }

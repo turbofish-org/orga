@@ -1,7 +1,7 @@
 use super::Symbol;
 use crate::encoding::{Decode, Encode};
-use crate::Result;
 use crate::query::Query;
+use crate::Result;
 use failure::bail;
 use std::marker::PhantomData;
 use std::ops::{Add, AddAssign, Div, Mul, Sub};

@@ -2,9 +2,9 @@ use super::{Adjust, Amount, Balance, Give, Symbol, Take};
 use crate::collections::map::{ChildMut as MapChildMut, Ref as MapRef};
 use crate::collections::{Map, Next};
 use crate::encoding::{Decode, Encode, Terminated};
+use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
-use crate::query::Query;
 use crate::Result;
 use std::cell::UnsafeCell;
 use std::marker::PhantomData;
@@ -99,7 +99,7 @@ where
         if multiplier == Amount::zero() {
             multiplier = Amount::one();
         }
-        
+
         Ok(Self {
             multiplier,
             total: Amount::create(store.sub(&[1]), data.1)?,
@@ -325,10 +325,12 @@ where
     V::Encoding: Default,
 {
     pub fn new(entry: MapRef<'a, UnsafeCell<Entry<V, S>>>) -> Self {
-        Child { entry, _symbol: PhantomData }
+        Child {
+            entry,
+            _symbol: PhantomData,
+        }
     }
 }
-
 
 impl<'a, V, S> Deref for Child<'a, V, S>
 where
