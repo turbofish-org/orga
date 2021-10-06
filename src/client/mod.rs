@@ -156,6 +156,7 @@ mod tests {
 
     #[ignore]
     #[tokio::test]
+    #[cfg(feature = "abci")]
     async fn rpc_client() {
         use crate::abci::TendermintClient;
         let mut client = TendermintClient::<Foo>::new("http://localhost:26657").unwrap();

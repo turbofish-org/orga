@@ -1,3 +1,5 @@
+use proc_macro2::TokenStream;
+use quote::quote;
 use std::collections::HashSet;
 use syn::*;
 
@@ -126,4 +128,29 @@ pub fn relevant_methods(
         .into_iter()
         .flat_map(get_methods)
         .collect()
+}
+
+pub fn gen_param_input(generics: &Generics, bracketed: bool) -> TokenStream {
+    let gen_params = generics.params.iter().map(|p| match p {
+        GenericParam::Type(p) => {
+            let ident = &p.ident;
+            quote!(#ident)
+        }
+        GenericParam::Lifetime(p) => {
+            let ident = &p.lifetime.ident;
+            quote!(#ident)
+        }
+        GenericParam::Const(p) => {
+            let ident = &p.ident;
+            quote!(#ident)
+        }
+    });
+
+    if gen_params.len() == 0 {
+        quote!()
+    } else if bracketed {
+        quote!(<#(#gen_params),*>)
+    } else {
+        quote!(#(#gen_params),*)
+    }
 }
