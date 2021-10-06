@@ -55,4 +55,6 @@ required-features = ["merk", "abci"]
 name = "contexts"
 required-features = ["merk", "abci"]
 
-
+[[example]]
+name = "simple-coin"
+required-features = ["merk", "abci"]
