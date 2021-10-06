@@ -12,14 +12,14 @@ impl BeginBlock for MyApp {
     fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
         self.height = ctx.height;
         println!("height: {}", self.height);
+        let ctx = self.context::<Validators>().unwrap();
+        ctx.set_voting_power([1; 32], 2);
         Ok(())
     }
 }
 
 impl EndBlock for MyApp {
-    fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
-        ctx.set_voting_power([0; 32], 2);
-
+    fn end_block(&mut self, _ctx: &EndBlockCtx) -> Result<()> {
         Ok(())
     }
 }

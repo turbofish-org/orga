@@ -1,20 +1,30 @@
 use super::{BeginBlockCtx, EndBlockCtx, GetContext, InitChainCtx, Signer};
 use crate::abci::{BeginBlock, EndBlock, InitChain};
 use crate::call::Call;
-use crate::client::Client;
+use crate::client::{AsyncCall, Client};
+use crate::coins::Address;
 use crate::collections::Map;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::Result;
+use std::ops::Deref;
 use std::path::PathBuf;
 
-type NonceMap = Map<[u8; 32], u64>;
+type NonceMap = Map<Address, u64>;
 
 pub struct NonceProvider<T> {
     inner: T,
     map: NonceMap,
+}
+
+impl<T> Deref for NonceProvider<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
 }
 
 #[derive(Encode, Decode)]
@@ -39,10 +49,10 @@ where
             // Happy paths:
             (Some(pub_key), Some(nonce)) => {
                 let mut expected_nonce = self.map.entry(pub_key)?.or_default()?;
-                if nonce != *expected_nonce {
+                if nonce < *expected_nonce {
                     failure::bail!("Nonce is not valid.");
                 }
-                *expected_nonce += 1;
+                *expected_nonce = nonce + 1;
                 self.inner.call(call.inner_call)
             }
             (None, None) => self.inner.call(call.inner_call),
@@ -67,6 +77,8 @@ pub struct NonceClient<T, U: Clone> {
     marker: std::marker::PhantomData<T>,
 }
 
+unsafe impl<T, U: Send + Clone> Send for NonceClient<T, U> {}
+
 impl<T, U: Clone> Clone for NonceClient<T, U> {
     fn clone(&self) -> Self {
         NonceClient {
@@ -76,20 +88,27 @@ impl<T, U: Clone> Clone for NonceClient<T, U> {
     }
 }
 
-impl<T: Call, U: Call<Call = NonceCall<T::Call>> + Clone> Call for NonceClient<T, U> {
-    type Call = NonceCall<T::Call>;
+#[async_trait::async_trait]
+impl<T: Call, U: AsyncCall<Call = NonceCall<T::Call>> + Clone> AsyncCall for NonceClient<T, U>
+where
+    T::Call: Send,
+    U: Send,
+{
+    type Call = T::Call;
 
-    fn call(&mut self, call: Self::Call) -> Result<()> {
+    async fn call(&mut self, call: Self::Call) -> Result<()> {
         // Load nonce from file
         let nonce = load_nonce()?;
+
         let res = self.parent.call(NonceCall {
-            inner_call: call.inner_call,
+            inner_call: call,
             nonce: Some(nonce),
-        })?;
+        });
 
         // Increment the local nonce
         write_nonce(nonce + 1)?;
-        Ok(res)
+
+        res.await
     }
 }
 
@@ -251,16 +270,15 @@ mod tests {
         assert_eq!(state.inner.count, 1);
         Context::remove::<Signer>();
         Context::add(Signer {
-            signer: Some([0; 32]),
+            signer: Some([0; 32].into()),
         });
 
         // Signed, correct nonce
         state.call(nonced_call(0)).unwrap();
         assert_eq!(state.inner.count, 2);
 
-        // Signed, incorrect nonces
+        // Signed, incorrect nonce
         assert!(state.call(nonced_call(0)).is_err());
-        assert!(state.call(nonced_call(123)).is_err());
 
         // Signed, no nonce
         assert!(state.call(unnonced_call()).is_err());

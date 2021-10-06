@@ -23,8 +23,8 @@ pub use tendermint_proto::abci as messages;
 use tendermint_proto::abci::request::Value as Req;
 use tendermint_proto::abci::response::Value as Res;
 
-// mod tendermint_client;
-// pub use tendermint_client::TendermintClient;
+mod tendermint_client;
+pub use tendermint_client::TendermintClient;
 
 /// Top-level struct for running an ABCI application. Maintains an ABCI server,
 /// mempool, and handles committing data to the store.
@@ -265,6 +265,7 @@ impl<A: Application> ABCIStateMachine<A> {
                     let owned_store = store.take().unwrap();
                     let flush_store = Shared::new(BufStore::wrap(owned_store.clone()));
                     let res = app.check_tx(flush_store.clone(), req)?;
+
                     let mut unwrapped_fs = flush_store.into_inner();
                     unwrapped_fs.flush()?;
                     store.replace(owned_store);

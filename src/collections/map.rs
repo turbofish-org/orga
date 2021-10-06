@@ -6,6 +6,7 @@ use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
 use super::Next;
 use crate::call::Call;
+use crate::client::{AsyncCall, Client as ClientTrait};
 use crate::query::Query;
 use crate::state::*;
 use crate::store::Iter as StoreIter;
@@ -85,7 +86,7 @@ impl<K> Eq for MapKey<K> {}
 /// When values in the map are mutated, inserted, or deleted, they are retained
 /// in an in-memory map until the call to `State::flush` which writes the
 /// changes to the backing store.
-#[derive(Query)]
+#[derive(Query, Call)]
 pub struct Map<K, V, S = DefaultBackingStore> {
     store: Store<S>,
     children: BTreeMap<MapKey<K>, Option<V>>,
@@ -118,6 +119,76 @@ where
         }
 
         Ok(())
+    }
+}
+
+pub struct Client<K, V, U: Clone> {
+    parent: U,
+    key: Option<K>,
+    _marker: std::marker::PhantomData<V>,
+}
+
+impl<K, V, S, U: Clone> ClientTrait<U> for Map<K, V, S> {
+    type Client = Client<K, V, U>;
+
+    fn create_client(parent: U) -> Self::Client {
+        Client {
+            parent,
+            key: None,
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<K: Clone, V, U: Clone> Clone for Client<K, V, U> {
+    fn clone(&self) -> Self {
+        Client {
+            parent: self.parent.clone(),
+            key: self.key.clone(),
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<K: Clone, V: Call, U: Clone> Client<K, V, U>
+where
+    V: ClientTrait<Self>,
+{
+    pub fn get_mut(&mut self, key: K) -> V::Client {
+        let mut adapter = self.clone();
+        adapter.key = Some(key);
+        V::create_client(adapter)
+    }
+}
+
+unsafe impl<K: Clone, V: Call, U: Clone> Send for Client<K, V, U>
+where
+    U: AsyncCall<Call = <Map<K, V> as Call>::Call>,
+    K: Encode + Decode + Terminated,
+    V::Call: Sync,
+    U: Send,
+    K: Send,
+{
+}
+
+#[async_trait::async_trait]
+impl<K: Clone, V: Call, U: Clone> AsyncCall for Client<K, V, U>
+where
+    U: AsyncCall<Call = <Map<K, V> as Call>::Call>,
+    K: Encode + Decode + Terminated,
+    V::Call: Sync + Send,
+    U: Send,
+    K: Send,
+{
+    type Call = V::Call;
+
+    async fn call(&mut self, subcall: Self::Call) -> Result<()> {
+        let key = self.key.as_ref().unwrap().clone();
+
+        let subcall_bytes = subcall.encode()?;
+
+        let call = <Map<K, V> as Call>::Call::MethodGetMut(key, subcall_bytes);
+        self.parent.call(call).await
     }
 }
 
@@ -190,6 +261,29 @@ where
             // value is not in memory, try to get from store
             self.get_from_store(&map_key.inner)?.map(Ref::Owned)
         })
+    }
+}
+
+impl<K, V, S, D> Map<K, V, S>
+where
+    K: Encode + Terminated,
+    V: State<S, Encoding = D>,
+    S: Read,
+    D: Default,
+{
+    pub fn get_or_default(&self, key: K) -> Result<Ref<V>> {
+        let key_bytes = key.encode()?;
+        let maybe_value = self.get(key)?;
+
+        let value = match maybe_value {
+            Some(value) => value,
+            None => Ref::Owned(V::create(
+                self.store.sub(key_bytes.as_slice()),
+                D::default(),
+            )?),
+        };
+
+        Ok(value)
     }
 }
 
@@ -579,6 +673,19 @@ where
 
     fn call(&mut self, call: Self::Call) -> Result<()> {
         (**self).call(call)
+    }
+}
+
+impl<'a, K, V, S, U> ClientTrait<U> for ChildMut<'a, K, V, S>
+where
+    V: ClientTrait<U>,
+    K: Encode,
+    U: Clone,
+{
+    type Client = V::Client;
+
+    fn create_client(parent: U) -> Self::Client {
+        V::create_client(parent)
     }
 }
 
