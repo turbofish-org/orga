@@ -1,7 +1,7 @@
+use proc_macro2::TokenStream;
+use quote::quote;
 use std::collections::HashSet;
 use syn::*;
-use quote::quote;
-use proc_macro2::TokenStream;
 
 pub fn parse_parent() -> File {
     let path = proc_macro::Span::call_site().source_file().path();
@@ -129,7 +129,6 @@ pub fn relevant_methods(
         .flat_map(get_methods)
         .collect()
 }
-
 
 pub fn gen_param_input(generics: &Generics, bracketed: bool) -> TokenStream {
     let gen_params = generics.params.iter().map(|p| match p {

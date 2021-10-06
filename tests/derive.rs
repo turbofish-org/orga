@@ -8,7 +8,8 @@ use orga::store::{MapStore, Shared, Store};
 
 #[derive(Encode, Decode, PartialEq, Debug)]
 struct Foo<T>
-    where T: Default,
+where
+    T: Default,
 {
     a: u8,
     b: Option<T>,

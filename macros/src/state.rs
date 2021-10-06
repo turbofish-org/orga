@@ -1,9 +1,9 @@
+use super::utils::gen_param_input;
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use std::str::FromStr;
 use syn::*;
-use super::utils::gen_param_input;
 
 pub fn derive(item: TokenStream) -> TokenStream {
     let item = parse_macro_input!(item as DeriveInput);
