@@ -183,30 +183,30 @@ impl<'a> ABCIStore for MerkStore {
         self.write(metadata)?;
         self.merk.as_mut().unwrap().flush()?;
 
-        if self.height()? % STATE_SYNC_EPOCH == 0 {
-            // Create new checkpoint
-            let checkpoint = self
-                .merk
-                .as_ref()
-                .unwrap()
-                .checkpoint(self.home.join(self.height()?.to_string()))?;
+        // if self.height()? % STATE_SYNC_EPOCH == 0 {
+        //     // Create new checkpoint
+        //     let checkpoint = self
+        //         .merk
+        //         .as_ref()
+        //         .unwrap()
+        //         .checkpoint(self.home.join(self.height()?.to_string()))?;
 
-            let snapshot = MerkSnapshot {
-                hash: self.merk.as_ref().unwrap().root_hash().to_vec(),
-                checkpoint,
-                chunks: self.merk.as_ref().unwrap().chunks()?.len() as u32,
-            };
-            self.snapshots.insert(self.height()?, snapshot);
+        //     let snapshot = MerkSnapshot {
+        //         hash: self.merk.as_ref().unwrap().root_hash().to_vec(),
+        //         checkpoint,
+        //         chunks: self.merk.as_ref().unwrap().chunks()?.len() as u32,
+        //     };
+        //     self.snapshots.insert(self.height()?, snapshot);
 
-            if self.height()? > 2 * STATE_SYNC_EPOCH {
-                let remove_height = self.height()? - 2 * STATE_SYNC_EPOCH;
-                self.snapshots.remove(&remove_height);
-                let path = self.home.join(remove_height.to_string());
-                if path.exists() {
-                    std::fs::remove_dir_all(path)?;
-                }
-            }
-        }
+        //     if self.height()? > 2 * STATE_SYNC_EPOCH {
+        //         let remove_height = self.height()? - 2 * STATE_SYNC_EPOCH;
+        //         self.snapshots.remove(&remove_height);
+        //         let path = self.home.join(remove_height.to_string());
+        //         if path.exists() {
+        //             std::fs::remove_dir_all(path)?;
+        //         }
+        //     }
+        // }
 
         Ok(())
     }
