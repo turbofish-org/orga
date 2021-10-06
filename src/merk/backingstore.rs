@@ -144,6 +144,11 @@ impl ABCIPrefixedProofStore {
         prefixed_key.extend_from_slice(key);
         prefixed_key
     }
+
+    fn deprefix_key(mut key: Vec<u8>) -> Vec<u8> {
+        key.remove(0);
+        key
+    }
 }
 
 impl Read for ABCIPrefixedProofStore {
@@ -154,6 +159,8 @@ impl Read for ABCIPrefixedProofStore {
 
     fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
         let key = Self::prefix_key(key);
-        self.0.get_next(key.as_slice())
+        let maybe_kv = self.0.get_next(key.as_slice())?
+            .map(|(key, value)| (Self::deprefix_key(key), value));
+        Ok(maybe_kv)
     }
 }
