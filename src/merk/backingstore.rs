@@ -11,7 +11,7 @@ pub enum BackingStore {
     WrappedMerk(WrappedMerkStore),
     ProofBuilder(ProofBuilder),
     MapStore(Shared<MapStore>),
-    ProofMap(Shared<ProofStore>),
+    ProofMap(Shared<ABCIPrefixedProofStore>),
 }
 
 impl Read for BackingStore {
@@ -83,10 +83,10 @@ impl BackingStore {
         }
     }
 
-    pub fn into_proof_map(self) -> Result<Shared<ProofStore>> {
+    pub fn into_abci_prefixed_proof_map(self) -> Result<Shared<ABCIPrefixedProofStore>> {
         match self {
-            BackingStore::ProofMap(map) => Ok(map),
-            _ => bail!("Failed to downcast backing store to proof map"),
+            BackingStore::ProofMap(store) => Ok(store),
+            _ => bail!("Failed to downcast backing store to ABCI-prefixed proof map"),
         }
     }
 }
@@ -110,8 +110,8 @@ impl From<Shared<MapStore>> for BackingStore {
     }
 }
 
-impl From<Shared<ProofStore>> for BackingStore {
-    fn from(store: Shared<ProofStore>) -> BackingStore {
+impl From<Shared<ABCIPrefixedProofStore>> for BackingStore {
+    fn from(store: Shared<ABCIPrefixedProofStore>) -> BackingStore {
         BackingStore::ProofMap(store)
     }
 }
@@ -128,5 +128,39 @@ impl Read for ProofStore {
         let mut iter = self.0.range((Bound::Excluded(key), Bound::Unbounded));
         let item = iter.next().transpose()?;
         Ok(item.map(|(k, v)| (k.to_vec(), v.to_vec())))
+    }
+}
+
+pub struct ABCIPrefixedProofStore(pub ProofStore);
+
+impl ABCIPrefixedProofStore {
+    pub fn new(map: ProofMap) -> Self {
+        ABCIPrefixedProofStore(ProofStore(map))
+    }
+
+    fn prefix_key(key: &[u8]) -> Vec<u8> {
+        let mut prefixed_key = Vec::with_capacity(key.len() + 1);
+        prefixed_key.push(0);
+        prefixed_key.extend_from_slice(key);
+        prefixed_key
+    }
+
+    fn deprefix_key(mut key: Vec<u8>) -> Vec<u8> {
+        key.remove(0);
+        key
+    }
+}
+
+impl Read for ABCIPrefixedProofStore {
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        let key = Self::prefix_key(key);
+        self.0.get(key.as_slice())
+    }
+
+    fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
+        let key = Self::prefix_key(key);
+        let maybe_kv = self.0.get_next(key.as_slice())?
+            .map(|(key, value)| (Self::deprefix_key(key), value));
+        Ok(maybe_kv)
     }
 }

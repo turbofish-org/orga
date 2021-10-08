@@ -64,6 +64,14 @@ noop_impl!(i32);
 noop_impl!(i64);
 noop_impl!(i128);
 
+impl<T> Query for Vec<T> {
+    type Query = ();
+
+    fn query(&self, _: ()) -> Result<()> {
+        Ok(())
+    }
+}
+
 impl<T> Query for (T,)
 where
     T: Query,

@@ -183,6 +183,7 @@ impl<'a> ABCIStore for MerkStore {
         self.write(metadata)?;
         self.merk.as_mut().unwrap().flush()?;
 
+        #[cfg(state_sync)]
         if self.height()? % STATE_SYNC_EPOCH == 0 {
             // Create new checkpoint
             let checkpoint = self

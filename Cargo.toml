@@ -13,7 +13,7 @@ merk = { git = "https://github.com/nomic-io/merk", rev = "42a2943852b23b61ec9159
 tendermint-rpc = { version = "0.21.0", features = ["http-client"], optional = true }
 tendermint = { version = "0.21.0", optional = true }
 tendermint-proto = { version = "0.21.0", optional = true }
-orga-macros = { path = "macros", version = "0.2.0" }
+orga-macros = { path = "macros", version = "0.2.1" }
 seq-macro = "0.1.4"
 log = "0.4.8"
 hex-literal = "0.3.3"

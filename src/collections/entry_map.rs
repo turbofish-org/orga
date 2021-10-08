@@ -113,7 +113,7 @@ where
 
 impl<'a, T: Entry, S> EntryMap<T, S>
 where
-    T::Key: Next<T::Key> + Decode + Encode + Terminated + Clone,
+    T::Key: Next + Decode + Encode + Terminated + Clone,
     T::Value: State<S> + Clone,
     S: Read,
 {
@@ -132,7 +132,7 @@ where
 
 pub struct Iter<'a, T: Entry, S>
 where
-    T::Key: Next<T::Key> + Decode + Encode + Terminated + Clone,
+    T::Key: Next + Decode + Encode + Terminated + Clone,
     T::Value: State<S> + Clone,
     S: Read,
 {
@@ -141,7 +141,7 @@ where
 
 impl<'a, T: Entry, S> Iterator for Iter<'a, T, S>
 where
-    T::Key: Next<T::Key> + Decode + Encode + Terminated + Clone,
+    T::Key: Next + Decode + Encode + Terminated + Clone,
     T::Value: State<S> + Clone,
     S: Read,
 {

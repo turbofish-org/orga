@@ -30,7 +30,7 @@ fn derive_named_struct(data: syn::DataStruct, ident: syn::Ident) -> TokenStream 
         .collect();
 
     let output = quote! {
-        impl ::orga::collections::Next<#ident> for #ident {
+        impl ::orga::collections::Next for #ident {
             fn next(&self) -> Option<#ident> {
                 let mut return_struct = Self {
                     #(#field_names: self.#field_names, )*

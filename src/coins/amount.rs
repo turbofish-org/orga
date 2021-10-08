@@ -1,5 +1,6 @@
 use super::Symbol;
 use crate::encoding::{Decode, Encode};
+use crate::query::Query;
 use crate::Result;
 use failure::bail;
 use std::marker::PhantomData;
@@ -7,10 +8,18 @@ use std::ops::{Add, AddAssign, Div, Mul, Sub};
 
 const PRECISION: u64 = 1_000_000_000;
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Debug)]
 pub struct Amount<S: Symbol> {
     pub value: u64,
     symbol: PhantomData<S>,
+}
+
+impl<S: Symbol> Query for Amount<S> {
+    type Query = ();
+
+    fn query(&self, _: ()) -> Result<()> {
+        Ok(())
+    }
 }
 
 impl<S: Symbol> std::fmt::Display for Amount<S> {

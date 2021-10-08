@@ -9,6 +9,7 @@ use crate::state::State;
 use crate::store::Store;
 use crate::Result;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use tendermint_proto::abci::{
     Evidence, LastCommitInfo, RequestBeginBlock, RequestEndBlock, RequestInitChain, ValidatorUpdate,
 };
@@ -26,17 +27,38 @@ pub struct ABCIProvider<T> {
 pub struct InitChainCtx {
     pub time: Option<Timestamp>,
     pub chain_id: String,
-    pub validators: Vec<ValidatorUpdate>,
+    pub validators: Vec<Validator>,
     pub app_state_bytes: Vec<u8>,
     pub initial_height: i64,
 }
 
+pub struct Validator {
+    pub pubkey: [u8; 32],
+    pub power: u64,
+}
+
+impl From<ValidatorUpdate> for Validator {
+    fn from(update: ValidatorUpdate) -> Self {
+        let pubkey_bytes = match update.pub_key.unwrap().sum.unwrap() {
+            Sum::Ed25519(bytes) => bytes,
+            Sum::Secp256k1(bytes) => bytes,
+        };
+
+        let pubkey: [u8; 32] = pubkey_bytes.try_into().unwrap();
+        let power: u64 = update.power.try_into().unwrap();
+
+        Validator { pubkey, power }
+    }
+}
+
 impl From<RequestInitChain> for InitChainCtx {
     fn from(req: RequestInitChain) -> Self {
+        let validators = req.validators.into_iter().map(Into::into).collect();
+
         Self {
             time: req.time,
             chain_id: req.chain_id,
-            validators: req.validators,
+            validators,
             app_state_bytes: req.app_state_bytes,
             initial_height: req.initial_height,
         }
@@ -81,7 +103,9 @@ pub struct Validators {
 }
 
 impl Validators {
-    pub fn set_voting_power(&mut self, pub_key: [u8; 32], power: u64) {
+    pub fn set_voting_power<A: Into<[u8; 32]>>(&mut self, pub_key: A, power: u64) {
+        let pub_key = pub_key.into();
+
         let sum = Some(Sum::Ed25519(pub_key.to_vec()));
         let key = PublicKey { sum };
         self.updates.insert(
@@ -176,6 +200,7 @@ impl<T: App> Call for ABCIProvider<T> {
 
 impl<T: Query> Query for ABCIProvider<T> {
     type Query = T::Query;
+
     fn query(&self, query: Self::Query) -> Result<()> {
         self.inner.query(query)
     }
