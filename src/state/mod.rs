@@ -4,6 +4,7 @@ use crate::Result;
 pub use orga_macros::State;
 use std::cell::{RefCell, UnsafeCell};
 use std::convert::TryInto;
+use std::marker::PhantomData;
 
 /// A trait for types which provide a higher-level API for data stored within a
 /// [`store::Store`](../store/trait.Store.html).
@@ -228,6 +229,18 @@ where
     }
 }
 
+impl<T: State<S>, S> State<S> for PhantomData<T> {
+    type Encoding = Self;
+
+    fn create(store: Store<S>, data: Self::Encoding) -> Result<Self> {
+        Ok(data)
+    }
+
+    fn flush(self) -> Result<Self::Encoding> {
+        Ok(self)
+    }
+}
+
 #[derive(Encode, Decode)]
 pub struct Encoded1Tuple<A, S>
 where
@@ -318,8 +331,8 @@ state_tuple_impl!(A, B, C; D; 0, 1, 2; 3; Encoded4Tuple);
 state_tuple_impl!(A, B, C, D; E; 0, 1, 2, 3; 4; Encoded5Tuple);
 state_tuple_impl!(A, B, C, D, E; F; 0, 1, 2, 3, 4; 5; Encoded6Tuple);
 state_tuple_impl!(A, B, C, D, E, F; G; 0, 1, 2, 3, 4, 5; 6; Encoded7Tuple);
-state_tuple_impl!(A, B, C, D, E, F, G; H; 0, 1, 2, 3, 4, 5, 6; 7; Encoded8Tuple);
-state_tuple_impl!(A, B, C, D, E, F, G, H; I; 0, 1, 2, 3, 4, 5, 6, 7; 8; Encoded9Tuple);
-state_tuple_impl!(A, B, C, D, E, F, G, H, I; J; 0, 1, 2, 3, 4, 5, 6, 7, 8; 9; Encoded10Tuple);
-state_tuple_impl!(A, B, C, D, E, F, G, H, I, J; K; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9; 10; Encoded11Tuple);
-state_tuple_impl!(A, B, C, D, E, F, G, H, I, J, K; L; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10; 11; Encoded12Tuple);
+// state_tuple_impl!(A, B, C, D, E, F, G; H; 0, 1, 2, 3, 4, 5, 6; 7; Encoded8Tuple);
+// state_tuple_impl!(A, B, C, D, E, F, G, H; I; 0, 1, 2, 3, 4, 5, 6, 7; 8; Encoded9Tuple);
+// state_tuple_impl!(A, B, C, D, E, F, G, H, I; J; 0, 1, 2, 3, 4, 5, 6, 7, 8; 9; Encoded10Tuple);
+// state_tuple_impl!(A, B, C, D, E, F, G, H, I, J; K; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9; 10; Encoded11Tuple);
+// state_tuple_impl!(A, B, C, D, E, F, G, H, I, J, K; L; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10; 11; Encoded12Tuple);
