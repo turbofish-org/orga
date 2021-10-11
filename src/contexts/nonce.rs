@@ -1,5 +1,4 @@
-use super::{BeginBlockCtx, EndBlockCtx, GetContext, InitChainCtx, Signer};
-use crate::abci::{BeginBlock, EndBlock, InitChain};
+use super::{GetContext, Signer};
 use crate::call::Call;
 use crate::client::{AsyncCall, Client};
 use crate::coins::Address;
@@ -7,12 +6,9 @@ use crate::collections::Map;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
-use crate::store::Store;
 use crate::Result;
 use std::ops::Deref;
 use std::path::PathBuf;
-
-type NonceMap = Map<Address, u64>;
 
 #[derive(State, Encode, Decode)]
 pub struct NonceProvider<T: State> {

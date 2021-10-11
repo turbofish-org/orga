@@ -4,7 +4,6 @@ use crate::collections::{Map, Next};
 use crate::encoding::{Decode, Encode, Terminated};
 use crate::query::Query;
 use crate::state::State;
-use crate::store::Store;
 use crate::Result;
 use std::cell::UnsafeCell;
 use std::marker::PhantomData;

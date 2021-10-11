@@ -190,7 +190,7 @@ where
 impl<T: State<S>, S> State<S> for PhantomData<T> {
     type Encoding = Self;
 
-    fn create(store: Store<S>, data: Self::Encoding) -> Result<Self> {
+    fn create(_: Store<S>, data: Self::Encoding) -> Result<Self> {
         Ok(data)
     }
 
@@ -228,7 +228,7 @@ where
     where
         S: Read,
     {
-        Ok((A::create(store.clone(), data.inner.0)?,))
+        Ok((A::create(store, data.inner.0)?,))
     }
 
     fn flush(self) -> Result<Self::Encoding> {
