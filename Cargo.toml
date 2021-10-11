@@ -46,3 +46,10 @@ abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto", "prost", "r
 [profile.release]
 lto = true
 
+[[example]]
+name = "counter"
+features = ["merk", "abci"]
+
+[[example]]
+name = "simple-coin"
+features = ["merk", "abci"]
