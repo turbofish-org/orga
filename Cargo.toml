@@ -48,8 +48,8 @@ lto = true
 
 [[example]]
 name = "counter"
-features = ["merk", "abci"]
+required-features = ["merk", "abci"]
 
 [[example]]
 name = "simple-coin"
-features = ["merk", "abci"]
+required-features = ["merk", "abci"]
