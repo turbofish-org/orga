@@ -158,21 +158,7 @@ where
 
     pub fn get(&self, key: K) -> Result<Child<V, S>> {
         let entry = self.map.get(key)?.unwrap();
-        {
-            let mut entry = unsafe { &mut *entry.get() };
-
-            if entry.last_multiplier == Amount::zero() {
-                entry.last_multiplier = self.multiplier;
-            }
-
-            if entry.last_multiplier != self.multiplier {
-                let adjustment = (self.multiplier / entry.last_multiplier)?;
-                entry.inner.adjust(adjustment)?;
-                entry.last_multiplier = self.multiplier;
-            }
-        }
-
-        Ok(Child::new(entry))
+        Child::new(entry, self.multiplier)
     }
 }
 
@@ -189,9 +175,9 @@ where
     where
         B: RangeBounds<K>,
     {
-        Ok(self.map.range(bounds)?.map(|entry| {
+        Ok(self.map.range(bounds)?.map(move |entry| {
             let entry = entry?;
-            let child = Child::new(entry.1);
+            let child = Child::new(entry.1, self.multiplier)?;
             Ok((entry.0, child))
         }))
     }
@@ -308,43 +294,65 @@ where
     }
 }
 
-pub struct Child<'a, V, S>
-where
-    S: Symbol,
-    V: State + Balance<S> + Adjust<S>,
-    V::Encoding: Default,
-{
-    entry: MapRef<'a, UnsafeCell<Entry<V, S>>>,
-    _symbol: PhantomData<S>,
-}
+// placed in a separate module to ensure instances only get created via
+// `Child::new`
+mod child {
+    use super::*;
 
-impl<'a, V, S> Child<'a, V, S>
-where
-    S: Symbol,
-    V: State + Balance<S> + Adjust<S>,
-    V::Encoding: Default,
-{
-    pub fn new(entry: MapRef<'a, UnsafeCell<Entry<V, S>>>) -> Self {
-        Child {
-            entry,
-            _symbol: PhantomData,
+    pub struct Child<'a, V, S>
+    where
+        S: Symbol,
+        V: State + Balance<S> + Adjust<S>,
+        V::Encoding: Default,
+    {
+        entry: MapRef<'a, UnsafeCell<Entry<V, S>>>,
+        _symbol: PhantomData<S>,
+    }
+
+    impl<'a, V, S> Child<'a, V, S>
+    where
+        S: Symbol,
+        V: State + Balance<S> + Adjust<S>,
+        V::Encoding: Default,
+    {
+        pub fn new(
+            entry_ref: MapRef<'a, UnsafeCell<Entry<V, S>>>,
+            current_multiplier: Amount<S>,
+        ) -> Result<Self> {
+            let mut entry = unsafe { &mut *entry_ref.get() };
+
+            if entry.last_multiplier == Amount::zero() {
+                entry.last_multiplier = current_multiplier;
+            }
+
+            if entry.last_multiplier != current_multiplier {
+                let adjustment = (current_multiplier / entry.last_multiplier)?;
+                entry.inner.adjust(adjustment)?;
+                entry.last_multiplier = current_multiplier;
+            }
+
+            Ok(Child {
+                entry: entry_ref,
+                _symbol: PhantomData,
+            })
+        }
+    }
+
+    impl<'a, V, S> Deref for Child<'a, V, S>
+    where
+        S: Symbol,
+        V: State + Balance<S> + Adjust<S>,
+        V::Encoding: Default,
+    {
+        type Target = V;
+
+        fn deref(&self) -> &Self::Target {
+            let v = self.entry.get();
+            &unsafe { &*v }.inner
         }
     }
 }
-
-impl<'a, V, S> Deref for Child<'a, V, S>
-where
-    S: Symbol,
-    V: State + Balance<S> + Adjust<S>,
-    V::Encoding: Default,
-{
-    type Target = V;
-
-    fn deref(&self) -> &Self::Target {
-        let v = self.entry.get();
-        &unsafe { &*v }.inner
-    }
-}
+use child::Child;
 
 #[cfg(test)]
 mod tests {
