@@ -9,6 +9,18 @@ use orga::prelude::*;
 pub struct Simp;
 impl Symbol for Simp {}
 
+impl State for Simp {
+    type Encoding = Self;
+
+    fn create(_: Store, data: Self::Encoding) -> Result<Self> {
+        Ok(data)
+    }
+
+    fn flush(self) -> Result<Self::Encoding> {
+        Ok(self)
+    }
+}
+
 #[derive(State, Call, Client, Query)]
 pub struct SimpleCoin {
     balances: Map<Address, Coin<Simp>>,
@@ -18,7 +30,8 @@ impl InitChain for SimpleCoin {
     fn init_chain(&mut self, _ctx: &InitChainCtx) -> Result<()> {
         let my_address = load_keypair().unwrap().public.to_bytes();
         println!("my address: {:?}", my_address);
-        self.balances.insert(my_address.into(), Simp::mint(100))?;
+        self.balances
+            .insert(my_address.into(), Simp::mint(100).into())?;
         Ok(())
     }
 }
