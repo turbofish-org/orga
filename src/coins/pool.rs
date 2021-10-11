@@ -352,7 +352,7 @@ mod child {
         }
     }
 }
-use child::Child;
+pub use child::Child;
 
 #[cfg(test)]
 mod tests {
