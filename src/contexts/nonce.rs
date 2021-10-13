@@ -1,8 +1,10 @@
 use super::{GetContext, Signer};
+use crate::abci::{BeginBlock, EndBlock, InitChain};
 use crate::call::Call;
 use crate::client::{AsyncCall, Client};
 use crate::coins::Address;
 use crate::collections::Map;
+use crate::contexts::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
@@ -163,43 +165,34 @@ fn write_nonce(nonce: u64) -> Result<()> {
     Ok(std::fs::write(&nonce_path, nonce.encode()?)?)
 }
 
-// impl<T> From<NonceProvider<T>> for (<NonceMap as State>::Encoding, T::Encoding)
-// where
-//     T: State,
-// {
-//     fn from(provider: NonceProvider<T>) -> Self {
-//         (provider.map.into(), provider.inner.into())
-//     }
-// }
-
 // TODO: Remove dependency on ABCI for this otherwise-pure plugin.
 
-// impl<T> BeginBlock for NonceProvider<T>
-// where
-//     T: BeginBlock + State,
-// {
-//     fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
-//         self.inner.begin_block(ctx)
-//     }
-// }
+impl<T> BeginBlock for NonceProvider<T>
+where
+    T: BeginBlock + State,
+{
+    fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
+        self.inner.begin_block(ctx)
+    }
+}
 
-// impl<T> EndBlock for NonceProvider<T>
-// where
-//     T: EndBlock + State,
-// {
-//     fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
-//         self.inner.end_block(ctx)
-//     }
-// }
+impl<T> EndBlock for NonceProvider<T>
+where
+    T: EndBlock + State,
+{
+    fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
+        self.inner.end_block(ctx)
+    }
+}
 
-// impl<T> InitChain for NonceProvider<T>
-// where
-//     T: InitChain + State + Call,
-// {
-//     fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
-//         self.inner.init_chain(ctx)
-//     }
-// }
+impl<T> InitChain for NonceProvider<T>
+where
+    T: InitChain + State + Call,
+{
+    fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
+        self.inner.init_chain(ctx)
+    }
+}
 
 #[cfg(test)]
 mod tests {
