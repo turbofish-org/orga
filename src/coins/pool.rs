@@ -1,14 +1,16 @@
 use super::{Adjust, Amount, Balance, Give, Symbol, Take};
 use crate::collections::map::{ChildMut as MapChildMut, Ref as MapRef};
-use crate::collections::Map;
-use crate::encoding::{Encode, Terminated};
+use crate::collections::{Map, Next};
+use crate::encoding::{Decode, Encode, Terminated};
+use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::Result;
 use std::cell::UnsafeCell;
 use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut, Drop};
+use std::ops::{Deref, DerefMut, Drop, RangeBounds};
 
+#[derive(Query)]
 pub struct Pool<K, V, S>
 where
     S: Symbol,
@@ -93,8 +95,13 @@ where
     );
 
     fn create(store: Store, data: Self::Encoding) -> Result<Self> {
+        let mut multiplier = Amount::create(store.sub(&[0]), data.0)?;
+        if multiplier == Amount::zero() {
+            multiplier = Amount::one();
+        }
+
         Ok(Self {
-            multiplier: Amount::create(store.sub(&[0]), data.0)?,
+            multiplier,
             total: Amount::create(store.sub(&[1]), data.1)?,
             map: Map::create(store.sub(&[2]), data.2)?,
         })
@@ -151,24 +158,32 @@ where
 
     pub fn get(&self, key: K) -> Result<Child<V, S>> {
         let entry = self.map.get(key)?.unwrap();
-        {
-            let mut entry = unsafe { &mut *entry.get() };
+        Child::new(entry, self.multiplier)
+    }
+}
 
-            if entry.last_multiplier == Amount::zero() {
-                entry.last_multiplier = self.multiplier;
-            }
+pub type IterEntry<'a, K, V, S> = Result<(MapRef<'a, K>, Child<'a, V, S>)>;
 
-            if entry.last_multiplier != self.multiplier {
-                let adjustment = (self.multiplier / entry.last_multiplier)?;
-                entry.inner.adjust(adjustment)?;
-                entry.last_multiplier = self.multiplier;
-            }
-        }
+impl<K, V, S> Pool<K, V, S>
+where
+    S: Symbol,
+    K: Encode + Decode + Terminated + Clone + Next,
+    V: State + Adjust<S> + Balance<S>,
+    V::Encoding: Default,
+{
+    pub fn range<B>(&self, bounds: B) -> Result<impl Iterator<Item = IterEntry<K, V, S>>>
+    where
+        B: RangeBounds<K>,
+    {
+        Ok(self.map.range(bounds)?.map(move |entry| {
+            let entry = entry?;
+            let child = Child::new(entry.1, self.multiplier)?;
+            Ok((entry.0, child))
+        }))
+    }
 
-        Ok(Child {
-            entry,
-            _symbol: PhantomData,
-        })
+    pub fn iter(&self) -> Result<impl Iterator<Item = IterEntry<K, V, S>>> {
+        self.range(..)
     }
 }
 
@@ -279,29 +294,65 @@ where
     }
 }
 
-pub struct Child<'a, V, S>
-where
-    S: Symbol,
-    V: State + Balance<S> + Adjust<S>,
-    V::Encoding: Default,
-{
-    entry: MapRef<'a, UnsafeCell<Entry<V, S>>>,
-    _symbol: PhantomData<S>,
-}
+// placed in a separate module to ensure instances only get created via
+// `Child::new`
+mod child {
+    use super::*;
 
-impl<'a, V, S> Deref for Child<'a, V, S>
-where
-    S: Symbol,
-    V: State + Balance<S> + Adjust<S>,
-    V::Encoding: Default,
-{
-    type Target = V;
+    pub struct Child<'a, V, S>
+    where
+        S: Symbol,
+        V: State + Balance<S> + Adjust<S>,
+        V::Encoding: Default,
+    {
+        entry: MapRef<'a, UnsafeCell<Entry<V, S>>>,
+        _symbol: PhantomData<S>,
+    }
 
-    fn deref(&self) -> &Self::Target {
-        let v = self.entry.get();
-        &unsafe { &*v }.inner
+    impl<'a, V, S> Child<'a, V, S>
+    where
+        S: Symbol,
+        V: State + Balance<S> + Adjust<S>,
+        V::Encoding: Default,
+    {
+        pub fn new(
+            entry_ref: MapRef<'a, UnsafeCell<Entry<V, S>>>,
+            current_multiplier: Amount<S>,
+        ) -> Result<Self> {
+            let mut entry = unsafe { &mut *entry_ref.get() };
+
+            if entry.last_multiplier == Amount::zero() {
+                entry.last_multiplier = current_multiplier;
+            }
+
+            if entry.last_multiplier != current_multiplier {
+                let adjustment = (current_multiplier / entry.last_multiplier)?;
+                entry.inner.adjust(adjustment)?;
+                entry.last_multiplier = current_multiplier;
+            }
+
+            Ok(Child {
+                entry: entry_ref,
+                _symbol: PhantomData,
+            })
+        }
+    }
+
+    impl<'a, V, S> Deref for Child<'a, V, S>
+    where
+        S: Symbol,
+        V: State + Balance<S> + Adjust<S>,
+        V::Encoding: Default,
+    {
+        type Target = V;
+
+        fn deref(&self) -> &Self::Target {
+            let v = self.entry.get();
+            &unsafe { &*v }.inner
+        }
     }
 }
+pub use child::Child;
 
 #[cfg(test)]
 mod tests {

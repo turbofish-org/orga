@@ -30,13 +30,13 @@ pub trait Entry {
     fn from_entry(entry: (Self::Key, Self::Value)) -> Self;
 }
 
-pub trait Next<T> {
-    fn next(&self) -> Option<T>;
+pub trait Next: Sized {
+    fn next(&self) -> Option<Self>;
 }
 
 macro_rules! impl_next {
     ($T:ty) => {
-        impl Next<$T> for $T {
+        impl Next for $T {
             fn next(&self) -> Option<Self> {
                 self.checked_add(1)
             }
@@ -57,7 +57,7 @@ impl_next!(i128);
 
 macro_rules! tuple_next {
     ($($type:ident),*; $($length:tt),*) => {
-        impl<$($type: Next<$type> + Default,)*> Next<($($type,)*)> for ($($type,)*) {
+        impl<$($type: Next + Default,)*> Next for ($($type,)*) {
             fn next(&self) -> Option<Self> {
                     let mut return_tuple: ($($type,)*)  = Default::default();
 
@@ -89,9 +89,9 @@ tuple_next!(A, B, C, D, E, F, G, H, I, J; 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
 tuple_next!(A, B, C, D, E, F, G, H, I, J, K; 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
 tuple_next!(A, B, C, D, E, F, G, H, I, J, K, L; 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
 
-impl<T, const N: usize> Next<[T; N]> for [T; N]
+impl<T, const N: usize> Next for [T; N]
 where
-    T: Default + Next<T> + Copy,
+    T: Default + Next + Copy,
 {
     fn next(&self) -> Option<[T; N]> {
         let mut return_key: [T; N] = *self;

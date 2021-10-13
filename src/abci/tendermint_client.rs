@@ -7,7 +7,7 @@ use tm::Client as _;
 use crate::call::Call;
 use crate::client::{AsyncCall, Client};
 use crate::encoding::{Decode, Encode};
-use crate::merk::ProofStore;
+use crate::merk::ABCIPrefixedProofStore;
 use crate::query::Query;
 use crate::state::State;
 use crate::store::{Shared, Store};
@@ -67,7 +67,7 @@ impl<T: Client<TendermintAdapter<T>> + Query + State> TendermintClient<T> {
             None => return Err(failure::format_err!("missing root value")),
         };
         let encoding = T::Encoding::decode(root_value)?;
-        let store: Shared<ProofStore> = Shared::new(ProofStore(map));
+        let store: Shared<ABCIPrefixedProofStore> = Shared::new(ABCIPrefixedProofStore::new(map));
         let state = T::create(Store::new(store.into()), encoding)?;
 
         // TODO: retry logic

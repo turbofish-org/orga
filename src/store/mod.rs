@@ -32,6 +32,15 @@ pub trait Read {
     /// key order, or `None` if there are no entries which follow.
     fn get_next(&self, key: &[u8]) -> Result<Option<KV>>;
 
+    /// Gets the entry at `key` if it exists, otherwise returns the next entry
+    /// by ascending key order, or `None` if there are no entries which follow.
+    fn get_next_inclusive(&self, key: &[u8]) -> Result<Option<KV>> {
+        match self.get(key)? {
+            Some(value) => Ok(Some((key.to_vec(), value))),
+            None => self.get_next(key),
+        }
+    }
+
     /// Returns an iterator over the key/value entries in the given range.
     #[inline]
     fn range<B: RangeBounds<Vec<u8>>>(&self, bounds: B) -> Iter<Self> {
