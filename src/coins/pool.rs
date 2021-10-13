@@ -56,37 +56,6 @@ where
     inner: T,
 }
 
-// impl<T, S> ::orga::state::State for Entry<T, S>
-// where
-//     S: Symbol,
-// {
-//     type Encoding = (
-//         <Amount<S> as ::orga::state::State>::Encoding,
-//         <T as ::orga::state::State>::Encoding,
-//     );
-//     fn create(store: ::orga::store::Store, data: Self::Encoding) -> ::orga::Result<Self> {
-//         Ok(Self {
-//             last_multiplier: ::orga::state::State::create(store.sub(&[0]), data.0)?,
-//             inner: ::orga::state::State::create(store.sub(&[1]), data.1)?,
-//         })
-//     }
-//     fn flush(self) -> ::orga::Result<Self::Encoding> {
-//         Ok((
-//             ::orga::state::State::<::orga::store::DefaultBackingStore>::flush(
-//                 self.last_multiplier,
-//             )?,
-//             ::orga::state::State::<::orga::store::DefaultBackingStore>::flush(self.inner)?,
-//         ))
-//     }
-// }
-// impl<T, S> From<Entry<T, S>> for <Entry<T, S> as ::orga::state::State>::Encoding
-// where
-//     S: Symbol,
-// {
-//     fn from(value: Entry<T, S>) -> Self {
-//         (value.last_multiplier.into(), value.inner.into())
-//     }
-// }
 impl<T: State, S: Symbol> Deref for Entry<T, S> {
     type Target = T;
 
@@ -100,73 +69,6 @@ impl<T: State, S: Symbol> DerefMut for Entry<T, S> {
         &mut self.inner
     }
 }
-
-// impl<T: State, S: Symbol> State for Entry<T, S> {
-//     type Encoding = (<Amount<S> as State>::Encoding, T::Encoding);
-
-//     fn create(store: Store, data: Self::Encoding) -> Result<Self> {
-//         Ok(Self {
-//             last_multiplier: data.0,
-//             inner: T::create(store, data.1)?,
-//         })
-//     }
-
-//     fn flush(self) -> Result<Self::Encoding> {
-//         Ok((self.last_multiplier, self.inner.flush()?))
-//     }
-// }
-
-// impl<T: State, S: Symbol> From<Entry<T, S>> for <Entry<T, S> as State>::Encoding {
-//     fn from(child: Entry<T, S>) -> Self {
-//         (child.last_multiplier, child.inner.into())
-//     }
-// }
-
-// impl<K, V, S> State for Pool<K, V, S>
-// where
-//     S: Symbol,
-//     K: Encode + Terminated,
-//     V: State + Balance<S> + Adjust<S>,
-// {
-//     #[allow(clippy::type_complexity)]
-//     type Encoding = (
-//         <Amount<S> as State>::Encoding,
-//         <Amount<S> as State>::Encoding,
-//         <Map<K, V> as State>::Encoding,
-//     );
-
-//     fn create(store: Store, data: Self::Encoding) -> Result<Self> {
-//         let mut multiplier = Amount::create(store.sub(&[0]), data.0)?;
-//         if multiplier == Amount::zero() {
-//             multiplier = Amount::one();
-//         }
-
-//         Ok(Self {
-//             multiplier,
-//             total: Amount::create(store.sub(&[1]), data.1)?,
-//             map: Map::create(store.sub(&[2]), data.2)?,
-//         })
-//     }
-
-//     fn flush(self) -> Result<Self::Encoding> {
-//         Ok((
-//             <Amount<S> as State>::flush(self.multiplier)?,
-//             <Amount<S> as State>::flush(self.total)?,
-//             self.map.flush()?,
-//         ))
-//     }
-// }
-
-// impl<K, V, S> From<Pool<K, V, S>> for <Pool<K, V, S> as State>::Encoding
-// where
-//     S: Symbol,
-//     K: Encode + Terminated,
-//     V: State + Adjust<S> + Balance<S>,
-// {
-//     fn from(pool: Pool<K, V, S>) -> Self {
-//         (pool.multiplier, pool.total, pool.map.into())
-//     }
-// }
 
 impl<K, V, S> Pool<K, V, S>
 where
