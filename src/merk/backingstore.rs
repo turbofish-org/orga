@@ -159,7 +159,9 @@ impl Read for ABCIPrefixedProofStore {
 
     fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
         let key = Self::prefix_key(key);
-        let maybe_kv = self.0.get_next(key.as_slice())?
+        let maybe_kv = self
+            .0
+            .get_next(key.as_slice())?
             .map(|(key, value)| (Self::deprefix_key(key), value));
         Ok(maybe_kv)
     }
