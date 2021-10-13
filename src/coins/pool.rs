@@ -4,15 +4,16 @@ use crate::collections::{Map, Next};
 use crate::encoding::{Decode, Encode, Terminated};
 use crate::query::Query;
 use crate::state::State;
-use crate::store::Store;
 use crate::Result;
 use std::cell::UnsafeCell;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Drop, RangeBounds};
 
-#[derive(Query)]
+#[derive(Query, State)]
 pub struct Pool<K, V, S>
 where
+    K: Terminated + Encode,
+    V: State,
     S: Symbol,
 {
     multiplier: Amount<S>,
@@ -22,6 +23,8 @@ where
 
 impl<K, V, S> Balance<S> for Pool<K, V, S>
 where
+    K: Terminated + Encode,
+    V: State,
     S: Symbol,
 {
     fn balance(&self) -> Amount<S> {
@@ -31,6 +34,8 @@ where
 
 impl<K, V, S> Adjust<S> for Pool<K, V, S>
 where
+    K: Terminated + Encode,
+    V: State,
     S: Symbol,
 {
     fn adjust(&mut self, multiplier: Amount<S>) -> Result<()> {
@@ -41,12 +46,17 @@ where
     }
 }
 
-pub struct Entry<T, S: Symbol> {
+#[derive(State)]
+pub struct Entry<T, S>
+where
+    T: State,
+    S: Symbol,
+{
     last_multiplier: Amount<S>,
     inner: T,
 }
 
-impl<T, S: Symbol> Deref for Entry<T, S> {
+impl<T: State, S: Symbol> Deref for Entry<T, S> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -54,76 +64,9 @@ impl<T, S: Symbol> Deref for Entry<T, S> {
     }
 }
 
-impl<T, S: Symbol> DerefMut for Entry<T, S> {
+impl<T: State, S: Symbol> DerefMut for Entry<T, S> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
-    }
-}
-
-impl<T: State, S: Symbol> State for Entry<T, S> {
-    type Encoding = (<Amount<S> as State>::Encoding, T::Encoding);
-
-    fn create(store: Store, data: Self::Encoding) -> Result<Self> {
-        Ok(Self {
-            last_multiplier: data.0,
-            inner: T::create(store, data.1)?,
-        })
-    }
-
-    fn flush(self) -> Result<Self::Encoding> {
-        Ok((self.last_multiplier, self.inner.flush()?))
-    }
-}
-
-impl<T: State, S: Symbol> From<Entry<T, S>> for <Entry<T, S> as State>::Encoding {
-    fn from(child: Entry<T, S>) -> Self {
-        (child.last_multiplier, child.inner.into())
-    }
-}
-
-impl<K, V, S> State for Pool<K, V, S>
-where
-    S: Symbol,
-    K: Encode + Terminated,
-    V: State + Balance<S> + Adjust<S>,
-{
-    #[allow(clippy::type_complexity)]
-    type Encoding = (
-        <Amount<S> as State>::Encoding,
-        <Amount<S> as State>::Encoding,
-        <Map<K, V> as State>::Encoding,
-    );
-
-    fn create(store: Store, data: Self::Encoding) -> Result<Self> {
-        let mut multiplier = Amount::create(store.sub(&[0]), data.0)?;
-        if multiplier == Amount::zero() {
-            multiplier = Amount::one();
-        }
-
-        Ok(Self {
-            multiplier,
-            total: Amount::create(store.sub(&[1]), data.1)?,
-            map: Map::create(store.sub(&[2]), data.2)?,
-        })
-    }
-
-    fn flush(self) -> Result<Self::Encoding> {
-        Ok((
-            <Amount<S> as State>::flush(self.multiplier)?,
-            <Amount<S> as State>::flush(self.total)?,
-            self.map.flush()?,
-        ))
-    }
-}
-
-impl<K, V, S> From<Pool<K, V, S>> for <Pool<K, V, S> as State>::Encoding
-where
-    S: Symbol,
-    K: Encode + Terminated,
-    V: State + Adjust<S> + Balance<S>,
-{
-    fn from(pool: Pool<K, V, S>) -> Self {
-        (pool.multiplier, pool.total, pool.map.into())
     }
 }
 
@@ -365,10 +308,22 @@ mod tests {
     struct Simp;
     impl Symbol for Simp {}
 
+    impl State for Simp {
+        type Encoding = Self;
+
+        fn create(_: Store, data: Self::Encoding) -> Result<Self> {
+            Ok(data)
+        }
+
+        fn flush(self) -> Result<Self::Encoding> {
+            Ok(self)
+        }
+    }
+
     #[test]
     fn simple_pool() -> Result<()> {
         let store = Store::new(Shared::new(MapStore::new()).into());
-        let enc = (Amount::one(), Amount::zero(), ());
+        let enc = (Amount::one().into(), Amount::zero().into(), ());
         let mut pool = Pool::<Address, Coin<Simp>, Simp>::create(store, enc)?;
 
         let alice = [0; 32].into();

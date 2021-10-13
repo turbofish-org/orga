@@ -1,14 +1,15 @@
 use super::Symbol;
-use crate::encoding::{Decode, Encode};
 use crate::query::Query;
+use crate::state::State;
 use crate::Result;
+use ed::{Decode, Encode};
 use failure::bail;
 use std::marker::PhantomData;
 use std::ops::{Add, AddAssign, Div, Mul, Sub};
 
 const PRECISION: u64 = 1_000_000_000;
 
-#[derive(Encode, Decode, Debug)]
+#[derive(State, Encode, Decode, Debug)]
 pub struct Amount<S: Symbol> {
     pub value: u64,
     symbol: PhantomData<S>,

@@ -1,25 +1,24 @@
-use super::{BeginBlockCtx, EndBlockCtx, GetContext, InitChainCtx, Signer};
+use super::{GetContext, Signer};
 use crate::abci::{BeginBlock, EndBlock, InitChain};
 use crate::call::Call;
 use crate::client::{AsyncCall, Client};
 use crate::coins::Address;
 use crate::collections::Map;
+use crate::contexts::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
-use crate::store::Store;
 use crate::Result;
 use std::ops::Deref;
 use std::path::PathBuf;
 
-type NonceMap = Map<Address, u64>;
-
-pub struct NonceProvider<T> {
+#[derive(State, Encode, Decode)]
+pub struct NonceProvider<T: State> {
+    map: Map<Address, u64>,
     inner: T,
-    map: NonceMap,
 }
 
-impl<T> Deref for NonceProvider<T> {
+impl<T: State> Deref for NonceProvider<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -64,7 +63,7 @@ where
     }
 }
 
-impl<T: Query> Query for NonceProvider<T> {
+impl<T: Query + State> Query for NonceProvider<T> {
     type Query = T::Query;
 
     fn query(&self, query: Self::Query) -> Result<()> {
@@ -112,7 +111,7 @@ where
     }
 }
 
-impl<T: Client<NonceClient<T, U>>, U: Clone> Client<U> for NonceProvider<T> {
+impl<T: Client<NonceClient<T, U>> + State, U: Clone> Client<U> for NonceProvider<T> {
     type Client = T::Client;
 
     fn create_client(parent: U) -> Self::Client {
@@ -120,24 +119,6 @@ impl<T: Client<NonceClient<T, U>>, U: Clone> Client<U> for NonceProvider<T> {
             parent,
             marker: std::marker::PhantomData,
         })
-    }
-}
-
-impl<T> State for NonceProvider<T>
-where
-    T: State,
-{
-    type Encoding = (<NonceMap as State>::Encoding, T::Encoding);
-
-    fn create(store: Store, data: Self::Encoding) -> Result<Self> {
-        Ok(Self {
-            map: NonceMap::create(store.sub(&[0]), data.0)?,
-            inner: T::create(store.sub(&[1]), data.1)?,
-        })
-    }
-
-    fn flush(self) -> Result<Self::Encoding> {
-        Ok((self.map.flush()?, self.inner.flush()?))
     }
 }
 
@@ -149,6 +130,7 @@ fn nonce_path() -> Result<PathBuf> {
     std::fs::create_dir_all(&orga_home)?;
     Ok(orga_home.join("nonce"))
 }
+
 fn load_nonce() -> Result<u64> {
     let nonce_path = nonce_path()?;
     if nonce_path.exists() {
@@ -164,15 +146,6 @@ fn load_nonce() -> Result<u64> {
 fn write_nonce(nonce: u64) -> Result<()> {
     let nonce_path = nonce_path()?;
     Ok(std::fs::write(&nonce_path, nonce.encode()?)?)
-}
-
-impl<T> From<NonceProvider<T>> for (<NonceMap as State>::Encoding, T::Encoding)
-where
-    T: State,
-{
-    fn from(provider: NonceProvider<T>) -> Self {
-        (provider.map.into(), provider.inner.into())
-    }
 }
 
 // TODO: Remove dependency on ABCI for this otherwise-pure plugin.
@@ -197,7 +170,7 @@ where
 
 impl<T> InitChain for NonceProvider<T>
 where
-    T: InitChain + State,
+    T: InitChain + State + Call,
 {
     fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
         self.inner.init_chain(ctx)

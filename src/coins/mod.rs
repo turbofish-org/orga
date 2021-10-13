@@ -27,10 +27,13 @@ pub use balance::*;
 use bech32::{self, encode_to_fmt, FromBase32, ToBase32, Variant};
 
 use crate::collections::Next;
-use crate::encoding::{Decode, Encode};
+use crate::macros::State;
 use crate::query::Query;
+use ed::{Decode, Encode};
 
-#[derive(Encode, Decode, Next, Query, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Copy)]
+#[derive(
+    Encode, Decode, State, Next, Query, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Copy,
+)]
 pub struct Address {
     bytes: [u8; 32],
 }

@@ -22,8 +22,7 @@ is_executable = "1.0.1"
 reqwest = {version = "0.11.4", features = ["blocking"]}
 flate2 = "1.0.20"
 tar = "0.4.33"
-# ed = "0.2.2"
-ed = { git = "https://github.com/nomic-io/ed", rev = "f79dce84a94cc6938946888c52be77aa0fd4fb9c"}
+ed = { git = "https://github.com/nomic-io/ed.git", rev = "6d327abacf0c6068ceaed36fb67410ae65f2abbe"}
 toml_edit = "0.2.0"
 datetime = "0.5.2"
 prost = {version = "0.7", optional = true}
@@ -49,10 +48,6 @@ lto = true
 
 [[example]]
 name = "counter"
-required-features = ["merk", "abci"]
-
-[[example]]
-name = "contexts"
 required-features = ["merk", "abci"]
 
 [[example]]

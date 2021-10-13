@@ -1,9 +1,9 @@
 use super::{Adjust, Amount, Balance, Give, Symbol, Take};
-use crate::encoding::{Decode, Encode};
+use crate::state::State;
 use crate::Result;
 
 #[must_use = "If these coins are meant to be discarded, explicitly call the `burn` method"]
-#[derive(Encode, Decode)]
+#[derive(State)]
 pub struct Coin<S: Symbol> {
     pub amount: Amount<S>,
 }

@@ -335,10 +335,10 @@ impl Tendermint {
             }
         };
         let file_name = path.file_name().unwrap();
-        if file_name != "genesis.json" {
-            //TODO: more sophisticated method to ensure that the file is a valid genesis.json
-            panic!("Provided file is not a genesis.json.");
-        }
+        assert!(
+            !(file_name != "genesis.json"),
+            "Provided file is not a genesis.json"
+        );
 
         Command::new("cp")
             .arg(path.clone())

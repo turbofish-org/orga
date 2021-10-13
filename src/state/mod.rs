@@ -3,6 +3,8 @@ use crate::store::*;
 use crate::Result;
 pub use orga_macros::State;
 use std::cell::{RefCell, UnsafeCell};
+use std::convert::TryInto;
+use std::marker::PhantomData;
 
 /// A trait for types which provide a higher-level API for data stored within a
 /// [`store::Store`](../store/trait.Store.html).
@@ -51,17 +53,82 @@ pub trait State<S = DefaultBackingStore>: Sized {
         S: Write;
 }
 
-impl<T: Encode + Decode, S> State<S> for T {
-    type Encoding = Self;
+macro_rules! state_impl {
+    ($type:ty) => {
+        impl<S> State<S> for $type {
+            type Encoding = Self;
 
-    #[inline]
-    fn create(_: Store<S>, value: Self) -> Result<Self> {
-        Ok(value)
+            #[inline]
+            fn create(_: Store<S>, value: Self) -> Result<Self> {
+                Ok(value)
+            }
+
+            #[inline]
+            fn flush(self) -> Result<Self::Encoding> {
+                Ok(self)
+            }
+        }
+    };
+}
+
+state_impl!(u8);
+state_impl!(u16);
+state_impl!(u32);
+state_impl!(u64);
+state_impl!(u128);
+state_impl!(bool);
+state_impl!(());
+
+#[derive(Encode, Decode)]
+pub struct EncodedArray<T: State<S>, S, const N: usize> {
+    inner: [T::Encoding; N],
+}
+
+impl<T: State<S>, S, const N: usize> From<[T; N]> for EncodedArray<T, S, N> {
+    fn from(value: [T; N]) -> Self {
+        EncodedArray {
+            inner: value.map(|val| val.into()),
+        }
+    }
+}
+
+impl<T: State<S>, S, const N: usize> State<S> for [T; N]
+where
+    T::Encoding: ed::Terminated,
+{
+    type Encoding = EncodedArray<T, S, N>;
+
+    fn create(store: Store<S>, value: Self::Encoding) -> Result<Self>
+    where
+        S: Read,
+    {
+        let self_vec: Vec<T::Encoding> = value.inner.try_into()?;
+        let mut vec: Vec<Result<T>> = Vec::with_capacity(N);
+        self_vec
+            .into_iter()
+            .for_each(|x| vec.push(T::create(store.clone(), x)));
+        let result: Result<Vec<T>> = vec.into_iter().collect();
+        //since vec is directly created and populated from passed value, panic! will never be reached
+        let result_array: [T; N] = result?.try_into().unwrap_or_else(|v: Vec<T>| {
+            panic!("Expected Vec of length {}, but found length {}", N, v.len())
+        });
+        Ok(result_array)
     }
 
-    #[inline]
     fn flush(self) -> Result<Self::Encoding> {
-        Ok(self)
+        let self_vec: Vec<T> = self.try_into()?;
+        let mut vec: Vec<T::Encoding> = Vec::with_capacity(N);
+        self_vec.into_iter().for_each(|x| vec.push(x.into()));
+
+        //since vec is directly created and populated from passed value, panic! will never be reached
+        let result_array: [T::Encoding; N] =
+            vec.try_into().unwrap_or_else(|v: Vec<T::Encoding>| {
+                panic!("Expected Vec of length {}, but found length {}", N, v.len())
+            });
+
+        Ok(EncodedArray {
+            inner: result_array,
+        })
     }
 }
 
@@ -119,3 +186,111 @@ where
         Self(value.into_inner().into())
     }
 }
+
+impl<T: State<S>, S> State<S> for PhantomData<T> {
+    type Encoding = Self;
+
+    fn create(_: Store<S>, data: Self::Encoding) -> Result<Self> {
+        Ok(data)
+    }
+
+    fn flush(self) -> Result<Self::Encoding> {
+        Ok(self)
+    }
+}
+
+#[derive(Encode, Decode)]
+pub struct Encoded1Tuple<A, S>
+where
+    A: State<S>,
+{
+    inner: (A::Encoding,),
+}
+
+impl<A, S> From<(A,)> for Encoded1Tuple<A, S>
+where
+    A: State<S>,
+{
+    fn from(value: (A,)) -> Self {
+        Encoded1Tuple {
+            inner: (value.0.into(),),
+        }
+    }
+}
+
+impl<A, S> State<S> for (A,)
+where
+    A: State<S>,
+{
+    type Encoding = Encoded1Tuple<A, S>;
+
+    fn create(store: Store<S>, data: Self::Encoding) -> Result<Self>
+    where
+        S: Read,
+    {
+        Ok((A::create(store, data.inner.0)?,))
+    }
+
+    fn flush(self) -> Result<Self::Encoding> {
+        Ok(Encoded1Tuple {
+            inner: (self.0.into(),),
+        })
+    }
+}
+
+macro_rules! state_tuple_impl {
+    ($($type:ident),*; $last_type: ident; $($indices:tt),*; $length: tt; $new_type_name:tt) => {
+
+        #[derive(Encode, Decode)]
+        pub struct $new_type_name <$($type, )* $last_type, S>
+        where
+            $($type: State<S>,)* $last_type: State<S> {
+                inner: ($($type::Encoding,)* $last_type::Encoding),
+
+        }
+
+        impl<$($type,)* $last_type, S> From<($($type,)* $last_type,)> for $new_type_name<$($type, )* $last_type, S>
+        where
+            $($type: State<S>,)* $last_type: State<S> {
+                fn from(value: ($($type,)* $last_type),) -> Self {
+                    $new_type_name {
+                        inner: ($(value.$indices.into(),)* value.$length.into(),),
+                    }
+                }
+            }
+
+        //last one doesn't necessarily need to be terminated
+        impl<$($type,)* $last_type, S> State<S> for ($($type,)* $last_type,)
+        where
+            $($type: State<S>,)* $last_type: State<S>,
+            $($type::Encoding: ed::Terminated,)*{
+            type Encoding = $new_type_name<$($type,)* $last_type, S>;
+
+            fn create(store: Store<S>, data: Self::Encoding) -> Result<Self>
+            where
+                S: Read,
+            {
+                Ok(($($type::create(store.clone(), data.inner.$indices)?,)* $last_type::create(store.clone(), data.inner.$length)?))
+            }
+
+            fn flush(self) -> Result<Self::Encoding> {
+                Ok($new_type_name {
+                    inner: ($(self.$indices.into(),)* self.$length.into(),),
+                })
+            }
+
+        }
+    }
+}
+
+state_tuple_impl!(A; B; 0; 1; Encoded2Tuple);
+state_tuple_impl!(A, B; C; 0, 1; 2; Encoded3Tuple);
+state_tuple_impl!(A, B, C; D; 0, 1, 2; 3; Encoded4Tuple);
+state_tuple_impl!(A, B, C, D; E; 0, 1, 2, 3; 4; Encoded5Tuple);
+state_tuple_impl!(A, B, C, D, E; F; 0, 1, 2, 3, 4; 5; Encoded6Tuple);
+state_tuple_impl!(A, B, C, D, E, F; G; 0, 1, 2, 3, 4, 5; 6; Encoded7Tuple);
+state_tuple_impl!(A, B, C, D, E, F, G; H; 0, 1, 2, 3, 4, 5, 6; 7; Encoded8Tuple);
+state_tuple_impl!(A, B, C, D, E, F, G, H; I; 0, 1, 2, 3, 4, 5, 6, 7; 8; Encoded9Tuple);
+state_tuple_impl!(A, B, C, D, E, F, G, H, I; J; 0, 1, 2, 3, 4, 5, 6, 7, 8; 9; Encoded10Tuple);
+state_tuple_impl!(A, B, C, D, E, F, G, H, I, J; K; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9; 10; Encoded11Tuple);
+state_tuple_impl!(A, B, C, D, E, F, G, H, I, J, K; L; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10; 11; Encoded12Tuple);
