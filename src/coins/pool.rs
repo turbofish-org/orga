@@ -394,75 +394,87 @@ mod tests {
     use crate::encoding::{Decode, Encode};
     use crate::store::{MapStore, Shared, Store};
 
-    // #[derive(Encode, Decode, Debug)]
-    // struct Simp;
-    // impl Symbol for Simp {}
+    #[derive(Encode, Decode, Debug)]
+    struct Simp;
+    impl Symbol for Simp {}
 
-    // #[test]
-    // fn simple_pool() -> Result<()> {
-    //     let store = Store::new(Shared::new(MapStore::new()).into());
-    //     let enc = (Amount::one(), Amount::zero(), ());
-    //     let mut pool = Pool::<Address, Coin<Simp>, Simp>::create(store, enc)?;
+    impl State for Simp {
+        type Encoding = Self;
 
-    //     let alice = [0; 32].into();
-    //     let bob = [1; 32].into();
+        fn create(_: Store, data: Self::Encoding) -> Result<Self> {
+            Ok(data)
+        }
 
-    //     {
-    //         let mut alice_child = pool.get_mut(alice)?;
-    //         alice_child.add(10)?;
-    //     }
+        fn flush(self) -> Result<Self::Encoding> {
+            Ok(self)
+        }
+    }
 
-    //     assert_eq!(pool.balance().value, 10);
+    #[test]
+    fn simple_pool() -> Result<()> {
+        let store = Store::new(Shared::new(MapStore::new()).into());
+        let enc = (Amount::one().into(), Amount::zero().into(), ());
+        let mut pool = Pool::<Address, Coin<Simp>, Simp>::create(store, enc)?;
 
-    //     {
-    //         let mut bob_child = pool.get_mut(bob)?;
-    //         bob_child.add(2)?;
-    //     }
+        let alice = [0; 32].into();
+        let bob = [1; 32].into();
 
-    //     assert_eq!(pool.balance().value, 12);
-    //     {
-    //         let alice_child = pool.get_mut(alice)?;
-    //         assert_eq!(alice_child.balance().value, 10);
-    //     }
+        {
+            let mut alice_child = pool.get_mut(alice)?;
+            alice_child.add(10)?;
+        }
 
-    //     pool.add(12)?;
+        assert_eq!(pool.balance().value, 10);
 
-    //     {
-    //         let alice_child = pool.get(alice)?;
-    //         assert_eq!(alice_child.balance().value, 20);
-    //     }
+        {
+            let mut bob_child = pool.get_mut(bob)?;
+            bob_child.add(2)?;
+        }
 
-    //     assert_eq!(pool.balance().value, 24);
+        assert_eq!(pool.balance().value, 12);
+        {
+            let alice_child = pool.get_mut(alice)?;
+            assert_eq!(alice_child.balance().value, 10);
+        }
 
-    //     pool.take(6)?.burn();
+        pool.add(12)?;
 
-    //     assert_eq!(pool.balance().value, 18);
-    //     {
-    //         let alice_child = pool.get_mut(alice)?;
-    //         assert_eq!(alice_child.balance().value, 15);
-    //     }
+        {
+            let alice_child = pool.get(alice)?;
+            assert_eq!(alice_child.balance().value, 20);
+        }
 
-    //     {
-    //         let mut alice_child = pool.get_mut(alice)?;
-    //         alice_child.take(4)?.burn();
-    //         assert_eq!(alice_child.balance().value, 11);
-    //     }
+        assert_eq!(pool.balance().value, 24);
 
-    //     assert_eq!(pool.balance().value, 14);
+        pool.take(6)?.burn();
 
-    //     {
-    //         let bob_child = pool.get_mut(bob)?;
-    //         assert_eq!(bob_child.balance().value, 3);
-    //     }
+        assert_eq!(pool.balance().value, 18);
+        {
+            let alice_child = pool.get_mut(alice)?;
+            assert_eq!(alice_child.balance().value, 15);
+        }
 
-    //     pool.adjust(Amount::units(2))?;
-    //     assert_eq!(pool.balance().value, 28);
+        {
+            let mut alice_child = pool.get_mut(alice)?;
+            alice_child.take(4)?.burn();
+            assert_eq!(alice_child.balance().value, 11);
+        }
 
-    //     {
-    //         let bob_child = pool.get(bob)?;
-    //         assert_eq!(bob_child.balance().value, 6);
-    //     }
+        assert_eq!(pool.balance().value, 14);
 
-    //     Ok(())
-    // }
+        {
+            let bob_child = pool.get_mut(bob)?;
+            assert_eq!(bob_child.balance().value, 3);
+        }
+
+        pool.adjust(Amount::units(2))?;
+        assert_eq!(pool.balance().value, 28);
+
+        {
+            let bob_child = pool.get(bob)?;
+            assert_eq!(bob_child.balance().value, 6);
+        }
+
+        Ok(())
+    }
 }
