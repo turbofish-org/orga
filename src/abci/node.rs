@@ -10,6 +10,7 @@ use crate::state::State;
 use crate::store::{Read, Shared, Store, Write};
 use crate::tendermint::Tendermint;
 use crate::Result;
+use std::borrow::Borrow;
 use std::path::{Path, PathBuf};
 use tendermint_proto::abci::*;
 pub struct Node<A> {
@@ -61,7 +62,6 @@ where
         std::thread::spawn(move || {
             let mut tm_process = Tendermint::new(&tm_home)
                 .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
                 .p2p_laddr(format!("tcp://0.0.0.0:{}", p2p_port).as_str())
                 .rpc_laddr(format!("tcp://0.0.0.0:{}", rpc_port).as_str()); // Note: public by default
 
@@ -91,7 +91,6 @@ where
 
         Tendermint::new(&self.tm_home)
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
             .unsafe_reset_all();
 
         self
@@ -121,8 +120,8 @@ where
         self
     }
 
-    pub fn peers<T: AsRef<String>>(mut self, peers: &[T]) -> Self {
-        let peers = peers.iter().map(|p| p.as_ref().to_string()).collect();
+    pub fn peers<T: Borrow<str>>(mut self, peers: &[T]) -> Self {
+        let peers = peers.iter().map(|p| p.borrow().to_string()).collect();
         self.p2p_persistent_peers.replace(peers);
 
         self
