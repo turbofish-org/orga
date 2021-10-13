@@ -122,24 +122,6 @@ impl<T: Client<NonceClient<T, U>> + State, U: Clone> Client<U> for NonceProvider
     }
 }
 
-// impl<T> State for NonceProvider<T>
-// where
-//     T: State,
-// {
-//     type Encoding = (<NonceMap as State>::Encoding, T::Encoding);
-
-//     fn create(store: Store, data: Self::Encoding) -> Result<Self> {
-//         Ok(Self {
-//             map: NonceMap::create(store.sub(&[0]), data.0)?,
-//             inner: T::create(store.sub(&[1]), data.1)?,
-//         })
-//     }
-
-//     fn flush(self) -> Result<Self::Encoding> {
-//         Ok((self.map.flush()?, self.inner.flush()?))
-//     }
-// }
-
 fn nonce_path() -> Result<PathBuf> {
     let orga_home = home::home_dir()
         .expect("No home directory set")
@@ -148,6 +130,7 @@ fn nonce_path() -> Result<PathBuf> {
     std::fs::create_dir_all(&orga_home)?;
     Ok(orga_home.join("nonce"))
 }
+
 fn load_nonce() -> Result<u64> {
     let nonce_path = nonce_path()?;
     if nonce_path.exists() {
