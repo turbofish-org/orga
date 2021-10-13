@@ -238,9 +238,11 @@ impl<A: Application> ABCIStateMachine<A> {
                         .unwrap()
                         .parse()
                         .expect("Invalid STOP_HEIGHT value");
-                    if self.height >= stop_height {
-                        panic!("Reached stop height ({})", stop_height);
-                    }
+                    assert!(
+                        !(self.height >= stop_height),
+                        "Reached stop height ({})",
+                        stop_height
+                    );
                 }
 
                 self.mempool_state.replace(Default::default());
