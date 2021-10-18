@@ -233,7 +233,7 @@ impl Tendermint {
     ///
     /// Note: Using this configuration command with incompatible
     /// terminating methods will cause the tendermint process to fail
-    pub fn p2p_persistent_peers<const N: usize>(mut self, peers: [&str; N]) -> Self {
+    pub fn p2p_persistent_peers(mut self, peers: Vec<String>) -> Self {
         self.process.set_arg("--p2p.persistent_peers");
         let mut arg: String = "".to_string();
         peers.iter().for_each(|x| arg += &x.to_string());
@@ -341,10 +341,10 @@ impl Tendermint {
             }
         };
         let file_name = path.file_name().unwrap();
-        if file_name != "genesis.json" {
-            //TODO: more sophisticated method to ensure that the file is a valid genesis.json
-            panic!("Provided file is not a genesis.json.");
-        }
+        assert!(
+            !(file_name != "genesis.json"),
+            "Provided file is not a genesis.json"
+        );
 
         Command::new("cp")
             .arg(path.clone())

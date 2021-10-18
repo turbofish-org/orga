@@ -32,16 +32,6 @@ impl<'a, S: Read + ?Sized> Iter<'a, S> {
             done: false,
         }
     }
-
-    /// Returns the entry at `key` if it exists, otherwise returns the next
-    /// entry by ascending key ordering.
-    fn get_next_inclusive(&self, key: &[u8]) -> Result<Option<KV>> {
-        if let Some(value) = self.parent.get(key)? {
-            return Ok(Some((key.to_vec(), value)));
-        }
-
-        self.parent.get_next(key)
-    }
 }
 
 impl<'a, S: Read> Iterator for Iter<'a, S> {
@@ -54,10 +44,10 @@ impl<'a, S: Read> Iterator for Iter<'a, S> {
 
         let maybe_entry = match self.bounds.0 {
             // if entry exists at empty key, emit that. if not, get next entry
-            Bound::Unbounded => self.get_next_inclusive(&[]).transpose(),
+            Bound::Unbounded => self.parent.get_next_inclusive(&[]).transpose(),
 
             // if entry exists at given key, emit that. if not, get next entry
-            Bound::Included(ref key) => self.get_next_inclusive(key).transpose(),
+            Bound::Included(ref key) => self.parent.get_next_inclusive(key).transpose(),
 
             // get next entry
             Bound::Excluded(ref key) => self.parent.get_next(key).transpose(),

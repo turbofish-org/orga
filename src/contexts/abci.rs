@@ -1,13 +1,15 @@
 // use super::Context;
+use super::Context;
 use crate::abci::{prost::Adapter, App};
 use crate::call::Call;
+use crate::collections::Map;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::Result;
-use std::cell::RefCell;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use tendermint_proto::abci::{
     Evidence, LastCommitInfo, RequestBeginBlock, RequestEndBlock, RequestInitChain, ValidatorUpdate,
 };
@@ -15,25 +17,48 @@ use tendermint_proto::crypto::{public_key::Sum, PublicKey};
 use tendermint_proto::google::protobuf::Timestamp;
 use tendermint_proto::types::Header;
 
+type UpdateMap = Map<[u8; 32], Adapter<ValidatorUpdate>>;
 pub struct ABCIProvider<T> {
     inner: T,
     pub(crate) validator_updates: Option<HashMap<[u8; 32], ValidatorUpdate>>,
+    updates: UpdateMap,
 }
 
 pub struct InitChainCtx {
     pub time: Option<Timestamp>,
     pub chain_id: String,
-    pub validators: Vec<ValidatorUpdate>,
+    pub validators: Vec<Validator>,
     pub app_state_bytes: Vec<u8>,
     pub initial_height: i64,
 }
 
+pub struct Validator {
+    pub pubkey: [u8; 32],
+    pub power: u64,
+}
+
+impl From<ValidatorUpdate> for Validator {
+    fn from(update: ValidatorUpdate) -> Self {
+        let pubkey_bytes = match update.pub_key.unwrap().sum.unwrap() {
+            Sum::Ed25519(bytes) => bytes,
+            Sum::Secp256k1(bytes) => bytes,
+        };
+
+        let pubkey: [u8; 32] = pubkey_bytes.try_into().unwrap();
+        let power: u64 = update.power.try_into().unwrap();
+
+        Validator { pubkey, power }
+    }
+}
+
 impl From<RequestInitChain> for InitChainCtx {
     fn from(req: RequestInitChain) -> Self {
+        let validators = req.validators.into_iter().map(Into::into).collect();
+
         Self {
             time: req.time,
             chain_id: req.chain_id,
-            validators: req.validators,
+            validators,
             app_state_bytes: req.app_state_bytes,
             initial_height: req.initial_height,
         }
@@ -64,9 +89,7 @@ impl From<RequestBeginBlock> for BeginBlockCtx {
 }
 
 #[derive(Default)]
-pub struct EndBlockCtx {
-    pub validator_updates: RefCell<HashMap<[u8; 32], ValidatorUpdate>>,
-}
+pub struct EndBlockCtx {}
 
 impl From<RequestEndBlock> for EndBlockCtx {
     fn from(_req: RequestEndBlock) -> Self {
@@ -74,21 +97,27 @@ impl From<RequestEndBlock> for EndBlockCtx {
     }
 }
 
-impl EndBlockCtx {
-    pub fn set_voting_power(&self, pub_key: [u8; 32], power: u64) {
+#[derive(Default)]
+pub struct Validators {
+    updates: HashMap<[u8; 32], Adapter<ValidatorUpdate>>,
+}
+
+impl Validators {
+    pub fn set_voting_power<A: Into<[u8; 32]>>(&mut self, pub_key: A, power: u64) {
+        let pub_key = pub_key.into();
+
         let sum = Some(Sum::Ed25519(pub_key.to_vec()));
         let key = PublicKey { sum };
-        let mut validator_updates = self.validator_updates.borrow_mut();
-        validator_updates.insert(
+        self.updates.insert(
             pub_key,
             tendermint_proto::abci::ValidatorUpdate {
                 pub_key: Some(key),
                 power: power as i64,
-            },
+            }
+            .into(),
         );
     }
 }
-
 #[derive(Encode, Decode)]
 pub enum ABCICall<C> {
     InitChain(Adapter<RequestInitChain>),
@@ -119,9 +148,9 @@ impl<C> From<RequestEndBlock> for ABCICall<C> {
 impl<T: App> Call for ABCIProvider<T> {
     type Call = ABCICall<T::Call>;
     fn call(&mut self, call: Self::Call) -> Result<()> {
-        self.reset();
         use ABCICall::*;
-        match call {
+        Context::add(Validators::default());
+        let res = match call {
             InitChain(req) => {
                 let ctx = req.into_inner().into();
                 self.inner.init_chain(&ctx)?;
@@ -137,25 +166,41 @@ impl<T: App> Call for ABCIProvider<T> {
             EndBlock(req) => {
                 let ctx = req.into_inner().into();
                 self.inner.end_block(&ctx)?;
-                self.validator_updates
-                    .replace(ctx.validator_updates.into_inner());
+
+                let mut update_keys = vec![];
+                let mut update_map = HashMap::new();
+
+                for entry in self.updates.iter()? {
+                    let (pubkey, update) = entry?;
+                    update_map.insert(*pubkey, update.clone());
+                    update_keys.push(*pubkey);
+                }
+
+                // Clear the update map
+                for key in update_keys {
+                    self.updates.remove(key)?;
+                }
+
+                // Expose validator updates for use in node
+                self.validator_updates.replace(update_map);
 
                 Ok(())
             }
             DeliverTx(inner_call) => self.inner.call(inner_call),
             CheckTx(inner_call) => self.inner.call(inner_call),
-        }
-    }
-}
+        }?;
 
-impl<T: App> ABCIProvider<T> {
-    pub fn reset(&mut self) {
-        self.validator_updates = None;
+        let validators = Context::resolve::<Validators>().unwrap();
+        for (pubkey, update) in validators.updates.iter() {
+            self.updates.insert(*pubkey, (*update).clone().into())?;
+        }
+        Ok(res)
     }
 }
 
 impl<T: Query> Query for ABCIProvider<T> {
     type Query = T::Query;
+
     fn query(&self, query: Self::Query) -> Result<()> {
         self.inner.query(query)
     }
@@ -168,13 +213,16 @@ where
 {
     type Encoding = (T::Encoding,);
     fn create(store: Store, data: Self::Encoding) -> Result<Self> {
+        Context::add(Validators::default());
         Ok(Self {
-            inner: T::create(store, data.0)?,
+            inner: T::create(store.sub(&[0]), data.0)?,
             validator_updates: None,
+            updates: UpdateMap::create(store.sub(&[1]), ())?,
         })
     }
 
     fn flush(self) -> Result<Self::Encoding> {
+        self.updates.flush()?;
         Ok((self.inner.flush()?,))
     }
 }

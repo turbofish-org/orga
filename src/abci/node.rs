@@ -10,6 +10,7 @@ use crate::state::State;
 use crate::store::{Read, Shared, Store, Write};
 use crate::tendermint::Tendermint;
 use crate::Result;
+use std::borrow::Borrow;
 use std::path::{Path, PathBuf};
 use tendermint_proto::abci::*;
 pub struct Node<A> {
@@ -19,6 +20,8 @@ pub struct Node<A> {
     p2p_port: u16,
     rpc_port: u16,
     abci_port: u16,
+    genesis_path: Option<PathBuf>,
+    p2p_persistent_peers: Option<Vec<String>>,
 }
 
 impl<A: App> Node<A>
@@ -44,6 +47,8 @@ where
             p2p_port: 26656,
             rpc_port: 26657,
             abci_port: 26658,
+            genesis_path: None,
+            p2p_persistent_peers: None,
         }
     }
 
@@ -52,14 +57,23 @@ where
         let tm_home = self.tm_home.clone();
         let p2p_port = self.p2p_port;
         let rpc_port = self.rpc_port;
-
+        let maybe_genesis_path = self.genesis_path;
+        let maybe_peers = self.p2p_persistent_peers;
         std::thread::spawn(move || {
-            Tendermint::new(&tm_home)
+            let mut tm_process = Tendermint::new(&tm_home)
                 .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
                 .p2p_laddr(format!("tcp://0.0.0.0:{}", p2p_port).as_str())
-                .rpc_laddr(format!("tcp://0.0.0.0:{}", rpc_port).as_str()) // Note: public by default
-                .start();
+                .rpc_laddr(format!("tcp://0.0.0.0:{}", rpc_port).as_str()); // Note: public by default
+
+            if let Some(genesis_path) = maybe_genesis_path {
+                tm_process = tm_process.with_genesis(genesis_path);
+            }
+
+            if let Some(peers) = maybe_peers {
+                tm_process = tm_process.p2p_persistent_peers(peers);
+            }
+
+            tm_process.start();
         });
         let app = InternalApp::<ABCIProvider<A>>::new();
         let store = MerkStore::new(self.merk_home.clone());
@@ -77,7 +91,6 @@ where
 
         Tendermint::new(&self.tm_home)
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
             .unsafe_reset_all();
 
         self
@@ -97,6 +110,19 @@ where
 
     pub fn abci_port(mut self, port: u16) -> Self {
         self.abci_port = port;
+
+        self
+    }
+
+    pub fn with_genesis<P: AsRef<Path>>(mut self, genesis_path: P) -> Self {
+        self.genesis_path.replace(genesis_path.as_ref().into());
+
+        self
+    }
+
+    pub fn peers<T: Borrow<str>>(mut self, peers: &[T]) -> Self {
+        let peers = peers.iter().map(|p| p.borrow().to_string()).collect();
+        self.p2p_persistent_peers.replace(peers);
 
         self
     }
@@ -168,27 +194,38 @@ where
     }
 
     fn deliver_tx(&self, store: WrappedMerk, req: RequestDeliverTx) -> Result<ResponseDeliverTx> {
-        self.run(store, move |state| -> Result<_> {
+        let run_res = self.run(store, move |state| -> Result<_> {
             let inner_call = Decode::decode(req.tx.as_slice())?;
             state.call(ABCICall::DeliverTx(inner_call))
-        })??;
+        })?;
 
-        Ok(Default::default())
+        let mut deliver_tx_res = ResponseDeliverTx::default();
+        if let Err(err) = run_res {
+            deliver_tx_res.code = 1;
+            deliver_tx_res.log = err.to_string();
+        }
+
+        Ok(deliver_tx_res)
     }
 
     fn check_tx(&self, store: WrappedMerk, req: RequestCheckTx) -> Result<ResponseCheckTx> {
-        self.run(store, move |state| -> Result<_> {
+        let run_res = self.run(store, move |state| -> Result<_> {
             let inner_call = Decode::decode(req.tx.as_slice())?;
             state.call(ABCICall::CheckTx(inner_call))
-        })??;
+        })?;
+        let mut check_tx_res = ResponseCheckTx::default();
+        if let Err(err) = run_res {
+            check_tx_res.code = 1;
+            check_tx_res.log = err.to_string();
+        }
 
-        Ok(Default::default())
+        Ok(check_tx_res)
     }
 
-    fn query(&self, store: Shared<MerkStore>, req: RequestQuery) -> Result<ResponseQuery> {
+    fn query(&self, merk_store: Shared<MerkStore>, req: RequestQuery) -> Result<ResponseQuery> {
         let query_bytes = req.data;
-        let backing_store: BackingStore = store.clone().into();
-        let store_height = store.borrow().height()?;
+        let backing_store: BackingStore = merk_store.clone().into();
+        let store_height = merk_store.borrow().height()?;
         let store = Store::new(backing_store.clone());
         let state_bytes = store.get(&[])?.unwrap();
         let data: <ABCIProvider<A> as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
@@ -198,12 +235,18 @@ where
         let query = Decode::decode(query_bytes.as_slice())?;
         state.query(query)?;
         let proof_builder = backing_store.into_proof_builder()?;
+        let root_hash = merk_store.borrow().root_hash()?;
         let proof_bytes = proof_builder.build()?;
+
+        // TODO: we shouldn't need to include the root hash in the response
+        let mut value = vec![];
+        value.extend(root_hash);
+        value.extend(proof_bytes);
 
         let res = ResponseQuery {
             code: 0,
             height: store_height as i64,
-            value: proof_bytes,
+            value,
             ..Default::default()
         };
 

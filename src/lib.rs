@@ -6,6 +6,7 @@
 #![feature(trivial_bounds)]
 #![allow(incomplete_features)]
 #![feature(specialization)]
+#![feature(generic_associated_types)]
 
 extern crate self as orga;
 
@@ -47,18 +48,25 @@ pub mod tendermint;
 
 pub mod contexts;
 
+pub mod coins;
+
 mod error;
 
 // re-exports
+pub use async_trait::async_trait;
 pub use error::*;
+pub use futures_lite::future::Boxed as BoxFuture;
 pub use orga_macros as macros;
 
 pub mod prelude {
     #[cfg(feature = "abci")]
     pub use crate::abci::*;
     pub use crate::call::*;
+    pub use crate::client::{AsyncCall, Client};
+    pub use crate::coins::*;
     pub use crate::collections::*;
     pub use crate::contexts::*;
+    pub use crate::encoding::*;
     pub use crate::query::*;
     pub use crate::state::*;
     pub use crate::store::*;

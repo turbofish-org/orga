@@ -5,6 +5,8 @@ use quote::quote;
 use std::collections::HashSet;
 use syn::*;
 
+use super::utils::*;
+
 pub fn derive(item: TokenStream) -> TokenStream {
     let item = parse_macro_input!(item as DeriveInput);
     let source = parse_parent();
@@ -15,16 +17,16 @@ pub fn derive(item: TokenStream) -> TokenStream {
         Span::call_site(),
     );
 
-    let call_enum = create_call_enum(&item, &source);
-    let call_impl = create_call_impl(&item, &source, &call_enum);
+    let (call_enum_tokens, call_enum) = create_call_enum(&item, &source);
+    let (call_impl_tokens, _) = create_call_impl(&item, &source, &call_enum);
 
     let output = quote!(
         use ::orga::macros::*;
 
         pub mod #modname {
             use super::*;
-            #call_enum
-            #call_impl
+            #call_enum_tokens
+            #call_impl_tokens
         }
     );
 
@@ -53,7 +55,11 @@ pub fn attr(_args: TokenStream, input: TokenStream) -> TokenStream {
     quote!(#method).into()
 }
 
-fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> TokenStream2 {
+pub(super) fn create_call_impl(
+    item: &DeriveInput,
+    source: &File,
+    call_enum: &ItemEnum,
+) -> (TokenStream2, ItemImpl) {
     let name = &item.ident;
     let generics = &item.generics;
     let mut generics_sanitized = generics.clone();
@@ -136,7 +142,7 @@ fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> 
 
             quote! {
                 Call::#variant_name(subcall) => {
-                    ::orga::call::Call::call(&mut self.#field_name, subcall)
+                    ::orga::call::maybe_call(&mut self.#field_name, subcall)
                 }
             }
         })
@@ -167,7 +173,7 @@ fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> 
                 })
                 .collect();
             let full_inputs = quote! {
-                #(, #inputs: #input_types)*
+                #(, #inputs: #input_types)*, subcall: Vec<u8>
             };
 
             let unit_tuple: Type = parse2(quote!(())).unwrap();
@@ -198,18 +204,19 @@ fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> 
             );
             maybe_call_defs.push(quote! {
                 trait #trait_name#generic_reqs {
-                    fn maybe_call(&mut self #full_inputs) -> ::orga::Result<#output_type>;
+                    fn maybe_call(&mut self #full_inputs) -> ::orga::Result<()>;
                 }
                 impl<__Self, #(#requirements),*> #trait_name#generic_reqs for __Self {
-                    default fn maybe_call(&mut self #full_inputs) -> ::orga::Result<#output_type> {
+                    default fn maybe_call(&mut self #full_inputs) -> ::orga::Result<()> {
                         Err(::orga::Error::Call("This call cannot be called because not all bounds are met".into()))
                     }
                 }
                 impl#parent_generics #trait_name#generic_reqs for #name#generic_params
                 where #where_preds #encoding_bounds #call_bounds #parent_where_preds
                 {
-                    fn maybe_call(&mut self #full_inputs) -> ::orga::Result<#output_type> {
-                        Ok(self.#method_name(#(#inputs),*))
+                    fn maybe_call(&mut self #full_inputs) -> ::orga::Result<()> {
+                        let output = self.#method_name(#(#inputs),*);
+                        ::orga::call::maybe_call(output, subcall)
                     }
                 }
             });
@@ -222,42 +229,41 @@ fn create_call_impl(item: &DeriveInput, source: &File, call_enum: &ItemEnum) -> 
 
             quote! {
                 Call::#variant_name(#(#inputs,)* subcall) => {
-                    let subcall = ::orga::encoding::Decode::decode(subcall.as_slice())?;
-                    ::orga::call::Call::call(
-                        &mut #trait_name#dotted_generic_reqs::maybe_call(self, #(#inputs),*),
-                        subcall,
-                    )
+                    #trait_name#dotted_generic_reqs::maybe_call(self, #(#inputs,)* subcall)
                 }
             }
         })
         .collect();
 
-    quote! {
+    let impl_output = quote! {
         impl#generics_sanitized ::orga::call::Call for #name#generic_params
-        where #where_preds #encoding_bounds #call_bounds
+        where #where_preds #encoding_bounds
         {
             type Call = #call_type#call_generics;
 
             fn call(&mut self, call: Self::Call) -> ::orga::Result<()> {
                 match call {
-                    Noop => {
-                        return Err(::orga::Error::Call("Not callable".into()))
-                    }
+                    #call_type::Noop => Ok(()),
                     #(#field_call_arms),*
                     #(#method_call_arms),*
                 }
             }
         }
+    };
+
+    let output = quote! {
+        #impl_output
         #(#maybe_call_defs)*
-    }
+    };
+
+    (output, syn::parse2(impl_output).unwrap())
 }
 
-fn create_call_enum(item: &DeriveInput, source: &File) -> ItemEnum {
+pub(super) fn create_call_enum(item: &DeriveInput, source: &File) -> (TokenStream2, ItemEnum) {
     let name = &item.ident;
     let generics = &item.generics;
 
     let mut generic_params = vec![];
-    let mut call_params = vec![];
 
     let fields = match &item.data {
         Data::Struct(data) => data.fields.iter(),
@@ -283,11 +289,8 @@ fn create_call_enum(item: &DeriveInput, source: &File) -> ItemEnum {
                 generics.params.iter().cloned(),
             );
             generic_params.extend(requirements.clone());
-            call_params.extend(requirements);
 
-            let ty = &field.ty;
-
-            quote!(#name(<#ty as ::orga::call::Call>::Call))
+            quote!(#name(Vec<u8>))
         })
         .collect();
 
@@ -334,142 +337,26 @@ fn create_call_enum(item: &DeriveInput, source: &File) -> ItemEnum {
         quote!(<#(#params),*>)
     };
 
-    let call_preds = quote!(#(#call_params: ::orga::call::Call),*);
-
-    let output = quote! {
+    let struct_output = quote! {
         #[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
-        pub enum Call#generic_params
-        where #call_preds
-        {
+        pub enum Call#generic_params {
             Noop,
             #(#field_variants,)*
             #(#method_variants,)*
         }
     };
 
-    syn::parse2(output).unwrap()
-}
+    let output = quote! {
+        #struct_output
 
-fn parse_parent() -> File {
-    let path = proc_macro::Span::call_site().source_file().path();
-    let source = std::fs::read_to_string(path).unwrap();
-    parse_file(source.as_str()).unwrap()
-}
-
-fn get_generic_requirements<I, J>(inputs: I, params: J) -> Vec<Ident>
-where
-    I: Iterator<Item = Type>,
-    J: Iterator<Item = GenericParam>,
-{
-    let params = params.collect::<Vec<_>>();
-    let maybe_generic_inputs = inputs
-        .filter_map(|input| match input {
-            Type::Path(path) => Some(path),
-            Type::Reference(reference) => match *reference.elem {
-                Type::Path(path) => Some(path),
-                _ => None,
-            },
-            _ => None,
-        })
-        .flat_map(|path| {
-            let mut paths = vec![];
-            fn add_arguments(path: &TypePath, paths: &mut Vec<PathSegment>) {
-                let last = path.path.segments.last().unwrap();
-                paths.push(last.clone());
-                if let PathArguments::AngleBracketed(ref args) = last.arguments {
-                    for arg in args.args.iter() {
-                        if let GenericArgument::Type(ty) = arg {
-                            let maybe_path = match ty {
-                                Type::Path(path) => Some(path),
-                                Type::Reference(reference) => match *reference.elem {
-                                    Type::Path(ref path) => Some(path),
-                                    _ => None,
-                                },
-                                _ => None,
-                            };
-                            maybe_path.map(|path| add_arguments(path, paths));
-                        }
-                    }
-                }
+        impl#generic_params Default for Call#generic_params {
+            fn default() -> Self {
+                Call::Noop
             }
-            add_arguments(&path, &mut paths);
-
-            paths
-        });
-    let mut requirements = vec![];
-    for input in maybe_generic_inputs {
-        params
-            .iter()
-            .filter_map(|param| match param {
-                GenericParam::Type(param) => Some(param),
-                _ => None,
-            })
-            .find(|param| param.ident == input.ident)
-            .map(|param| {
-                requirements.push(param.ident.clone());
-            });
-    }
-    requirements
-}
-
-fn relevant_impls(name: &Ident, source: &File) -> Vec<ItemImpl> {
-    source
-        .items
-        .iter()
-        .filter_map(|item| match item {
-            Item::Impl(item) => Some(item),
-            _ => None,
-        })
-        .filter(|item| item.trait_.is_none())
-        .filter(|item| {
-            let path = match &*item.self_ty {
-                Type::Path(path) => path,
-                _ => return false,
-            };
-
-            if path.qself.is_some() {
-                return false;
-            }
-            if path.path.segments.len() != 1 {
-                return false;
-            }
-            if path.path.segments[0].ident != *name {
-                return false;
-            }
-
-            true
-        })
-        .cloned()
-        .collect()
-}
-
-fn relevant_methods(name: &Ident, attr: &str, source: &File) -> Vec<(ImplItemMethod, ItemImpl)> {
-    let get_methods = |item: ItemImpl| -> Vec<_> {
-        item.items
-            .iter()
-            .filter_map(|item| match item {
-                ImplItem::Method(method) => Some(method),
-                _ => None,
-            })
-            .filter(|method| {
-                method
-                    .attrs
-                    .iter()
-                    .find(|a| a.path.is_ident(&attr))
-                    .is_some()
-            })
-            .filter(|method| matches!(method.vis, Visibility::Public(_)))
-            .filter(|method| method.sig.unsafety.is_none())
-            .filter(|method| method.sig.asyncness.is_none())
-            .filter(|method| method.sig.abi.is_none())
-            .map(|method| (method.clone(), item.clone()))
-            .collect()
+        }
     };
 
-    relevant_impls(name, source)
-        .into_iter()
-        .flat_map(get_methods)
-        .collect()
+    (output, syn::parse2(struct_output).unwrap())
 }
 
 fn gen_param_input(generics: &Generics, bracketed: bool) -> TokenStream2 {
