@@ -2,10 +2,13 @@ use crate::abci::ABCIStore;
 use crate::error::Result;
 use crate::store::*;
 use failure::format_err;
-use merk::{restore::Restorer, rocksdb, tree::Tree, BatchEntry, Merk, Op, chunks::ChunkProducer};
-use std::{collections::BTreeMap, convert::TryInto};
-use std::{mem::transmute, path::{PathBuf, Path}};
+use merk::{chunks::ChunkProducer, restore::Restorer, rocksdb, tree::Tree, BatchEntry, Merk, Op};
 use std::cell::RefCell;
+use std::{collections::BTreeMap, convert::TryInto};
+use std::{
+    mem::transmute,
+    path::{Path, PathBuf},
+};
 use tendermint_proto::abci::{self, *};
 type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
@@ -232,9 +235,7 @@ impl ABCIStore for MerkStore {
 
     fn load_snapshot_chunk(&self, req: RequestLoadSnapshotChunk) -> Result<Vec<u8>> {
         match self.snapshots.get(&req.height) {
-            Some(snapshot) => {
-                snapshot.chunk(req.chunk as usize)
-            }
+            Some(snapshot) => snapshot.chunk(req.chunk as usize),
             None => {
                 todo!();
                 Ok(vec![])
@@ -327,7 +328,7 @@ impl MerkStore {
     }
 
     fn maybe_prune_snapshots(&mut self) -> Result<()> {
-        let height = self.height()?;        
+        let height = self.height()?;
         if height <= SNAPSHOT_INTERVAL * SNAPSHOT_LIMIT {
             return Ok(());
         }
@@ -372,7 +373,12 @@ fn load_snapshots(home: &Path) -> Result<BTreeMap<u64, MerkSnapshot>> {
         let checkpoint = Merk::open(&path)?;
         let length = checkpoint.chunks()?.len() as u32;
         let hash = checkpoint.root_hash().to_vec();
-        let snapshot = MerkSnapshot { checkpoint, length, hash, chunks: RefCell::new(None) };
+        let snapshot = MerkSnapshot {
+            checkpoint,
+            length,
+            hash,
+            chunks: RefCell::new(None),
+        };
 
         let height_str = path.file_name().unwrap().to_str().unwrap();
         let height: u64 = height_str.parse()?;
