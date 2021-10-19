@@ -96,7 +96,7 @@ impl ProcessHandler {
 pub struct Tendermint {
     process: ProcessHandler,
     home: PathBuf,
-    genesis_path: Option<PathBuf>,
+    genesis_bytes: Option<Vec<u8>>,
     config_contents: Option<toml_edit::Document>,
 }
 
@@ -116,7 +116,7 @@ impl Tendermint {
         let tendermint = Tendermint {
             process: ProcessHandler::new(tm_bin_path.to_str().unwrap()),
             home: home_path.clone().into(),
-            genesis_path: None,
+            genesis_bytes: None,
             config_contents: None,
         };
         tendermint.home(home_path.into())
@@ -331,38 +331,21 @@ impl Tendermint {
     }
 
     fn apply_genesis(&self) {
-        let path = match &self.genesis_path {
-            Some(inner) => inner,
+        let genesis_bytes = match &self.genesis_bytes {
+            Some(inner) => inner.clone(),
             None => {
                 return;
             }
         };
-        let file_name = path.file_name().unwrap();
-        assert!(
-            !(file_name != "genesis.json"),
-            "Provided file is not a genesis.json"
-        );
 
-        Command::new("cp")
-            .arg(path.clone())
-            .arg(self.home.join("config").join(file_name))
-            .spawn()
-            .expect("Failed to spawn genesis.json copy process.")
-            .wait()
-            .expect("genesis.json copy process failed.");
+        let target_path = self.home.join("config").join("genesis.json");
+        let mut genesis_file = fs::File::create(target_path).unwrap();
+        genesis_file.write_all(genesis_bytes.as_slice()).unwrap();
     }
 
-    /// Copies the contents of the file at passed path to the genesis.json
-    /// file located in the config directory of the tendermint home
-    ///
-    /// Compatible Commands:
-    ///     start
-    ///     init
-    ///
-    /// Note: This copy happens upon calling a terminating method in order to
-    /// ensure file copy is not overwritten by called tendermint process
-    pub fn with_genesis(mut self, path: PathBuf) -> Self {
-        self.genesis_path = Some(path);
+    pub fn with_genesis(mut self, genesis_bytes: Vec<u8>) -> Self {
+        self.genesis_bytes.replace(genesis_bytes);
+
         self
     }
 

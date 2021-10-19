@@ -11,7 +11,7 @@ use crate::Result;
 use home::home_dir;
 use std::borrow::Borrow;
 use std::marker::PhantomData;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tendermint_proto::abci::*;
 
 pub struct Node<A> {
@@ -21,7 +21,7 @@ pub struct Node<A> {
     p2p_port: u16,
     rpc_port: u16,
     abci_port: u16,
-    genesis_path: Option<PathBuf>,
+    genesis_bytes: Option<Vec<u8>>,
     p2p_persistent_peers: Option<Vec<String>>,
 }
 
@@ -50,7 +50,7 @@ where
             p2p_port: 26656,
             rpc_port: 26657,
             abci_port: 26658,
-            genesis_path: None,
+            genesis_bytes: None,
             p2p_persistent_peers: None,
         }
     }
@@ -60,7 +60,7 @@ where
         let tm_home = self.tm_home.clone();
         let p2p_port = self.p2p_port;
         let rpc_port = self.rpc_port;
-        let maybe_genesis_path = self.genesis_path;
+        let maybe_genesis_bytes = self.genesis_bytes;
         let maybe_peers = self.p2p_persistent_peers;
         std::thread::spawn(move || {
             let mut tm_process = Tendermint::new(&tm_home)
@@ -68,8 +68,8 @@ where
                 .p2p_laddr(format!("tcp://0.0.0.0:{}", p2p_port).as_str())
                 .rpc_laddr(format!("tcp://0.0.0.0:{}", rpc_port).as_str()); // Note: public by default
 
-            if let Some(genesis_path) = maybe_genesis_path {
-                tm_process = tm_process.with_genesis(genesis_path);
+            if let Some(genesis_bytes) = maybe_genesis_bytes {
+                tm_process = tm_process.with_genesis(genesis_bytes);
             }
 
             if let Some(peers) = maybe_peers {
@@ -117,8 +117,8 @@ where
         self
     }
 
-    pub fn with_genesis<P: AsRef<Path>>(mut self, genesis_path: P) -> Self {
-        self.genesis_path.replace(genesis_path.as_ref().into());
+    pub fn with_genesis<const N: usize>(mut self, genesis_bytes: &'static [u8; N]) -> Self {
+        self.genesis_bytes.replace(genesis_bytes.to_vec());
 
         self
     }
