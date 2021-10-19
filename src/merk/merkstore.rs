@@ -304,14 +304,16 @@ impl ABCIStore for MerkStore {
 impl MerkStore {
     fn maybe_create_snapshot(&mut self) -> Result<()> {
         let height = self.height()?;
-
         if height == 0 || height % SNAPSHOT_INTERVAL != 0 {
             return Ok(());
         }
+        if self.snapshots.contains_key(&height) {
+            return Ok(());
+        }
 
+        let path = self.snapshot_path(height);
         let merk = self.merk.as_ref().unwrap();
-
-        let checkpoint = merk.checkpoint(self.snapshot_path(height))?;
+        let checkpoint = merk.checkpoint(path)?;
 
         let snapshot = MerkSnapshot {
             checkpoint,
@@ -325,11 +327,13 @@ impl MerkStore {
     }
 
     fn maybe_prune_snapshots(&mut self) -> Result<()> {
-        let height = self.height()?;
-
+        let height = self.height()?;        
         if height <= SNAPSHOT_INTERVAL * SNAPSHOT_LIMIT {
             return Ok(());
         }
+
+        // TODO: iterate through snapshot map rather than just pruning the
+        // expected oldest one
 
         let remove_height = height - SNAPSHOT_INTERVAL * SNAPSHOT_LIMIT;
         self.snapshots.remove(&remove_height);
