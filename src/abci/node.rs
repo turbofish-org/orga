@@ -12,6 +12,7 @@ use home::home_dir;
 use std::borrow::Borrow;
 use std::marker::PhantomData;
 use std::path::PathBuf;
+use std::process::Stdio;
 use tendermint_proto::abci::*;
 
 pub struct Node<A> {
@@ -23,6 +24,8 @@ pub struct Node<A> {
     abci_port: u16,
     genesis_bytes: Option<Vec<u8>>,
     p2p_persistent_peers: Option<Vec<String>>,
+    stdout: Stdio,
+    stderr: Stdio,
 }
 
 impl<A: App> Node<A>
@@ -52,6 +55,8 @@ where
             abci_port: 26658,
             genesis_bytes: None,
             p2p_persistent_peers: None,
+            stdout: Stdio::null(),
+            stderr: Stdio::null(),
         }
     }
 
@@ -60,11 +65,14 @@ where
         let tm_home = self.tm_home.clone();
         let p2p_port = self.p2p_port;
         let rpc_port = self.rpc_port;
+        let stdout = self.stdout;
+        let stderr = self.stderr;
         let maybe_genesis_bytes = self.genesis_bytes;
         let maybe_peers = self.p2p_persistent_peers;
         std::thread::spawn(move || {
             let mut tm_process = Tendermint::new(&tm_home)
-                .stdout(std::process::Stdio::null())
+                .stdout(stdout)
+                .stderr(stderr)
                 .p2p_laddr(format!("tcp://0.0.0.0:{}", p2p_port).as_str())
                 .rpc_laddr(format!("tcp://0.0.0.0:{}", rpc_port).as_str()); // Note: public by default
 
@@ -126,6 +134,18 @@ where
     pub fn peers<T: Borrow<str>>(mut self, peers: &[T]) -> Self {
         let peers = peers.iter().map(|p| p.borrow().to_string()).collect();
         self.p2p_persistent_peers.replace(peers);
+
+        self
+    }
+
+    pub fn stdout<T: Into<Stdio>>(mut self, stdout: T) -> Self {
+        self.stdout = stdout.into();
+
+        self
+    }
+
+    pub fn stderr<T: Into<Stdio>>(mut self, stderr: T) -> Self {
+        self.stderr = stderr.into();
 
         self
     }
