@@ -4,11 +4,12 @@ use crate::store::*;
 use failure::format_err;
 use merk::{restore::Restorer, rocksdb, tree::Tree, BatchEntry, Merk, Op};
 use std::{collections::BTreeMap, convert::TryInto};
-use std::{mem::transmute, path::PathBuf};
+use std::{mem::transmute, path::{PathBuf, Path}};
 use tendermint_proto::abci::{self, *};
 type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
-const STATE_SYNC_EPOCH: u64 = 1000;
+const SNAPSHOT_INTERVAL: u64 = 1000;
+const SNAPSHOT_LIMIT: u64 = 4;
 
 struct MerkSnapshot {
     checkpoint: Merk,
@@ -31,21 +32,27 @@ impl MerkStore {
     /// Constructs a `MerkStore` which references the given
     /// [`Merk`](https://docs.rs/merk/latest/merk/struct.Merk.html) inside the
     /// `merk_home` directory. Initializes a new Merk instance if the directory
-    /// is empty.
-    pub fn new(merk_home: PathBuf) -> Self {
-        let merk = Merk::open(&merk_home.join("db")).unwrap();
-        let restore_path = &merk_home.join("restore");
-        if restore_path.exists() {
-            std::fs::remove_dir_all(&restore_path).expect("Failed to remove state sync data");
-        }
+    /// is empty
+    pub fn new(home: PathBuf) -> Self {
+        let merk = Merk::open(&home.join("db")).unwrap();
+
+        // TODO: return result instead of panicking
+        maybe_remove_restore(&home).expect("Failed to remove incomplete state sync restore");
+
+        let snapshots = load_snapshots(&home).expect("Failed to load snapshots");
+
         MerkStore {
             map: Some(Default::default()),
             merk: Some(merk),
-            home: merk_home,
-            snapshots: BTreeMap::new(),
+            home,
+            snapshots,
             target_snapshot: None,
             restorer: None,
         }
+    }
+
+    fn path<T: ToString>(&self, name: T) -> PathBuf {
+        self.home.join(name.to_string())
     }
 
     /// Flushes writes to the underlying `Merk` store.
@@ -162,7 +169,7 @@ impl Write for MerkStore {
     }
 }
 
-impl<'a> ABCIStore for MerkStore {
+impl ABCIStore for MerkStore {
     fn height(&self) -> Result<u64> {
         let maybe_bytes = self.merk().get_aux(b"height")?;
         match maybe_bytes {
@@ -183,33 +190,7 @@ impl<'a> ABCIStore for MerkStore {
         self.write(metadata)?;
         self.merk.as_mut().unwrap().flush()?;
 
-        #[cfg(state_sync)]
-        if self.height()? % STATE_SYNC_EPOCH == 0 {
-            // Create new checkpoint
-            let checkpoint = self
-                .merk
-                .as_ref()
-                .unwrap()
-                .checkpoint(self.home.join(self.height()?.to_string()))?;
-
-            let snapshot = MerkSnapshot {
-                hash: self.merk.as_ref().unwrap().root_hash().to_vec(),
-                checkpoint,
-                chunks: self.merk.as_ref().unwrap().chunks()?.len() as u32,
-            };
-            self.snapshots.insert(self.height()?, snapshot);
-
-            if self.height()? > 2 * STATE_SYNC_EPOCH {
-                let remove_height = self.height()? - 2 * STATE_SYNC_EPOCH;
-                self.snapshots.remove(&remove_height);
-                let path = self.home.join(remove_height.to_string());
-                if path.exists() {
-                    std::fs::remove_dir_all(path)?;
-                }
-            }
-        }
-
-        Ok(())
+        self.maybe_create_snapshot()
     }
 
     fn list_snapshots(&self) -> Result<Vec<Snapshot>> {
@@ -283,8 +264,8 @@ impl<'a> ABCIStore for MerkStore {
         let mut res = ResponseOfferSnapshot::default();
         res.set_result(abci::response_offer_snapshot::Result::Reject);
         if let Some(snapshot) = req.snapshot {
-            if self.height()? + STATE_SYNC_EPOCH < snapshot.height
-                && snapshot.height % STATE_SYNC_EPOCH == 0
+            if self.height()? + SNAPSHOT_INTERVAL < snapshot.height
+                && snapshot.height % SNAPSHOT_INTERVAL == 0
                 && snapshot.hash == req.app_hash
             {
                 self.target_snapshot = Some(snapshot);
@@ -294,6 +275,82 @@ impl<'a> ABCIStore for MerkStore {
 
         Ok(res)
     }
+}
+
+impl MerkStore {
+    fn maybe_create_snapshot(&mut self) -> Result<()> {
+        let height = self.height()?;
+
+        if height == 0 || height % SNAPSHOT_INTERVAL != 0 {
+            return Ok(());
+        }
+
+        let merk = self.merk.as_ref().unwrap();
+
+        let checkpoint = merk.checkpoint(self.snapshot_path(height))?;
+
+        let snapshot = MerkSnapshot {
+            hash: merk.root_hash().to_vec(),
+            checkpoint,
+            chunks: merk.chunks()?.len() as u32,
+        };
+        self.snapshots.insert(height, snapshot);
+
+        self.maybe_prune_snapshots()
+    }
+
+    fn maybe_prune_snapshots(&mut self) -> Result<()> {
+        let height = self.height()?;
+
+        if height <= SNAPSHOT_INTERVAL * SNAPSHOT_LIMIT {
+            return Ok(());
+        }
+
+        let remove_height = height - SNAPSHOT_INTERVAL * SNAPSHOT_LIMIT;
+        self.snapshots.remove(&remove_height);
+
+        let path = self.snapshot_path(remove_height);
+        if path.exists() {
+            std::fs::remove_dir_all(path)?;
+        }
+
+        Ok(())
+    }
+
+    fn snapshot_path(&self, height: u64) -> PathBuf {
+        self.path("snapshots").join(height.to_string())
+    }
+}
+
+fn maybe_remove_restore(home: &Path) -> Result<()> {
+    let restore_path = home.join("restore");
+    if restore_path.exists() {
+        std::fs::remove_dir_all(&restore_path)?;
+    }
+
+    Ok(())
+}
+
+fn load_snapshots(home: &Path) -> Result<BTreeMap<u64, MerkSnapshot>> {
+    let mut snapshots = BTreeMap::new();
+
+    let snapshot_dir = home.join("snapshots").read_dir()?;
+    for entry in snapshot_dir {
+        let entry = entry?;
+        let path = entry.path();
+
+        // TODO: open read-only
+        let checkpoint = Merk::open(&path)?;
+        let chunks = checkpoint.chunks()?.len() as u32;
+        let hash = checkpoint.root_hash().to_vec();
+        let snapshot = MerkSnapshot { checkpoint, chunks, hash };
+
+        let height_str = path.file_name().unwrap().to_str().unwrap();
+        let height: u64 = height_str.parse()?;
+        snapshots.insert(height, snapshot);
+    }
+
+    Ok(snapshots)
 }
 
 fn read_u64(bytes: &[u8]) -> u64 {
