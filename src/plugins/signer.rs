@@ -1,22 +1,22 @@
-use std::ops::Deref;
-
-use super::{BeginBlockCtx, Context, EndBlockCtx, InitChainCtx};
+use super::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
 use crate::abci::{BeginBlock, EndBlock, InitChain};
 use crate::call::Call;
 use crate::client::{AsyncCall, Client};
 use crate::coins::Address;
+use crate::context::Context;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::Result;
 use ed25519_dalek::{Keypair, PublicKey, Signature, Signer as Ed25519Signer};
+use std::ops::Deref;
 
-pub struct SignerProvider<T> {
+pub struct SignerPlugin<T> {
     inner: T,
 }
 
-impl<T> Deref for SignerProvider<T> {
+impl<T> Deref for SignerPlugin<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -51,7 +51,7 @@ impl SignerCall {
     }
 }
 
-impl<T: Call> Call for SignerProvider<T> {
+impl<T: Call> Call for SignerPlugin<T> {
     type Call = SignerCall;
     fn call(&mut self, call: Self::Call) -> Result<()> {
         let signer_ctx = Signer {
@@ -64,7 +64,7 @@ impl<T: Call> Call for SignerProvider<T> {
     }
 }
 
-impl<T: Query> Query for SignerProvider<T> {
+impl<T: Query> Query for SignerPlugin<T> {
     type Query = T::Query;
 
     fn query(&self, query: Self::Query) -> Result<()> {
@@ -113,7 +113,7 @@ where
     }
 }
 
-impl<T: Client<SignerClient<T, U>>, U: Clone> Client<U> for SignerProvider<T> {
+impl<T: Client<SignerClient<T, U>>, U: Clone> Client<U> for SignerPlugin<T> {
     type Client = T::Client;
 
     fn create_client(parent: U) -> Self::Client {
@@ -125,7 +125,7 @@ impl<T: Client<SignerClient<T, U>>, U: Clone> Client<U> for SignerProvider<T> {
     }
 }
 
-impl<T> State for SignerProvider<T>
+impl<T> State for SignerPlugin<T>
 where
     T: State,
 {
@@ -141,11 +141,11 @@ where
     }
 }
 
-impl<T> From<SignerProvider<T>> for (T::Encoding,)
+impl<T> From<SignerPlugin<T>> for (T::Encoding,)
 where
     T: State,
 {
-    fn from(provider: SignerProvider<T>) -> Self {
+    fn from(provider: SignerPlugin<T>) -> Self {
         (provider.inner.into(),)
     }
 }
@@ -176,7 +176,7 @@ pub fn load_keypair() -> Result<Keypair> {
 // TODO: In the future, Signer shouldn't need to know about ABCI, but
 // implementing passthrough of ABCI lifecycle methods as below seems preferable to creating a formal
 // distinction between Contexts and normal State / Call / Query types for now.
-impl<T> BeginBlock for SignerProvider<T>
+impl<T> BeginBlock for SignerPlugin<T>
 where
     T: BeginBlock + State,
 {
@@ -185,7 +185,7 @@ where
     }
 }
 
-impl<T> EndBlock for SignerProvider<T>
+impl<T> EndBlock for SignerPlugin<T>
 where
     T: EndBlock + State,
 {
@@ -194,7 +194,7 @@ where
     }
 }
 
-impl<T> InitChain for SignerProvider<T>
+impl<T> InitChain for SignerPlugin<T>
 where
     T: InitChain + State,
 {

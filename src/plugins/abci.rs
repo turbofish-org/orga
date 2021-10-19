@@ -1,8 +1,7 @@
-// use super::Context;
-use super::Context;
 use crate::abci::{prost::Adapter, App};
 use crate::call::Call;
 use crate::collections::Map;
+use crate::context::Context;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
@@ -18,7 +17,7 @@ use tendermint_proto::google::protobuf::Timestamp;
 use tendermint_proto::types::Header;
 
 type UpdateMap = Map<[u8; 32], Adapter<ValidatorUpdate>>;
-pub struct ABCIProvider<T> {
+pub struct ABCIPlugin<T> {
     inner: T,
     pub(crate) validator_updates: Option<HashMap<[u8; 32], ValidatorUpdate>>,
     updates: UpdateMap,
@@ -145,7 +144,7 @@ impl<C> From<RequestEndBlock> for ABCICall<C> {
     }
 }
 
-impl<T: App> Call for ABCIProvider<T> {
+impl<T: App> Call for ABCIPlugin<T> {
     type Call = ABCICall<T::Call>;
     fn call(&mut self, call: Self::Call) -> Result<()> {
         use ABCICall::*;
@@ -198,7 +197,7 @@ impl<T: App> Call for ABCIProvider<T> {
     }
 }
 
-impl<T: Query> Query for ABCIProvider<T> {
+impl<T: Query> Query for ABCIPlugin<T> {
     type Query = T::Query;
 
     fn query(&self, query: Self::Query) -> Result<()> {
@@ -206,7 +205,7 @@ impl<T: Query> Query for ABCIProvider<T> {
     }
 }
 
-impl<T> State for ABCIProvider<T>
+impl<T> State for ABCIPlugin<T>
 where
     T: State,
     T::Encoding: From<T>,
@@ -227,12 +226,12 @@ where
     }
 }
 
-impl<T> From<ABCIProvider<T>> for (T::Encoding,)
+impl<T> From<ABCIPlugin<T>> for (T::Encoding,)
 where
     T: State,
     T::Encoding: From<T>,
 {
-    fn from(provider: ABCIProvider<T>) -> Self {
+    fn from(provider: ABCIPlugin<T>) -> Self {
         (provider.inner.into(),)
     }
 }

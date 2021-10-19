@@ -499,7 +499,7 @@ impl ABCIStore for MemStore {
     }
 }
 
-use crate::contexts::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
+use crate::plugins::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
 pub trait BeginBlock {
     fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()>;
 }
