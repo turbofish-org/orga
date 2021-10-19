@@ -10,7 +10,7 @@ use crate::client::{AsyncCall, Client as ClientTrait};
 use crate::query::Query;
 use crate::state::*;
 use crate::store::*;
-use crate::Result;
+use crate::{Error, Result};
 use ed::*;
 
 #[derive(Clone)]
@@ -508,7 +508,9 @@ where
                 (true, true) => {
                     let map_key = self.map_iter.peek().unwrap().0;
                     let backing_key = match self.store_iter.peek().unwrap() {
-                        Err(err) => failure::bail!("{}", err),
+                        Err(_) => {
+                            return Err(Error::Store("Backing key does not exist".into()));
+                        }
                         Ok((ref key, _)) => key,
                     };
 
@@ -728,7 +730,7 @@ impl<'a, V: Default> Default for Ref<'a, V> {
 ///
 /// If the value is mutated, it will be retained in memory until the parent
 /// collection is flushed.
-pub enum ChildMut<'a, K: Encode, V, S = DefaultBackingStore> {
+pub enum ChildMut<'a, K, V, S = DefaultBackingStore> {
     /// An existing value which was loaded from the store.
     Unmodified(Option<(K, V, &'a mut Map<K, V, S>)>),
 

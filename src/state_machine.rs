@@ -22,7 +22,7 @@ where
 mod tests {
     use super::*;
     use crate::store::{MapStore, Read, Write};
-    use failure::bail;
+    use crate::Error;
 
     fn get_u8<R: Read>(key: &[u8], store: R) -> Result<u8> {
         match store.get(key) {
@@ -43,7 +43,7 @@ mod tests {
         // get count, compare to n, write if successful
         let count = get_u8(b"count", &store)?;
         if count != n {
-            bail!("Invalid count");
+            return Err(Error::Test("Invalid count".into()));
         }
         put_u8(b"count", count + 1, &mut store)?;
         Ok(count + 1)

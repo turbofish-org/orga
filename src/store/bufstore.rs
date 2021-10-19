@@ -145,7 +145,7 @@ fn iter_merge_next<S: Read>(
             (true, true) => {
                 let map_key = map_iter.peek().unwrap().0;
                 let backing_key = match store_iter.peek().unwrap() {
-                    Err(err) => failure::bail!("{}", err),
+                    Err(_) => return Err(Error::Store("Backing key does not exist".into())),
                     Ok((ref key, _)) => key,
                 };
                 let key_cmp = map_key.cmp(backing_key);

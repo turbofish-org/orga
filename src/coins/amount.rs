@@ -1,9 +1,8 @@
 use super::Symbol;
 use crate::query::Query;
 use crate::state::State;
-use crate::Result;
+use crate::{Error, Result};
 use ed::{Decode, Encode};
-use failure::bail;
 use std::marker::PhantomData;
 use std::ops::{Add, AddAssign, Div, Mul, Sub};
 
@@ -130,7 +129,7 @@ impl<S: Symbol, I: Into<Self>> Mul<I> for Amount<S> {
         let value: u128 = value * other.value as u128;
         let value: u128 = value / PRECISION as u128;
         if value > u64::MAX.into() {
-            bail!("Overflow")
+            return Err(Error::Overflow);
         } else {
             Ok(Amount::new(value as u64))
         }
@@ -143,7 +142,7 @@ impl<S: Symbol, I: Into<Self>> Div<I> for Amount<S> {
     fn div(self, other: I) -> Result<Self> {
         let other = other.into();
         if other.value == 0 {
-            bail!("Cannot divide by zero");
+            return Err(Error::DivideByZero);
         }
 
         let value: u128 = self.value.into();
@@ -160,7 +159,7 @@ impl<S: Symbol, I: Into<Self>> Sub<I> for Amount<S> {
         let other = other.into();
         match self.value.checked_sub(other.value) {
             Some(value) => Ok(Amount::new(value)),
-            None => bail!("Overflow"),
+            None => Err(Error::Overflow),
         }
     }
 }

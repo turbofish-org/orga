@@ -31,7 +31,7 @@ impl ProofBuilder {
         let store = self.store.borrow();
         let query = self.query.take();
 
-        store.merk().prove(query)
+        Ok(store.merk().prove(query)?)
     }
 }
 
