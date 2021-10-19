@@ -2,9 +2,10 @@ use crate::abci::ABCIStore;
 use crate::error::Result;
 use crate::store::*;
 use failure::format_err;
-use merk::{restore::Restorer, rocksdb, tree::Tree, BatchEntry, Merk, Op};
+use merk::{restore::Restorer, rocksdb, tree::Tree, BatchEntry, Merk, Op, chunks::ChunkProducer};
 use std::{collections::BTreeMap, convert::TryInto};
 use std::{mem::transmute, path::{PathBuf, Path}};
+use std::cell::RefCell;
 use tendermint_proto::abci::{self, *};
 type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
@@ -13,8 +14,28 @@ const SNAPSHOT_LIMIT: u64 = 4;
 
 struct MerkSnapshot {
     checkpoint: Merk,
-    chunks: u32,
+    chunks: RefCell<Option<ChunkProducer<'static>>>,
+    length: u32,
     hash: Vec<u8>,
+}
+
+impl MerkSnapshot {
+    fn chunk(&self, index: usize) -> Result<Vec<u8>> {
+        let self_chunks = self.chunks.borrow_mut();
+
+        // if we don't have a chunk producer, create one
+        if self_chunks.is_none() {
+            let chunks = self.checkpoint.chunks()?;
+            // transmute lifetime into static - this is a self-referential
+            // struct, and we know the ChunkProducer's reference to the Merk
+            // will be valid for the lifetime of the MerkSnapshot
+            let chunks = unsafe { transmute(chunks) };
+            *self_chunks = Some(chunks);
+        }
+
+        let chunks = self_chunks.as_ref().unwrap();
+        chunks.chunk(index)
+    }
 }
 
 /// A [`store::Store`] implementation backed by a [`merk`](https://docs.rs/merk)
@@ -199,7 +220,7 @@ impl ABCIStore for MerkStore {
         // or just the latest one?
         if let Some((height, snapshot)) = self.snapshots.last_key_value() {
             snapshots.push(Snapshot {
-                chunks: snapshot.chunks,
+                chunks: snapshot.length,
                 hash: snapshot.hash.clone(),
                 height: *height,
                 ..Default::default()
@@ -210,13 +231,15 @@ impl ABCIStore for MerkStore {
     }
 
     fn load_snapshot_chunk(&self, req: RequestLoadSnapshotChunk) -> Result<Vec<u8>> {
-        let mut chunk = vec![];
-        if let Some(snapshot) = self.snapshots.get(&req.height) {
-            chunk = snapshot.checkpoint.chunks()?.chunk(req.chunk as usize)?;
+        match self.snapshots.get(&req.height) {
+            Some(snapshot) => {
+                snapshot.chunk(req.chunk as usize)
+            }
+            None => {
+                todo!();
+                Ok(vec![])
+            }
         }
-
-        // TODO: what should we do if we haven't retained this snapshot?
-        Ok(chunk)
     }
 
     fn apply_snapshot_chunk(&mut self, req: RequestApplySnapshotChunk) -> Result<()> {
@@ -263,6 +286,7 @@ impl ABCIStore for MerkStore {
     fn offer_snapshot(&mut self, req: RequestOfferSnapshot) -> Result<ResponseOfferSnapshot> {
         let mut res = ResponseOfferSnapshot::default();
         res.set_result(abci::response_offer_snapshot::Result::Reject);
+
         if let Some(snapshot) = req.snapshot {
             if self.height()? + SNAPSHOT_INTERVAL < snapshot.height
                 && snapshot.height % SNAPSHOT_INTERVAL == 0
@@ -290,9 +314,10 @@ impl MerkStore {
         let checkpoint = merk.checkpoint(self.snapshot_path(height))?;
 
         let snapshot = MerkSnapshot {
-            hash: merk.root_hash().to_vec(),
             checkpoint,
-            chunks: merk.chunks()?.len() as u32,
+            chunks: RefCell::new(None),
+            length: merk.chunks()?.len() as u32,
+            hash: merk.root_hash().to_vec(),
         };
         self.snapshots.insert(height, snapshot);
 
@@ -341,9 +366,9 @@ fn load_snapshots(home: &Path) -> Result<BTreeMap<u64, MerkSnapshot>> {
 
         // TODO: open read-only
         let checkpoint = Merk::open(&path)?;
-        let chunks = checkpoint.chunks()?.len() as u32;
+        let length = checkpoint.chunks()?.len() as u32;
         let hash = checkpoint.root_hash().to_vec();
-        let snapshot = MerkSnapshot { checkpoint, chunks, hash };
+        let snapshot = MerkSnapshot { checkpoint, length, hash, chunks: RefCell::new(None) };
 
         let height_str = path.file_name().unwrap().to_str().unwrap();
         let height: u64 = height_str.parse()?;
