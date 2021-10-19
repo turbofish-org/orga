@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use super::{ABCIStateMachine, ABCIStore, App, Application, WrappedMerk};
 use crate::call::Call;
 use crate::contexts::{ABCICall, ABCIProvider};
@@ -10,9 +8,12 @@ use crate::state::State;
 use crate::store::{Read, Shared, Store, Write};
 use crate::tendermint::Tendermint;
 use crate::Result;
+use home::home_dir;
 use std::borrow::Borrow;
+use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use tendermint_proto::abci::*;
+
 pub struct Node<A> {
     _app: PhantomData<A>,
     tm_home: PathBuf,
@@ -28,8 +29,10 @@ impl<A: App> Node<A>
 where
     <A as State>::Encoding: Default,
 {
-    pub fn new<P: AsRef<Path>>(home: P) -> Self {
-        let home: PathBuf = home.as_ref().into();
+    pub fn new(home: &str) -> Self {
+        let home: PathBuf = home_dir()
+            .expect("Could not resolve user home directory")
+            .join(format!(".{}", home).as_str());
         let merk_home = home.join("merk");
         let tm_home = home.join("tendermint");
         if !home.exists() {
