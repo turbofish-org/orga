@@ -30,6 +30,8 @@ static TENDERMINT_ZIP_HASH: [u8; 32] =
 static TENDERMINT_ZIP_HASH: [u8; 32] =
     hex!("01a076d3297a5381587a77621b7f45dca7acb7fc21ce2e29ca327ccdaee41757");
 
+const TENDERMINT_BINARY_NAME: &str = "tendermint-v0.34.11";
+
 fn verify_hash(tendermint_bytes: &[u8]) {
     let mut hasher = Sha256::new();
     hasher.update(tendermint_bytes);
@@ -108,10 +110,11 @@ impl Tendermint {
     pub fn new<T: Into<PathBuf> + Clone>(home_path: T) -> Tendermint {
         let path: PathBuf = home_path.clone().into();
         if !path.exists() {
-            fs::create_dir(path).expect("Failed to create Tendermint home directory");
+            fs::create_dir(path.clone()).expect("Failed to create Tendermint home directory");
         }
+        let tm_bin_path = path.join(TENDERMINT_BINARY_NAME);
         let tendermint = Tendermint {
-            process: ProcessHandler::new("tendermint"),
+            process: ProcessHandler::new(tm_bin_path.to_str().unwrap()),
             home: home_path.clone().into(),
             genesis_path: None,
             config_contents: None,
@@ -120,7 +123,7 @@ impl Tendermint {
     }
 
     fn install(&self) {
-        let tendermint_path = self.home.join("tendermint-v0.34.11");
+        let tendermint_path = self.home.join(TENDERMINT_BINARY_NAME);
 
         if tendermint_path.is_executable() {
             info!("Tendermint already installed");
@@ -569,7 +572,7 @@ mod tests {
         let expected: HashSet<String> = HashSet::from([
             "config".to_string(),
             "data".to_string(),
-            "tendermint-v0.34.11".to_string(),
+            TENDERMINT_BINARY_NAME.to_string(),
         ]);
 
         assert_eq!(file_set, expected);
