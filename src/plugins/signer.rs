@@ -8,7 +8,7 @@ use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
-use crate::Result;
+use crate::{Error, Result};
 use ed25519_dalek::{Keypair, PublicKey, Signature, Signer as Ed25519Signer};
 use std::ops::Deref;
 
@@ -46,7 +46,7 @@ impl SignerCall {
                 Ok(Some(pubkey_bytes.into()))
             }
             (None, None) => Ok(None),
-            _ => failure::bail!("Malformed transaction"),
+            _ => Err(Error::Signer("Malformed transaction".into())),
         }
     }
 }

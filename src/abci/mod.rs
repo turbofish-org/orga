@@ -4,7 +4,6 @@ use std::env;
 use std::net::ToSocketAddrs;
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 
-use failure::bail;
 use log::info;
 
 use crate::call::Call;
@@ -12,7 +11,7 @@ use crate::merk::MerkStore;
 use crate::query::Query;
 use crate::state::State;
 use crate::store::{BufStore, BufStoreMap, MapStore, Read, Shared, Write, KV};
-use crate::Result;
+use crate::{Error, Result};
 mod node;
 pub use node::*;
 
@@ -62,7 +61,9 @@ impl<A: Application> ABCIStateMachine<A> {
     /// [`Application`](trait.Application.html).
     pub fn run(&mut self, req: Request) -> Result<Res> {
         let value = match req.value {
-            None => bail!("Received empty request"),
+            None => {
+                return Err(Error::ABCI("Received empty request".into()));
+            }
             Some(value) => value,
         };
 

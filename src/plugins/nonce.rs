@@ -1,14 +1,15 @@
 use super::{BeginBlockCtx, EndBlockCtx, InitChainCtx, Signer};
 use crate::abci::{BeginBlock, EndBlock, InitChain};
 use crate::call::Call;
-use crate::client::{AsyncCall, Client};
+use crate::client::Client;
 use crate::coins::Address;
 use crate::collections::Map;
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
+use crate::prelude::AsyncCall;
 use crate::query::Query;
 use crate::state::State;
-use crate::Result;
+use crate::{Error, Result};
 use std::ops::Deref;
 use std::path::PathBuf;
 
@@ -41,15 +42,19 @@ where
     fn call(&mut self, call: Self::Call) -> Result<()> {
         let signer = match self.context::<Signer>() {
             Some(signer) => signer,
-            None => failure::bail!("Nonce could not resolve the Signer context."),
+            None => {
+                return Err(Error::Nonce(
+                    "Nonce could not resolve the Signer context".into(),
+                ));
+            }
         };
 
         match (signer.signer, call.nonce) {
             // Happy paths:
             (Some(pub_key), Some(nonce)) => {
                 let mut expected_nonce = self.map.entry(pub_key)?.or_default()?;
-                if nonce < *expected_nonce {
-                    failure::bail!("Nonce is not valid.");
+                if nonce != *expected_nonce {
+                    return Err(Error::Nonce("Nonce is not valid".into()));
                 }
                 *expected_nonce = nonce + 1;
                 self.inner.call(call.inner_call)
@@ -57,8 +62,10 @@ where
             (None, None) => self.inner.call(call.inner_call),
 
             // Unhappy paths:
-            (Some(_), None) => failure::bail!("Signed calls must include a nonce."),
-            (None, Some(_)) => failure::bail!("Unsigned calls must not include a nonce."),
+            (Some(_), None) => Err(Error::Nonce("Signed calls must include a nonce".into())),
+            (None, Some(_)) => Err(Error::Nonce(
+                "Unsinged calls must not include a nonce".into(),
+            )),
         }
     }
 }

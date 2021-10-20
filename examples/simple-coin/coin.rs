@@ -4,6 +4,7 @@ use orga::coins::*;
 use orga::encoding::{Decode, Encode};
 use orga::plugins::load_keypair;
 use orga::prelude::*;
+use orga::{Error, Result};
 
 #[derive(Encode, Decode)]
 pub struct Simp;
@@ -53,9 +54,9 @@ impl SimpleCoin {
     pub fn transfer(&mut self, to: Address, amount: Amount<Simp>) -> Result<()> {
         let signer = self
             .context::<Signer>()
-            .ok_or_else(|| failure::format_err!("No signer context available"))?
+            .ok_or_else(|| Error::App("No signer context available".into()))?
             .signer
-            .ok_or_else(|| failure::format_err!("Transfer calls must be signed"))?;
+            .ok_or_else(|| Error::App("Transfer calls must be signed".into()))?;
 
         let mut sender = self.balances.entry(signer)?.or_default()?;
         let coins = sender.take(amount)?;

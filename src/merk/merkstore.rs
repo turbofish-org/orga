@@ -1,7 +1,6 @@
 use crate::abci::ABCIStore;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::store::*;
-use failure::format_err;
 use merk::{restore::Restorer, rocksdb, tree::Tree, BatchEntry, Merk, Op};
 use std::{collections::BTreeMap, convert::TryInto};
 use std::{mem::transmute, path::PathBuf};
@@ -60,10 +59,11 @@ impl MerkStore {
         let batch = to_batch(map);
         let aux_batch = to_batch(aux);
 
-        self.merk
+        Ok(self
+            .merk
             .as_mut()
             .unwrap()
-            .apply(batch.as_ref(), aux_batch.as_ref())
+            .apply(batch.as_ref(), aux_batch.as_ref())?)
     }
 
     pub(super) fn merk(&self) -> &Merk {
@@ -246,11 +246,13 @@ impl<'a> ABCIStore for MerkStore {
             .expect("Tried to apply a snapshot chunk while no state sync is in progress");
 
         if self.restorer.is_none() {
-            let expected_hash: [u8; 32] = target_snapshot
-                .hash
-                .clone()
-                .try_into()
-                .map_err(|_| format_err!("Failed to parse expected root hash"))?;
+            let expected_hash: [u8; 32] = match target_snapshot.hash.clone().try_into() {
+                Ok(inner) => inner,
+                Err(_) => {
+                    return Err(Error::Store("Failed to parse expected root hash".into()));
+                }
+            };
+
             let restorer = Restorer::new(
                 &restore_path,
                 expected_hash,

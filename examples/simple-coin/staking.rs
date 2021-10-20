@@ -1,6 +1,7 @@
 use super::{Simp, SimpleCoin};
 use orga::coins::*;
 use orga::prelude::*;
+use orga::{Error, Result};
 
 #[derive(State)]
 pub struct AppWithStaking {
@@ -13,9 +14,9 @@ impl AppWithStaking {
     pub fn delegate(&mut self, validator_address: Address, amount: Amount<Simp>) -> Result<()> {
         let signer = self
             .context::<Signer>()
-            .ok_or_else(|| failure::format_err!("No signer context available"))?
+            .ok_or_else(|| Error::App("No signer context available".into()))?
             .signer
-            .ok_or_else(|| failure::format_err!("Delegate calls must be signed"))?;
+            .ok_or_else(|| Error::App("Delegate calls must be signed".into()))?;
 
         let mut sender = self.simp.balances().entry(signer)?.or_default()?;
         let coins = sender.take(amount)?;
