@@ -63,8 +63,12 @@ impl MerkStore {
         // TODO: return result instead of panicking
         maybe_remove_restore(&home).expect("Failed to remove incomplete state sync restore");
 
-        std::fs::create_dir(&home.join("snapshots"))
-            .expect("Failed to create 'snapshots' directory");
+        let snapshot_path = home.join("snapshots");
+        if !snapshot_path.exists() {
+            std::fs::create_dir(&snapshot_path)
+                .expect("Failed to create 'snapshots' directory");
+        }
+
         let snapshots = load_snapshots(&home).expect("Failed to load snapshots");
 
         MerkStore {
@@ -291,7 +295,7 @@ impl ABCIStore for MerkStore {
         res.set_result(abci::response_offer_snapshot::Result::Reject);
 
         if let Some(snapshot) = req.snapshot {
-            if self.height()? + SNAPSHOT_INTERVAL < snapshot.height
+            if self.height()? + SNAPSHOT_INTERVAL <= snapshot.height
                 && snapshot.height % SNAPSHOT_INTERVAL == 0
                 && snapshot.hash == req.app_hash
             {
