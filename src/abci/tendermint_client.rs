@@ -11,7 +11,7 @@ use crate::merk::ABCIPrefixedProofStore;
 use crate::query::Query;
 use crate::state::State;
 use crate::store::{Shared, Store};
-use crate::Result;
+use crate::{Error, Result};
 
 pub use tm::endpoint::broadcast::tx_commit::Response as TxResponse;
 
@@ -58,13 +58,20 @@ impl<T: Client<TendermintAdapter<T>> + Query + State> TendermintClient<T> {
             .tm_client
             .abci_query(None, query_bytes, None, true)
             .await?;
-        let root_hash = res.value[0..32].try_into()?;
+        let root_hash = match res.value[0..32].try_into() {
+            Ok(inner) => inner,
+            _ => {
+                return Err(Error::Tendermint(
+                    "Cannot convert result to fixed size array".into(),
+                ));
+            }
+        };
         let proof_bytes = &res.value[32..];
 
         let map = merk::proofs::query::verify(proof_bytes, root_hash)?;
         let root_value = match map.get(&[])? {
             Some(root_value) => root_value,
-            None => return Err(failure::format_err!("missing root value")),
+            None => return Err(Error::ABCI("Missing root value".into())),
         };
         let encoding = T::Encoding::decode(root_value)?;
         let store: Shared<ABCIPrefixedProofStore> = Shared::new(ABCIPrefixedProofStore::new(map));
@@ -122,15 +129,15 @@ impl<'a> std::future::Future for NoReturn<'a> {
             match res {
                 std::task::Poll::Ready(Ok(tx_res)) => {
                     if tx_res.check_tx.code.is_err() {
-                        std::task::Poll::Ready(Err(failure::format_err!(
+                        std::task::Poll::Ready(Err(Error::ABCI(format!(
                             "CheckTx failed: {}",
                             tx_res.check_tx.log
-                        )))
+                        ))))
                     } else if tx_res.deliver_tx.code.is_err() {
-                        std::task::Poll::Ready(Err(failure::format_err!(
+                        std::task::Poll::Ready(Err(Error::ABCI(format!(
                             "DeliverTx failed: {}",
                             tx_res.deliver_tx.log
-                        )))
+                        ))))
                     } else {
                         std::task::Poll::Ready(Ok(()))
                     }
