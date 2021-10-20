@@ -256,7 +256,7 @@ impl Tendermint {
         self.process.set_arg(addr);
         self
     }
-    
+
     /// ABCI listen address, or one of: 'kvstore', 'persistent_kvstore',
     /// 'counter', 'counter_serial' or 'noop' for local testing.
     /// Port required
@@ -273,7 +273,7 @@ impl Tendermint {
         self.process.set_arg(addr);
         self
     }
-    
+
     /// Stdout target
     ///
     /// # Examples
