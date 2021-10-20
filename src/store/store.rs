@@ -1,5 +1,5 @@
 use super::{Read, Shared, Write, KV};
-use crate::{Result, Error};
+use crate::{Error, Result};
 
 // TODO: figure out how to let users set DefaultBackingStore, similar to setting
 // the global allocator in the standard library
