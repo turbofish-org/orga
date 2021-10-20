@@ -24,7 +24,7 @@ struct MerkSnapshot {
 
 impl MerkSnapshot {
     fn chunk(&self, index: usize) -> Result<Vec<u8>> {
-        let self_chunks = self.chunks.borrow_mut();
+        let mut self_chunks = self.chunks.borrow_mut();
 
         // if we don't have a chunk producer, create one
         if self_chunks.is_none() {
@@ -36,7 +36,7 @@ impl MerkSnapshot {
             *self_chunks = Some(chunks);
         }
 
-        let chunks = self_chunks.as_ref().unwrap();
+        let chunks = self_chunks.as_mut().unwrap();
         chunks.chunk(index)
     }
 }
@@ -63,6 +63,8 @@ impl MerkStore {
         // TODO: return result instead of panicking
         maybe_remove_restore(&home).expect("Failed to remove incomplete state sync restore");
 
+        std::fs::create_dir(&home.join("snapshots"))
+            .expect("Failed to create 'snapshots' directory");
         let snapshots = load_snapshots(&home).expect("Failed to load snapshots");
 
         MerkStore {
@@ -218,28 +220,26 @@ impl ABCIStore for MerkStore {
     }
 
     fn list_snapshots(&self) -> Result<Vec<Snapshot>> {
-        let mut snapshots = vec![];
-        // TODO: should we list all our snapshots,
-        // or just the latest one?
-        if let Some((height, snapshot)) = self.snapshots.last_key_value() {
-            snapshots.push(Snapshot {
+        let snapshots = self
+            .snapshots
+            .iter()
+            .map(|(height, snapshot)| Snapshot {
                 chunks: snapshot.length,
                 hash: snapshot.hash.clone(),
                 height: *height,
                 ..Default::default()
-            });
-        }
-
+            })
+            .collect();
         Ok(snapshots)
     }
 
     fn load_snapshot_chunk(&self, req: RequestLoadSnapshotChunk) -> Result<Vec<u8>> {
         match self.snapshots.get(&req.height) {
             Some(snapshot) => snapshot.chunk(req.chunk as usize),
-            None => {
-                todo!();
-                Ok(vec![])
-            }
+            // ABCI has no way to specify that we don't have the requested
+            // chunk, so we just return an empty one (and probably get banned by
+            // the client when they try to verify)
+            None => Ok(vec![]),
         }
     }
 
@@ -255,7 +255,7 @@ impl ABCIStore for MerkStore {
                 .hash
                 .clone()
                 .try_into()
-                .map_err(|_| format_err!("Failed to parse expected root hash"))?;
+                .map_err(|_| format_err!("Failed to convert expected root hash"))?;
             let restorer = Restorer::new(
                 &restore_path,
                 expected_hash,
@@ -269,16 +269,18 @@ impl ABCIStore for MerkStore {
         if chunks_remaining == 0 {
             let restored = self.restorer.take().unwrap().finalize()?;
             self.merk.take().unwrap().destroy()?;
-            let p = self.home.join("db");
+            let db_path = self.path("db");
             drop(restored);
 
-            std::fs::rename(&restore_path, &p)?;
-            self.merk = Some(Merk::open(p)?);
+            std::fs::rename(&restore_path, &db_path)?;
+            self.merk = Some(Merk::open(db_path)?);
 
+            // TODO: write height and flush before renaming db for atomicity
             let height = self.target_snapshot.as_ref().unwrap().height;
             let height_bytes = height.to_be_bytes().to_vec();
             let metadata = vec![(b"height".to_vec(), Some(height_bytes))];
             self.write(metadata)?;
+            self.merk.as_mut().unwrap().flush()?;
         }
 
         Ok(())
