@@ -1,5 +1,5 @@
 use super::{Read, Shared, Write, KV};
-use crate::Result;
+use crate::{Result, Error};
 
 // TODO: figure out how to let users set DefaultBackingStore, similar to setting
 // the global allocator in the standard library
@@ -84,7 +84,7 @@ impl<S: Write> Write for Store<S> {
         // if we instead check this statically using known encoding lengths via
         // ed.
         if key.len() + self.prefix.len() >= 256 {
-            failure::bail!("Store keys must be < 256 bytes");
+            return Err(Error::Store("Store keys must be < 256 bytes".into()));
         }
 
         let prefixed = concat(self.prefix.as_slice(), key.as_slice());
