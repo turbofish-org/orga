@@ -1,6 +1,6 @@
 use crate::encoding::{Decode, Encode};
 use crate::store::*;
-use crate::Result;
+use crate::{Error, Result};
 pub use orga_macros::State;
 use std::cell::{RefCell, UnsafeCell};
 use std::convert::TryInto;
@@ -102,7 +102,14 @@ where
     where
         S: Read,
     {
-        let self_vec: Vec<T::Encoding> = value.inner.try_into()?;
+        let self_vec: Vec<T::Encoding> = match value.inner.try_into() {
+            Ok(inner) => inner,
+            _ => {
+                return Err(Error::State(
+                    "Failed to cast self as Vec<T::Encoding>".into(),
+                ))
+            }
+        };
         let mut vec: Vec<Result<T>> = Vec::with_capacity(N);
         self_vec
             .into_iter()
@@ -116,7 +123,10 @@ where
     }
 
     fn flush(self) -> Result<Self::Encoding> {
-        let self_vec: Vec<T> = self.try_into()?;
+        let self_vec: Vec<T> = match self.try_into() {
+            Ok(inner) => inner,
+            _ => return Err(Error::State("Failed to cast self as Vec<T>".into())),
+        };
         let mut vec: Vec<T::Encoding> = Vec::with_capacity(N);
         self_vec.into_iter().for_each(|x| vec.push(x.into()));
 
