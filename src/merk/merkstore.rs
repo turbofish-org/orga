@@ -66,8 +66,7 @@ impl MerkStore {
 
         let snapshot_path = home.join("snapshots");
         if !snapshot_path.exists() {
-            std::fs::create_dir(&snapshot_path)
-                .expect("Failed to create 'snapshots' directory");
+            std::fs::create_dir(&snapshot_path).expect("Failed to create 'snapshots' directory");
         }
 
         let snapshots = load_snapshots(&home).expect("Failed to load snapshots");
