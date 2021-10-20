@@ -1,7 +1,6 @@
 use crate::abci::ABCIStore;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::store::*;
-use failure::format_err;
 use merk::{chunks::ChunkProducer, restore::Restorer, rocksdb, tree::Tree, BatchEntry, Merk, Op};
 use std::cell::RefCell;
 use std::{collections::BTreeMap, convert::TryInto};
@@ -37,7 +36,9 @@ impl MerkSnapshot {
         }
 
         let chunks = self_chunks.as_mut().unwrap();
-        chunks.chunk(index)
+        let chunk = chunks.chunk(index)?;
+
+        Ok(chunk)
     }
 }
 
@@ -97,10 +98,11 @@ impl MerkStore {
         let batch = to_batch(map);
         let aux_batch = to_batch(aux);
 
-        self.merk
+        Ok(self
+            .merk
             .as_mut()
             .unwrap()
-            .apply(batch.as_ref(), aux_batch.as_ref())
+            .apply(batch.as_ref(), aux_batch.as_ref())?)
     }
 
     pub(super) fn merk(&self) -> &Merk {
@@ -255,11 +257,13 @@ impl ABCIStore for MerkStore {
             .expect("Tried to apply a snapshot chunk while no state sync is in progress");
 
         if self.restorer.is_none() {
-            let expected_hash: [u8; 32] = target_snapshot
-                .hash
-                .clone()
-                .try_into()
-                .map_err(|_| format_err!("Failed to convert expected root hash"))?;
+            let expected_hash: [u8; 32] = match target_snapshot.hash.clone().try_into() {
+                Ok(inner) => inner,
+                Err(_) => {
+                    return Err(Error::Store("Failed to convert expected root hash".into()));
+                }
+            };
+
             let restorer = Restorer::new(
                 &restore_path,
                 expected_hash,

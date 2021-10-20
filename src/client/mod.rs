@@ -1,6 +1,6 @@
 use crate::call::Call;
 use crate::query::Query;
-use crate::Result;
+use crate::{Error, Result};
 
 pub use crate::macros::Client;
 pub use call_chain::CallChain;
@@ -92,7 +92,7 @@ impl Foo {
         match id {
             0 => Ok(&self.bar),
             1 => Ok(&self.bar2),
-            _ => failure::bail!("Invalid id"),
+            _ => Err(Error::InvalidID),
         }
     }
 
@@ -102,7 +102,7 @@ impl Foo {
         match id {
             0 => Ok(&mut self.bar),
             1 => Ok(&mut self.bar2),
-            _ => failure::bail!("Invalid id"),
+            _ => Err(Error::InvalidID),
         }
     }
 }

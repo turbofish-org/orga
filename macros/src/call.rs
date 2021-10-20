@@ -208,7 +208,7 @@ pub(super) fn create_call_impl(
                 }
                 impl<__Self, #(#requirements),*> #trait_name#generic_reqs for __Self {
                     default fn maybe_call(&mut self #full_inputs) -> ::orga::Result<()> {
-                        ::orga::failure::bail!("This call cannot be called because not all bounds are met")
+                        Err(::orga::Error::Call("This call cannot be called because not all bounds are met".into()))
                     }
                 }
                 impl#parent_generics #trait_name#generic_reqs for #name#generic_params
