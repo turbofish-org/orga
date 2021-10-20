@@ -7,9 +7,8 @@ description = "State machine engine"
 license = "MIT"
 
 [dependencies]
-failure = "0.1.8"
-abci2 = { git = "https://github.com/nomic-io/abci2", optional = true }
-merk = { git = "https://github.com/nomic-io/merk", rev = "42a2943852b23b61ec9159a7de6c63003f213796", optional = true }
+abci2 = { git = "https://github.com/nomic-io/abci2", rev = "fcc7a1d68aa492f0f7e60be05b6ce3146b290f0d", optional = true }
+merk = { git = "https://github.com/nomic-io/merk", rev = "bea12dc56a33b9f1aa70ef3f5e0e763f6f03c46b", optional = true }
 tendermint-rpc = { version = "0.21.0", features = ["http-client"], optional = true }
 tendermint = { version = "0.21.0", optional = true }
 tendermint-proto = { version = "0.21.0", optional = true }
@@ -29,6 +28,7 @@ prost = {version = "0.7", optional = true}
 home = "0.5.3"
 rand_core = { version = "0.5", optional = true}
 ed25519-dalek = {version = "1", optional = true}
+thiserror = "1.0.29"
 bech32 = "0.8.1"
 async-trait = "0.1.51"
 futures-lite = "1.12.0"
