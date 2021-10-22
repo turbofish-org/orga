@@ -13,6 +13,8 @@ use crate::{Error, Result};
 use std::ops::Deref;
 use std::path::PathBuf;
 
+const NONCE_INCREASE_LIMIT: u64 = 1000;
+
 #[derive(State, Encode, Decode)]
 pub struct NoncePlugin<T: State> {
     map: Map<Address, u64>,
@@ -56,6 +58,14 @@ where
                 if nonce <= *expected_nonce {
                     return Err(Error::Nonce("Nonce is not valid".into()));
                 }
+
+                if nonce - *expected_nonce > NONCE_INCREASE_LIMIT {
+                    return Err(Error::Nonce(format!(
+                        "Nonce increase is too large: {}",
+                        nonce - *expected_nonce
+                    )));
+                }
+
                 *expected_nonce = nonce;
                 self.inner.call(call.inner_call)
             }
