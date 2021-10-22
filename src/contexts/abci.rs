@@ -1,3 +1,6 @@
+#[cfg(test)]
+use mutagen::mutate;
+
 // use super::Context;
 use super::Context;
 use crate::abci::{prost::Adapter, App};
@@ -103,6 +106,7 @@ pub struct Validators {
 }
 
 impl Validators {
+    #[cfg_attr(test, mutate)]
     pub fn set_voting_power<A: Into<[u8; 32]>>(&mut self, pub_key: A, power: u64) {
         let pub_key = pub_key.into();
 
@@ -147,6 +151,8 @@ impl<C> From<RequestEndBlock> for ABCICall<C> {
 
 impl<T: App> Call for ABCIProvider<T> {
     type Call = ABCICall<T::Call>;
+
+    #[cfg_attr(test, mutate)]
     fn call(&mut self, call: Self::Call) -> Result<()> {
         use ABCICall::*;
         Context::add(Validators::default());

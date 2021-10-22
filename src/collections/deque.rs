@@ -1,3 +1,6 @@
+#[cfg(test)]
+use mutagen::mutate;
+
 use super::map::{ChildMut, Map, ReadOnly, Ref};
 use crate::call::Call;
 use crate::encoding::{Decode, Encode};
@@ -69,36 +72,43 @@ impl<T: State<S>, S: Read> State<S> for Deque<T, S> {
 
 impl<T: State<S>, S: Read> Deque<T, S> {
     #[query]
+    #[cfg_attr(test, mutate)]
     pub fn len(&self) -> u64 {
         self.meta.tail - self.meta.head
     }
 
     #[query]
+    #[cfg_attr(test, mutate)]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
     #[query]
+    #[cfg_attr(test, mutate)]
     pub fn get(&self, index: u64) -> Result<Option<Ref<T>>> {
         self.map.get(index + self.meta.head)
     }
 
     #[query]
+    #[cfg_attr(test, mutate)]
     pub fn front(&self) -> Result<Option<Ref<T>>> {
         self.map.get(self.meta.head)
     }
 
     #[query]
+    #[cfg_attr(test, mutate)]
     pub fn back(&self) -> Result<Option<Ref<T>>> {
         self.map.get(self.meta.tail - 1)
     }
 }
 
 impl<T: State<S>, S: Write> Deque<T, S> {
+    #[cfg_attr(test, mutate)]
     pub fn get_mut(&mut self, index: u64) -> Result<Option<ChildMut<u64, T, S>>> {
         self.map.get_mut(index + self.meta.head)
     }
 
+    #[cfg_attr(test, mutate)]
     pub fn push_back(&mut self, value: T::Encoding) -> Result<()> {
         let index = self.meta.tail;
         self.meta.tail += 1;
@@ -107,6 +117,7 @@ impl<T: State<S>, S: Write> Deque<T, S> {
         Ok(())
     }
 
+    #[cfg_attr(test, mutate)]
     pub fn push_front(&mut self, value: T::Encoding) -> Result<()> {
         self.meta.head -= 1;
         let index = self.meta.head;
@@ -115,6 +126,7 @@ impl<T: State<S>, S: Write> Deque<T, S> {
         Ok(())
     }
 
+    #[cfg_attr(test, mutate)]
     pub fn pop_front(&mut self) -> Result<Option<ReadOnly<T>>> {
         if self.is_empty() {
             return Ok(None);
@@ -124,6 +136,7 @@ impl<T: State<S>, S: Write> Deque<T, S> {
         self.map.remove(self.meta.head - 1)
     }
 
+    #[cfg_attr(test, mutate)]
     pub fn pop_back(&mut self) -> Result<Option<ReadOnly<T>>> {
         if self.is_empty() {
             return Ok(None);

@@ -1,3 +1,6 @@
+#[cfg(test)]
+use mutagen::mutate;
+
 use super::map::Iter as MapIter;
 use super::map::Map;
 use super::map::ReadOnly;
@@ -57,12 +60,14 @@ where
     T::Value: State<S>,
     S: Read,
 {
+    #[cfg_attr(test, mutate)]
     pub fn insert(&mut self, entry: T) -> Result<()> {
         let (key, value) = entry.into_entry();
         self.map.insert(key, value.into())
     }
 
     #[query]
+    #[cfg_attr(test, mutate)]
     pub fn contains_entry_key(&self, entry: T) -> Result<bool> {
         let (key, _) = entry.into_entry();
         self.map.contains_key(key)
@@ -76,6 +81,7 @@ where
     T::Value: State<S>,
     S: Read,
 {
+    #[cfg_attr(test, mutate)]
     pub fn delete(&mut self, entry: T) -> Result<()> {
         let (key, _) = entry.into_entry();
         self.map.remove(key)?;
@@ -92,6 +98,7 @@ where
     S: Read,
 {
     #[query]
+    #[cfg_attr(test, mutate)]
     pub fn contains(&self, entry: T) -> Result<bool> {
         let (key, value) = entry.into_entry();
 
@@ -117,12 +124,14 @@ where
     T::Value: State<S> + Clone,
     S: Read,
 {
+    #[cfg_attr(test, mutate)]
     pub fn iter(&'a mut self) -> Result<Iter<'a, T, S>> {
         Ok(Iter {
             map_iter: self.map.iter()?,
         })
     }
 
+    #[cfg_attr(test, mutate)]
     pub fn range<B: RangeBounds<T::Key>>(&'a mut self, range: B) -> Result<Iter<'a, T, S>> {
         Ok(Iter {
             map_iter: self.map.range(range)?,

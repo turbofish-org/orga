@@ -1,3 +1,6 @@
+#[cfg(test)]
+use mutagen::mutate;
+
 use crate::encoding::{Decode, Encode};
 use crate::{Error, Result};
 use std::cell::RefCell;
@@ -192,6 +195,7 @@ impl<T: Call, const N: usize> Call for [T; N] {
     }
 }
 
+#[cfg_attr(test, mutate)]
 pub fn maybe_call<T>(value: T, subcall: Vec<u8>) -> Result<()> {
     MaybeCallWrapper(value).maybe_call(subcall)
 }

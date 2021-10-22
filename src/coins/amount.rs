@@ -1,3 +1,6 @@
+#[cfg(test)]
+use mutagen::mutate;
+
 use super::Symbol;
 use crate::query::Query;
 use crate::state::State;
@@ -69,6 +72,7 @@ impl<S: Symbol> Eq for Amount<S> {}
 impl<S: Symbol> Copy for Amount<S> {}
 
 impl<S: Symbol> Amount<S> {
+    #[cfg_attr(test, mutate)]
     pub fn new(value: u64) -> Self {
         Amount {
             value,
@@ -76,14 +80,17 @@ impl<S: Symbol> Amount<S> {
         }
     }
 
+    #[cfg_attr(test, mutate)]
     pub fn zero() -> Self {
         Self::new(0)
     }
 
+    #[cfg_attr(test, mutate)]
     pub fn one() -> Self {
         Self::new(PRECISION)
     }
 
+    #[cfg_attr(test, mutate)]
     pub fn units(value: u64) -> Self {
         Amount {
             value: value * PRECISION,
