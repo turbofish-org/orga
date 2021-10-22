@@ -255,7 +255,19 @@ where
         let state = <ABCIProvider<A> as State>::create(store, data)?;
 
         // Check which keys are accessed by the query and build a proof
-        let query = Decode::decode(query_bytes.as_slice())?;
+        let query_decode_res = Decode::decode(query_bytes.as_slice());
+        let query = match query_decode_res {
+            Ok(query) => query,
+            Err(err) => {
+                return Ok(ResponseQuery {
+                    code: 1,
+                    height: store_height as i64,
+                    log: err.to_string(),
+                    ..Default::default()
+                });
+            }
+        };
+
         if let Err(err) = state.query(query) {
             return Ok(ResponseQuery {
                 code: 1,
