@@ -264,8 +264,11 @@ mod tests {
         });
 
         // Signed, correct nonce
-        state.call(nonced_call(0)).unwrap();
+        state.call(nonced_call(1)).unwrap();
         assert_eq!(state.inner.count, 2);
+
+        // Signed, but nonce incremented by too much
+        assert!(state.call(nonced_call(2000)).is_err());
 
         // Signed, incorrect nonce
         assert!(state.call(nonced_call(0)).is_err());
