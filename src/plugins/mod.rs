@@ -1,6 +1,3 @@
-mod context;
-pub use context::*;
-
 #[cfg(feature = "abci")]
 mod signer;
 #[cfg(feature = "abci")]

@@ -46,9 +46,11 @@ pub mod store;
 /// Tendermint process handler.
 pub mod tendermint;
 
-pub mod contexts;
+pub mod plugins;
 
 pub mod coins;
+
+pub mod context;
 
 mod error;
 
@@ -65,8 +67,9 @@ pub mod prelude {
     pub use crate::client::{AsyncCall, Client};
     pub use crate::coins::*;
     pub use crate::collections::*;
-    pub use crate::contexts::*;
+    pub use crate::context::*;
     pub use crate::encoding::*;
+    pub use crate::plugins::*;
     pub use crate::query::*;
     pub use crate::state::*;
     pub use crate::store::*;
