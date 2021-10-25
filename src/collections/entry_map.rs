@@ -428,4 +428,132 @@ mod test {
 
         assert!(result);
     }
+
+    #[derive(Entry, Debug, Eq, PartialEq)]
+    pub struct MultiKeyMapEntry {
+        #[key]
+        key_1: u32,
+        #[key]
+        key_2: u8,
+        #[key]
+        key_3: u16,
+        value: u32,
+    }
+
+    #[test]
+    fn insert_multi_key() {
+        let store = Store::new(MapStore::new());
+        let mut entry_map: EntryMap<MultiKeyMapEntry> = EntryMap::create(store, ()).unwrap();
+
+        let entry = MultiKeyMapEntry {
+            key_1: 42,
+            key_2: 12,
+            key_3: 9,
+            value: 84,
+        };
+
+        entry_map.insert(entry).unwrap();
+
+        assert!(entry_map
+            .contains(MultiKeyMapEntry {
+                key_1: 42,
+                key_2: 12,
+                key_3: 9,
+                value: 84
+            })
+            .unwrap());
+    }
+
+    #[test]
+    fn delete_multi_key() {
+        let store = Store::new(MapStore::new());
+        let mut entry_map: EntryMap<MultiKeyMapEntry> = EntryMap::create(store, ()).unwrap();
+
+        let entry = MultiKeyMapEntry {
+            key_1: 42,
+            key_2: 12,
+            key_3: 9,
+            value: 84,
+        };
+
+        entry_map.insert(entry).unwrap();
+        entry_map
+            .delete(MultiKeyMapEntry {
+                key_1: 42,
+                key_2: 12,
+                key_3: 9,
+                value: 84,
+            })
+            .unwrap();
+
+        assert!(!entry_map
+            .contains(MultiKeyMapEntry {
+                key_1: 42,
+                key_2: 12,
+                key_3: 9,
+                value: 84
+            })
+            .unwrap());
+    }
+
+    #[test]
+    fn iter_multi_key() {
+        let store = Store::new(MapStore::new());
+        let mut entry_map: EntryMap<MultiKeyMapEntry> = EntryMap::create(store, ()).unwrap();
+
+        entry_map
+            .insert(MultiKeyMapEntry {
+                key_1: 0,
+                key_2: 0,
+                key_3: 1,
+                value: 1,
+            })
+            .unwrap();
+        entry_map
+            .insert(MultiKeyMapEntry {
+                key_1: 1,
+                key_2: 0,
+                key_3: 1,
+                value: 9,
+            })
+            .unwrap();
+        entry_map
+            .insert(MultiKeyMapEntry {
+                key_1: 0,
+                key_2: 1,
+                key_3: 0,
+                value: 4,
+            })
+            .unwrap();
+
+        let actual: Vec<MultiKeyMapEntry> = vec![
+            MultiKeyMapEntry {
+                key_1: 0,
+                key_2: 0,
+                key_3: 1,
+                value: 1,
+            },
+            MultiKeyMapEntry {
+                key_1: 0,
+                key_2: 1,
+                key_3: 0,
+                value: 4,
+            },
+            MultiKeyMapEntry {
+                key_1: 1,
+                key_2: 0,
+                key_3: 1,
+                value: 9,
+            },
+        ];
+
+        let result: bool = entry_map
+            .iter()
+            .unwrap()
+            .zip(actual.iter())
+            .map(|(actual, expected)| *actual.unwrap() == *expected)
+            .fold(true, |accumulator, item| item & accumulator);
+
+        assert!(result);
+    }
 }
