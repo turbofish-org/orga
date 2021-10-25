@@ -19,7 +19,7 @@ async fn main() {
     {
         [_, "node"] => {
             tokio::task::spawn_blocking(|| {
-                Node::<SignerProvider<NonceProvider<SimpleCoin>>>::new("simple_coin")
+                Node::<SignerPlugin<NoncePlugin<SimpleCoin>>>::new("simple_coin")
                     .reset()
                     .run()
             })

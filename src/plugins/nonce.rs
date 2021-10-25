@@ -1,10 +1,10 @@
-use super::{GetContext, Signer};
+use super::{BeginBlockCtx, EndBlockCtx, InitChainCtx, Signer};
 use crate::abci::{BeginBlock, EndBlock, InitChain};
 use crate::call::Call;
 use crate::client::Client;
 use crate::coins::Address;
 use crate::collections::Map;
-use crate::contexts::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
+use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
 use crate::prelude::AsyncCall;
 use crate::query::Query;
@@ -13,13 +13,15 @@ use crate::{Error, Result};
 use std::ops::Deref;
 use std::path::PathBuf;
 
+const NONCE_INCREASE_LIMIT: u64 = 1000;
+
 #[derive(State, Encode, Decode)]
-pub struct NonceProvider<T: State> {
+pub struct NoncePlugin<T: State> {
     map: Map<Address, u64>,
     inner: T,
 }
 
-impl<T: State> Deref for NonceProvider<T> {
+impl<T: State> Deref for NoncePlugin<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -33,7 +35,7 @@ pub struct NonceCall<T> {
     inner_call: T,
 }
 
-impl<T> Call for NonceProvider<T>
+impl<T> Call for NoncePlugin<T>
 where
     T: Call + State,
 {
@@ -53,10 +55,18 @@ where
             // Happy paths:
             (Some(pub_key), Some(nonce)) => {
                 let mut expected_nonce = self.map.entry(pub_key)?.or_default()?;
-                if nonce != *expected_nonce {
+                if nonce <= *expected_nonce {
                     return Err(Error::Nonce("Nonce is not valid".into()));
                 }
-                *expected_nonce = nonce + 1;
+
+                if nonce - *expected_nonce > NONCE_INCREASE_LIMIT {
+                    return Err(Error::Nonce(format!(
+                        "Nonce increase is too large: {}",
+                        nonce - *expected_nonce
+                    )));
+                }
+
+                *expected_nonce = nonce;
                 self.inner.call(call.inner_call)
             }
             (None, None) => self.inner.call(call.inner_call),
@@ -70,7 +80,7 @@ where
     }
 }
 
-impl<T: Query + State> Query for NonceProvider<T> {
+impl<T: Query + State> Query for NoncePlugin<T> {
     type Query = T::Query;
 
     fn query(&self, query: Self::Query) -> Result<()> {
@@ -118,7 +128,7 @@ where
     }
 }
 
-impl<T: Client<NonceClient<T, U>> + State, U: Clone> Client<U> for NonceProvider<T> {
+impl<T: Client<NonceClient<T, U>> + State, U: Clone> Client<U> for NoncePlugin<T> {
     type Client = T::Client;
 
     fn create_client(parent: U) -> Self::Client {
@@ -157,7 +167,7 @@ fn write_nonce(nonce: u64) -> Result<()> {
 
 // TODO: Remove dependency on ABCI for this otherwise-pure plugin.
 
-impl<T> BeginBlock for NonceProvider<T>
+impl<T> BeginBlock for NoncePlugin<T>
 where
     T: BeginBlock + State,
 {
@@ -166,7 +176,7 @@ where
     }
 }
 
-impl<T> EndBlock for NonceProvider<T>
+impl<T> EndBlock for NoncePlugin<T>
 where
     T: EndBlock + State,
 {
@@ -175,7 +185,7 @@ where
     }
 }
 
-impl<T> InitChain for NonceProvider<T>
+impl<T> InitChain for NoncePlugin<T>
 where
     T: InitChain + State + Call,
 {
@@ -188,7 +198,7 @@ where
 mod tests {
     use super::super::Signer;
     use super::*;
-    use crate::contexts::Context;
+    use crate::context::Context;
     use crate::store::{MapStore, Shared, Store};
 
     #[derive(State)]
@@ -235,7 +245,7 @@ mod tests {
     fn nonced_calls() {
         let store = Shared::new(MapStore::new());
         let mut state =
-            NonceProvider::<Counter>::create(Store::new(store.into()), Default::default()).unwrap();
+            NoncePlugin::<Counter>::create(Store::new(store.into()), Default::default()).unwrap();
 
         // Fails if the signer context isn't available.
         assert!(state.call(unnonced_call()).is_err());
@@ -254,8 +264,11 @@ mod tests {
         });
 
         // Signed, correct nonce
-        state.call(nonced_call(0)).unwrap();
+        state.call(nonced_call(1)).unwrap();
         assert_eq!(state.inner.count, 2);
+
+        // Signed, but nonce incremented by too much
+        assert!(state.call(nonced_call(2000)).is_err());
 
         // Signed, incorrect nonce
         assert!(state.call(nonced_call(0)).is_err());

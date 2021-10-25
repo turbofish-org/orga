@@ -2,15 +2,15 @@ name: CI
 
 on:
   push:
-    branches: [ develop ]
+    branches: [ master, develop ]
   pull_request:
-    branches: [ develop ]
+    branches: [ master, develop ]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  Build:
+  build-base:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
@@ -25,8 +25,9 @@ jobs:
       with:
           command: build
           args: --verbose
-          
-  Test:
+
+
+  build-all-features:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
@@ -36,14 +37,45 @@ jobs:
       with:
           toolchain: nightly
           override: true
-          args: --all-features
+    - name: Build
+      uses: actions-rs/cargo@v1
+      with:
+          command: build
+          args: --verbose --all-features
+
+  test-base:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Use Nightly
+      uses: actions-rs/toolchain@v1
+      with:
+          toolchain: nightly
+          override: true
     - name: Test
       uses: actions-rs/cargo@v1
       with:
           command: test
           args: --verbose
       
-  Coverage:
+  test-all-features:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Use Nightly
+      uses: actions-rs/toolchain@v1
+      with:
+          toolchain: nightly
+          override: true
+    - name: Test
+      uses: actions-rs/cargo@v1
+      with:
+          command: test
+          args: --verbose --all-features
+
+  coverage:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
@@ -66,9 +98,9 @@ jobs:
     - name: Upload to codecov.io
       uses: codecov/codecov-action@v1
       with:
-          fail_ci_if_error: true
+          fail_ci_if_error: true  
 
-  Format:
+  format:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
@@ -85,8 +117,8 @@ jobs:
           command: fmt
           args: --all -- --check
 
-  Clippy:
-    runs-on: ubuntu-latest
+  clippy:
+    runs-on: ubuntu-latest 
     steps:
     - name: Checkout
       uses: actions/checkout@v2
@@ -96,7 +128,7 @@ jobs:
           toolchain: nightly
           components: clippy
           override: true
-    - name: Check
+    - name: Check 
       uses: actions-rs/clippy-check@v1
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
