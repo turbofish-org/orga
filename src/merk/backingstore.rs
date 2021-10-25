@@ -1,3 +1,6 @@
+#[cfg(test)]
+use mutagen::mutate;
+
 use super::{MerkStore, ProofBuilder};
 use crate::store::{BufStore, MapStore, Read, Shared, Write, KV};
 use crate::{Error, Result};
@@ -61,6 +64,7 @@ impl Write for BackingStore {
 }
 
 impl BackingStore {
+    #[cfg_attr(test, mutate)]
     pub fn into_proof_builder(self) -> Result<ProofBuilder> {
         match self {
             BackingStore::ProofBuilder(builder) => Ok(builder),
@@ -70,6 +74,7 @@ impl BackingStore {
         }
     }
 
+    #[cfg_attr(test, mutate)]
     pub fn into_wrapped_merk(self) -> Result<WrappedMerkStore> {
         match self {
             BackingStore::WrappedMerk(store) => Ok(store),
@@ -79,6 +84,7 @@ impl BackingStore {
         }
     }
 
+    #[cfg_attr(test, mutate)]
     pub fn into_map_store(self) -> Result<Shared<MapStore>> {
         match self {
             BackingStore::MapStore(store) => Ok(store),
@@ -88,6 +94,7 @@ impl BackingStore {
         }
     }
 
+    #[cfg_attr(test, mutate)]
     pub fn into_abci_prefixed_proof_map(self) -> Result<Shared<ABCIPrefixedProofStore>> {
         match self {
             BackingStore::ProofMap(store) => Ok(store),
@@ -141,6 +148,7 @@ impl Read for ProofStore {
 pub struct ABCIPrefixedProofStore(pub ProofStore);
 
 impl ABCIPrefixedProofStore {
+    #[cfg_attr(test, mutate)]
     pub fn new(map: ProofMap) -> Self {
         ABCIPrefixedProofStore(ProofStore(map))
     }

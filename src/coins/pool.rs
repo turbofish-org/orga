@@ -1,3 +1,6 @@
+#[cfg(test)]
+use mutagen::mutate;
+
 use super::{Adjust, Amount, Balance, Give, Symbol, Take};
 use crate::collections::map::{ChildMut as MapChildMut, Ref as MapRef};
 use crate::collections::{Map, Next};
@@ -77,6 +80,7 @@ where
     V: State + Adjust<S> + Balance<S>,
     V::Encoding: Default,
 {
+    #[cfg_attr(test, mutate)]
     pub fn get_mut(&mut self, key: K) -> Result<ChildMut<K, V, S>> {
         let mut child = self.map.entry(key)?.or_default()?;
         let mut entry = child.get_mut();
@@ -99,6 +103,7 @@ where
         })
     }
 
+    #[cfg_attr(test, mutate)]
     pub fn get(&self, key: K) -> Result<Child<V, S>> {
         let entry = self.map.get(key)?.unwrap();
         Child::new(entry, self.multiplier)
@@ -114,6 +119,7 @@ where
     V: State + Adjust<S> + Balance<S>,
     V::Encoding: Default,
 {
+    #[cfg_attr(test, mutate)]
     pub fn range<B>(&self, bounds: B) -> Result<impl Iterator<Item = IterEntry<K, V, S>>>
     where
         B: RangeBounds<K>,
@@ -125,6 +131,7 @@ where
         }))
     }
 
+    #[cfg_attr(test, mutate)]
     pub fn iter(&self) -> Result<impl Iterator<Item = IterEntry<K, V, S>>> {
         self.range(..)
     }
@@ -258,6 +265,7 @@ mod child {
         V: State + Balance<S> + Adjust<S>,
         V::Encoding: Default,
     {
+        #[cfg_attr(test, mutate)]
         pub fn new(
             entry_ref: MapRef<'a, UnsafeCell<Entry<V, S>>>,
             current_multiplier: Amount<S>,

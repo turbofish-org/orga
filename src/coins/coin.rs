@@ -1,3 +1,6 @@
+#[cfg(test)]
+use mutagen::mutate;
+
 use super::{Adjust, Amount, Balance, Give, Symbol, Take};
 use crate::state::State;
 use crate::Result;
@@ -17,10 +20,12 @@ impl<S: Symbol> Default for Coin<S> {
 }
 
 impl<S: Symbol> Coin<S> {
+    #[cfg_attr(test, mutate)]
     pub fn new() -> Self {
         Coin { amount: 0.into() }
     }
 
+    #[cfg_attr(test, mutate)]
     pub fn mint<A>(amount: A) -> Self
     where
         A: Into<Amount<S>>,
@@ -30,10 +35,12 @@ impl<S: Symbol> Coin<S> {
         }
     }
 
+    #[cfg_attr(test, mutate)]
     pub fn transfer<G: Give<S>>(self, dest: &mut G) -> Result<()> {
         dest.add(self.amount)
     }
 
+    #[cfg_attr(test, mutate)]
     pub fn burn(self) {}
 }
 

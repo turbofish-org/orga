@@ -1,3 +1,6 @@
+#[cfg(test)]
+use mutagen::mutate;
+
 use std::cmp::Ordering;
 use std::collections::btree_map::Entry::{Occupied, Vacant};
 use std::collections::{btree_map, BTreeMap};
@@ -153,6 +156,7 @@ impl<K: Clone, V: Call, U: Clone> Client<K, V, U>
 where
     V: ClientTrait<Self>,
 {
+    #[cfg_attr(test, mutate)]
     pub fn get_mut(&mut self, key: K) -> V::Client {
         let mut adapter = self.clone();
         adapter.key = Some(key);
@@ -198,6 +202,7 @@ where
     S: Read,
 {
     #[query]
+    #[cfg_attr(test, mutate)]
     pub fn contains_key(&self, key: K) -> Result<bool> {
         let map_key = MapKey::<K>::new(key)?;
         let child_contains = self.children.contains_key(&map_key);
@@ -230,6 +235,7 @@ where
             .transpose()
     }
 
+    #[cfg_attr(test, mutate)]
     pub fn insert(&mut self, key: K, value: V::Encoding) -> Result<()> {
         let map_key = MapKey::<K>::new(key)?;
 
@@ -247,6 +253,7 @@ where
     /// the value was inserted, modified, or deleted since the last time the map
     /// was flushed.
     #[query]
+    #[cfg_attr(test, mutate)]
     pub fn get(&self, key: K) -> Result<Option<Ref<V>>> {
         let map_key = MapKey::<K>::new(key)?;
         Ok(if self.children.contains_key(&map_key) {
@@ -270,6 +277,7 @@ where
     S: Read,
     D: Default,
 {
+    #[cfg_attr(test, mutate)]
     pub fn get_or_default(&self, key: K) -> Result<Ref<V>> {
         let key_bytes = key.encode()?;
         let maybe_value = self.get(key)?;
@@ -302,11 +310,13 @@ where
     /// the value was inserted, modified, or deleted since the last time the map
     /// was flushed.
     #[call]
+    #[cfg_attr(test, mutate)]
     pub fn get_mut(&mut self, key: K) -> Result<Option<ChildMut<K, V, S>>> {
         Ok(self.entry(key)?.into())
     }
 
     /// Returns a mutable reference to the key/value entry for the given key.
+    #[cfg_attr(test, mutate)]
     pub fn entry(&mut self, key: K) -> Result<Entry<K, V, S>> {
         let map_key = MapKey::<K>::new(key)?;
         Ok(if self.children.contains_key(&map_key) {
@@ -334,6 +344,7 @@ where
     }
 
     /// Removes the value at the given key, if any.
+    #[cfg_attr(test, mutate)]
     pub fn remove(&mut self, key: K) -> Result<Option<ReadOnly<V>>> {
         let map_key = MapKey::<K>::new(key)?;
         if self.children.contains_key(&map_key) {
@@ -358,10 +369,12 @@ where
     V: State<S>,
     S: Read,
 {
+    #[cfg_attr(test, mutate)]
     pub fn iter(&'a self) -> Result<Iter<'a, K, V, S>> {
         self.range(..)
     }
 
+    #[cfg_attr(test, mutate)]
     pub fn range<B: RangeBounds<K>>(&'a self, range: B) -> Result<Iter<'a, K, V, S>> {
         let map_start = range
             .start_bound()
@@ -747,6 +760,7 @@ where
 {
     /// Removes the value and all of its child key/value entries (if any) from
     /// the parent collection.
+    #[cfg_attr(test, mutate)]
     pub fn remove(self) -> Result<()> {
         match self {
             ChildMut::Unmodified(mut inner) => {
@@ -851,6 +865,7 @@ where
     /// store during the flush step unless the value gets modified. See
     /// `or_insert` for a variation which will always write the newly created
     /// value.
+    #[cfg_attr(test, mutate)]
     pub fn or_create(self, data: V::Encoding) -> Result<ChildMut<'a, K, V, S>> {
         Ok(match self {
             Entry::Vacant { key, parent } => {
@@ -871,6 +886,7 @@ where
     /// store during the flush step even if the value never gets modified. See
     /// `or_create` for a variation which will only write the newly created
     /// value if it gets modified.
+    #[cfg_attr(test, mutate)]
     pub fn or_insert(self, data: V::Encoding) -> Result<ChildMut<'a, K, V, S>> {
         let mut child = self.or_create(data)?;
         child.deref_mut();
@@ -887,6 +903,7 @@ where
     /// Removes the value for the `Entry` if it exists. Returns a boolean which
     /// is `true` if a value previously existed for the entry, `false`
     /// otherwise.
+    #[cfg_attr(test, mutate)]
     pub fn remove(self) -> Result<bool> {
         Ok(match self {
             Entry::Occupied { child } => {
@@ -913,6 +930,7 @@ where
     /// store during the flush step unless the value gets modified. See
     /// `or_insert_default` for a variation which will always write the newly
     /// created value.
+    #[cfg_attr(test, mutate)]
     pub fn or_default(self) -> Result<ChildMut<'a, K, V, S>> {
         self.or_create(D::default())
     }
@@ -925,6 +943,7 @@ where
     /// store during the flush step even if the value never gets modified. See
     /// `or_default` for a variation which will only write the newly created
     /// value if it gets modified.
+    #[cfg_attr(test, mutate)]
     pub fn or_insert_default(self) -> Result<ChildMut<'a, K, V, S>> {
         self.or_insert(D::default())
     }

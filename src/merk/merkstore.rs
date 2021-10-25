@@ -1,3 +1,6 @@
+#[cfg(test)]
+use mutagen::mutate;
+
 use crate::abci::ABCIStore;
 use crate::error::{Error, Result};
 use crate::store::*;
@@ -58,6 +61,7 @@ impl MerkStore {
     /// [`Merk`](https://docs.rs/merk/latest/merk/struct.Merk.html) inside the
     /// `merk_home` directory. Initializes a new Merk instance if the directory
     /// is empty
+    #[cfg_attr(test, mutate)]
     pub fn new(home: PathBuf) -> Self {
         let merk = Merk::open(&home.join("db")).unwrap();
 
