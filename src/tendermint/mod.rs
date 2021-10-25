@@ -29,6 +29,8 @@ static TENDERMINT_ZIP_HASH: [u8; 32] =
 static TENDERMINT_ZIP_HASH: [u8; 32] =
     hex!("01a076d3297a5381587a77621b7f45dca7acb7fc21ce2e29ca327ccdaee41757");
 
+const TENDERMINT_BINARY_NAME: &str = "tendermint-v0.34.11";
+
 fn verify_hash(tendermint_bytes: &[u8]) {
     let mut hasher = Sha256::new();
     hasher.update(tendermint_bytes);
@@ -100,7 +102,7 @@ impl ProcessHandler {
 pub struct Tendermint {
     process: ProcessHandler,
     home: PathBuf,
-    genesis_path: Option<PathBuf>,
+    genesis_bytes: Option<Vec<u8>>,
     config_contents: Option<toml_edit::Document>,
 }
 
@@ -114,19 +116,20 @@ impl Tendermint {
     pub fn new<T: Into<PathBuf> + Clone>(home_path: T) -> Tendermint {
         let path: PathBuf = home_path.clone().into();
         if !path.exists() {
-            fs::create_dir(path).expect("Failed to create Tendermint home directory");
+            fs::create_dir(path.clone()).expect("Failed to create Tendermint home directory");
         }
+        let tm_bin_path = path.join(TENDERMINT_BINARY_NAME);
         let tendermint = Tendermint {
-            process: ProcessHandler::new("tendermint"),
+            process: ProcessHandler::new(tm_bin_path.to_str().unwrap()),
             home: home_path.clone().into(),
-            genesis_path: None,
+            genesis_bytes: None,
             config_contents: None,
         };
         tendermint.home(home_path.into())
     }
 
     fn install(&self) {
-        let tendermint_path = self.home.join("tendermint-v0.34.11");
+        let tendermint_path = self.home.join(TENDERMINT_BINARY_NAME);
 
         if tendermint_path.is_executable() {
             info!("Tendermint already installed");
@@ -334,38 +337,21 @@ impl Tendermint {
     }
 
     fn apply_genesis(&self) {
-        let path = match &self.genesis_path {
-            Some(inner) => inner,
+        let genesis_bytes = match &self.genesis_bytes {
+            Some(inner) => inner.clone(),
             None => {
                 return;
             }
         };
-        let file_name = path.file_name().unwrap();
-        assert!(
-            !(file_name != "genesis.json"),
-            "Provided file is not a genesis.json"
-        );
 
-        Command::new("cp")
-            .arg(path.clone())
-            .arg(self.home.join("config").join(file_name))
-            .spawn()
-            .expect("Failed to spawn genesis.json copy process.")
-            .wait()
-            .expect("genesis.json copy process failed.");
+        let target_path = self.home.join("config").join("genesis.json");
+        let mut genesis_file = fs::File::create(target_path).unwrap();
+        genesis_file.write_all(genesis_bytes.as_slice()).unwrap();
     }
 
-    /// Copies the contents of the file at passed path to the genesis.json
-    /// file located in the config directory of the tendermint home
-    ///
-    /// Compatible Commands:
-    ///     start
-    ///     init
-    ///
-    /// Note: This copy happens upon calling a terminating method in order to
-    /// ensure file copy is not overwritten by called tendermint process
-    pub fn with_genesis(mut self, path: PathBuf) -> Self {
-        self.genesis_path = Some(path);
+    pub fn with_genesis(mut self, genesis_bytes: Vec<u8>) -> Self {
+        self.genesis_bytes.replace(genesis_bytes);
+
         self
     }
 
@@ -575,7 +561,7 @@ mod tests {
         let expected: HashSet<String> = HashSet::from([
             "config".to_string(),
             "data".to_string(),
-            "tendermint-v0.34.11".to_string(),
+            TENDERMINT_BINARY_NAME.to_string(),
         ]);
 
         assert_eq!(file_set, expected);
