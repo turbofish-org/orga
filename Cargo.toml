@@ -1,6 +1,6 @@
 [package]
 name = "orga"
-version = "0.1.10"
+version = "0.2.0"
 authors = ["Matt Bell <mappum@gmail.com>"]
 edition = "2018"
 description = "State machine engine"
