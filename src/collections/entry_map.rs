@@ -463,4 +463,36 @@ mod test {
             })
             .unwrap());
     }
+
+    #[test]
+    fn delete_multi_key() {
+        let store = Store::new(MapStore::new());
+        let mut entry_map: EntryMap<MultiKeyMapEntry> = EntryMap::create(store, ()).unwrap();
+
+        let entry = MultiKeyMapEntry {
+            key_1: 42,
+            key_2: 12,
+            key_3: 9,
+            value: 84,
+        };
+
+        entry_map.insert(entry).unwrap();
+        entry_map
+            .delete(MultiKeyMapEntry {
+                key_1: 42,
+                key_2: 12,
+                key_3: 9,
+                value: 84,
+            })
+            .unwrap();
+
+        assert!(!entry_map
+            .contains(MultiKeyMapEntry {
+                key_1: 42,
+                key_2: 12,
+                key_3: 9,
+                value: 84
+            })
+            .unwrap());
+    }
 }
