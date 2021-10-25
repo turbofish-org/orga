@@ -260,6 +260,23 @@ impl Tendermint {
         self
     }
 
+    /// ABCI listen address, or one of: 'kvstore', 'persistent_kvstore',
+    /// 'counter', 'counter_serial' or 'noop' for local testing.
+    /// Port required
+    /// Default "tcp://127.0.0.1:26658"
+    /// Sets the --proxy_app argument
+    ///
+    /// Compatible Commands:
+    ///     start
+    ///
+    /// Note: Using this configuration command with incompatible terminating
+    /// methods will cause the tendermint process to fail
+    pub fn proxy_app(mut self, addr: &str) -> Self {
+        self.process.set_arg("--proxy_app");
+        self.process.set_arg(addr);
+        self
+    }
+
     /// Stdout target
     ///
     /// # Examples

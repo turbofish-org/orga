@@ -63,6 +63,7 @@ where
     pub fn run(self) {
         // Start tendermint process
         let tm_home = self.tm_home.clone();
+        let abci_port = self.abci_port;
         let p2p_port = self.p2p_port;
         let rpc_port = self.rpc_port;
         let stdout = self.stdout;
@@ -73,6 +74,7 @@ where
             let mut tm_process = Tendermint::new(&tm_home)
                 .stdout(stdout)
                 .stderr(stderr)
+                .proxy_app(format!("tcp://0.0.0.0:{}", abci_port).as_str())
                 .p2p_laddr(format!("tcp://0.0.0.0:{}", p2p_port).as_str())
                 .rpc_laddr(format!("tcp://0.0.0.0:{}", rpc_port).as_str()); // Note: public by default
 
