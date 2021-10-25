@@ -1,8 +1,8 @@
 // use orga::client::Client;
 use orga::client::Client;
 use orga::coins::*;
-use orga::contexts::load_keypair;
 use orga::encoding::{Decode, Encode};
+use orga::plugins::load_keypair;
 use orga::prelude::*;
 use orga::{Error, Result};
 

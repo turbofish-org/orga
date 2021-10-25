@@ -2,7 +2,7 @@
 use mutagen::mutate;
 
 use super::{Read, Shared, Write, KV};
-use crate::Result;
+use crate::{Error, Result};
 
 // TODO: figure out how to let users set DefaultBackingStore, similar to setting
 // the global allocator in the standard library
@@ -82,6 +82,16 @@ impl<S: Read> Read for Store<S> {
 impl<S: Write> Write for Store<S> {
     #[inline]
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
+        // merk has a hard limit of 256 bytes for keys, but it does not create
+        // an error until comitting. we assert the key length here so that
+        // writes will fail early rather than making the entire block fail. this
+        // assertion can be removed if the merk key length limit is removed, or
+        // if we instead check this statically using known encoding lengths via
+        // ed.
+        if key.len() + self.prefix.len() >= 256 {
+            return Err(Error::Store("Store keys must be < 256 bytes".into()));
+        }
+
         let prefixed = concat(self.prefix.as_slice(), key.as_slice());
         self.store.put(prefixed, value)
     }

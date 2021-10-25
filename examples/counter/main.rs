@@ -9,7 +9,7 @@ use multicounter::*;
 use orga::prelude::*;
 use tokio::task::spawn_blocking;
 
-pub type CounterApp = SignerProvider<NonceProvider<MultiCounter>>;
+pub type CounterApp = SignerPlugin<NoncePlugin<MultiCounter>>;
 
 type CounterQuery = counter_query::Query;
 type MultiCounterQuery = multi_counter_query::Query;

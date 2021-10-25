@@ -34,6 +34,8 @@ pub enum Error {
     Nonce(String),
     #[error("Overflow Error")]
     Overflow,
+    #[error("Parse Int Error: {0}")]
+    ParseInt(#[from] std::num::ParseIntError),
     #[error("Tendermint Error: {0}")]
     Tendermint(String),
     #[cfg(feature = "abci")]
