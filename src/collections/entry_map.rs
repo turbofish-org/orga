@@ -428,4 +428,39 @@ mod test {
 
         assert!(result);
     }
+
+    #[derive(Entry, Debug, Eq, PartialEq)]
+    pub struct MultiKeyMapEntry {
+        #[key]
+        key_1: u32,
+        #[key]
+        key_2: u8,
+        #[key]
+        key_3: u16,
+        value: u32,
+    }
+
+    #[test]
+    fn insert_multi_key() {
+        let store = Store::new(MapStore::new());
+        let mut entry_map: EntryMap<MultiKeyMapEntry> = EntryMap::create(store, ()).unwrap();
+
+        let entry = MultiKeyMapEntry {
+            key_1: 42,
+            key_2: 12,
+            key_3: 9,
+            value: 84,
+        };
+
+        entry_map.insert(entry).unwrap();
+
+        assert!(entry_map
+            .contains(MultiKeyMapEntry {
+                key_1: 42,
+                key_2: 12,
+                key_3: 9,
+                value: 84
+            })
+            .unwrap());
+    }
 }
