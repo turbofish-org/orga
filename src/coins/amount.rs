@@ -136,7 +136,7 @@ impl<S: Symbol, I: Into<Self>> Mul<I> for Amount<S> {
         let value: u128 = value * other.value as u128;
         let value: u128 = value / PRECISION as u128;
         if value > u64::MAX.into() {
-            return Err(Error::Overflow);
+            Err(Error::Overflow)
         } else {
             Ok(Amount::new(value as u64))
         }
