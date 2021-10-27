@@ -7,6 +7,8 @@
 #![allow(incomplete_features)]
 #![feature(specialization)]
 #![feature(generic_associated_types)]
+#![feature(try_trait_v2)]
+#![feature(never_type)]
 
 extern crate self as orga;
 

@@ -24,13 +24,18 @@ pub use adjust::*;
 pub mod balance;
 pub use balance::*;
 
+pub mod ratio;
+pub use ratio::*;
+
+pub mod math;
+pub use math::*;
+
 use bech32::{self, encode_to_fmt, FromBase32, ToBase32, Variant};
 
 use crate::collections::Next;
 use crate::macros::State;
 use crate::query::Query;
 use ed::{Decode, Encode};
-
 #[derive(
     Encode, Decode, State, Next, Query, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Copy,
 )]

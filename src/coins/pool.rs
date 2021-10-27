@@ -1,6 +1,7 @@
 #[cfg(test)]
 use mutagen::mutate;
 
+use super::Ratio;
 use super::{Adjust, Amount, Balance, Give, Symbol, Take};
 use crate::collections::map::{ChildMut as MapChildMut, Ref as MapRef};
 use crate::collections::{Map, Next};
@@ -19,33 +20,35 @@ where
     V: State,
     S: Symbol,
 {
-    multiplier: Amount<S>,
-    total: Amount<S>,
+    multiplier: Ratio,
+    total: Amount,
+    symbol: PhantomData<S>,
     map: Map<K, UnsafeCell<Entry<V, S>>>,
 }
 
-impl<K, V, S> Balance<S> for Pool<K, V, S>
+impl<K, V, S> Balance for Pool<K, V, S>
 where
     K: Terminated + Encode,
     V: State,
     S: Symbol,
 {
-    fn balance(&self) -> Amount<S> {
+    fn balance(&self) -> Amount {
         self.total
     }
 }
 
-impl<K, V, S> Adjust<S> for Pool<K, V, S>
+impl<K, V, S> Adjust for Pool<K, V, S>
 where
     K: Terminated + Encode,
     V: State,
     S: Symbol,
 {
-    fn adjust(&mut self, multiplier: Amount<S>) -> Result<()> {
-        self.multiplier = (self.multiplier * multiplier)?;
-        self.total = (self.total * multiplier)?;
+    fn adjust(&mut self, multiplier: Ratio) -> Result<()> {
+        todo!();
+        // self.multiplier = self.multiplier * multiplier;
+        // self.total = (self.total * multiplier)?;
 
-        Ok(())
+        // Ok(())
     }
 }
 
@@ -55,7 +58,8 @@ where
     T: State,
     S: Symbol,
 {
-    last_multiplier: Amount<S>,
+    last_multiplier: Ratio,
+    symbol: PhantomData<S>,
     inner: T,
 }
 
@@ -77,36 +81,38 @@ impl<K, V, S> Pool<K, V, S>
 where
     S: Symbol,
     K: Encode + Terminated + Clone,
-    V: State + Adjust<S> + Balance<S>,
+    V: State + Adjust + Balance,
     V::Encoding: Default,
 {
     #[cfg_attr(test, mutate)]
     pub fn get_mut(&mut self, key: K) -> Result<ChildMut<K, V, S>> {
-        let mut child = self.map.entry(key)?.or_default()?;
-        let mut entry = child.get_mut();
-        if entry.last_multiplier == Amount::zero() {
-            entry.last_multiplier = self.multiplier;
-        }
+        todo!();
+        // let mut child = self.map.entry(key)?.or_default()?;
+        // let mut entry = child.get_mut();
+        // if *entry.last_multiplier.numer() == 0 {
+        //     entry.last_multiplier = self.multiplier;
+        // }
 
-        if entry.last_multiplier != self.multiplier {
-            let adjustment = (self.multiplier / entry.last_multiplier)?;
-            entry.inner.adjust(adjustment)?;
-            entry.last_multiplier = self.multiplier;
-        }
-        let initial_balance = entry.inner.balance();
+        // if entry.last_multiplier != self.multiplier {
+        //     let adjustment = self.multiplier / entry.last_multiplier;
+        //     entry.inner.adjust(adjustment)?;
+        //     entry.last_multiplier = self.multiplier;
+        // }
+        // let initial_balance = entry.inner.balance();
 
-        Ok(ChildMut {
-            parent_total: &mut self.total,
-            entry: child,
-            initial_balance,
-            _symbol: PhantomData,
-        })
+        // Ok(ChildMut {
+        //     parent_total: &mut self.total,
+        //     entry: child,
+        //     initial_balance,
+        //     _symbol: PhantomData,
+        // })
     }
 
     #[cfg_attr(test, mutate)]
     pub fn get(&self, key: K) -> Result<Child<V, S>> {
-        let entry = self.map.get(key)?.unwrap();
-        Child::new(entry, self.multiplier)
+        todo!();
+        // let entry = self.map.get(key)?.unwrap();
+        // Child::new(entry, self.multiplier)
     }
 }
 
@@ -116,25 +122,26 @@ impl<K, V, S> Pool<K, V, S>
 where
     S: Symbol,
     K: Encode + Decode + Terminated + Clone + Next,
-    V: State + Adjust<S> + Balance<S>,
+    V: State + Adjust + Balance,
     V::Encoding: Default,
 {
-    #[cfg_attr(test, mutate)]
-    pub fn range<B>(&self, bounds: B) -> Result<impl Iterator<Item = IterEntry<K, V, S>>>
-    where
-        B: RangeBounds<K>,
-    {
-        Ok(self.map.range(bounds)?.map(move |entry| {
-            let entry = entry?;
-            let child = Child::new(entry.1, self.multiplier)?;
-            Ok((entry.0, child))
-        }))
-    }
+    // #[cfg_attr(test, mutate)]
+    // pub fn range<B>(&self, bounds: B) -> Result<impl Iterator<Item = IterEntry<K, V, S>>>
+    // where
+    //     B: RangeBounds<K>,
+    // {
+    //     todo!()
+    //     // Ok(self.map.range(bounds)?.map(move |entry| {
+    //     //     let entry = entry?;
+    //     //     let child = Child::new(entry.1, self.multiplier)?;
+    //     //     Ok((entry.0, child))
+    //     // }))
+    // }
 
-    #[cfg_attr(test, mutate)]
-    pub fn iter(&self) -> Result<impl Iterator<Item = IterEntry<K, V, S>>> {
-        self.range(..)
-    }
+    // #[cfg_attr(test, mutate)]
+    // pub fn iter(&self) -> Result<impl Iterator<Item = IterEntry<K, V, S>>> {
+    //     self.range(..)
+    // }
 }
 
 impl<K, V, S> Give<S> for Pool<K, V, S>
@@ -143,17 +150,18 @@ where
     K: Encode + Terminated,
     V: State,
 {
-    fn add<A: Into<Amount<S>>>(&mut self, amount: A) -> Result<()> {
-        let amount: Amount<S> = amount.into();
+    fn add<A: Into<Amount>>(&mut self, amount: A) -> Result<()> {
+        todo!();
+        // let amount: Amount<S> = amount.into();
 
-        if self.total > 0.into() {
-            let increase = Amount::one() + (amount / self.total)?;
-            self.multiplier = (self.multiplier * increase)?;
-        } else {
-            self.multiplier = Amount::one();
-        }
+        // if self.total > 0.into() {
+        //     let increase = Amount::one() + (amount / self.total)?;
+        //     self.multiplier = (self.multiplier * increase)?;
+        // } else {
+        //     self.multiplier = Amount::one();
+        // }
 
-        self.total += amount;
+        // self.total += amount;
 
         Ok(())
     }
@@ -167,12 +175,13 @@ where
 {
     fn deduct<A>(&mut self, amount: A) -> Result<()>
     where
-        A: Into<Amount<S>>,
+        A: Into<Amount>,
     {
-        let amount = amount.into();
-        let decrease = (Amount::one() - (amount / self.total)?)?;
-        self.total = (self.total - amount)?;
-        self.multiplier = (self.multiplier * decrease)?;
+        todo!();
+        // let amount = amount.into();
+        // let decrease = amount / self.total;
+        // self.total = (self.total - amount)?;
+        // self.multiplier = (self.multiplier * decrease)?;
 
         Ok(())
     }
@@ -182,12 +191,12 @@ pub struct ChildMut<'a, K, V, S>
 where
     S: Symbol,
     K: Encode + Clone,
-    V: State + Balance<S> + Adjust<S>,
+    V: State + Balance + Adjust,
     V::Encoding: Default,
 {
-    parent_total: &'a mut Amount<S>,
+    parent_total: &'a mut Amount,
     entry: MapChildMut<'a, K, UnsafeCell<Entry<V, S>>>,
-    initial_balance: Amount<S>,
+    initial_balance: Amount,
     _symbol: PhantomData<S>,
 }
 
@@ -195,14 +204,14 @@ impl<'a, K, V, S> Drop for ChildMut<'a, K, V, S>
 where
     S: Symbol,
     K: Encode + Clone,
-    V: State + Balance<S> + Adjust<S>,
+    V: State + Balance + Adjust,
     V::Encoding: Default,
 {
     fn drop(&mut self) {
         use std::cmp::Ordering::*;
         let start_balance = self.initial_balance;
         let end_balance = self.entry.get_mut().balance();
-        match end_balance.value.cmp(&start_balance.value) {
+        match end_balance.cmp(&start_balance) {
             Greater => {
                 *self.parent_total += (end_balance - start_balance).expect("Overflow");
             }
@@ -221,7 +230,7 @@ impl<'a, K, V, S> Deref for ChildMut<'a, K, V, S>
 where
     S: Symbol,
     K: Encode + Clone,
-    V: State + Balance<S> + Adjust<S>,
+    V: State + Balance + Adjust,
     V::Encoding: Default,
 {
     type Target = V;
@@ -236,7 +245,7 @@ impl<'a, K, V, S> DerefMut for ChildMut<'a, K, V, S>
 where
     S: Symbol,
     K: Encode + Clone,
-    V: State + Balance<S> + Adjust<S>,
+    V: State + Balance + Adjust,
     V::Encoding: Default,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
@@ -252,7 +261,7 @@ mod child {
     pub struct Child<'a, V, S>
     where
         S: Symbol,
-        V: State + Balance<S> + Adjust<S>,
+        V: State + Balance + Adjust,
         V::Encoding: Default,
     {
         entry: MapRef<'a, UnsafeCell<Entry<V, S>>>,
@@ -262,37 +271,34 @@ mod child {
     impl<'a, V, S> Child<'a, V, S>
     where
         S: Symbol,
-        V: State + Balance<S> + Adjust<S>,
+        V: State + Balance + Adjust,
         V::Encoding: Default,
     {
         #[cfg_attr(test, mutate)]
         pub fn new(
             entry_ref: MapRef<'a, UnsafeCell<Entry<V, S>>>,
-            current_multiplier: Amount<S>,
+            current_multiplier: Ratio,
         ) -> Result<Self> {
-            let mut entry = unsafe { &mut *entry_ref.get() };
+            todo!()
+            // let mut entry = unsafe { &mut *entry_ref.get() };
 
-            if entry.last_multiplier == Amount::zero() {
-                entry.last_multiplier = current_multiplier;
-            }
+            // if entry.last_multiplier != current_multiplier {
+            //     let adjustment = current_multiplier / entry.last_multiplier;
+            //     entry.inner.adjust(adjustment)?;
+            //     entry.last_multiplier = current_multiplier;
+            // }
 
-            if entry.last_multiplier != current_multiplier {
-                let adjustment = (current_multiplier / entry.last_multiplier)?;
-                entry.inner.adjust(adjustment)?;
-                entry.last_multiplier = current_multiplier;
-            }
-
-            Ok(Child {
-                entry: entry_ref,
-                _symbol: PhantomData,
-            })
+            // Ok(Child {
+            //     entry: entry_ref,
+            //     _symbol: PhantomData,
+            // })
         }
     }
 
     impl<'a, V, S> Deref for Child<'a, V, S>
     where
         S: Symbol,
-        V: State + Balance<S> + Adjust<S>,
+        V: State + Balance + Adjust,
         V::Encoding: Default,
     {
         type Target = V;
@@ -330,68 +336,68 @@ mod tests {
 
     #[test]
     fn simple_pool() -> Result<()> {
-        let store = Store::new(Shared::new(MapStore::new()).into());
-        let enc = (Amount::one().into(), Amount::zero().into(), ());
-        let mut pool = Pool::<Address, Coin<Simp>, Simp>::create(store, enc)?;
+        // let store = Store::new(Shared::new(MapStore::new()).into());
+        // let enc = (Amount::one().into(), Amount::zero().into(), ());
+        // let mut pool = Pool::<Address, Coin<Simp>, Simp>::create(store, enc)?;
 
-        let alice = [0; 32].into();
-        let bob = [1; 32].into();
+        // let alice = [0; 32].into();
+        // let bob = [1; 32].into();
 
-        {
-            let mut alice_child = pool.get_mut(alice)?;
-            alice_child.add(10)?;
-        }
+        // {
+        //     let mut alice_child = pool.get_mut(alice)?;
+        //     alice_child.add(10)?;
+        // }
 
-        assert_eq!(pool.balance().value, 10);
+        // assert_eq!(pool.balance().value, 10);
 
-        {
-            let mut bob_child = pool.get_mut(bob)?;
-            bob_child.add(2)?;
-        }
+        // {
+        //     let mut bob_child = pool.get_mut(bob)?;
+        //     bob_child.add(2)?;
+        // }
 
-        assert_eq!(pool.balance().value, 12);
-        {
-            let alice_child = pool.get_mut(alice)?;
-            assert_eq!(alice_child.balance().value, 10);
-        }
+        // assert_eq!(pool.balance().value, 12);
+        // {
+        //     let alice_child = pool.get_mut(alice)?;
+        //     assert_eq!(alice_child.balance().value, 10);
+        // }
 
-        pool.add(12)?;
+        // pool.add(12)?;
 
-        {
-            let alice_child = pool.get(alice)?;
-            assert_eq!(alice_child.balance().value, 20);
-        }
+        // {
+        //     let alice_child = pool.get(alice)?;
+        //     assert_eq!(alice_child.balance().value, 20);
+        // }
 
-        assert_eq!(pool.balance().value, 24);
+        // assert_eq!(pool.balance().value, 24);
 
-        pool.take(6)?.burn();
+        // pool.take(6)?.burn();
 
-        assert_eq!(pool.balance().value, 18);
-        {
-            let alice_child = pool.get_mut(alice)?;
-            assert_eq!(alice_child.balance().value, 15);
-        }
+        // assert_eq!(pool.balance().value, 18);
+        // {
+        //     let alice_child = pool.get_mut(alice)?;
+        //     assert_eq!(alice_child.balance().value, 15);
+        // }
 
-        {
-            let mut alice_child = pool.get_mut(alice)?;
-            alice_child.take(4)?.burn();
-            assert_eq!(alice_child.balance().value, 11);
-        }
+        // {
+        //     let mut alice_child = pool.get_mut(alice)?;
+        //     alice_child.take(4)?.burn();
+        //     assert_eq!(alice_child.balance().value, 11);
+        // }
 
-        assert_eq!(pool.balance().value, 14);
+        // assert_eq!(pool.balance().value, 14);
 
-        {
-            let bob_child = pool.get_mut(bob)?;
-            assert_eq!(bob_child.balance().value, 3);
-        }
+        // {
+        //     let bob_child = pool.get_mut(bob)?;
+        //     assert_eq!(bob_child.balance().value, 3);
+        // }
 
-        pool.adjust(Amount::units(2))?;
-        assert_eq!(pool.balance().value, 28);
+        // pool.adjust(Amount::units(2))?;
+        // assert_eq!(pool.balance().value, 28);
 
-        {
-            let bob_child = pool.get(bob)?;
-            assert_eq!(bob_child.balance().value, 6);
-        }
+        // {
+        //     let bob_child = pool.get(bob)?;
+        //     assert_eq!(bob_child.balance().value, 6);
+        // }
 
         Ok(())
     }
