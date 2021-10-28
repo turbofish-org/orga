@@ -8,7 +8,11 @@ impl Add<Amount> for Amount {
     type Output = MathResult<Amount>;
 
     fn add(self, other: Amount) -> Self::Output {
-        MathResult::Ok(self.0.checked_add(other.0).ok_or(Error::Overflow)?.into())
+        self.0
+            .checked_add(other.0)
+            .map(Self)
+            .ok_or(Error::Overflow)
+            .into()
     }
 }
 
