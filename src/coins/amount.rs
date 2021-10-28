@@ -59,38 +59,6 @@ impl<I: Into<Amount> + Copy> PartialEq<I> for Amount {
     }
 }
 
-impl<I: Into<Self>> Add<I> for Amount {
-    type Output = Self;
-
-    fn add(self, other: I) -> Self {
-        let other = other.into();
-        Amount::new(self.0 + other.0)
-    }
-}
-
-impl<I: Into<Self>> AddAssign<I> for Amount {
-    fn add_assign(&mut self, other: I) {
-        let other = other.into();
-        *self = *self + other;
-    }
-}
-
-impl<I: Into<Self>> Div<I> for Amount {
-    type Output = Result<Self>;
-
-    fn div(self, other: I) -> Result<Self> {
-        todo!()
-    }
-}
-
-impl<I: Into<Amount>> Sub<I> for Amount {
-    type Output = Result<Amount>;
-
-    fn sub(self, other: I) -> Result<Self> {
-        todo!()
-    }
-}
-
 impl TryFrom<Result<Amount>> for Amount {
     type Error = Error;
 

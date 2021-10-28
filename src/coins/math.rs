@@ -10,8 +10,20 @@ pub enum MathResult<T> {
 }
 
 impl<T> From<MathResult<T>> for Result<T> {
-    fn from(_residual: MathResult<T>) -> Self {
-        Self::Err(Error::Unknown)
+    fn from(math_result: MathResult<T>) -> Self {
+        match math_result {
+            MathResult::Ok(t) => Ok(t),
+            MathResult::Err(err) => Err(err),
+        }
+    }
+}
+
+impl<T> From<Result<T>> for MathResult<T> {
+    fn from(result: Result<T>) -> Self {
+        match result {
+            Ok(t) => MathResult::Ok(t),
+            Err(err) => MathResult::Err(err),
+        }
     }
 }
 

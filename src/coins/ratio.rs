@@ -77,10 +77,8 @@ impl TryFrom<Result<Ratio>> for Ratio {
     }
 }
 
-// impl TryFrom<Amount> for Ratio {
-//     type Error = Error;
-
-//     fn try_from(value: Amount) -> Result<Self> {
-//         Ok(Ratio(NumRatio::new(value.0, 1)))
-//     }
-// }
+impl From<Amount> for Ratio {
+    fn from(amount: Amount) -> Self {
+        Self::new(amount.0, 1).unwrap()
+    }
+}

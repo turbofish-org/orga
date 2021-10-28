@@ -63,8 +63,9 @@ impl<S: Symbol> Take<S> for Coin<S> {
     where
         A: Into<Amount>,
     {
-        let amount = amount.into();
-        self.amount = (self.amount - amount)?;
+        todo!();
+        // let amount = amount.into();
+        // self.amount = (self.amount - amount)?;
         Ok(())
     }
 }
@@ -74,8 +75,9 @@ impl<S: Symbol> Give<S> for Coin<S> {
     where
         A: Into<Amount>,
     {
-        let amount = amount.into();
-        self.amount += amount;
+        todo!();
+        // let amount = amount.into();
+        // self.amount += amount;
 
         Ok(())
     }

@@ -208,21 +208,22 @@ where
     V::Encoding: Default,
 {
     fn drop(&mut self) {
-        use std::cmp::Ordering::*;
-        let start_balance = self.initial_balance;
-        let end_balance = self.entry.get_mut().balance();
-        match end_balance.cmp(&start_balance) {
-            Greater => {
-                *self.parent_total += (end_balance - start_balance).expect("Overflow");
-            }
-            Less => {
-                let prev_total = *self.parent_total;
-                *self.parent_total = (prev_total
-                    - (start_balance - end_balance).expect("Overflow"))
-                .expect("Overflow");
-            }
-            Equal => {}
-        };
+        todo!();
+        // use std::cmp::Ordering::*;
+        // let start_balance = self.initial_balance;
+        // let end_balance = self.entry.get_mut().balance();
+        // match end_balance.cmp(&start_balance) {
+        //     Greater => {
+        //         *self.parent_total += (end_balance - start_balance).expect("Overflow");
+        //     }
+        //     Less => {
+        //         let prev_total = *self.parent_total;
+        //         *self.parent_total = (prev_total
+        //             - (start_balance - end_balance).expect("Overflow"))
+        //         .expect("Overflow");
+        //     }
+        //     Equal => {}
+        // };
     }
 }
 
