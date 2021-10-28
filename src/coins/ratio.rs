@@ -6,8 +6,7 @@ use crate::{Error, Result};
 use num_rational::Ratio as NumRatio;
 use num_traits::CheckedMul;
 use std::convert::{TryFrom, TryInto};
-use std::ops::{Add, ControlFlow, Div, FromResidual, Mul, Neg, Sub, Try};
-use std::result::Result as StdResult;
+use std::ops::{Add, Div, Mul, Neg, Sub};
 
 pub struct Ratio(pub(crate) NumRatio<u64>);
 
@@ -17,34 +16,9 @@ impl From<u64> for Ratio {
     }
 }
 
-impl<I> Mul<I> for Ratio
-where
-    I: TryInto<Ratio>,
-    I::Error: std::error::Error,
-{
-    type Output = MathResult<Ratio>;
-
-    fn mul(self, other: I) -> Self::Output {
-        let other = other.try_into()?;
-        let mul_res = self.0.checked_mul(&other.0);
-
-        match mul_res {
-            Some(res) => MathResult::Ok(Ratio(res)),
-            None => MathResult::Err(Error::Unknown),
-        }
-    }
-}
-
-impl<I> Mul<I> for MathResult<Ratio>
-where
-    I: TryInto<Ratio>,
-    I::Error: std::error::Error,
-{
-    type Output = MathResult<Ratio>;
-    fn mul(self, other: I) -> Self::Output {
-        let other = other.try_into()?;
-
-        self? * other
+impl From<NumRatio<u64>> for Ratio {
+    fn from(value: NumRatio<u64>) -> Self {
+        Ratio(value)
     }
 }
 
@@ -103,10 +77,10 @@ impl TryFrom<Result<Ratio>> for Ratio {
     }
 }
 
-impl TryFrom<Amount> for Ratio {
-    type Error = Error;
+// impl TryFrom<Amount> for Ratio {
+//     type Error = Error;
 
-    fn try_from(value: Amount) -> Result<Self> {
-        Ok(Ratio(NumRatio::new(value.0, 1)))
-    }
-}
+//     fn try_from(value: Amount) -> Result<Self> {
+//         Ok(Ratio(NumRatio::new(value.0, 1)))
+//     }
+// }

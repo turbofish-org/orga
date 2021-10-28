@@ -1,12 +1,12 @@
 #[cfg(test)]
 use mutagen::mutate;
 
-use super::Ratio;
+use super::{MathResult, Ratio};
 use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
 use ed::{Decode, Encode};
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::ops::{Add, AddAssign, Div, Mul, Sub};
 
 #[derive(State, Encode, Decode, Debug, Default, Clone, Copy)]
@@ -91,20 +91,11 @@ impl<I: Into<Amount>> Sub<I> for Amount {
     }
 }
 
-impl<I: TryInto<Ratio>> Mul<I> for Amount {
-    type Output = Result<Ratio>;
+impl TryFrom<Result<Amount>> for Amount {
+    type Error = Error;
 
-    fn mul(self, other: I) -> Self::Output {
-        todo!()
-        // let other: Ratio = other.try_into().map_err(|_| Error::Unknown)?;
-
-        // other * self
-    }
-}
-
-impl From<Ratio> for Amount {
-    fn from(value: Ratio) -> Self {
-        Amount::new(value.0.to_integer())
+    fn try_from(value: Result<Amount>) -> Result<Self> {
+        value
     }
 }
 
@@ -116,13 +107,15 @@ mod tests {
     fn ops() -> Result<()> {
         let v: Amount = 2.try_into().unwrap();
         let w: Amount = 3.into();
+        let b = v * w;
+        // assert_eq!(b?.0, 6);
 
         let x = Ratio::new(3, 1)?;
         let y = Ratio::new(4, 1)?;
         let z = Ratio::new(2, 1)?;
 
-        let a = (x * y * z)?;
-        assert_eq!(*a.0.numer(), 24);
+        let a = (b * x * y * z)?;
+        assert_eq!(*a.0.numer(), 144);
         Ok(())
     }
 }
