@@ -9,6 +9,12 @@ pub enum MathResult<T> {
     Err(Error),
 }
 
+impl<T> MathResult<T> {
+    pub fn result(self) -> Result<T> {
+        self.into()
+    }
+}
+
 impl<T> From<MathResult<T>> for Result<T> {
     fn from(math_result: MathResult<T>) -> Self {
         match math_result {

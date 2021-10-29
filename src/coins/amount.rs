@@ -26,12 +26,6 @@ impl std::fmt::Display for Amount {
     }
 }
 
-impl PartialOrd for Amount {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.0.cmp(&other.0))
-    }
-}
-
 impl Ord for Amount {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.partial_cmp(other).unwrap()
@@ -50,12 +44,6 @@ impl Amount {
 impl From<u64> for Amount {
     fn from(value: u64) -> Self {
         Amount::new(value)
-    }
-}
-
-impl<I: Into<Amount> + Copy> PartialEq<I> for Amount {
-    fn eq(&self, other: &I) -> bool {
-        self.0 == (*other).into().0
     }
 }
 

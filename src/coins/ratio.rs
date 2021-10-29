@@ -1,13 +1,13 @@
-use super::{Amount, MathResult};
-use crate::encoding::{Decode, Encode, Terminated};
+use super::Amount;
+use crate::encoding::{Decode, Encode};
 use crate::state::State;
 use crate::store::Store;
 use crate::{Error, Result};
 use num_rational::Ratio as NumRatio;
-use num_traits::CheckedMul;
-use std::convert::{TryFrom, TryInto};
-use std::ops::{Add, Div, Mul, Neg, Sub};
+use std::cmp::Ordering;
+use std::convert::TryFrom;
 
+#[derive(Clone, Copy, Debug)]
 pub struct Ratio(pub(crate) NumRatio<u64>);
 
 impl From<u64> for Ratio {
@@ -22,6 +22,14 @@ impl From<NumRatio<u64>> for Ratio {
     }
 }
 
+impl Eq for Ratio {}
+
+impl Ord for Ratio {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+
 impl Ratio {
     pub fn new(numer: u64, denom: u64) -> Result<Self> {
         if denom == 0 {
@@ -29,6 +37,10 @@ impl Ratio {
         }
 
         Ok(Self(NumRatio::new(numer, denom)))
+    }
+
+    pub fn amount(&self) -> Amount {
+        Amount::new(self.0.to_integer())
     }
 }
 
