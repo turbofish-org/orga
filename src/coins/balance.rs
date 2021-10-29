@@ -1,5 +1,3 @@
-use super::Amount;
-
-pub trait Balance {
-    fn balance(&self) -> Amount;
+pub trait Balance<T> {
+    fn balance(&self) -> T;
 }

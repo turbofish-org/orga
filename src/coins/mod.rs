@@ -9,6 +9,9 @@ pub use symbol::*;
 pub mod coin;
 pub use coin::*;
 
+pub mod share;
+pub use share::*;
+
 pub mod give;
 pub use give::*;
 

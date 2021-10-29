@@ -52,9 +52,23 @@ impl<S: Symbol> Coin<S> {
     pub fn burn(self) {}
 }
 
-impl<S: Symbol> Balance for Coin<S> {
+impl<S: Symbol> Balance<Amount> for Coin<S> {
     fn balance(&self) -> Amount {
         self.amount
+    }
+}
+
+impl<S: Symbol> Balance<Ratio> for Coin<S> {
+    fn balance(&self) -> Ratio {
+        self.amount.into()
+    }
+}
+
+impl<S: Symbol> Adjust for Coin<S> {
+    fn adjust(&mut self, multiplier: Ratio) -> Result<()> {
+        self.amount = (self.amount * multiplier)?.amount();
+
+        Ok(())
     }
 }
 
@@ -63,9 +77,8 @@ impl<S: Symbol> Take<S> for Coin<S> {
     where
         A: Into<Amount>,
     {
-        todo!();
-        // let amount = amount.into();
-        // self.amount = (self.amount - amount)?;
+        self.amount = (self.amount - amount.into())?;
+
         Ok(())
     }
 }
@@ -75,18 +88,8 @@ impl<S: Symbol> Give<S> for Coin<S> {
     where
         A: Into<Amount>,
     {
-        todo!();
-        // let amount = amount.into();
-        // self.amount += amount;
+        self.amount = (self.amount + amount.into())?;
 
-        Ok(())
-    }
-}
-
-impl<S: Symbol> Adjust for Coin<S> {
-    fn adjust(&mut self, amount: Ratio) -> Result<()> {
-        todo!();
-        // self.amount = (self.amount * amount)?;
         Ok(())
     }
 }
