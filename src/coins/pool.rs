@@ -1,7 +1,7 @@
 #[cfg(test)]
 use mutagen::mutate;
 
-use super::{Adjust, Amount, Balance, Deduct, Give, Symbol, Take};
+use super::{Adjust, Amount, Balance, Give, Symbol, Take};
 use super::{Coin, Ratio};
 use crate::collections::map::{ChildMut as MapChildMut, Ref as MapRef};
 use crate::collections::{Map, Next};
@@ -323,7 +323,7 @@ pub use child::Child;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::coins::{Address, Coin, Share};
+    use crate::coins::{Address, Share};
     use crate::encoding::{Decode, Encode};
     use crate::store::{MapStore, Shared, Store};
 

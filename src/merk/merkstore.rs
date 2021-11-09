@@ -69,7 +69,9 @@ impl MerkStore {
         maybe_remove_restore(&home).expect("Failed to remove incomplete state sync restore");
 
         let snapshot_path = home.join("snapshots");
-        if !snapshot_path.exists() {
+
+        let no_snapshot = !snapshot_path.exists();
+        if no_snapshot {
             std::fs::create_dir(&snapshot_path).expect("Failed to create 'snapshots' directory");
         }
 

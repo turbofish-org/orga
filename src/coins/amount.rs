@@ -1,13 +1,8 @@
-#[cfg(test)]
-use mutagen::mutate;
-
-use super::{MathResult, Ratio};
 use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
 use ed::{Decode, Encode};
-use std::convert::{TryFrom, TryInto};
-use std::ops::{Add, AddAssign, Div, Mul, Sub};
+use std::convert::TryFrom;
 
 #[derive(State, Encode, Decode, Debug, Default, Clone, Copy)]
 pub struct Amount(pub(crate) u64);
@@ -35,7 +30,6 @@ impl Ord for Amount {
 impl Eq for Amount {}
 
 impl Amount {
-    #[cfg_attr(test, mutate)]
     pub fn new(value: u64) -> Self {
         Amount(value)
     }
@@ -57,14 +51,15 @@ impl TryFrom<Result<Amount>> for Amount {
 
 #[cfg(test)]
 mod tests {
+    use super::super::{Amount, Ratio};
     use super::*;
+    use std::convert::TryInto;
 
     #[test]
     fn ops() -> Result<()> {
         let v: Amount = 2.try_into().unwrap();
         let w: Amount = 3.into();
         let b = v * w;
-        // assert_eq!(b?.0, 6);
 
         let x = Ratio::new(3, 1)?;
         let y = Ratio::new(4, 1)?;

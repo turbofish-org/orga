@@ -1,9 +1,6 @@
 use std::marker::PhantomData;
 
-#[cfg(test)]
-use mutagen::mutate;
-
-use super::{Adjust, Amount, Balance, Coin, Deduct, Give, Ratio, Symbol, Take};
+use super::{Adjust, Amount, Balance, Coin, Give, Ratio, Symbol, Take};
 use crate::state::State;
 use crate::Result;
 
@@ -60,19 +57,6 @@ impl<S: Symbol> Take<S, Amount> for Share<S> {
         Ok(Coin::mint(amount))
     }
 }
-
-// impl<S: Symbol> Take<S, Ratio> for Share<S> {
-//     type Value = Self;
-//     fn take<A: Into<Ratio>>(&mut self, amount: A) -> Result<Self::Value> {
-//         let amount = amount.into();
-//         self.amount = (self.amount - amount)?;
-
-//         Ok(Self {
-//             amount,
-//             ..Default::default()
-//         })
-//     }
-// }
 
 impl<S: Symbol> Give<S> for Share<S> {
     fn add<A>(&mut self, amount: A) -> Result<()>

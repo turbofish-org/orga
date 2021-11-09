@@ -1,11 +1,7 @@
-use std::marker::PhantomData;
-
-#[cfg(test)]
-use mutagen::mutate;
-
-use super::{Adjust, Amount, Balance, Deduct, Give, Ratio, Symbol, Take};
+use super::{Adjust, Amount, Balance, Deduct, Give, Ratio, Symbol};
 use crate::state::State;
 use crate::Result;
+use std::marker::PhantomData;
 
 #[must_use = "If these coins are meant to be discarded, explicitly call the `burn` method"]
 #[derive(State)]
@@ -24,7 +20,6 @@ impl<S: Symbol> Default for Coin<S> {
 }
 
 impl<S: Symbol> Coin<S> {
-    #[cfg_attr(test, mutate)]
     pub fn new() -> Self {
         Coin {
             amount: 0.into(),
@@ -32,7 +27,6 @@ impl<S: Symbol> Coin<S> {
         }
     }
 
-    #[cfg_attr(test, mutate)]
     pub fn mint<A>(amount: A) -> Self
     where
         A: Into<Amount>,
@@ -43,12 +37,10 @@ impl<S: Symbol> Coin<S> {
         }
     }
 
-    #[cfg_attr(test, mutate)]
     pub fn transfer<G: Give<S>>(self, dest: &mut G) -> Result<()> {
         dest.add(self.amount)
     }
 
-    #[cfg_attr(test, mutate)]
     pub fn burn(self) {}
 }
 

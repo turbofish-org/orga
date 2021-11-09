@@ -382,7 +382,7 @@ mod test {
     #[test]
     fn iter_tuple_struct() {
         let store = Store::new(MapStore::new());
-        let mut entry_map: EntryMap<TupleMapEntry> = EntryMap::create(store.clone(), ()).unwrap();
+        let mut entry_map: EntryMap<TupleMapEntry> = EntryMap::create(store, ()).unwrap();
 
         entry_map.insert(TupleMapEntry(12, 24)).unwrap();
         entry_map.insert(TupleMapEntry(13, 26)).unwrap();
@@ -407,7 +407,7 @@ mod test {
     #[test]
     fn range_full_tuple_struct() {
         let store = Store::new(MapStore::new());
-        let mut entry_map: EntryMap<TupleMapEntry> = EntryMap::create(store.clone(), ()).unwrap();
+        let mut entry_map: EntryMap<TupleMapEntry> = EntryMap::create(store, ()).unwrap();
 
         entry_map.insert(TupleMapEntry(12, 24)).unwrap();
         entry_map.insert(TupleMapEntry(13, 26)).unwrap();

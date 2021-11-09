@@ -1,6 +1,4 @@
-use super::Ratio;
 use crate::{Error, Result};
-use std::convert::{TryFrom, TryInto};
 use std::ops::{ControlFlow, FromResidual, Try};
 use std::result::Result as StdResult;
 
