@@ -1,14 +1,14 @@
 #[cfg(test)]
 use mutagen::mutate;
 
-use super::Ratio;
-use super::{Adjust, Amount, Balance, Give, Symbol, Take};
+use super::{Adjust, Amount, Balance, Deduct, Give, Symbol, Take};
+use super::{Coin, Ratio};
 use crate::collections::map::{ChildMut as MapChildMut, Ref as MapRef};
 use crate::collections::{Map, Next};
 use crate::encoding::{Decode, Encode, Terminated};
 use crate::query::Query;
 use crate::state::State;
-use crate::Result;
+use crate::{Error, Result};
 use std::cell::UnsafeCell;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Drop, RangeBounds};
@@ -87,9 +87,9 @@ where
     pub fn get_mut(&mut self, key: K) -> Result<ChildMut<K, V, S>> {
         let mut child = self.map.entry(key)?.or_default()?;
         let mut entry = child.get_mut();
-        // if *entry.last_multiplier.numer() == 0 {
-        //     entry.last_multiplier = self.multiplier;
-        // }
+        if *entry.last_multiplier.0.numer() == 0 {
+            entry.last_multiplier = self.multiplier;
+        }
 
         if entry.last_multiplier.0 != self.multiplier.0 {
             let adjustment = (self.multiplier / entry.last_multiplier)?;
@@ -108,7 +108,7 @@ where
 
     #[cfg_attr(test, mutate)]
     pub fn get(&self, key: K) -> Result<Child<V, S>> {
-        let entry = self.map.get(key)?.unwrap();
+        let entry = self.map.get_or_default(key)?;
         Child::new(entry, self.multiplier)
     }
 }
@@ -122,23 +122,22 @@ where
     V: State + Adjust + Balance<Ratio>,
     V::Encoding: Default,
 {
-    // #[cfg_attr(test, mutate)]
-    // pub fn range<B>(&self, bounds: B) -> Result<impl Iterator<Item = IterEntry<K, V, S>>>
-    // where
-    //     B: RangeBounds<K>,
-    // {
-    //     todo!()
-    //     // Ok(self.map.range(bounds)?.map(move |entry| {
-    //     //     let entry = entry?;
-    //     //     let child = Child::new(entry.1, self.multiplier)?;
-    //     //     Ok((entry.0, child))
-    //     // }))
-    // }
+    #[cfg_attr(test, mutate)]
+    pub fn range<B>(&self, bounds: B) -> Result<impl Iterator<Item = IterEntry<K, V, S>>>
+    where
+        B: RangeBounds<K>,
+    {
+        Ok(self.map.range(bounds)?.map(move |entry| {
+            let entry = entry?;
+            let child = Child::new(entry.1, self.multiplier)?;
+            Ok((entry.0, child))
+        }))
+    }
 
-    // #[cfg_attr(test, mutate)]
-    // pub fn iter(&self) -> Result<impl Iterator<Item = IterEntry<K, V, S>>> {
-    //     self.range(..)
-    // }
+    #[cfg_attr(test, mutate)]
+    pub fn iter(&self) -> Result<impl Iterator<Item = IterEntry<K, V, S>>> {
+        self.range(..)
+    }
 }
 
 impl<K, V, S> Give<S> for Pool<K, V, S>
@@ -148,11 +147,16 @@ where
     V: State,
 {
     fn add<A: Into<Amount>>(&mut self, amount: A) -> Result<()> {
+        if self.total == Ratio::new(0, 1)? {
+            return Err(Error::Coins("Cannot add directly to an empty pool".into()));
+        }
+
         let amount = amount.into();
         let amount_ratio: Ratio = amount.into();
 
         if self.total.0 > 0.into() {
-            let increase = (amount_ratio / self.total)?;
+            let base: Amount = 1.into();
+            let increase = base + (amount_ratio / self.total)?;
             self.multiplier = (self.multiplier * increase)?;
         } else {
             self.multiplier = Ratio::new(1, 1)?;
@@ -170,17 +174,20 @@ where
     K: Encode + Terminated,
     V: State,
 {
-    fn deduct<A>(&mut self, amount: A) -> Result<()>
+    type Value = Coin<S>;
+
+    fn take<A>(&mut self, amount: A) -> Result<Self::Value>
     where
         A: Into<Amount>,
     {
         let amount = amount.into();
         let amount_ratio: Ratio = amount.into();
-        let decrease = amount_ratio / self.total;
+        let base: Ratio = 1.into();
+        let decrease = base - (amount_ratio / self.total);
         self.total = (self.total - amount_ratio)?;
         self.multiplier = (self.multiplier * decrease)?;
 
-        Ok(())
+        Ok(Coin::mint(amount))
     }
 }
 
@@ -279,6 +286,10 @@ mod child {
             current_multiplier: Ratio,
         ) -> Result<Self> {
             let mut entry = unsafe { &mut *entry_ref.get() };
+            let zero: Ratio = 0.into();
+            if entry.last_multiplier == zero {
+                entry.last_multiplier = current_multiplier;
+            }
 
             if entry.last_multiplier != current_multiplier {
                 let adjustment = (current_multiplier / entry.last_multiplier)?;
@@ -312,7 +323,7 @@ pub use child::Child;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::coins::{Address, Coin};
+    use crate::coins::{Address, Coin, Share};
     use crate::encoding::{Decode, Encode};
     use crate::store::{MapStore, Shared, Store};
 
@@ -341,66 +352,106 @@ mod tests {
             PhantomData,
             (),
         );
-        let mut pool = Pool::<Address, Coin<Simp>, Simp>::create(store, enc)?;
+        let mut pool = Pool::<Address, Share<Simp>, Simp>::create(store, enc)?;
 
         let alice = [0; 32].into();
         let bob = [1; 32].into();
+
+        pool.add(1)
+            .expect_err("Should not be able to add to empty pool");
+
+        {
+            let alice_child = pool.get(alice)?;
+            let alice_balance: Ratio = alice_child.balance();
+            let target: Ratio = 0.into();
+            assert_eq!(alice_balance, target);
+        }
+
+        let pool_balance = pool.balance();
+        let target: Ratio = 0.into();
+        assert_eq!(pool_balance, target);
 
         {
             let mut alice_child = pool.get_mut(alice)?;
             alice_child.add(10)?;
         }
-        // assert_eq!(balance, 10.into());
+        let target: Ratio = 10.into();
+        assert_eq!(pool.balance(), target);
 
         {
             let mut bob_child = pool.get_mut(bob)?;
             bob_child.add(2)?;
         }
 
-        // assert_eq!(pool.balance(), 12.into());
+        let target: Ratio = 12.into();
+        assert_eq!(pool.balance(), target);
         {
             let alice_child = pool.get_mut(alice)?;
-            // assert_eq!(alice_child.balance(), 10.into());
+            let alice_balance: Ratio = alice_child.balance();
+            let target: Ratio = 10.into();
+            assert_eq!(alice_balance, target);
         }
 
         pool.add(12)?;
 
         {
             let alice_child = pool.get(alice)?;
-            // assert_eq!(alice_child.balance(), 20.into());
+            let target: Ratio = 20.into();
+            let alice_balance: Ratio = alice_child.balance();
+            assert_eq!(alice_balance, target);
         }
 
-        // assert_eq!(pool.balance(), 24.into());
+        let target: Ratio = 24.into();
+        assert_eq!(pool.balance(), target);
 
-        pool.take(6)?.burn();
+        let taken_coins = pool.take(6)?;
+        taken_coins.burn();
 
-        // assert_eq!(pool.balance(), 18.into());
+        let target: Ratio = 18.into();
+        assert_eq!(pool.balance(), target);
         {
             let alice_child = pool.get_mut(alice)?;
-            // assert_eq!(alice_child.balance(), 15.into());
+            let target: Ratio = 15.into();
+            let alice_balance: Ratio = alice_child.balance();
+            assert_eq!(alice_balance, target);
         }
 
         {
             let mut alice_child = pool.get_mut(alice)?;
-            let balance: Amount = alice_child.balance();
-            // Erroring here currently:
-            alice_child.take(4)?.burn();
-            // assert_eq!(alice_child.balance(), 11.into());
+            let taken_coins = alice_child.take(4)?;
+            taken_coins.burn();
         }
 
-        // assert_eq!(pool.balance(), 14.into());
+        let target: Ratio = 14.into();
+        assert_eq!(pool.balance(), target);
 
         {
             let bob_child = pool.get_mut(bob)?;
-            // assert_eq!(bob_child.balance(), 3.into());
+            let target: Ratio = 3.into();
+            let bob_balance: Ratio = bob_child.balance();
+            assert_eq!(bob_balance, target);
         }
 
         pool.adjust(2.into())?;
-        // assert_eq!(pool.balance(), 28.into());
+        let target: Ratio = 28.into();
+        assert_eq!(pool.balance(), target);
 
         {
             let bob_child = pool.get(bob)?;
-            // assert_eq!(bob_child.balance(), 6.into());
+            let bob_balance: Ratio = bob_child.balance();
+            let target: Ratio = 6.into();
+            assert_eq!(bob_balance, target);
+        }
+
+        pool.add(1)?;
+
+        {
+            let mut bob_child = pool.get_mut(bob)?;
+            let taken_coins = bob_child.take(6)?;
+            taken_coins.burn();
+            let bob_balance: Ratio = bob_child.balance();
+            let expected_share_fraction = Ratio::new(3, 14)?;
+            assert_eq!(bob_balance, expected_share_fraction);
         }
 
         Ok(())

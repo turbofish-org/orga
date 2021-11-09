@@ -10,6 +10,12 @@ use std::convert::TryFrom;
 #[derive(Clone, Copy, Debug)]
 pub struct Ratio(pub(crate) NumRatio<u64>);
 
+impl Default for Ratio {
+    fn default() -> Self {
+        0.into()
+    }
+}
+
 impl From<u64> for Ratio {
     fn from(value: u64) -> Self {
         Ratio(NumRatio::new(value, 1))
@@ -52,7 +58,7 @@ pub struct RatioEncoding {
 impl Default for RatioEncoding {
     fn default() -> Self {
         Self {
-            numerator: 1,
+            numerator: 0,
             denominator: 1,
         }
     }

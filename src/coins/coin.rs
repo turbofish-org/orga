@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 #[cfg(test)]
 use mutagen::mutate;
 
-use super::{Adjust, Amount, Balance, Give, Ratio, Symbol, Take};
+use super::{Adjust, Amount, Balance, Deduct, Give, Ratio, Symbol, Take};
 use crate::state::State;
 use crate::Result;
 
@@ -72,11 +72,8 @@ impl<S: Symbol> Adjust for Coin<S> {
     }
 }
 
-impl<S: Symbol> Take<S> for Coin<S> {
-    fn deduct<A>(&mut self, amount: A) -> Result<()>
-    where
-        A: Into<Amount>,
-    {
+impl<S: Symbol> Deduct<S> for Coin<S> {
+    fn deduct<A: Into<Amount>>(&mut self, amount: A) -> Result<()> {
         self.amount = (self.amount - amount.into())?;
 
         Ok(())
@@ -91,5 +88,11 @@ impl<S: Symbol> Give<S> for Coin<S> {
         self.amount = (self.amount + amount.into())?;
 
         Ok(())
+    }
+}
+
+impl<S: Symbol> From<Amount> for Coin<S> {
+    fn from(amount: Amount) -> Self {
+        Self::mint(amount)
     }
 }

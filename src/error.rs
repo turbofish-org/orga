@@ -14,6 +14,8 @@ pub enum Error {
     Call(String),
     #[error("Client Error: {0}")]
     Client(String),
+    #[error("Coins Error: {0}")]
+    Coins(String),
     #[cfg(feature = "abci")]
     #[error(transparent)]
     Dalek(#[from] ed25519_dalek::ed25519::Error),
