@@ -443,6 +443,29 @@ mod tests {
             assert_eq!(bob_balance, target);
         }
 
+        {
+            let mut bob_child = pool.get_mut(bob)?;
+            bob_child.take(6)?.burn();
+        }
+
+        {
+            let mut alice_child = pool.get_mut(alice)?;
+            alice_child.take(22)?.burn();
+        }
+
+        let target: Ratio = 0.into();
+        assert_eq!(pool.balance(), target);
+
+        {
+            let mut bob_child = pool.get_mut(bob)?;
+            bob_child.add(6)?;
+        }
+
+        {
+            let mut alice_child = pool.get_mut(alice)?;
+            alice_child.add(22)?;
+        }
+
         pool.add(1)?;
 
         {
