@@ -1,4 +1,4 @@
-use super::{Adjust, Amount, Balance, Deduct, Give, Ratio, Symbol};
+use super::{Adjust, Amount, Balance, Give, Ratio, Symbol, Take};
 use crate::state::State;
 use crate::Result;
 use std::marker::PhantomData;
@@ -64,11 +64,12 @@ impl<S: Symbol> Adjust for Coin<S> {
     }
 }
 
-impl<S: Symbol> Deduct<S> for Coin<S> {
-    fn deduct<A: Into<Amount>>(&mut self, amount: A) -> Result<()> {
-        self.amount = (self.amount - amount.into())?;
+impl<S: Symbol> Take<S> for Coin<S> {
+    fn take<A: Into<Amount>>(&mut self, amount: A) -> Result<Self::Value> {
+        let amount = amount.into();
+        self.amount = (self.amount - amount)?;
 
-        Ok(())
+        Ok(Coin::mint(amount))
     }
 }
 
