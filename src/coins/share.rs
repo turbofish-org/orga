@@ -6,7 +6,7 @@ use crate::Result;
 
 #[derive(State, Debug)]
 pub struct Share<S: Symbol> {
-    amount: Ratio,
+    pub amount: Ratio,
     symbol: PhantomData<S>,
 }
 
@@ -28,13 +28,13 @@ impl<S: Symbol> Share<S> {
     }
 }
 
-impl<S: Symbol> Balance<Amount> for Share<S> {
+impl<S: Symbol> Balance<S, Amount> for Share<S> {
     fn balance(&self) -> Amount {
         self.amount.amount()
     }
 }
 
-impl<S: Symbol> Balance<Ratio> for Share<S> {
+impl<S: Symbol> Balance<S, Ratio> for Share<S> {
     fn balance(&self) -> Ratio {
         self.amount
     }
@@ -59,11 +59,8 @@ impl<S: Symbol> Take<S, Amount> for Share<S> {
 }
 
 impl<S: Symbol> Give<S> for Share<S> {
-    fn add<A>(&mut self, amount: A) -> Result<()>
-    where
-        A: Into<Amount>,
-    {
-        self.amount = (self.amount + amount.into())?;
+    fn give(&mut self, coin: Coin<S>) -> Result<()> {
+        self.amount = (self.amount + coin.amount)?;
 
         Ok(())
     }

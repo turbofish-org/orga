@@ -4,7 +4,7 @@ use crate::Result;
 use std::marker::PhantomData;
 
 #[must_use = "If these coins are meant to be discarded, explicitly call the `burn` method"]
-#[derive(State)]
+#[derive(State, Debug)]
 pub struct Coin<S: Symbol> {
     pub amount: Amount,
     symbol: PhantomData<S>,
@@ -44,13 +44,13 @@ impl<S: Symbol> Coin<S> {
     pub fn burn(self) {}
 }
 
-impl<S: Symbol> Balance<Amount> for Coin<S> {
+impl<S: Symbol> Balance<S, Amount> for Coin<S> {
     fn balance(&self) -> Amount {
         self.amount
     }
 }
 
-impl<S: Symbol> Balance<Ratio> for Coin<S> {
+impl<S: Symbol> Balance<S, Ratio> for Coin<S> {
     fn balance(&self) -> Ratio {
         self.amount.into()
     }
@@ -74,11 +74,16 @@ impl<S: Symbol> Take<S> for Coin<S> {
 }
 
 impl<S: Symbol> Give<S> for Coin<S> {
-    fn add<A>(&mut self, amount: A) -> Result<()>
-    where
-        A: Into<Amount>,
-    {
-        self.amount = (self.amount + amount.into())?;
+    // fn add<A>(&mut self, amount: A) -> Result<()>
+    // where
+    //     A: Into<Amount>,
+    // {
+    //     self.amount = (self.amount + amount.into())?;
+
+    //     Ok(())
+    // }
+    fn give(&mut self, value: Coin<S>) -> Result<()> {
+        self.amount = (self.amount + value.amount)?;
 
         Ok(())
     }
@@ -86,6 +91,12 @@ impl<S: Symbol> Give<S> for Coin<S> {
 
 impl<S: Symbol> From<Amount> for Coin<S> {
     fn from(amount: Amount) -> Self {
+        Self::mint(amount)
+    }
+}
+
+impl<S: Symbol> From<u64> for Coin<S> {
+    fn from(amount: u64) -> Self {
         Self::mint(amount)
     }
 }

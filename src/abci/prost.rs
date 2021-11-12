@@ -4,6 +4,7 @@ use crate::store::Store;
 use prost::Message;
 use std::io::{Error as IOError, ErrorKind as IOErrorKind, Read, Write};
 
+#[derive(Debug)]
 pub struct Adapter<T: Message + Default>(T);
 
 impl<T: Message + Default> State for Adapter<T> {

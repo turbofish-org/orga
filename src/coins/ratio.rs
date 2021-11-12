@@ -6,13 +6,55 @@ use crate::{Error, Result};
 use num_rational::Ratio as NumRatio;
 use std::cmp::Ordering;
 use std::convert::TryFrom;
+use std::ops::{Deref, DerefMut};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Ratio(pub(crate) NumRatio<u64>);
 
+impl Encode for Ratio {
+    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+        dest.write_all(self.0.numer().encode()?.as_slice())?;
+        dest.write_all(self.0.denom().encode()?.as_slice())?;
+
+        Ok(())
+    }
+
+    fn encoding_length(&self) -> ed::Result<usize> {
+        Ok(8 * 2)
+    }
+}
+
+impl Decode for Ratio {
+    fn decode<R: std::io::Read>(mut source: R) -> ed::Result<Self> {
+        let mut numer_bytes = [0u8; 8];
+        let mut denom_bytes = [0u8; 8];
+        source.read_exact(&mut numer_bytes)?;
+        source.read_exact(&mut denom_bytes)?;
+        let numer = u64::decode(numer_bytes.as_ref())?;
+        let denom = u64::decode(numer_bytes.as_ref())?;
+        Ratio::new(numer, denom).map_err(|_| ed::Error::UnexpectedByte(0))
+    }
+}
+
+impl ed::Terminated for Ratio {}
+
 impl Default for Ratio {
     fn default() -> Self {
         0.into()
+    }
+}
+
+impl Deref for Ratio {
+    type Target = NumRatio<u64>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Ratio {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 

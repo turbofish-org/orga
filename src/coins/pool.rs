@@ -1,19 +1,20 @@
 #[cfg(test)]
 use mutagen::mutate;
 
-use super::{Adjust, Amount, Balance, Give, Symbol, Take};
+use super::{Adjust, Amount, Balance, Give, RatioEncoding, Symbol, Take};
 use super::{Coin, Ratio};
 use crate::collections::map::{ChildMut as MapChildMut, Ref as MapRef};
 use crate::collections::{Map, Next};
 use crate::encoding::{Decode, Encode, Terminated};
 use crate::query::Query;
 use crate::state::State;
+use crate::store::Store;
 use crate::{Error, Result};
 use std::cell::UnsafeCell;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Drop, RangeBounds};
 
-#[derive(Query, State)]
+#[derive(Query)]
 pub struct Pool<K, V, S>
 where
     K: Terminated + Encode,
@@ -26,7 +27,62 @@ where
     map: Map<K, UnsafeCell<Entry<V, S>>>,
 }
 
-impl<K, V, S> Balance<Ratio> for Pool<K, V, S>
+impl<K, V, S> State for Pool<K, V, S>
+where
+    K: Terminated + Encode,
+    V: State,
+    S: Symbol,
+{
+    type Encoding = PoolEncoding;
+
+    fn create(store: Store, data: Self::Encoding) -> Result<Self> {
+        Ok(Self {
+            multiplier: Ratio::create(store.sub(&[0]), data.multiplier)?,
+            total: Ratio::create(store.sub(&[1]), data.total)?,
+            symbol: PhantomData,
+            map: Map::<_, _, _>::create(store.sub(&[2]), ())?,
+        })
+    }
+
+    fn flush(self) -> Result<Self::Encoding> {
+        self.map.flush()?;
+        Ok(Self::Encoding {
+            multiplier: self.multiplier.flush()?,
+            total: self.total.flush()?,
+        })
+    }
+}
+
+#[derive(Encode, Decode)]
+pub struct PoolEncoding {
+    multiplier: RatioEncoding,
+    total: RatioEncoding,
+}
+
+impl Default for PoolEncoding {
+    fn default() -> Self {
+        PoolEncoding {
+            multiplier: Ratio::new(1, 1).unwrap().into(),
+            total: Ratio::new(0, 1).unwrap().into(),
+        }
+    }
+}
+
+impl<K, V, S> From<Pool<K, V, S>> for PoolEncoding
+where
+    K: Terminated + Encode,
+    V: State,
+    S: Symbol,
+{
+    fn from(pool: Pool<K, V, S>) -> Self {
+        PoolEncoding {
+            multiplier: pool.multiplier.into(),
+            total: pool.total.into(),
+        }
+    }
+}
+
+impl<K, V, S> Balance<S, Ratio> for Pool<K, V, S>
 where
     K: Terminated + Encode,
     V: State,
@@ -80,7 +136,7 @@ impl<K, V, S> Pool<K, V, S>
 where
     S: Symbol,
     K: Encode + Terminated + Clone,
-    V: State + Adjust + Balance<Ratio>,
+    V: State + Adjust + Balance<S, Ratio>,
     V::Encoding: Default,
 {
     #[cfg_attr(test, mutate)]
@@ -119,7 +175,7 @@ impl<K, V, S> Pool<K, V, S>
 where
     S: Symbol,
     K: Encode + Decode + Terminated + Clone + Next,
-    V: State + Adjust + Balance<Ratio>,
+    V: State + Adjust + Balance<S, Ratio>,
     V::Encoding: Default,
 {
     #[cfg_attr(test, mutate)]
@@ -146,13 +202,12 @@ where
     K: Encode + Terminated,
     V: State,
 {
-    fn add<A: Into<Amount>>(&mut self, amount: A) -> Result<()> {
+    fn give(&mut self, coin: Coin<S>) -> Result<()> {
         if self.total == Ratio::new(0, 1)? {
             return Err(Error::Coins("Cannot add directly to an empty pool".into()));
         }
 
-        let amount = amount.into();
-        let amount_ratio: Ratio = amount.into();
+        let amount_ratio: Ratio = coin.amount.into();
 
         if self.total.0 > 0.into() {
             let base: Amount = 1.into();
@@ -162,7 +217,7 @@ where
             self.multiplier = Ratio::new(1, 1)?;
         }
 
-        self.total = (self.total + amount)?;
+        self.total = (self.total + amount_ratio)?;
 
         Ok(())
     }
@@ -195,7 +250,7 @@ pub struct ChildMut<'a, K, V, S>
 where
     S: Symbol,
     K: Encode + Clone,
-    V: State + Balance<Ratio> + Adjust,
+    V: State + Balance<S, Ratio> + Adjust,
     V::Encoding: Default,
 {
     parent_total: &'a mut Ratio,
@@ -208,7 +263,7 @@ impl<'a, K, V, S> Drop for ChildMut<'a, K, V, S>
 where
     S: Symbol,
     K: Encode + Clone,
-    V: State + Balance<Ratio> + Adjust,
+    V: State + Balance<S, Ratio> + Adjust,
     V::Encoding: Default,
 {
     fn drop(&mut self) {
@@ -236,7 +291,7 @@ impl<'a, K, V, S> Deref for ChildMut<'a, K, V, S>
 where
     S: Symbol,
     K: Encode + Clone,
-    V: State + Balance<Ratio> + Adjust,
+    V: State + Balance<S, Ratio> + Adjust,
     V::Encoding: Default,
 {
     type Target = V;
@@ -251,7 +306,7 @@ impl<'a, K, V, S> DerefMut for ChildMut<'a, K, V, S>
 where
     S: Symbol,
     K: Encode + Clone,
-    V: State + Balance<Ratio> + Adjust,
+    V: State + Balance<S, Ratio> + Adjust,
     V::Encoding: Default,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
@@ -267,7 +322,7 @@ mod child {
     pub struct Child<'a, V, S>
     where
         S: Symbol,
-        V: State + Balance<Ratio> + Adjust,
+        V: State + Balance<S, Ratio> + Adjust,
         V::Encoding: Default,
     {
         entry: MapRef<'a, UnsafeCell<Entry<V, S>>>,
@@ -277,7 +332,7 @@ mod child {
     impl<'a, V, S> Child<'a, V, S>
     where
         S: Symbol,
-        V: State + Balance<Ratio> + Adjust,
+        V: State + Balance<S, Ratio> + Adjust,
         V::Encoding: Default,
     {
         #[cfg_attr(test, mutate)]
@@ -307,7 +362,7 @@ mod child {
     impl<'a, V, S> Deref for Child<'a, V, S>
     where
         S: Symbol,
-        V: State + Balance<Ratio> + Adjust,
+        V: State + Balance<S, Ratio> + Adjust,
         V::Encoding: Default,
     {
         type Target = V;
@@ -346,12 +401,7 @@ mod tests {
     #[test]
     fn simple_pool() -> Result<()> {
         let store = Store::new(Shared::new(MapStore::new()).into());
-        let enc = (
-            Ratio::new(1, 1)?.into(),
-            Ratio::new(0, 1)?.into(),
-            PhantomData,
-            (),
-        );
+        let enc = Default::default();
         let mut pool = Pool::<Address, Share<Simp>, Simp>::create(store, enc)?;
 
         let alice = [0; 32].into();

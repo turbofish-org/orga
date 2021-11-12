@@ -98,9 +98,9 @@ impl From<RequestEndBlock> for EndBlockCtx {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Validators {
-    updates: HashMap<[u8; 32], Adapter<ValidatorUpdate>>,
+    pub(crate) updates: HashMap<[u8; 32], Adapter<ValidatorUpdate>>,
 }
 
 impl Validators {
