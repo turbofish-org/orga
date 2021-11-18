@@ -22,7 +22,7 @@ where
     S: Symbol,
 {
     multiplier: Ratio,
-    total: Ratio,
+    pub(crate) total: Ratio,
     symbol: PhantomData<S>,
     map: Map<K, UnsafeCell<Entry<V, S>>>,
 }

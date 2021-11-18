@@ -1,4 +1,4 @@
-use super::{Amount, Coin, Symbol};
+use super::{Coin, Symbol};
 use crate::Result;
 
 pub trait Give<S: Symbol, V = Coin<S>>: Sized {

@@ -1,4 +1,6 @@
+use super::pool::{Child as PoolChild, ChildMut as PoolChildMut};
 use super::{Address, Adjust, Amount, Balance, Coin, Give, Pool, Ratio, Share, Symbol, Take};
+use crate::collections::Deque;
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
 use crate::plugins::Validators;
@@ -11,7 +13,7 @@ type Delegators<S> = Pool<Address, Delegator<S>, S>;
 
 pub struct Staking<S: Symbol> {
     vp_per_coin: Ratio,
-    validators: Pool<Address, Delegators<S>, S>,
+    validators: Pool<Address, Validator<S>, S>,
 }
 
 impl<S: Symbol> State for Staking<S> {
@@ -20,17 +22,14 @@ impl<S: Symbol> State for Staking<S> {
     fn create(store: Store, data: Self::Encoding) -> Result<Self> {
         Ok(Self {
             vp_per_coin: <Ratio as State>::create(store.sub(&[0]), data.vp_per_coin)?,
-            validators: <Pool<Address, Delegators<S>, S> as State>::create(
-                store.sub(&[1]),
-                data.validators,
-            )?,
+            validators: State::create(store.sub(&[1]), data.validators)?,
         })
     }
 
     fn flush(self) -> Result<Self::Encoding> {
         Ok(Self::Encoding {
             vp_per_coin: <Ratio as State>::flush(self.vp_per_coin)?,
-            validators: <Pool<Address, Delegators<S>, S> as State>::flush(self.validators)?,
+            validators: self.validators.flush()?,
         })
     }
 }
@@ -47,7 +46,7 @@ impl<S: Symbol> From<Staking<S>> for StakingEncoding<S> {
 #[derive(Encode, Decode)]
 pub struct StakingEncoding<S: Symbol> {
     vp_per_coin: <Ratio as State>::Encoding,
-    validators: <Pool<Address, Delegator<S>, S> as State>::Encoding,
+    validators: <Pool<Address, Validator<S>, S> as State>::Encoding,
 }
 
 impl<S: Symbol> Default for StakingEncoding<S> {
@@ -67,7 +66,7 @@ impl<S: Symbol> Staking<S> {
         coins: Coin<S>,
     ) -> Result<()> {
         let mut validator = self.validators.get_mut(val_address)?;
-        let mut delegator = validator.get_mut(delegator_address)?;
+        let mut delegator = validator.delegators.get_mut(delegator_address)?;
         delegator.give(coins)?;
         drop(delegator);
         let voting_power = (validator.balance() * self.vp_per_coin)?.to_integer();
@@ -80,31 +79,54 @@ impl<S: Symbol> Staking<S> {
         Ok(())
     }
 
-    pub fn slash(&mut self, val_address: Address, amount: Amount) -> Result<()> {
+    pub fn slash<A: Into<Amount>>(&mut self, val_address: Address, amount: A) -> Result<Coin<S>> {
+        let amount = amount.into();
+        let balance_before = self.balance();
         let mut validator = self.validators.get_mut(val_address)?;
-        validator.take(amount)?.burn();
+        let slashed_coins = validator.take(amount)?;
+        validator.jailed = true;
+        let delegator_keys: Vec<Address> = validator
+            .delegators
+            .iter()?
+            .filter_map(|entry| match entry {
+                Err(_e) => None, // TODO: Handle error
+                Ok((k, _v)) => Some(*k),
+            })
+            .collect();
 
-        Ok(())
+        delegator_keys.iter().try_for_each(|k| -> Result<()> {
+            let mut delegator = validator.delegators.get_mut(*k)?;
+            delegator.jailed = true;
+            Ok(())
+        })?;
+
+        drop(validator);
+        let balance_after = self.balance();
+
+        self.vp_per_coin = (self.vp_per_coin * (balance_after / balance_before))?;
+
+        self.context::<Validators>()
+            .ok_or_else(|| Error::Coins("No Validators context available".into()))?
+            .set_voting_power(val_address, 0);
+
+        Ok(slashed_coins)
+    }
+
+    pub fn get(&self, val_address: Address) -> Result<PoolChild<Validator<S>, S>> {
+        self.validators.get(val_address)
+    }
+
+    pub fn get_mut(
+        &mut self,
+        val_address: Address,
+    ) -> Result<PoolChildMut<Address, Validator<S>, S>> {
+        self.validators.get_mut(val_address)
     }
 }
 
 impl<S: Symbol> Balance<S, Amount> for Staking<S> {
     fn balance(&self) -> Amount {
         self.validators.balance().amount()
-    }
-}
-
-impl<S: Symbol> Take<S> for Staking<S> {
-    type Value = Coin<S>;
-
-    fn take<A: Into<Amount>>(&mut self, amount: A) -> Result<Self::Value> {
-        let amount = amount.into();
-        let one: Amount = 1.into();
-        // TODO: Handle withdrawing all coins
-        self.vp_per_coin = (self.vp_per_coin / (one - (amount / self.validators.balance())))?;
-        let coins = self.validators.take(amount)?;
-
-        Ok(coins)
     }
 }
 
@@ -119,22 +141,99 @@ impl<S: Symbol> Give<S> for Staking<S> {
     }
 }
 
+#[derive(State)]
 pub struct Validator<S: Symbol> {
+    jailed: bool,
     delegators: Delegators<S>,
+    jailed_coins: Amount,
 }
 
-#[derive(State, Debug)]
+impl<S: Symbol> Validator<S> {
+    pub fn get_mut(&mut self, address: Address) -> Result<PoolChildMut<Address, Delegator<S>, S>> {
+        self.delegators.get_mut(address)
+    }
+
+    pub fn get(&self, address: Address) -> Result<PoolChild<Delegator<S>, S>> {
+        self.delegators.get(address)
+    }
+}
+
+impl<S: Symbol> Adjust for Validator<S> {
+    fn adjust(&mut self, multiplier: Ratio) -> Result<()> {
+        self.delegators.adjust(multiplier)
+    }
+}
+
+impl<S: Symbol> Balance<S, Ratio> for Validator<S> {
+    fn balance(&self) -> Ratio {
+        if self.jailed {
+            0.into()
+        } else {
+            self.delegators.balance()
+        }
+    }
+}
+
+impl<S: Symbol> Take<S> for Validator<S> {
+    type Value = Coin<S>;
+
+    fn take<A: Into<Amount>>(&mut self, amount: A) -> Result<Self::Value> {
+        self.delegators.take(amount)
+    }
+}
+
+impl<S: Symbol> Give<S> for Validator<S> {
+    fn give(&mut self, coins: Coin<S>) -> Result<()> {
+        self.delegators.give(coins)
+    }
+}
+
+#[derive(State)]
+pub struct Unbond<S: Symbol> {
+    coins: Coin<S>,
+}
+#[derive(State)]
 pub struct Delegator<S: Symbol> {
     liquid: Coin<S>,
     staked: Share<S>,
-    unbonding: Share<S>,
+    jailed: bool,
+    unbonding: Deque<Unbond<S>>,
+}
+
+impl<S: Symbol> Delegator<S> {
+    pub fn unbond<A: Into<Amount>>(&mut self, amount: A) -> Result<()> {
+        let amount = amount.into();
+        let coins = self.staked.take(amount)?;
+        let unbond = Unbond { coins };
+        self.unbonding.push_back(unbond.into())?;
+
+        Ok(())
+    }
+
+    fn process_unbonds(&mut self) -> Result<()> {
+        while let Some(_unbond) = self.unbonding.front()? {
+            // TODO: Check time
+            let unbond_matured = true;
+            if unbond_matured {
+                let unbond = self
+                    .unbonding
+                    .pop_front()?
+                    .ok_or_else(|| Error::Coins("Failed to pop unbond".into()))?;
+                self.liquid.add(unbond.coins.amount)?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 /// Taking coins from a delegator means withdrawing liquid coins.
 impl<S: Symbol> Take<S> for Delegator<S> {
     type Value = Coin<S>;
     fn take<A: Into<Amount>>(&mut self, amount: A) -> Result<Self::Value> {
-        todo!()
+        let amount = amount.into();
+        self.process_unbonds()?;
+        self.liquid.take(amount)
     }
 }
 
@@ -147,14 +246,18 @@ impl<S: Symbol> Take<S> for Delegator<S> {
 impl<S: Symbol> Adjust for Delegator<S> {
     fn adjust(&mut self, multiplier: Ratio) -> Result<()> {
         use std::cmp::Ordering::*;
+        if self.jailed {
+            return Ok(());
+        }
         let one = Ratio::new(1, 1)?;
+
         match multiplier.cmp(&one) {
             Greater => {
                 self.staked.amount = (self.staked.amount * multiplier)?;
             }
             Less => {
                 self.staked.amount = (self.staked.amount * multiplier)?;
-                self.unbonding.amount = (self.unbonding.amount * multiplier)?;
+                // self.unbonding.amount = (self.unbonding.amount * multiplier)?;
             }
             Equal => (),
         }
@@ -167,7 +270,11 @@ impl<S: Symbol> Adjust for Delegator<S> {
 /// parent collection to calculate the validator's voting power.
 impl<S: Symbol> Balance<S, Ratio> for Delegator<S> {
     fn balance(&self) -> Ratio {
-        self.staked.amount
+        if self.jailed {
+            0.into()
+        } else {
+            self.staked.amount
+        }
     }
 }
 
@@ -211,68 +318,113 @@ mod tests {
         staking.delegate(alice, alice, Coin::mint(100))?;
         staking.delegate(bob, bob, Coin::mint(300))?;
         staking.delegate(bob, carol, Coin::mint(100))?;
-        staking.take(250)?.burn();
         staking.delegate(bob, carol, Coin::mint(200))?;
         staking.delegate(bob, dave, Coin::mint(400))?;
 
         let ctx = Context::resolve::<Validators>().unwrap();
 
         let total_staked = staking.balance();
-        assert_eq!(total_staked, 850);
+        assert_eq!(total_staked, 1100);
 
         let alice_vp = ctx.updates.get(&alice.bytes).unwrap().power;
         assert_eq!(alice_vp, 100);
 
         let bob_vp = ctx.updates.get(&bob.bytes).unwrap().power;
-        assert_eq!(bob_vp, 1600);
+        assert_eq!(bob_vp, 1000);
 
-        let alice_self_delegation: Amount = (*staking.validators.get(alice)?.get(alice)?).balance();
-        assert_eq!(alice_self_delegation, 50);
+        let alice_self_delegation: Amount = (*staking.get(alice)?.delegators.get(alice)?).balance();
+        assert_eq!(alice_self_delegation, 100);
 
-        let bob_self_delegation: Amount = (*staking.validators.get(bob)?.get(bob)?).balance();
-        assert_eq!(bob_self_delegation, 150);
+        let bob_self_delegation: Amount = (*staking.get(bob)?.delegators.get(bob)?).balance();
+        assert_eq!(bob_self_delegation, 300);
 
-        let carol_to_bob_delegation: Amount = (*staking.validators.get(bob)?.get(carol)?).balance();
-        assert_eq!(carol_to_bob_delegation, 250);
+        let carol_to_bob_delegation: Amount = (*staking.get(bob)?.delegators.get(carol)?).balance();
+        assert_eq!(carol_to_bob_delegation, 300);
 
-        let alice_val_balance = (*staking.validators.get(alice)?).balance();
-        assert_eq!(alice_val_balance, 50);
+        let alice_val_balance = (*staking.get(alice)?).balance();
+        assert_eq!(alice_val_balance, 100);
 
-        let bob_val_balance = (*staking.validators.get(bob)?).balance();
-        assert_eq!(bob_val_balance, 800);
+        let bob_val_balance = (*staking.get(bob)?).balance();
+        assert_eq!(bob_val_balance, 1000);
+
+        // Big block rewards, doubling all balances
+        staking.give(Coin::mint(600))?;
+        staking.give(Coin::mint(500))?;
+
+        let total_staked = staking.balance();
+        assert_eq!(total_staked, 2200);
+
+        let carol_to_bob_delegation: Amount = (*staking.get(bob)?.delegators.get(carol)?).balance();
+        assert_eq!(carol_to_bob_delegation, 600);
+
+        let bob_val_balance = (*staking.get(bob)?).balance();
+        assert_eq!(bob_val_balance, 2000);
+
+        let bob_vp = ctx.updates.get(&bob.bytes).unwrap().power;
+        assert_eq!(bob_vp, 1000);
 
         // Bob gets slashed 50%
+        let slashed_coins = staking.slash(bob, 1000)?;
+        assert_eq!(slashed_coins.amount, 1000);
+        slashed_coins.burn();
+
+        // Bob has been jailed and should no longer have any voting power
+        let bob_vp = ctx.updates.get(&bob.bytes).unwrap().power;
+        assert_eq!(bob_vp, 0);
+
+        // Bob's staked coins should no longer be present in the global staking
+        // balance
+        let total_staked = staking.balance();
+        assert_eq!(total_staked, 200);
+
+        // Carol can still withdraw her 300 coins from Bob's jailed validator
         {
-            let mut bob_val = staking.validators.get_mut(bob)?;
-            bob_val.take(400)?.burn();
+            staking.get_mut(bob)?.get_mut(carol)?.unbond(300)?;
+            let alice_recovered_coins = staking.get_mut(bob)?.get_mut(carol)?.take(300)?;
+
+            assert_eq!(alice_recovered_coins.amount, 300);
         }
 
-        let bob_val_balance = (*staking.validators.get(bob)?).balance();
-        assert_eq!(bob_val_balance, 400);
+        {
+            // Bob withdraws a third of his self-delegation
+            staking.get_mut(bob)?.get_mut(bob)?.unbond(100)?;
+            let bob_recovered_coins = staking.get_mut(bob)?.get_mut(bob)?.take(100)?;
+            assert_eq!(bob_recovered_coins.amount, 100);
+            staking
+                .get_mut(bob)?
+                .get_mut(bob)?
+                .unbond(201)
+                .expect_err("Should not be able to unbond more than we have staked");
 
-        let carol_to_bob_delegation: Amount = (*staking.validators.get(bob)?.get(carol)?).balance();
-        assert_eq!(carol_to_bob_delegation, 125);
+            staking.get_mut(bob)?.get_mut(bob)?.unbond(50)?;
+            staking
+                .get_mut(bob)?
+                .get_mut(bob)?
+                .take(51)
+                .expect_err("Should not be able to take more than we have unbonded");
+            staking.get_mut(bob)?.get_mut(bob)?.take(50)?.burn();
+        }
 
         let total_staked = staking.balance();
-        assert_eq!(total_staked, 450);
+        assert_eq!(total_staked, 200);
 
-        // Big block reward
-        staking.give(Coin::mint(450 * 3))?;
+        // More block reward, but bob's delegators are jailed and should not
+        // earn from it
+        staking.give(Coin::mint(200))?;
 
         let total_staked = staking.balance();
-        assert_eq!(total_staked, 1800);
+        assert_eq!(total_staked, 400);
 
-        let alice_self_delegation: Amount = (*staking.validators.get(alice)?.get(alice)?).balance();
-        assert_eq!(alice_self_delegation, 200);
+        let alice_val_balance = (*staking.get(alice)?).balance();
+        assert_eq!(alice_val_balance, 400);
 
-        let carol_to_bob_delegation: Amount = (*staking.validators.get(bob)?.get(carol)?).balance();
-        assert_eq!(carol_to_bob_delegation, 500);
+        staking
+            .get_mut(bob)?
+            .get_mut(dave)?
+            .unbond(401)
+            .expect_err("Dave should only have 400 unbondable coins");
 
-        let alice_vp = ctx.updates.get(&alice.bytes).unwrap().power;
-        assert_eq!(alice_vp, 100);
-
-        let bob_vp = ctx.updates.get(&bob.bytes).unwrap().power;
-        assert_eq!(bob_vp, 1600);
+        staking.get_mut(bob)?.get_mut(dave)?.unbond(400)?;
 
         Ok(())
     }
