@@ -7,6 +7,7 @@
 #![allow(incomplete_features)]
 #![feature(specialization)]
 #![feature(generic_associated_types)]
+#![feature(const_generics_defaults)]
 #![feature(try_trait_v2)]
 #![feature(never_type)]
 

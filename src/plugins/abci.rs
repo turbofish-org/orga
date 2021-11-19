@@ -23,6 +23,7 @@ pub struct ABCIPlugin<T> {
     inner: T,
     pub(crate) validator_updates: Option<HashMap<[u8; 32], ValidatorUpdate>>,
     updates: UpdateMap,
+    time: Option<Timestamp>,
 }
 
 pub struct InitChainCtx {
@@ -120,6 +121,20 @@ impl Validators {
         );
     }
 }
+
+pub struct Time {
+    pub seconds: i64,
+    pub nanos: i32,
+}
+
+impl Time {
+    #[cfg(test)]
+    pub(crate) fn from_seconds<T: Into<i64>>(seconds: T) -> Self {
+        let seconds = seconds.into();
+        Self { seconds, nanos: 0 }
+    }
+}
+
 #[derive(Encode, Decode)]
 pub enum ABCICall<C> {
     InitChain(Adapter<RequestInitChain>),
@@ -154,6 +169,15 @@ impl<T: App> Call for ABCIPlugin<T> {
     fn call(&mut self, call: Self::Call) -> Result<()> {
         use ABCICall::*;
         Context::add(Validators::default());
+        let create_time_ctx = |time: &Option<Timestamp>| {
+            if let Some(timestamp) = time {
+                Context::add(Time {
+                    seconds: timestamp.seconds,
+                    nanos: timestamp.nanos,
+                });
+            }
+        };
+        create_time_ctx(&self.time);
         let res = match call {
             InitChain(req) => {
                 let ctx = req.into_inner().into();
@@ -162,7 +186,9 @@ impl<T: App> Call for ABCIPlugin<T> {
                 Ok(())
             }
             BeginBlock(req) => {
-                let ctx = req.into_inner().into();
+                let ctx: BeginBlockCtx = req.into_inner().into();
+                self.time = ctx.header.clone().time;
+                create_time_ctx(&self.time);
                 self.inner.begin_block(&ctx)?;
 
                 Ok(())
@@ -222,6 +248,7 @@ where
             inner: T::create(store.sub(&[0]), data.0)?,
             validator_updates: None,
             updates: UpdateMap::create(store.sub(&[1]), ())?,
+            time: None,
         })
     }
 
