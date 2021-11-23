@@ -71,6 +71,9 @@ impl<S: Symbol, const U: u64> Staking<S, U> {
         coins: Coin<S>,
     ) -> Result<()> {
         let mut validator = self.validators.get_mut(val_address)?;
+        if validator.jailed {
+            return Err(Error::Coins("Cannot delegate to jailed validator".into()));
+        }
         validator.amount_staked = (validator.amount_staked + coins.amount)?;
         let mut delegator = validator.get_mut(delegator_address)?;
         self.amount_delegated = (self.amount_delegated + coins.amount)?;
@@ -82,6 +85,7 @@ impl<S: Symbol, const U: u64> Staking<S, U> {
         self.context::<Validators>()
             .ok_or_else(|| Error::Coins("No Validators context available".into()))?
             .set_voting_power(val_address, voting_power);
+
         Ok(())
     }
 
@@ -205,7 +209,6 @@ impl<S: Symbol, const U: u64> Validator<S, U> {
     }
 
     fn slash(&mut self, amount: Amount) -> Result<Coin<S>> {
-        // let slashed_coins = self.take(amount)?;
         self.jailed = true;
         let one: Ratio = 1.into();
         let slash_multiplier = (one - (amount / self.slashable_balance()?))?;
@@ -285,7 +288,7 @@ pub struct Delegator<S: Symbol, const U: u64> {
 }
 
 impl<S: Symbol, const U: u64> Delegator<S, U> {
-    pub fn unbond<A: Into<Amount>>(&mut self, amount: A) -> Result<()> {
+    fn unbond<A: Into<Amount>>(&mut self, amount: A) -> Result<()> {
         let amount = amount.into();
         let coins = self.staked.take(amount)?.into();
         let start_seconds = self
@@ -495,6 +498,14 @@ mod tests {
         let slashed_coins = staking.slash(bob, 500)?;
         assert_eq!(slashed_coins.amount, 500);
         slashed_coins.burn();
+
+        // Make sure it's now impossible to delegate to Bob
+        staking
+            .delegate(bob, alice, 200.into())
+            .expect_err("Should not be able to delegate to jailed validator");
+        staking
+            .delegate(bob, bob, 200.into())
+            .expect_err("Should not be able to delegate to jailed validator");
 
         // Bob has been jailed and should no longer have any voting power
         let bob_vp = ctx.updates.get(&bob.bytes).unwrap().power;
