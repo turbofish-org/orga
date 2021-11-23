@@ -74,3 +74,12 @@ impl<S: Symbol> From<Ratio> for Share<S> {
         }
     }
 }
+
+impl<S: Symbol> From<Coin<S>> for Share<S> {
+    fn from(coins: Coin<S>) -> Self {
+        Self {
+            amount: coins.amount.into(),
+            ..Default::default()
+        }
+    }
+}
