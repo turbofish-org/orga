@@ -41,6 +41,12 @@ impl From<u64> for Amount {
     }
 }
 
+impl From<Amount> for u64 {
+    fn from(amount: Amount) -> Self {
+        amount.0
+    }
+}
+
 impl TryFrom<Result<Amount>> for Amount {
     type Error = Error;
 

@@ -1,6 +1,6 @@
 use super::pool::{Child as PoolChild, ChildMut as PoolChildMut};
 use super::{Address, Adjust, Amount, Balance, Coin, Give, Pool, Ratio, Share, Symbol, Take};
-use crate::collections::Deque;
+use crate::collections::{Deque, Map};
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
 use crate::plugins::{Time, Validators};
@@ -11,9 +11,9 @@ use crate::{Error, Result};
 type Delegators<S, const U: u64> = Pool<Address, Delegator<S, U>, S>;
 
 pub struct Staking<S: Symbol, const U: u64 = 0> {
-    vp_per_coin: Ratio,
     validators: Pool<Address, Validator<S, U>, S>,
     amount_delegated: Amount,
+    consensus_keys: Map<Address, Address>,
 }
 
 impl<S: Symbol, const U: u64> State for Staking<S, U> {
@@ -21,15 +21,15 @@ impl<S: Symbol, const U: u64> State for Staking<S, U> {
 
     fn create(store: Store, data: Self::Encoding) -> Result<Self> {
         Ok(Self {
-            vp_per_coin: <Ratio as State>::create(store.sub(&[0]), data.vp_per_coin)?,
-            validators: State::create(store.sub(&[1]), data.validators)?,
-            amount_delegated: State::create(store.sub(&[2]), data.amount_delegated)?,
+            validators: State::create(store.sub(&[0]), data.validators)?,
+            amount_delegated: State::create(store.sub(&[1]), data.amount_delegated)?,
+            consensus_keys: State::create(store.sub(&[2]), ())?,
         })
     }
 
     fn flush(self) -> Result<Self::Encoding> {
+        self.consensus_keys.flush()?;
         Ok(Self::Encoding {
-            vp_per_coin: <Ratio as State>::flush(self.vp_per_coin)?,
             validators: self.validators.flush()?,
             amount_delegated: self.amount_delegated.flush()?,
         })
@@ -39,7 +39,6 @@ impl<S: Symbol, const U: u64> State for Staking<S, U> {
 impl<S: Symbol, const U: u64> From<Staking<S, U>> for StakingEncoding<S, U> {
     fn from(staking: Staking<S, U>) -> Self {
         Self {
-            vp_per_coin: staking.vp_per_coin.into(),
             validators: staking.validators.into(),
             amount_delegated: staking.amount_delegated.into(),
         }
@@ -48,7 +47,6 @@ impl<S: Symbol, const U: u64> From<Staking<S, U>> for StakingEncoding<S, U> {
 
 #[derive(Encode, Decode)]
 pub struct StakingEncoding<S: Symbol, const U: u64> {
-    vp_per_coin: <Ratio as State>::Encoding,
     validators: <Pool<Address, Validator<S, U>, S> as State>::Encoding,
     amount_delegated: <Amount as State>::Encoding,
 }
@@ -56,7 +54,6 @@ pub struct StakingEncoding<S: Symbol, const U: u64> {
 impl<S: Symbol, const U: u64> Default for StakingEncoding<S, U> {
     fn default() -> Self {
         Self {
-            vp_per_coin: Ratio::new(1, 1).unwrap().into(),
             validators: Default::default(),
             amount_delegated: Default::default(),
         }
@@ -70,6 +67,7 @@ impl<S: Symbol, const U: u64> Staking<S, U> {
         delegator_address: Address,
         coins: Coin<S>,
     ) -> Result<()> {
+        let consensus_key = self.consensus_key(val_address)?;
         let mut validator = self.validators.get_mut(val_address)?;
         if validator.jailed {
             return Err(Error::Coins("Cannot delegate to jailed validator".into()));
@@ -79,12 +77,39 @@ impl<S: Symbol, const U: u64> Staking<S, U> {
         self.amount_delegated = (self.amount_delegated + coins.amount)?;
         delegator.give(coins)?;
         drop(delegator);
-        let voting_power = (validator.balance() * self.vp_per_coin)?.to_integer();
+        let voting_power = validator.staked().into();
         drop(validator);
 
         self.context::<Validators>()
             .ok_or_else(|| Error::Coins("No Validators context available".into()))?
-            .set_voting_power(val_address, voting_power);
+            .set_voting_power(consensus_key, voting_power);
+
+        Ok(())
+    }
+
+    fn consensus_key(&self, val_address: Address) -> Result<Address> {
+        let consensus_key = match self.consensus_keys.get(val_address)? {
+            Some(key) => *key,
+            None => return Err(Error::Coins("Validator is not declared".into())),
+        };
+
+        Ok(consensus_key)
+    }
+
+    pub fn declare(
+        &mut self,
+        val_address: Address,
+        consensus_key: Address,
+        coins: Coin<S>,
+    ) -> Result<()> {
+        let declared = self.consensus_keys.contains_key(val_address)?;
+        if declared {
+            return Err(Error::Coins("Validator is already declared".into()));
+        }
+        self.consensus_keys
+            .insert(val_address, consensus_key.into())?;
+
+        self.delegate(val_address, val_address, coins)?;
 
         Ok(())
     }
@@ -94,6 +119,7 @@ impl<S: Symbol, const U: u64> Staking<S, U> {
     }
 
     pub fn slash<A: Into<Amount>>(&mut self, val_address: Address, amount: A) -> Result<Coin<S>> {
+        let consensus_key = self.consensus_key(val_address)?;
         let jailed = self.get_mut(val_address)?.jailed;
         if !jailed {
             let reduction = self.slashable_balance(val_address)?;
@@ -101,17 +127,13 @@ impl<S: Symbol, const U: u64> Staking<S, U> {
             self.amount_delegated = (self.amount_delegated - reduction)?;
         }
         let amount = amount.into();
-        let staked_before = self.staked();
         let mut validator = self.get_mut(val_address)?;
         let slashed_coins = validator.slash(amount)?;
         drop(validator);
-        let staked_after = self.staked();
-
-        self.vp_per_coin = (self.vp_per_coin * (staked_after / staked_before))?;
 
         self.context::<Validators>()
             .ok_or_else(|| Error::Coins("No Validators context available".into()))?
-            .set_voting_power(val_address, 0);
+            .set_voting_power(consensus_key, 0);
 
         Ok(slashed_coins)
     }
@@ -150,6 +172,7 @@ impl<S: Symbol, const U: u64> Staking<S, U> {
         delegator_address: Address,
         amount: A,
     ) -> Result<()> {
+        let consensus_key = self.consensus_key(val_address)?;
         let amount = amount.into();
         let mut validator = self.validators.get_mut(val_address)?;
         {
@@ -162,6 +185,13 @@ impl<S: Symbol, const U: u64> Staking<S, U> {
             validator.amount_staked = (validator.amount_staked - amount)?;
         }
 
+        let vp = validator.staked().into();
+        drop(validator);
+
+        self.context::<Validators>()
+            .ok_or_else(|| Error::Coins("No Validators context available".into()))?
+            .set_voting_power(consensus_key, vp);
+
         Ok(())
     }
 
@@ -169,7 +199,7 @@ impl<S: Symbol, const U: u64> Staking<S, U> {
         self.validators.get(val_address)
     }
 
-    pub fn get_mut(
+    fn get_mut(
         &mut self,
         val_address: Address,
     ) -> Result<PoolChildMut<Address, Validator<S, U>, S>> {
@@ -193,10 +223,7 @@ pub struct Validator<S: Symbol, const U: u64> {
 }
 
 impl<S: Symbol, const U: u64> Validator<S, U> {
-    pub fn get_mut(
-        &mut self,
-        address: Address,
-    ) -> Result<PoolChildMut<Address, Delegator<S, U>, S>> {
+    fn get_mut(&mut self, address: Address) -> Result<PoolChildMut<Address, Delegator<S, U>, S>> {
         self.delegators.get_mut(address)
     }
 
@@ -352,14 +379,17 @@ impl<S: Symbol, const U: u64> Delegator<S, U> {
 
         Ok(())
     }
+
+    fn give(&mut self, coins: Coin<S>) -> Result<()> {
+        self.staked.give(coins)
+    }
 }
 
-/// If a delegator is adjusted downward (ie. multiplier less than one), the
-/// validator has been slashed and the delegator loses some staked and unbonding
-/// shares.
-///
 /// If a delegator is adjusted upward (ie. multiplier greater than one), the
-/// validator has earned some reward. Only the staked coins are adjusted.
+/// validator has earned some reward. The reward is paid out to the delegator's
+/// liquid balance.
+///
+/// Adjusting a jailed delegator is a no-op.
 impl<S: Symbol, const U: u64> Adjust for Delegator<S, U> {
     fn adjust(&mut self, multiplier: Ratio) -> Result<()> {
         use std::cmp::Ordering::*;
@@ -408,14 +438,6 @@ impl<S: Symbol, const U: u64> Balance<S, Amount> for Delegator<S, U> {
     }
 }
 
-/// Giving coins to a delegator is used internally in delegation.
-impl<S: Symbol, const U: u64> Give<S> for Delegator<S, U> {
-    fn give(&mut self, coins: Coin<S>) -> Result<()> {
-        // TODO: Make sure it's impossible to delegate to a jailed validator
-        self.staked.give(coins)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -434,15 +456,27 @@ mod tests {
         let mut staking: Staking<Simp, 10> = Staking::create(store, Default::default())?;
 
         let alice = [0; 32].into();
+        let alice_con = [4; 32].into();
         let bob = [1; 32].into();
+        let bob_con = [5; 32].into();
         let carol = [2; 32].into();
         let dave = [3; 32].into();
+        let dave_con = [6; 32].into();
 
         Context::add(Validators::default());
         Context::add(Time::from_seconds(0));
 
-        staking.delegate(alice, alice, Coin::mint(100))?;
-        staking.delegate(bob, bob, Coin::mint(300))?;
+        staking
+            .delegate(alice, alice, Coin::mint(100))
+            .expect_err("Should not be able to delegate to an undeclared validator");
+        staking.declare(alice, alice_con, 50.into())?;
+        staking
+            .declare(alice, alice_con, 50.into())
+            .expect_err("Should not be able to redeclare validator");
+        staking.delegate(alice, alice, Coin::mint(50))?;
+        staking.declare(bob, bob_con, 50.into())?;
+
+        staking.delegate(bob, bob, Coin::mint(250))?;
         staking.delegate(bob, carol, Coin::mint(100))?;
         staking.delegate(bob, carol, Coin::mint(200))?;
         staking.delegate(bob, dave, Coin::mint(400))?;
@@ -452,10 +486,10 @@ mod tests {
         let total_staked = staking.staked();
         assert_eq!(total_staked, 1100);
 
-        let alice_vp = ctx.updates.get(&alice.bytes).unwrap().power;
+        let alice_vp = ctx.updates.get(&alice_con.bytes).unwrap().power;
         assert_eq!(alice_vp, 100);
 
-        let bob_vp = ctx.updates.get(&bob.bytes).unwrap().power;
+        let bob_vp = ctx.updates.get(&bob_con.bytes).unwrap().power;
         assert_eq!(bob_vp, 1000);
 
         let alice_self_delegation = staking.get(alice)?.get(alice)?.staked.amount;
@@ -491,7 +525,7 @@ mod tests {
         let bob_val_balance = staking.get(bob)?.staked();
         assert_eq!(bob_val_balance, 1000);
 
-        let bob_vp = ctx.updates.get(&bob.bytes).unwrap().power;
+        let bob_vp = ctx.updates.get(&bob_con.bytes).unwrap().power;
         assert_eq!(bob_vp, 1000);
 
         // Bob gets slashed 50%
@@ -508,7 +542,7 @@ mod tests {
             .expect_err("Should not be able to delegate to jailed validator");
 
         // Bob has been jailed and should no longer have any voting power
-        let bob_vp = ctx.updates.get(&bob.bytes).unwrap().power;
+        let bob_vp = ctx.updates.get(&bob_con.bytes).unwrap().power;
         assert_eq!(bob_vp, 0);
 
         // Bob's staked coins should no longer be present in the global staking
@@ -581,6 +615,14 @@ mod tests {
         assert_eq!(staking.slashable_balance(bob)?, 0);
         staking.withdraw(bob, dave, 500)?.burn();
         assert_eq!(staking.slashable_balance(bob)?, 0);
+
+        staking.declare(dave, dave_con, 300.into())?;
+        assert_eq!(ctx.updates.get(&alice_con.bytes).unwrap().power, 100);
+        assert_eq!(ctx.updates.get(&dave_con.bytes).unwrap().power, 300);
+        staking.delegate(dave, carol, 300.into())?;
+        assert_eq!(ctx.updates.get(&dave_con.bytes).unwrap().power, 600);
+        staking.unbond(dave, dave, 150)?;
+        assert_eq!(ctx.updates.get(&dave_con.bytes).unwrap().power, 450);
 
         Ok(())
     }
