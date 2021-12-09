@@ -1,9 +1,11 @@
 use super::pool::{Child as PoolChild, ChildMut as PoolChildMut};
 use super::{Address, Adjust, Amount, Balance, Coin, Give, Pool, Ratio, Share, Symbol, Take};
+use crate::call::Call;
 use crate::collections::{Deque, Map};
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
-use crate::plugins::{Time, Validators};
+use crate::plugins::{Paid, Signer, Time, Validators};
+use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::{Error, Result};
@@ -195,6 +197,19 @@ impl<S: Symbol, const U: u64> Staking<S, U> {
         Ok(())
     }
 
+    fn delegations(&self, delegator_address: Address) -> Result<Vec<(Address, DelegationInfo)>> {
+        self.validators
+            .iter()?
+            .map(|entry| {
+                let (val_address, validator) = entry?;
+
+                let delegator = validator.get(delegator_address)?;
+
+                Ok((*val_address, delegator.info()))
+            })
+            .collect()
+    }
+
     pub fn get(&self, val_address: Address) -> Result<PoolChild<Validator<S, U>, S>> {
         self.validators.get(val_address)
     }
@@ -205,11 +220,94 @@ impl<S: Symbol, const U: u64> Staking<S, U> {
     ) -> Result<PoolChildMut<Address, Validator<S, U>, S>> {
         self.validators.get_mut(val_address)
     }
+
+    fn signer(&mut self) -> Result<Address> {
+        self.context::<Signer>()
+            .ok_or_else(|| Error::Coins("No Signer context available".into()))?
+            .signer
+            .ok_or_else(|| Error::Coins("Call must be signed".into()))
+    }
+
+    fn paid(&mut self) -> Result<&mut Paid> {
+        self.context::<Paid>()
+            .ok_or_else(|| Error::Coins("No Payment context available".into()))
+    }
+}
+
+#[derive(Encode, Decode)]
+pub enum StakingQuery {
+    Delegations { delegator_address: Address },
+}
+
+impl<S: Symbol, const U: u64> Query for Staking<S, U> {
+    type Query = StakingQuery;
+
+    fn query(&self, query: Self::Query) -> Result<()> {
+        match query {
+            StakingQuery::Delegations { delegator_address } => self.delegations(delegator_address),
+        }?;
+
+        Ok(())
+    }
+}
+
+#[derive(Encode, Decode)]
+pub enum StakingCall {
+    Unbond {
+        validator_address: Address,
+        amount: Amount,
+    },
+    Delegate {
+        validator_address: Address,
+        amount: Amount,
+    },
+    Declare {
+        consensus_key: Address,
+        amount: Amount,
+    },
+    TakeAsFunding {
+        validator_address: Address,
+        amount: Amount,
+    },
+}
+
+impl<S: Symbol, const U: u64> Call for Staking<S, U> {
+    type Call = StakingCall;
+
+    fn call(&mut self, call: Self::Call) -> Result<()> {
+        let signer = self.signer()?;
+        match call {
+            StakingCall::Unbond {
+                validator_address,
+                amount,
+            } => self.unbond(validator_address, signer, amount),
+            StakingCall::Declare {
+                consensus_key,
+                amount,
+            } => {
+                let payment = self.paid()?.take(amount)?;
+                self.declare(signer, consensus_key, payment)
+            }
+            StakingCall::Delegate {
+                validator_address,
+                amount,
+            } => {
+                let payment = self.paid()?.take(amount)?;
+                self.delegate(validator_address, signer, payment)
+            }
+            StakingCall::TakeAsFunding {
+                validator_address,
+                amount,
+            } => {
+                let taken_coins = self.withdraw(validator_address, signer, amount)?;
+                self.paid()?.give::<S, _>(taken_coins.amount)
+            }
+        }
+    }
 }
 
 impl<S: Symbol, const U: u64> Give<S> for Staking<S, U> {
     fn give(&mut self, coins: Coin<S>) -> Result<()> {
-        // TODO: Handle giving to empty pool
         self.validators.give(coins)
     }
 }
@@ -331,6 +429,13 @@ impl<S: Symbol, const U: u64> Delegator<S, U> {
         Ok(())
     }
 
+    fn info(&self) -> DelegationInfo {
+        DelegationInfo {
+            liquid: self.liquid.amount.amount(),
+            staked: self.staked.amount.amount(),
+        }
+    }
+
     fn slashable_balance(&mut self) -> Result<Ratio> {
         self.process_unbonds()?;
         let mut sum: Ratio = 0.into();
@@ -438,6 +543,12 @@ impl<S: Symbol, const U: u64> Balance<S, Amount> for Delegator<S, U> {
     }
 }
 
+#[derive(Encode, Decode)]
+pub struct DelegationInfo {
+    pub staked: Amount,
+    pub liquid: Amount,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -466,6 +577,9 @@ mod tests {
         Context::add(Validators::default());
         Context::add(Time::from_seconds(0));
 
+        staking
+            .give(100.into())
+            .expect_err("Cannot give to empty validator set");
         staking
             .delegate(alice, alice, Coin::mint(100))
             .expect_err("Should not be able to delegate to an undeclared validator");

@@ -27,6 +27,9 @@ pub use pool::*;
 pub mod staking;
 pub use staking::*;
 
+pub mod accounts;
+pub use accounts::*;
+
 pub mod adjust;
 pub use adjust::*;
 

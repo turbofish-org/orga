@@ -1,10 +1,13 @@
 use super::{Adjust, Amount, Balance, Give, Ratio, Symbol, Take};
+use crate::call::Call;
+use crate::context::GetContext;
+use crate::plugins::Paid;
 use crate::state::State;
-use crate::Result;
+use crate::{Error, Result};
 use std::marker::PhantomData;
 
 #[must_use = "If these coins are meant to be discarded, explicitly call the `burn` method"]
-#[derive(State, Debug)]
+#[derive(State, Call, Debug)]
 pub struct Coin<S: Symbol> {
     pub amount: Amount,
     symbol: PhantomData<S>,
@@ -42,6 +45,16 @@ impl<S: Symbol> Coin<S> {
     }
 
     pub fn burn(self) {}
+
+    #[call]
+    pub fn take_as_funding(&mut self, amount: Amount) -> Result<()> {
+        let taken_coins = self.take(amount)?;
+        let paid = self
+            .context::<Paid>()
+            .ok_or_else(|| Error::Coins("No Payable context available".into()))?;
+
+        paid.give::<S, _>(taken_coins.amount)
+    }
 }
 
 impl<S: Symbol> Balance<S, Amount> for Coin<S> {
@@ -74,14 +87,6 @@ impl<S: Symbol> Take<S> for Coin<S> {
 }
 
 impl<S: Symbol> Give<S> for Coin<S> {
-    // fn add<A>(&mut self, amount: A) -> Result<()>
-    // where
-    //     A: Into<Amount>,
-    // {
-    //     self.amount = (self.amount + amount.into())?;
-
-    //     Ok(())
-    // }
     fn give(&mut self, value: Coin<S>) -> Result<()> {
         self.amount = (self.amount + value.amount)?;
 
