@@ -135,24 +135,22 @@ pub mod accounts_client {
     }
     pub struct MethodTransferAdapter<S, __Return, __Parent>
     where
-        S: Symbol,
+        // S: Symbol,
         __Parent: Clone + Send,
-        __Parent: ::orga::client::AsyncCall<Call = <Accounts<S> as ::orga::call::Call>::Call>,
+        // __Parent: ::orga::client::AsyncCall<Call = <Accounts<S> as ::orga::call::Call>::Call>,
     {
         pub(super) parent: __Parent,
         args: (Address, Amount),
-        _marker: std::marker::PhantomData<(Accounts<S>, __Return)>,
+        _marker: std::marker::PhantomData<(S, __Return)>,
     }
-    unsafe impl<S: Symbol, __Parent, __Return> Send for MethodTransferAdapter<S, __Return, __Parent>
-    where
-        __Parent: Clone + Send,
-        __Parent: ::orga::client::AsyncCall<Call = <Accounts<S> as ::orga::call::Call>::Call>,
+    unsafe impl<S, __Parent, __Return> Send for MethodTransferAdapter<S, __Return, __Parent> where
+        __Parent: Clone + Send // __Parent: ::orga::client::AsyncCall<Call = <Accounts<S> as ::orga::call::Call>::Call>,
     {
     }
-    impl<S: Symbol, __Parent, __Return> Clone for MethodTransferAdapter<S, __Return, __Parent>
+    impl<S, __Parent, __Return> Clone for MethodTransferAdapter<S, __Return, __Parent>
     where
         __Parent: Clone + Send,
-        __Parent: ::orga::client::AsyncCall<Call = <Accounts<S> as ::orga::call::Call>::Call>,
+        // __Parent: ::orga::client::AsyncCall<Call = <Accounts<S> as ::orga::call::Call>::Call>,
     {
         fn clone(&self) -> Self {
             let encoded_args = ::orga::encoding::Encode::encode(&self.args).unwrap();
@@ -193,6 +191,7 @@ pub mod accounts_client {
             'life0: 'async_trait,
             Self: 'async_trait,
         {
+            // unimplemented!();
             Box::pin(async move {
                 if let ::core::option::Option::Some(__ret) =
                     ::core::option::Option::None::<Result<()>>

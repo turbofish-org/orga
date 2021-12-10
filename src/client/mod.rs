@@ -63,7 +63,7 @@ transparent_impl!(Option<T>);
 // TODO: move to call module? or will these always be client-specific?
 #[async_trait::async_trait]
 pub trait AsyncCall {
-    type Call;
+    type Call: Send;
 
     async fn call(&mut self, call: Self::Call) -> Result<()>;
 }

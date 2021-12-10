@@ -20,3 +20,4 @@ pub use payable::*;
 
 pub type DefaultPlugins<T> = SignerPlugin<NoncePlugin<PayablePlugin<T>>>;
 // pub type DefaultPlugins<T> = SignerPlugin<NoncePlugin<T>>;
+// pub type DefaultPlugins<T> = PayablePlugin<T>;

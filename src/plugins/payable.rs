@@ -9,6 +9,7 @@ use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
 use std::any::TypeId;
+use std::clone;
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 
@@ -104,6 +105,8 @@ pub enum PayableCall<T> {
     Unpaid(T),
 }
 
+unsafe impl<T> Send for PayableCall<T> {}
+
 impl<T> Call for PayablePlugin<T>
 where
     T: Call + State,
@@ -132,24 +135,24 @@ impl<T: Query + State> Query for PayablePlugin<T> {
     }
 }
 
-pub struct PayableClient<T, U: Clone> {
+pub struct UnpaidAdapter<T, U: Clone> {
     parent: U,
     marker: std::marker::PhantomData<T>,
 }
 
-impl<T, U: Clone> Clone for PayableClient<T, U> {
+unsafe impl<T, U: Send + Clone> Send for UnpaidAdapter<T, U> {}
+
+impl<T, U: Clone> Clone for UnpaidAdapter<T, U> {
     fn clone(&self) -> Self {
-        PayableClient {
+        UnpaidAdapter {
             parent: self.parent.clone(),
             marker: std::marker::PhantomData,
         }
     }
 }
 
-unsafe impl<T, U: Clone + Send> Send for PayableClient<T, U> {}
-
 #[async_trait::async_trait]
-impl<T: Call, U: AsyncCall<Call = PayableCall<T>> + Clone> AsyncCall for PayableClient<T, U>
+impl<T: Call, U: AsyncCall<Call = PayableCall<T::Call>> + Clone> AsyncCall for UnpaidAdapter<T, U>
 where
     T::Call: Send,
     U: Send,
@@ -157,19 +160,174 @@ where
     type Call = T::Call;
 
     async fn call(&mut self, call: Self::Call) -> Result<()> {
-        // self.parent.call(PayableCall::Unpaid(call)).await
-        todo!()
+        let res = self.parent.call(PayableCall::Unpaid(call));
+
+        res.await
     }
 }
 
-impl<T: Client<PayableClient<T, U>> + State, U: Clone> Client<U> for PayablePlugin<T> {
-    type Client = T::Client;
+pub struct PaidAdapter<T: Call, U: Clone> {
+    payer_call: Vec<u8>,
+    parent: U,
+    marker: std::marker::PhantomData<T>,
+}
+
+unsafe impl<T: Call, U: Send + Clone> Send for PaidAdapter<T, U> {}
+
+impl<T: Call, U: Clone> Clone for PaidAdapter<T, U> {
+    fn clone(&self) -> Self {
+        PaidAdapter {
+            payer_call: self.payer_call.clone(),
+            parent: self.parent.clone(),
+            marker: std::marker::PhantomData,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl<T: Call, U: AsyncCall<Call = PayableCall<T::Call>> + Clone> AsyncCall for PaidAdapter<T, U>
+where
+    T::Call: Send,
+    U: Send,
+{
+    type Call = T::Call;
+
+    async fn call(&mut self, call: Self::Call) -> Result<()> {
+        let res = self.parent.call(PayableCall::Paid(PaidCall {
+            payer: Decode::decode(self.payer_call.clone().as_slice())?,
+            paid: call,
+        }));
+
+        res.await
+    }
+}
+
+pub struct PayableClient<T: Client<UnpaidAdapter<T, U>>, U: Clone + Send> {
+    inner: T::Client,
+    parent: U,
+}
+
+pub struct PayerAdapter<T: Call> {
+    intercepted_call: std::sync::Arc<std::sync::Mutex<Option<Vec<u8>>>>,
+    marker: std::marker::PhantomData<T>,
+}
+
+unsafe impl<T: Call> Send for PayerAdapter<T> {}
+
+impl<T: Call> Clone for PayerAdapter<T> {
+    fn clone(&self) -> Self {
+        PayerAdapter {
+            intercepted_call: self.intercepted_call.clone(),
+            marker: std::marker::PhantomData,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl<T: Call> AsyncCall for PayerAdapter<T>
+where
+    T::Call: Send,
+{
+    type Call = T::Call;
+
+    async fn call(&mut self, call: Self::Call) -> Result<()> {
+        self.intercepted_call
+            .lock()
+            .unwrap()
+            .replace(call.encode()?);
+        Ok(())
+    }
+}
+
+impl<
+        T: Client<UnpaidAdapter<T, U>> + Client<PaidAdapter<T, U>> + Client<PayerAdapter<T>> + Call,
+        U: Clone + Send,
+    > PayableClient<T, U>
+where
+    <T as Client<UnpaidAdapter<T, U>>>::Client: Clone,
+    <T as Client<PaidAdapter<T, U>>>::Client: Clone,
+    <T as Client<PayerAdapter<T>>>::Client: Clone,
+{
+    pub fn pay_from<F, X: std::future::Future>(
+        &mut self,
+        get_payer: F,
+    ) -> <T as Client<PaidAdapter<T, U>>>::Client
+    where
+        F: FnOnce(<T as Client<PayerAdapter<T>>>::Client) -> X,
+    {
+        let mut payer_adapter = PayerAdapter {
+            intercepted_call: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            marker: std::marker::PhantomData,
+        };
+        let mut inner_client = T::create_client(payer_adapter.clone());
+
+        futures_lite::future::block_on(get_payer(inner_client));
+
+        let paid_adapter = PaidAdapter {
+            payer_call: payer_adapter
+                .intercepted_call
+                .lock()
+                .unwrap()
+                .take()
+                .expect("Must make payer call")
+                .encode()
+                .expect("Failed to encode call"),
+            parent: self.parent.clone(),
+            marker: std::marker::PhantomData,
+        };
+
+        T::create_client(paid_adapter)
+    }
+}
+
+impl<T: Client<UnpaidAdapter<T, U>>, U: Clone + Send> Clone for PayableClient<T, U>
+where
+    T::Client: Clone,
+{
+    fn clone(&self) -> Self {
+        PayableClient {
+            inner: self.inner.clone(),
+            parent: self.parent.clone(),
+        }
+    }
+}
+
+impl<T: Client<UnpaidAdapter<T, U>>, U: Clone + Send> Deref for PayableClient<T, U>
+where
+    T::Client: Clone,
+{
+    type Target = T::Client;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl<T: Client<UnpaidAdapter<T, U>>, U: Clone + Send> DerefMut for PayableClient<T, U>
+where
+    T::Client: Clone,
+{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+unsafe impl<T: Client<UnpaidAdapter<T, U>>, U: Clone + Send> Send for PayableClient<T, U> {}
+
+impl<T: Client<UnpaidAdapter<T, U>> + State, U: Clone + Send> Client<U> for PayablePlugin<T>
+where
+    T::Client: Clone,
+{
+    type Client = PayableClient<T, U>;
 
     fn create_client(parent: U) -> Self::Client {
-        T::create_client(PayableClient {
+        PayableClient {
+            inner: T::create_client(UnpaidAdapter {
+                parent: parent.clone(),
+                marker: std::marker::PhantomData,
+            }),
             parent,
-            marker: std::marker::PhantomData,
-        })
+        }
     }
 }
 
