@@ -79,98 +79,98 @@ pub trait AsyncQuery {
 }
 
 // TODO: support deriving for types inside module in macros, then move this into
-// tests module
-#[derive(Debug, Call, Client, Query)]
-pub struct Foo {
-    pub bar: Bar,
-    pub bar2: Bar,
-}
+// // tests module
+// #[derive(Debug, Call, Client, Query)]
+// pub struct Foo {
+//     pub bar: Bar,
+//     pub bar2: Bar,
+// }
 
-impl Foo {
-    #[query]
-    pub fn get_bar(&self, id: u8) -> Result<&Bar> {
-        match id {
-            0 => Ok(&self.bar),
-            1 => Ok(&self.bar2),
-            _ => Err(Error::InvalidID),
-        }
-    }
+// impl Foo {
+//     #[query]
+//     pub fn get_bar(&self, id: u8) -> Result<&Bar> {
+//         match id {
+//             0 => Ok(&self.bar),
+//             1 => Ok(&self.bar2),
+//             _ => Err(Error::InvalidID),
+//         }
+//     }
 
-    #[call]
-    pub fn get_bar_mut(&mut self, id: u8) -> Result<&mut Bar> {
-        println!("Called get_bar_mut({}) on Foo", id);
-        match id {
-            0 => Ok(&mut self.bar),
-            1 => Ok(&mut self.bar2),
-            _ => Err(Error::InvalidID),
-        }
-    }
-}
+//     #[call]
+//     pub fn get_bar_mut(&mut self, id: u8) -> Result<&mut Bar> {
+//         println!("Called get_bar_mut({}) on Foo", id);
+//         match id {
+//             0 => Ok(&mut self.bar),
+//             1 => Ok(&mut self.bar2),
+//             _ => Err(Error::InvalidID),
+//         }
+//     }
+// }
 
-#[derive(Debug, Call, Client, Query)]
-pub struct Bar(u32);
+// #[derive(Debug, Call, Client, Query)]
+// pub struct Bar(u32);
 
-impl Bar {
-    #[query]
-    pub fn count(&self) -> u32 {
-        self.0
-    }
+// impl Bar {
+//     #[query]
+//     pub fn count(&self) -> u32 {
+//         self.0
+//     }
 
-    #[call]
-    pub fn increment(&mut self) {
-        println!("called increment() on Bar");
-        self.0 += 1;
-    }
-}
+//     #[call]
+//     pub fn increment(&mut self) {
+//         println!("called increment() on Bar");
+//         self.0 += 1;
+//     }
+// }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::{Arc, Mutex};
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use std::sync::{Arc, Mutex};
 
-    #[tokio::test]
-    async fn client() {
-        let state = Arc::new(Mutex::new(Foo {
-            bar: Bar(0),
-            bar2: Bar(0),
-        }));
+//     #[tokio::test]
+//     async fn client() {
+//         let state = Arc::new(Mutex::new(Foo {
+//             bar: Bar(0),
+//             bar2: Bar(0),
+//         }));
 
-        let mut client = Mock::new(state.clone());
+//         let mut client = Mock::new(state.clone());
 
-        client.bar.increment().await.unwrap();
-        println!("{:?}\n\n", &state.lock().unwrap());
+//         client.bar.increment().await.unwrap();
+//         println!("{:?}\n\n", &state.lock().unwrap());
 
-        client.get_bar_mut(1).increment().await.unwrap();
-        println!("{:?}\n\n", &state.lock().unwrap());
+//         client.get_bar_mut(1).increment().await.unwrap();
+//         println!("{:?}\n\n", &state.lock().unwrap());
 
-        use bar_query::Query as BarQuery;
-        use foo_query::Query as FooQuery;
-        use orga::encoding::Encode;
+//         use bar_query::Query as BarQuery;
+//         use foo_query::Query as FooQuery;
+//         use orga::encoding::Encode;
 
-        let query = FooQuery::MethodGetBar(1, BarQuery::MethodCount(vec![]).encode().unwrap());
-        let count = client
-            .query(query, |state| Ok(state.get_bar(1)?.count()))
-            .unwrap();
-        println!("{}\n\n", count);
-    }
+//         let query = FooQuery::MethodGetBar(1, BarQuery::MethodCount(vec![]).encode().unwrap());
+//         let count = client
+//             .query(query, |state| Ok(state.get_bar(1)?.count()))
+//             .unwrap();
+//         println!("{}\n\n", count);
+//     }
 
-    #[ignore]
-    #[tokio::test]
-    #[cfg(feature = "abci")]
-    async fn rpc_client() {
-        use crate::abci::TendermintClient;
-        let mut client = TendermintClient::<Foo>::new("http://localhost:26657").unwrap();
+//     #[ignore]
+//     #[tokio::test]
+//     #[cfg(feature = "abci")]
+//     async fn rpc_client() {
+//         use crate::abci::TendermintClient;
+//         let mut client = TendermintClient::<Foo>::new("http://localhost:26657").unwrap();
 
-        client.bar.increment().await.unwrap();
-        client.get_bar_mut(1).increment().await.unwrap();
+//         client.bar.increment().await.unwrap();
+//         client.get_bar_mut(1).increment().await.unwrap();
 
-        // println!("{:?}\n\n", client.bar.count().await.unwrap());
+//         // println!("{:?}\n\n", client.bar.count().await.unwrap());
 
-        // println!("{:?}\n\n", client.get_bar_count(1).await.unwrap());
-        // println!(
-        //     "{:?}\n\n",
-        //     client.get_bar(1).await.unwrap().count(1).await.unwrap()
-        // );
-        // println!("{:?}\n\n", client.get_bar(1).count().await.unwrap());
-    }
-}
+//         // println!("{:?}\n\n", client.get_bar_count(1).await.unwrap());
+//         // println!(
+//         //     "{:?}\n\n",
+//         //     client.get_bar(1).await.unwrap().count(1).await.unwrap()
+//         // );
+//         // println!("{:?}\n\n", client.get_bar(1).count().await.unwrap());
+//     }
+// }
