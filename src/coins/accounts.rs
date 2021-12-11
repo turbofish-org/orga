@@ -96,36 +96,3 @@ impl<S: Symbol> Accounts<S> {
         account.take(amount)
     }
 }
-
-// pub struct AccountsClient<S, U> {
-//     parent: U,
-//     _symbol: std::marker::PhantomData<S>,
-// }
-
-// impl<S: Symbol, U: Clone> Clone for AccountsClient<S, U> {
-//     fn clone(&self) -> Self {
-//         AccountsClient {
-//             parent: self.parent.clone(),
-//             _symbol: std::marker::PhantomData,
-//         }
-//     }
-// }
-
-// impl<S: Symbol, U: Clone> Client<U> for Accounts<S> {
-//     type Client = AccountsClient<S, U>;
-
-//     fn create_client(parent: U) -> Self::Client {
-//         AccountsClient {
-//             parent,
-//             _symbol: std::marker::PhantomData,
-//         }
-//     }
-// }
-
-// type AccountsCall<S> = <Accounts<S> as Call>::Call;
-// impl<S: Symbol, U: Clone + AsyncCall<Call = <Accounts<S> as Call>::Call>> AccountsClient<S, U> {
-//     pub fn transfer(&mut self, to: Address, amount: Amount) -> CallChain<> {
-//         let call = AccountsCall::<S>::MethodTransfer(to, amount, vec![]);
-//         self.parent.call(call)
-//     }
-// }

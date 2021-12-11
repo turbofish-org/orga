@@ -59,11 +59,6 @@ async fn main() {
     let bal = my_balance().await.unwrap();
     println!("My balance: {:?}", bal);
 
-    // fn print_name<T>(t: &T) {
-    //     dbg!(std::any::type_name::<T>());
-    // }
-    // print_name(&rpc_client().accounts);
-
     rpc_client()
         .accounts
         .transfer([0; 32].into(), 100.into())

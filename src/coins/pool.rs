@@ -382,7 +382,7 @@ mod tests {
     use crate::encoding::{Decode, Encode};
     use crate::store::{MapStore, Shared, Store};
 
-    #[derive(Encode, Decode, Debug)]
+    #[derive(Encode, Decode, Debug, Clone)]
     struct Simp;
     impl Symbol for Simp {}
 

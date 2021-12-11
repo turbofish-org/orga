@@ -6,7 +6,7 @@ use orga::plugins::load_keypair;
 use orga::prelude::*;
 use orga::{Error, Result};
 
-#[derive(Encode, Decode, Debug)]
+#[derive(Encode, Decode, Debug, Clone)]
 pub struct Simp;
 impl Symbol for Simp {}
 
