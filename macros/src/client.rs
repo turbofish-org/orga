@@ -468,7 +468,7 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
                 {
                     type Call = <#field_ty as ::orga::call::Call>::Call;
         
-                    async fn call(&mut self, call: Self::Call) -> Result<()> {
+                    async fn call(&mut self, call: Self::Call) -> ::orga::Result<()> {
                         // assumes that the call has a tuple variant called "Field" +
                         // the camel-cased name as the field
                         let subcall_bytes = ::orga::encoding::Encode::encode(&call)?; // TODO: error handling
