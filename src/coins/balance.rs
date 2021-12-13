@@ -1,5 +1,4 @@
 use super::{Amount, Symbol};
-
-pub trait Balance<S: Symbol> {
-    fn balance(&self) -> Amount<S>;
+pub trait Balance<S: Symbol, U = Amount> {
+    fn balance(&self) -> U;
 }

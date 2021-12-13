@@ -11,7 +11,7 @@ pub struct AppWithStaking {
 }
 
 impl AppWithStaking {
-    pub fn delegate(&mut self, validator_address: Address, amount: Amount<Simp>) -> Result<()> {
+    pub fn delegate(&mut self, validator_address: Address, amount: Amount) -> Result<()> {
         let signer = self
             .context::<Signer>()
             .ok_or_else(|| Error::App("No signer context available".into()))?
@@ -43,7 +43,7 @@ impl EndBlock for AppWithStaking {
                 let validator_address = unbond.validator_address;
                 let validator = self.staking.validators.get(validator_address)?;
 
-                let _new_voting_power = validator.balance().value;
+                let _new_voting_power = validator.balance();
             }
         }
 

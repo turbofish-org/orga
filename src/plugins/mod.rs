@@ -12,3 +12,11 @@ pub use nonce::*;
 mod abci;
 #[cfg(feature = "abci")]
 pub use abci::*;
+
+#[cfg(feature = "abci")]
+mod payable;
+#[cfg(feature = "abci")]
+pub use payable::*;
+
+#[cfg(feature = "abci")]
+pub type DefaultPlugins<T> = SignerPlugin<NoncePlugin<PayablePlugin<T>>>;

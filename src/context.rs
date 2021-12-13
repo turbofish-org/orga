@@ -73,21 +73,36 @@ mod tests {
     struct ContextC {
         _baz: u32,
     }
+
+    struct ContextD<T> {
+        inner: T,
+    }
     #[test]
     fn context_add_and_resolve() {
         let a = ContextA { foo: 0 };
         let b = ContextA { foo: 1 };
         let c = ContextA { foo: 2 };
         let d = ContextB { bar: vec![1, 2, 3] };
+        let e = ContextD { inner: 10u32 };
+        let f = ContextD {
+            inner: vec![1, 2, 3, 4] as Vec<i32>,
+        };
+
         Context::add(a);
         Context::add(b);
         Context::add(c);
         Context::add(d);
+        Context::add(e);
+        Context::add(f);
         let resolved_a = Context::resolve::<ContextA>().unwrap();
         let resolved_b = Context::resolve::<ContextB>().unwrap();
         let resolved_c = Context::resolve::<ContextC>();
+        let resolved_d = Context::resolve::<ContextD<u32>>().unwrap();
         assert_eq!(resolved_a.foo, 2);
         assert_eq!(resolved_b.bar, vec![1, 2, 3]);
         assert!(resolved_c.is_none());
+        assert_eq!(resolved_d.inner, 10);
+        let resolved_e = Context::resolve::<ContextD<Vec<i32>>>().unwrap();
+        assert_eq!(resolved_e.inner, vec![1, 2, 3, 4]);
     }
 }

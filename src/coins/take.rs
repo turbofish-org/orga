@@ -1,17 +1,12 @@
-use super::{Amount, Coin, Symbol};
+use super::{Amount, Symbol};
 use crate::Result;
 
-pub trait Take<S: Symbol> {
-    fn deduct<A>(&mut self, amount: A) -> Result<()>
-    where
-        A: Into<Amount<S>>;
+pub trait Take<S: Symbol, U = Amount>: Sized {
+    type Value = Self;
 
-    fn take<A>(&mut self, amount: A) -> Result<Coin<S>>
-    where
-        A: Into<Amount<S>>,
-    {
-        let amount = amount.into();
-        self.deduct(amount)?;
-        Ok(Coin { amount })
-    }
+    fn take<A: Into<U>>(&mut self, amount: A) -> Result<Self::Value>;
+}
+
+pub trait Deduct<S: Symbol, U = Amount>: Sized {
+    fn deduct<A: Into<U>>(&mut self, amount: A) -> Result<()>;
 }

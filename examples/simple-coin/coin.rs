@@ -6,7 +6,7 @@ use orga::plugins::load_keypair;
 use orga::prelude::*;
 use orga::{Error, Result};
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Debug, Clone)]
 pub struct Simp;
 impl Symbol for Simp {}
 
@@ -40,7 +40,7 @@ impl BeginBlock for SimpleCoin {
     fn begin_block(&mut self, _ctx: &BeginBlockCtx) -> Result<()> {
         for entry in self.balances.iter()? {
             let (key, balance) = entry?;
-            println!("{:?} has {}", *key, balance.amount.value);
+            println!("{:?} has {:?}", *key, balance.amount);
         }
         println!("\n\n\n");
         // self.balances.insert()
@@ -51,7 +51,7 @@ impl BeginBlock for SimpleCoin {
 
 impl SimpleCoin {
     #[call]
-    pub fn transfer(&mut self, to: Address, amount: Amount<Simp>) -> Result<()> {
+    pub fn transfer(&mut self, to: Address, amount: Amount) -> Result<()> {
         let signer = self
             .context::<Signer>()
             .ok_or_else(|| Error::App("No signer context available".into()))?
@@ -59,7 +59,7 @@ impl SimpleCoin {
             .ok_or_else(|| Error::App("Transfer calls must be signed".into()))?;
 
         let mut sender = self.balances.entry(signer)?.or_default()?;
-        let coins = sender.take(amount)?;
+        let coins = (*sender).take(amount)?;
         let mut receiver = self.balances.entry(to)?.or_default()?;
         receiver.give(coins).unwrap();
 

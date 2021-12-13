@@ -7,6 +7,9 @@
 #![allow(incomplete_features)]
 #![feature(specialization)]
 #![feature(generic_associated_types)]
+#![feature(const_generics_defaults)]
+#![feature(try_trait_v2)]
+#![feature(never_type)]
 
 extern crate self as orga;
 
@@ -48,6 +51,7 @@ pub mod tendermint;
 
 pub mod plugins;
 
+#[cfg(feature = "abci")]
 pub mod coins;
 
 pub mod context;
@@ -65,6 +69,7 @@ pub mod prelude {
     pub use crate::abci::*;
     pub use crate::call::*;
     pub use crate::client::{AsyncCall, Client};
+    #[cfg(feature = "abci")]
     pub use crate::coins::*;
     pub use crate::collections::*;
     pub use crate::context::*;

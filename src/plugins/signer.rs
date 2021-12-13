@@ -54,6 +54,7 @@ impl SignerCall {
 impl<T: Call> Call for SignerPlugin<T> {
     type Call = SignerCall;
     fn call(&mut self, call: Self::Call) -> Result<()> {
+        Context::remove::<Signer>();
         let signer_ctx = Signer {
             signer: call.verify()?,
         };

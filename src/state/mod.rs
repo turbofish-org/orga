@@ -76,6 +76,11 @@ state_impl!(u16);
 state_impl!(u32);
 state_impl!(u64);
 state_impl!(u128);
+state_impl!(i8);
+state_impl!(i16);
+state_impl!(i32);
+state_impl!(i64);
+state_impl!(i128);
 state_impl!(bool);
 state_impl!(());
 

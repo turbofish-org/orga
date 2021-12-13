@@ -76,6 +76,7 @@ fn create_client_struct(
     let generics = &item.generics;
 
     let parent_ty: GenericParam = syn::parse2(quote!(__Parent)).unwrap();
+    let return_ty: GenericParam = syn::parse2(quote!(__Return)).unwrap();
 
     let mut generics_sanitized = generics.clone();
     generics_sanitized.params.iter_mut().for_each(|g| {
@@ -85,13 +86,23 @@ fn create_client_struct(
     });
     generics_sanitized.params.push(parent_ty.clone());
 
-    let mut generics_sanitized_with_return = generics_sanitized.clone();
-    generics_sanitized_with_return
+    let mut generics_with_parent = generics.clone();
+    generics_with_parent.params.push(parent_ty.clone());
+
+    let mut generics_with_return_and_parent = generics.clone();
+    generics_with_return_and_parent
         .params
-        .push(syn::parse_quote!(__Return));
+        .push(return_ty.clone());
+    generics_with_return_and_parent
+        .params
+        .push(parent_ty.clone());
+
+    let mut generics_sanitized_with_return = generics_sanitized.clone();
+    generics_sanitized_with_return.params.push(return_ty);
 
     let generic_params = gen_param_input(generics, false);
     let generic_params_bracketed = gen_param_input(generics, true);
+    let generic_params_bracketed_with_parent = gen_param_input(&generics_with_parent, true);
     let where_preds = item.generics.where_clause.as_ref().map(|w| &w.predicates);
 
     let field_fields = field_adapters
@@ -241,7 +252,7 @@ fn create_client_struct(
                 let call_preds = call_impl.generics.where_clause.as_ref().map(|w| &w.predicates);
 
                 quote! {
-                    pub struct #adapter_name<#generic_params __Return, #parent_ty>
+                    pub struct #adapter_name#generics_with_return_and_parent
                     where
                         #parent_ty: Clone + Send,
                         #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call>,
@@ -288,7 +299,7 @@ fn create_client_struct(
 
                         async fn call(&mut self, call: Self::Call) -> Result<()> {
                             let call_bytes = ::orga::encoding::Encode::encode(&call)?;
-                            let parent_call = <#name as ::orga::call::Call>::Call::#call_variant_name(
+                            let parent_call = <#name#generic_params_bracketed as ::orga::call::Call>::Call::#call_variant_name(
                                 #(#unrolled_args,)*
                                 call_bytes
                             );
@@ -319,16 +330,17 @@ fn create_client_struct(
 
     quote! {
         #[must_use]
-        pub struct Client<#generic_params #parent_ty>
+        pub struct Client#generics_with_parent
         where
             #parent_ty: Clone + Send,
             #where_preds
         {
             pub(super) parent: #parent_ty,
             #(#field_fields,)*
+            __Marker: std::marker::PhantomData<(#generic_params)>,
         }
 
-        impl<#generic_params #parent_ty> Clone for Client<#generic_params #parent_ty>
+        impl#generics_sanitized Clone for Client#generic_params_bracketed_with_parent
         where
             #parent_ty: Clone + Send,
             #where_preds
@@ -337,11 +349,12 @@ fn create_client_struct(
                 Self {
                     parent: self.parent.clone(),
                     #(#field_clones,)*
+                    __Marker: std::marker::PhantomData,
                 }
             }
         }
 
-        impl#generics_sanitized Client<#generic_params #parent_ty>
+        impl#generics_sanitized Client#generic_params_bracketed_with_parent
         where
             #parent_ty: Clone + Send,
             #where_preds
@@ -351,6 +364,7 @@ fn create_client_struct(
                 Client {
                     #(#field_constructors,)*
                     parent,
+                    __Marker: std::marker::PhantomData,
                 }
             }
         }
@@ -366,99 +380,113 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
 
     let item_name = &item.ident;
     let item_generics = &item.generics;
+
+    let parent_ty: GenericParam = syn::parse2(quote!(__Parent)).unwrap();
+    let return_ty: GenericParam = syn::parse2(quote!(__Return)).unwrap();
+
+    let mut generics_sanitized = item_generics.clone();
+    generics_sanitized.params.iter_mut().for_each(|g| {
+        if let GenericParam::Type(ref mut t) = g {
+            t.default = None;
+        }
+    });
+    generics_sanitized.params.push(parent_ty.clone());
+
+    let mut generics_with_parent = item_generics.clone();
+    generics_with_parent.params.push(parent_ty.clone());
+
+    let mut generics_with_return_and_parent = item_generics.clone();
+    generics_with_return_and_parent
+        .params
+        .push(return_ty.clone());
+    generics_with_return_and_parent
+        .params
+        .push(parent_ty.clone());
+
+    let mut generics_sanitized_with_return = generics_sanitized.clone();
+    generics_sanitized_with_return.params.push(return_ty);
+
+    let generic_params_bracketed_with_parent = gen_param_input(&generics_with_parent, true);
+
     let item_ty = quote!(#item_name#item_generics);
 
     let adapters: Vec<_> = fields
         .iter()
         .enumerate()
-        .map(|(i, f)| create_field_adapter(&item_ty, f, i))
+        .map(|(i, field)| {
+            let struct_name = field.ident.as_ref().map_or(
+                Ident::new(format!("Field{}Adapter", i).as_str(), Span::call_site()),
+                |f| {
+                    Ident::new(
+                        format!("Field{}Adapter", f.to_string().to_camel_case()).as_str(),
+                        Span::call_site(),
+                    )
+                },
+            );
+            let variant_name = field.ident.as_ref().map_or(
+                Ident::new(format!("Field{}", i).as_str(), Span::call_site()),
+                |f| {
+                    Ident::new(
+                        format!("Field{}", f.to_string().to_camel_case()).as_str(),
+                        Span::call_site(),
+                    )
+                },
+            );
+            let field_ty = &field.ty;
+            let parent_client_ty: GenericParam = syn::parse2(quote!(__Parent)).unwrap();
+        
+            let struct_def = quote! {
+                #[derive(Clone)]
+                pub struct #struct_name#generics_with_parent
+                where
+                    #parent_client_ty: Clone + Send,
+                {
+                    pub(super) parent: #parent_client_ty,
+                }
+            };
+        
+            let output = quote! {
+                #struct_def
+                impl#generics_sanitized #struct_name#generic_params_bracketed_with_parent
+                where
+                    #parent_client_ty: Clone + Send,
+                {
+                    pub fn new(parent: #parent_client_ty) -> Self {
+                        Self { parent }
+                    }
+                }
+        
+                #[::orga::async_trait]
+                impl#generics_sanitized ::orga::client::AsyncCall for #struct_name#generic_params_bracketed_with_parent
+                where
+                    #parent_client_ty: Clone + Send,
+                    #parent_client_ty: ::orga::client::AsyncCall<Call = <#item_ty as ::orga::call::Call>::Call>,
+                {
+                    type Call = <#field_ty as ::orga::call::Call>::Call;
+        
+                    async fn call(&mut self, call: Self::Call) -> Result<()> {
+                        // assumes that the call has a tuple variant called "Field" +
+                        // the camel-cased name as the field
+                        let subcall_bytes = ::orga::encoding::Encode::encode(&call)?; // TODO: error handling
+                        let subcall = <#item_ty as ::orga::call::Call>::Call::#variant_name(subcall_bytes);
+                        self.parent.call(subcall).await
+                    }
+                }
+            };
+        
+            (output, struct_def)
+        })
         .collect();
     let adapter_outputs = adapters.clone().into_iter().map(|a| a.0);
     let adapter_items: Vec<_> = fields
         .iter()
         .map(|f| *f)
-        .zip(adapters.into_iter().map(|a| a.1))
+        .zip(adapters.into_iter().map(|a| syn::parse2(a.1).unwrap()))
         .collect();
 
     let output = quote!(#(#adapter_outputs)*);
 
     (output, adapter_items)
-}
-
-fn create_field_adapter(
-    parent_ty: &TokenStream2,
-    field: &Field,
-    i: usize,
-) -> (TokenStream2, ItemStruct) {
-    let struct_name = field.ident.as_ref().map_or(
-        Ident::new(format!("Field{}Adapter", i).as_str(), Span::call_site()),
-        |f| {
-            Ident::new(
-                format!("Field{}Adapter", f.to_string().to_camel_case()).as_str(),
-                Span::call_site(),
-            )
-        },
-    );
-    let variant_name = field.ident.as_ref().map_or(
-        Ident::new(format!("Field{}", i).as_str(), Span::call_site()),
-        |f| {
-            Ident::new(
-                format!("Field{}", f.to_string().to_camel_case()).as_str(),
-                Span::call_site(),
-            )
-        },
-    );
-    let field_ty = &field.ty;
-    let parent_client_ty: GenericParam = syn::parse2(quote!(__Parent)).unwrap();
-
-    let struct_def = quote! {
-        #[derive(Clone)]
-        pub struct #struct_name<#parent_client_ty>
-        where
-            #parent_client_ty: Clone + Send,
-        {
-            pub(super) parent: #parent_client_ty,
-        }
-    };
-
-    let adapter_struct: ItemStruct = syn::parse2(struct_def.clone()).unwrap();
-    let mut adapter_generics = adapter_struct.generics.clone();
-    adapter_generics.params.iter_mut().for_each(|g| {
-        if let GenericParam::Type(ref mut t) = g {
-            t.default = None;
-        }
-    });
-
-    let output = quote! {
-        #struct_def
-        impl#adapter_generics #struct_name<#parent_client_ty>
-        where
-            #parent_client_ty: Clone + Send,
-        {
-            pub fn new(parent: #parent_client_ty) -> Self {
-                Self { parent }
-            }
-        }
-
-        #[::orga::async_trait]
-        impl#adapter_generics ::orga::client::AsyncCall for #struct_name<#parent_client_ty>
-        where
-            #parent_client_ty: Clone + Send,
-            #parent_client_ty: ::orga::client::AsyncCall<Call = <#parent_ty as ::orga::call::Call>::Call>,
-        {
-            type Call = <#field_ty as ::orga::call::Call>::Call;
-
-            async fn call(&mut self, call: Self::Call) -> Result<()> {
-                // assumes that the call has a tuple variant called "Field" +
-                // the camel-cased name as the field
-                let subcall_bytes = ::orga::encoding::Encode::encode(&call)?; // TODO: error handling
-                let subcall = <#parent_ty as ::orga::call::Call>::Call::#variant_name(subcall_bytes);
-                self.parent.call(subcall).await
-            }
-        }
-    };
-
-    (output, adapter_struct)
 }
 
 fn gen_param_input(generics: &Generics, bracketed: bool) -> TokenStream2 {
