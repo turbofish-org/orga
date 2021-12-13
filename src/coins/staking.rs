@@ -701,6 +701,12 @@ mod tests {
         staking.unbond(dave, dave, 150)?;
         assert_eq!(ctx.updates.get(&dave_con.bytes).unwrap().power, 450);
 
+        // Anonymous other validator declares so we can try jailing dave
+        staking.declare([200; 32].into(), [201; 32].into(), 300.into())?;
+        staking.slash(dave, 0)?.burn();
+        assert_eq!(ctx.updates.get(&dave_con.bytes).unwrap().power, 0);
+        staking.slash(dave, 0)?.burn();
+
         Ok(())
     }
 }
