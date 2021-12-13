@@ -58,8 +58,15 @@ macro_rules! transparent_impl {
 
 transparent_impl!(&T);
 transparent_impl!(&mut T);
-transparent_impl!(Result<T>);
 transparent_impl!(Option<T>);
+
+impl<T: Client<U>, U: Clone, E> Client<U> for std::result::Result<T, E> {
+    type Client = T::Client;
+
+    fn create_client(parent: U) -> Self::Client {
+        T::create_client(parent)
+    }
+}
 
 // TODO: move to call module? or will these always be client-specific?
 #[async_trait::async_trait]

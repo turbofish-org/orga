@@ -3,6 +3,8 @@ use mutagen::mutate;
 
 use crate::encoding::{Decode, Encode};
 use crate::{Error, Result};
+use std::result::Result as StdResult;
+use std::error::Error as StdError;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -38,7 +40,7 @@ impl<T: Call> Call for RefCell<T> {
     }
 }
 
-impl<T: Call> Call for Result<T> {
+impl<T: Call, E: StdError> Call for StdResult<T, E> {
     type Call = T::Call;
 
     fn call(&mut self, call: Self::Call) -> Result<()> {
