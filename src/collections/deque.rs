@@ -16,7 +16,7 @@ pub struct Deque<T, S = DefaultBackingStore> {
     map: Map<u64, T, S>,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Clone)]
 pub struct Meta {
     head: u64,
     tail: u64,
