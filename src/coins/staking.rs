@@ -1,20 +1,24 @@
 use super::pool::{Child as PoolChild, ChildMut as PoolChildMut};
 use super::{Address, Adjust, Amount, Balance, Coin, Give, Pool, Ratio, Share, Symbol, Take};
+use crate::abci::BeginBlock;
 use crate::call::Call;
 use crate::client::Client;
 use crate::collections::{Deque, Map};
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
-use crate::plugins::{Paid, Signer, Time, Validators};
+use crate::plugins::{BeginBlockCtx, Paid, Signer, Time, Validators};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::{Error, Result};
+use sha2::{Digest, Sha256};
+use std::convert::TryInto;
 
 #[cfg(test)]
 const UNBONDING_SECONDS: u64 = 10; // 10 seconds
 #[cfg(not(test))]
 const UNBONDING_SECONDS: u64 = 60 * 60 * 24 * 7 * 2; // 2 weeks
+const MAX_OFFLINE_BLOCKS: u64 = 1800;
 
 type Delegators<S> = Pool<Address, Delegator<S>, S>;
 
@@ -23,6 +27,7 @@ pub struct Staking<S: Symbol> {
     validators: Pool<Address, Validator<S>, S>,
     amount_delegated: Amount,
     consensus_keys: Map<Address, Address>,
+    last_signed_block: Map<[u8; 20], u64>,
 }
 
 impl<S: Symbol> State for Staking<S> {
@@ -33,6 +38,7 @@ impl<S: Symbol> State for Staking<S> {
             validators: State::create(store.sub(&[0]), data.validators)?,
             amount_delegated: State::create(store.sub(&[1]), data.amount_delegated)?,
             consensus_keys: State::create(store.sub(&[2]), ())?,
+            last_signed_block: State::create(store.sub(&[3]), ())?,
         })
     }
 
@@ -51,6 +57,51 @@ impl<S: Symbol> From<Staking<S>> for StakingEncoding<S> {
             validators: staking.validators.into(),
             amount_delegated: staking.amount_delegated.into(),
         }
+    }
+}
+
+impl<S: Symbol> BeginBlock for Staking<S> {
+    fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
+        if let Some(last_commit_info) = &ctx.last_commit_info {
+            let height = ctx.height;
+            // Update last online height
+            last_commit_info
+                .votes
+                .iter()
+                .filter(|vote_info| vote_info.signed_last_block)
+                .filter(|vote_info| vote_info.validator.is_some())
+                .map(|vote_info| vote_info.validator.as_ref().unwrap())
+                .try_for_each(|validator| {
+                    self.last_signed_block.insert(
+                        validator.address[..]
+                            .try_into()
+                            .expect("Invalid pub key hash length"),
+                        height,
+                    )
+                })?;
+
+            let mut offline_validator_hashes: Vec<Vec<u8>> = vec![];
+            self.last_signed_block
+                .iter()?
+                .try_for_each(|res| -> Result<()> {
+                    let (hash, last_height) = res?;
+                    if *last_height + MAX_OFFLINE_BLOCKS < height {
+                        offline_validator_hashes.push(hash.to_vec());
+                    }
+
+                    Ok(())
+                })?;
+
+            for hash in offline_validator_hashes {
+                let val_addresses = self.val_address_for_consensus_key_hash(hash)?;
+                for address in val_addresses {
+                    if self.slashable_balance(address)? > 0 {
+                        self.slash(address, 0)?.burn();
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -266,6 +317,37 @@ impl<S: Symbol> Staking<S> {
     fn paid(&mut self) -> Result<&mut Paid> {
         self.context::<Paid>()
             .ok_or_else(|| Error::Coins("No Payment context available".into()))
+    }
+
+    fn val_address_for_consensus_key_hash(
+        &self,
+        consensus_key_hash: Vec<u8>,
+    ) -> Result<Vec<Address>> {
+        let mut consensus_keys: Vec<(Address, Address)> = vec![];
+        self.consensus_keys
+            .iter()?
+            .try_for_each(|entry| -> Result<()> {
+                let (k, v) = entry?;
+                consensus_keys.push((*k, *v));
+
+                Ok(())
+            })?;
+
+        let val_addresses = consensus_keys
+            .into_iter()
+            .filter_map(|(k, v)| {
+                let mut hasher = Sha256::new();
+                hasher.update(v.bytes);
+                let hash = hasher.finalize().to_vec();
+                if hash[..20] == consensus_key_hash[..20] {
+                    Some(k)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        Ok(val_addresses)
     }
 }
 
