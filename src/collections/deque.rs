@@ -16,7 +16,7 @@ pub struct Deque<T, S = DefaultBackingStore> {
     map: Map<u64, T, S>,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Clone)]
 pub struct Meta {
     head: u64,
     tail: u64,
@@ -112,8 +112,7 @@ impl<T: State<S>, S: Write> Deque<T, S> {
     pub fn push_back(&mut self, value: T::Encoding) -> Result<()> {
         let index = self.meta.tail;
         self.meta.tail += 1;
-        // TODO: use insert
-        self.map.entry(index)?.or_insert(value)?;
+        self.map.insert(index, value)?;
         Ok(())
     }
 
@@ -121,8 +120,7 @@ impl<T: State<S>, S: Write> Deque<T, S> {
     pub fn push_front(&mut self, value: T::Encoding) -> Result<()> {
         self.meta.head -= 1;
         let index = self.meta.head;
-        // TODO: use insert
-        self.map.entry(index)?.or_insert(value)?;
+        self.map.insert(index, value)?;
         Ok(())
     }
 
