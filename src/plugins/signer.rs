@@ -40,7 +40,7 @@ impl SignerCall {
         match (self.pubkey, self.signature) {
             (Some(pubkey_bytes), Some(signature)) => {
                 let pubkey = PublicKey::from_bytes(&pubkey_bytes)?;
-                let signature = Signature::new(signature);
+                let signature = Signature::from_bytes(&signature);
                 pubkey.verify_strict(&self.call_bytes, &signature)?;
 
                 Ok(Some(pubkey_bytes.into()))
