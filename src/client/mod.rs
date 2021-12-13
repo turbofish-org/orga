@@ -1,6 +1,7 @@
-use crate::call::Call;
-use crate::query::Query;
-use crate::{Error, Result};
+// use crate::call::Call;
+// use crate::query::Query;
+// use crate::Error;
+use crate::Result;
 
 pub use crate::macros::Client;
 pub use call_chain::CallChain;

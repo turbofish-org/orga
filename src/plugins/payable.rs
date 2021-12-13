@@ -1,15 +1,14 @@
-use super::{BeginBlockCtx, EndBlockCtx, InitChainCtx, Signer};
+use super::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
 use crate::abci::{BeginBlock, EndBlock, InitChain};
 use crate::call::Call;
 use crate::client::{AsyncCall, Client};
-use crate::coins::{Address, Amount, Coin, Give, Symbol, Take};
-use crate::context::{Context, GetContext};
+use crate::coins::{Amount, Coin, Symbol};
+use crate::context::Context;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
 use std::any::TypeId;
-use std::clone;
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 
@@ -105,6 +104,7 @@ pub enum PayableCall<T> {
     Unpaid(T),
 }
 
+#[allow(clippy::non_send_fields_in_send_ty)]
 unsafe impl<T> Send for PayableCall<T> {}
 
 impl<T> Call for PayablePlugin<T>
@@ -255,11 +255,11 @@ where
     where
         F: FnOnce(<T as Client<PayerAdapter<T>>>::Client) -> X,
     {
-        let mut payer_adapter = PayerAdapter {
+        let payer_adapter = PayerAdapter {
             intercepted_call: std::sync::Arc::new(std::sync::Mutex::new(None)),
             marker: std::marker::PhantomData,
         };
-        let mut inner_client = T::create_client(payer_adapter.clone());
+        let inner_client = T::create_client(payer_adapter.clone());
 
         futures_lite::future::block_on(get_payer(inner_client));
 
@@ -312,6 +312,7 @@ where
     }
 }
 
+#[allow(clippy::non_send_fields_in_send_ty)]
 unsafe impl<T: Client<UnpaidAdapter<T, U>>, U: Clone + Send> Send for PayableClient<T, U> {}
 
 impl<T: Client<UnpaidAdapter<T, U>> + State, U: Clone + Send> Client<U> for PayablePlugin<T>

@@ -1,5 +1,5 @@
 use crate::call::Call;
-use crate::client::{AsyncCall, CallChain, Client};
+use crate::client::Client;
 use crate::coins::{Address, Amount, Coin, Give, Symbol, Take};
 use crate::collections::Map;
 use crate::context::GetContext;

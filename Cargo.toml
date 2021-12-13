@@ -56,3 +56,7 @@ required-features = ["merk", "abci"]
 [[example]]
 name = "simple-coin"
 required-features = ["merk", "abci"]
+
+[[example]]
+name = "staking"
+required-features = ["merk", "abci"]

@@ -18,4 +18,5 @@ mod payable;
 #[cfg(feature = "abci")]
 pub use payable::*;
 
+#[cfg(feature = "abci")]
 pub type DefaultPlugins<T> = SignerPlugin<NoncePlugin<PayablePlugin<T>>>;

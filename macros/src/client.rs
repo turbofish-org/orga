@@ -406,8 +406,6 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
     let mut generics_sanitized_with_return = generics_sanitized.clone();
     generics_sanitized_with_return.params.push(return_ty);
 
-    let generic_params = gen_param_input(item_generics, false);
-    let generic_params_bracketed = gen_param_input(item_generics, true);
     let generic_params_bracketed_with_parent = gen_param_input(&generics_with_parent, true);
 
     let item_ty = quote!(#item_name#item_generics);
