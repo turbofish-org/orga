@@ -240,7 +240,7 @@ impl<A: Application> ABCIStateMachine<A> {
                         .parse()
                         .expect("Invalid STOP_HEIGHT value");
                     assert!(
-                        !(self.height >= stop_height),
+                        self.height < stop_height,
                         "Reached stop height ({})",
                         stop_height
                     );
