@@ -101,6 +101,22 @@ impl<S: Symbol> BeginBlock for Staking<S> {
                 }
             }
         }
+
+        for evidence in &ctx.byzantine_validators {
+            match &evidence.validator {
+                Some(validator) => {
+                    let val_addresses =
+                        self.val_address_for_consensus_key_hash(validator.address.clone())?;
+                    for address in val_addresses {
+                        if self.slashable_balance(address)? > 0 {
+                            self.slash(address, 0)?.burn();
+                        }
+                    }
+                }
+                None => {}
+            }
+        }
+
         Ok(())
     }
 }
