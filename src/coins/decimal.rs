@@ -58,7 +58,7 @@ impl Decimal {
         if self.0.is_sign_negative() {
             Err(Error::Coins("Amounts may not be negative".into()))
         } else {
-            match self.0.round().to_u64() {
+            match self.0.floor().to_u64() {
                 Some(value) => Ok(value.into()),
                 None => Err(Error::Coins(
                     "Amounts may not be greater than u64::MAX".into(),

@@ -44,6 +44,7 @@ impl<S: Symbol> State for Staking<S> {
 
     fn flush(self) -> Result<Self::Encoding> {
         self.consensus_keys.flush()?;
+        self.last_signed_block.flush()?;
         Ok(Self::Encoding {
             validators: self.validators.flush()?,
             amount_delegated: self.amount_delegated.flush()?,
