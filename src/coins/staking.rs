@@ -18,7 +18,7 @@ use std::convert::TryInto;
 const UNBONDING_SECONDS: u64 = 10; // 10 seconds
 #[cfg(not(test))]
 const UNBONDING_SECONDS: u64 = 60 * 60 * 24 * 7 * 2; // 2 weeks
-const MAX_OFFLINE_BLOCKS: u64 = 1800;
+const MAX_OFFLINE_BLOCKS: u64 = 100;
 
 type Delegators<S> = Pool<Address, Delegator<S>, S>;
 
