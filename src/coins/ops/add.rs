@@ -230,3 +230,37 @@ impl Add<MathResult<Decimal>> for MathResult<Amount> {
         self? + other?
     }
 }
+
+// Decimal + amount
+
+impl Add<Amount> for Decimal {
+    type Output = MathResult<Decimal>;
+
+    fn add(self, other: Amount) -> Self::Output {
+        other + self
+    }
+}
+
+impl Add<Amount> for MathResult<Decimal> {
+    type Output = MathResult<Decimal>;
+
+    fn add(self, other: Amount) -> Self::Output {
+        other + self?
+    }
+}
+
+impl Add<MathResult<Amount>> for Decimal {
+    type Output = MathResult<Decimal>;
+
+    fn add(self, other: MathResult<Amount>) -> Self::Output {
+        other? + self
+    }
+}
+
+impl Add<MathResult<Amount>> for MathResult<Decimal> {
+    type Output = MathResult<Decimal>;
+
+    fn add(self, other: MathResult<Amount>) -> Self::Output {
+        other? + self?
+    }
+}

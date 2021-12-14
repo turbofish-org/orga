@@ -67,3 +67,19 @@ impl PartialEq<u64> for Decimal {
         self.0 == other_dec.0
     }
 }
+
+impl PartialEq<Decimal> for Amount {
+    fn eq(&self, other: &Decimal) -> bool {
+        let self_decimal: Decimal = (*self).into();
+
+        self_decimal.0 == other.0
+    }
+}
+
+impl PartialEq<Amount> for Decimal {
+    fn eq(&self, other: &Amount) -> bool {
+        let other_decimal: Decimal = (*other).into();
+
+        self.0 == other_decimal.0
+    }
+}

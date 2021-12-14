@@ -67,3 +67,19 @@ impl PartialOrd<u64> for Decimal {
         self.0.partial_cmp(&other_dec.0)
     }
 }
+
+impl PartialOrd<Decimal> for Amount {
+    fn partial_cmp(&self, other: &Decimal) -> Option<Ordering> {
+        let self_decimal: Decimal = (*self).into();
+
+        self_decimal.partial_cmp(other)
+    }
+}
+
+impl PartialOrd<Amount> for Decimal {
+    fn partial_cmp(&self, other: &Amount) -> Option<Ordering> {
+        let other_decimal: Decimal = (*other).into();
+
+        self.0.partial_cmp(&other_decimal.0)
+    }
+}

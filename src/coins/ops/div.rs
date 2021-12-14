@@ -225,23 +225,3 @@ impl Div<MathResult<Decimal>> for MathResult<Amount> {
         self? / other?
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::Result;
-
-    #[test]
-    fn amount_div() -> Result<()> {
-        let fifty: Amount = 50.into();
-        let hundred: Amount = 100.into();
-        let four: Amount = 4.into();
-        let half = Ratio::new(1, 2)?;
-        let quotient = (fifty / hundred / four / half)?;
-
-        let target = Ratio::new(1, 4)?;
-        assert_eq!(quotient.0, target.0);
-
-        Ok(())
-    }
-}

@@ -1,6 +1,6 @@
-use super::Ratio;
+use super::Decimal;
 use crate::Result;
 
 pub trait Adjust {
-    fn adjust(&mut self, multiplier: Ratio) -> Result<()>;
+    fn adjust(&mut self, multiplier: Decimal) -> Result<()>;
 }

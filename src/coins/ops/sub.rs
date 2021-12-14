@@ -238,3 +238,43 @@ impl Sub<MathResult<Decimal>> for MathResult<Amount> {
         self? - other?
     }
 }
+
+// Decimal - amount
+
+impl Sub<Amount> for Decimal {
+    type Output = MathResult<Decimal>;
+
+    fn sub(self, other: Amount) -> Self::Output {
+        let other_decimal: Decimal = other.into();
+
+        self.0
+            .checked_sub(other_decimal.0)
+            .map(Decimal)
+            .ok_or(Error::Overflow)
+            .into()
+    }
+}
+
+impl Sub<Amount> for MathResult<Decimal> {
+    type Output = MathResult<Decimal>;
+
+    fn sub(self, other: Amount) -> Self::Output {
+        self? - other
+    }
+}
+
+impl Sub<MathResult<Amount>> for Decimal {
+    type Output = MathResult<Decimal>;
+
+    fn sub(self, other: MathResult<Amount>) -> Self::Output {
+        self - other?
+    }
+}
+
+impl Sub<MathResult<Amount>> for MathResult<Decimal> {
+    type Output = MathResult<Decimal>;
+
+    fn sub(self, other: MathResult<Amount>) -> Self::Output {
+        self? - other?
+    }
+}

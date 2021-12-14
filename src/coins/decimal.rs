@@ -54,20 +54,28 @@ impl Ord for Decimal {
 }
 
 impl Decimal {
-    pub fn amount(&self) -> Amount {
+    pub fn amount(&self) -> Result<Amount> {
         if self.0.is_sign_negative() {
-            0.into()
+            Err(Error::Coins("Amounts may not be negative".into()))
         } else {
-            match self.0.floor().to_u64() {
-                Some(value) => value.into(),
-                None => u64::MAX.into(),
+            match self.0.round().to_u64() {
+                Some(value) => Ok(value.into()),
+                None => Err(Error::Coins(
+                    "Amounts may not be greater than u64::MAX".into(),
+                )),
             }
         }
     }
 }
 
 #[derive(Encode, Decode)]
-pub struct DecimalEncoding([u8; 16]);
+pub struct DecimalEncoding(pub(crate) [u8; 16]);
+
+impl Default for DecimalEncoding {
+    fn default() -> Self {
+        Decimal(0.into()).into()
+    }
+}
 
 impl State for Decimal {
     type Encoding = DecimalEncoding;
