@@ -93,12 +93,17 @@ impl<S: Symbol> BeginBlock for Staking<S> {
                     Ok(())
                 })?;
 
-            for hash in offline_validator_hashes {
-                let val_addresses = self.val_address_for_consensus_key_hash(hash)?;
+            for hash in offline_validator_hashes.iter() {
+                let val_addresses = self.val_address_for_consensus_key_hash(hash.clone())?;
                 for address in val_addresses {
                     if self.slashable_balance(address)? > 0 {
                         self.slash(address, 0)?.burn();
                     }
+                    let key: [u8; 20] = hash
+                        .clone()
+                        .try_into()
+                        .map_err(|_e| Error::Coins("Invalid pubkey hash length".into()))?;
+                    self.last_signed_block.remove(key)?;
                 }
             }
         }
@@ -208,9 +213,11 @@ impl<S: Symbol> Staking<S> {
         let slashed_coins = validator.slash(amount)?;
         drop(validator);
 
-        self.context::<Validators>()
-            .ok_or_else(|| Error::Coins("No Validators context available".into()))?
-            .set_voting_power(consensus_key, 0);
+        if !jailed {
+            self.context::<Validators>()
+                .ok_or_else(|| Error::Coins("No Validators context available".into()))?
+                .set_voting_power(consensus_key, 0);
+        }
 
         Ok(slashed_coins)
     }
