@@ -1,7 +1,7 @@
 use crate::encoding::{Decode, Encode};
 use crate::{Error, Result};
-use std::result::Result as StdResult;
 use std::error::Error as StdError;
+use std::result::Result as StdResult;
 
 pub use orga_macros::{query, Query};
 
