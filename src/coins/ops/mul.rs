@@ -1,4 +1,4 @@
-use super::super::{Amount, MathResult, Ratio};
+use super::super::{Amount, Decimal, MathResult, Ratio};
 use crate::Error;
 use num_traits::CheckedMul;
 use std::ops::Mul;
@@ -140,5 +140,84 @@ impl Mul<MathResult<Amount>> for MathResult<Ratio> {
 
     fn mul(self, other: MathResult<Amount>) -> Self::Output {
         other? * self?
+    }
+}
+
+// Decimal / decimal
+
+impl Mul<Decimal> for Decimal {
+    type Output = MathResult<Decimal>;
+
+    fn mul(self, other: Decimal) -> Self::Output {
+        self.0
+            .checked_mul(other.0)
+            .map(Self)
+            .ok_or(Error::Overflow)
+            .into()
+    }
+}
+
+impl Mul<Decimal> for MathResult<Decimal> {
+    type Output = MathResult<Decimal>;
+
+    fn mul(self, other: Decimal) -> Self::Output {
+        self? * other
+    }
+}
+
+impl Mul<MathResult<Decimal>> for Decimal {
+    type Output = MathResult<Decimal>;
+
+    fn mul(self, other: MathResult<Decimal>) -> Self::Output {
+        self * other?
+    }
+}
+
+impl Mul<MathResult<Decimal>> for MathResult<Decimal> {
+    type Output = MathResult<Decimal>;
+
+    fn mul(self, other: MathResult<Decimal>) -> Self::Output {
+        self? * other?
+    }
+}
+
+// Amount / decimal
+
+impl Mul<Decimal> for Amount {
+    type Output = MathResult<Decimal>;
+
+    fn mul(self, other: Decimal) -> Self::Output {
+        let self_decimal: Decimal = self.into();
+
+        self_decimal
+            .0
+            .checked_mul(other.0)
+            .map(Decimal)
+            .ok_or(Error::DivideByZero)
+            .into()
+    }
+}
+
+impl Mul<Decimal> for MathResult<Amount> {
+    type Output = MathResult<Decimal>;
+
+    fn mul(self, other: Decimal) -> Self::Output {
+        self? * other
+    }
+}
+
+impl Mul<MathResult<Decimal>> for Amount {
+    type Output = MathResult<Decimal>;
+
+    fn mul(self, other: MathResult<Decimal>) -> Self::Output {
+        self * other?
+    }
+}
+
+impl Mul<MathResult<Decimal>> for MathResult<Amount> {
+    type Output = MathResult<Decimal>;
+
+    fn mul(self, other: MathResult<Decimal>) -> Self::Output {
+        self? * other?
     }
 }

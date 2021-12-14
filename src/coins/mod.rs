@@ -39,6 +39,9 @@ pub use balance::*;
 pub mod ratio;
 pub use ratio::*;
 
+pub mod decimal;
+pub use decimal::Decimal;
+
 pub mod math;
 pub use math::*;
 

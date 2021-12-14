@@ -1,4 +1,4 @@
-use super::super::{Amount, MathResult, Ratio};
+use super::super::{Amount, Decimal, MathResult, Ratio};
 use crate::Error;
 use num_traits::CheckedSub;
 use std::ops::Sub;
@@ -154,6 +154,125 @@ impl Sub<MathResult<Amount>> for Ratio {
 
 impl Sub<MathResult<Amount>> for MathResult<Ratio> {
     type Output = MathResult<Ratio>;
+
+    fn sub(self, other: MathResult<Amount>) -> Self::Output {
+        self? - other?
+    }
+}
+
+// Decimal - decimal
+
+impl Sub<Decimal> for Decimal {
+    type Output = MathResult<Decimal>;
+
+    fn sub(self, other: Decimal) -> Self::Output {
+        self.0
+            .checked_sub(other.0)
+            .map(Self)
+            .ok_or(Error::Overflow)
+            .into()
+    }
+}
+
+impl Sub<Decimal> for MathResult<Decimal> {
+    type Output = MathResult<Decimal>;
+
+    fn sub(self, other: Decimal) -> Self::Output {
+        self? - other
+    }
+}
+
+impl Sub<MathResult<Decimal>> for Decimal {
+    type Output = MathResult<Decimal>;
+
+    fn sub(self, other: MathResult<Decimal>) -> Self::Output {
+        self - other?
+    }
+}
+
+impl Sub<MathResult<Decimal>> for MathResult<Decimal> {
+    type Output = MathResult<Decimal>;
+
+    fn sub(self, other: MathResult<Decimal>) -> Self::Output {
+        self? - other?
+    }
+}
+
+// Amount - decimal
+
+impl Sub<Decimal> for Amount {
+    type Output = MathResult<Decimal>;
+
+    fn sub(self, other: Decimal) -> Self::Output {
+        let self_decimal: Decimal = self.into();
+
+        self_decimal
+            .0
+            .checked_sub(other.0)
+            .map(Decimal)
+            .ok_or(Error::Overflow)
+            .into()
+    }
+}
+
+impl Sub<Decimal> for MathResult<Amount> {
+    type Output = MathResult<Decimal>;
+
+    fn sub(self, other: Decimal) -> Self::Output {
+        self? - other
+    }
+}
+
+impl Sub<MathResult<Decimal>> for Amount {
+    type Output = MathResult<Decimal>;
+
+    fn sub(self, other: MathResult<Decimal>) -> Self::Output {
+        self - other?
+    }
+}
+
+impl Sub<MathResult<Decimal>> for MathResult<Amount> {
+    type Output = MathResult<Decimal>;
+
+    fn sub(self, other: MathResult<Decimal>) -> Self::Output {
+        self? - other?
+    }
+}
+
+// Decimal - amount
+
+impl Sub<Amount> for Decimal {
+    type Output = MathResult<Decimal>;
+
+    fn sub(self, other: Amount) -> Self::Output {
+        let other_decimal: Decimal = other.into();
+
+        self.0
+            .checked_sub(other_decimal.0)
+            .map(Decimal)
+            .ok_or(Error::Overflow)
+            .into()
+    }
+}
+
+impl Sub<Amount> for MathResult<Decimal> {
+    type Output = MathResult<Decimal>;
+
+    fn sub(self, other: Amount) -> Self::Output {
+        self? - other
+    }
+}
+
+impl Sub<MathResult<Amount>> for Decimal {
+    type Output = MathResult<Decimal>;
+
+    fn sub(self, other: MathResult<Amount>) -> Self::Output {
+        self - other?
+    }
+}
+
+impl Sub<MathResult<Amount>> for MathResult<Decimal> {
+    type Output = MathResult<Decimal>;
 
     fn sub(self, other: MathResult<Amount>) -> Self::Output {
         self? - other?

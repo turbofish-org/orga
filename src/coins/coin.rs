@@ -1,4 +1,4 @@
-use super::{Adjust, Amount, Balance, Give, Ratio, Symbol, Take};
+use super::{Adjust, Amount, Balance, Decimal, Give, Symbol, Take};
 use crate::call::Call;
 use crate::context::GetContext;
 use crate::plugins::Paid;
@@ -58,20 +58,20 @@ impl<S: Symbol> Coin<S> {
 }
 
 impl<S: Symbol> Balance<S, Amount> for Coin<S> {
-    fn balance(&self) -> Amount {
-        self.amount
+    fn balance(&self) -> Result<Amount> {
+        Ok(self.amount)
     }
 }
 
-impl<S: Symbol> Balance<S, Ratio> for Coin<S> {
-    fn balance(&self) -> Ratio {
-        self.amount.into()
+impl<S: Symbol> Balance<S, Decimal> for Coin<S> {
+    fn balance(&self) -> Result<Decimal> {
+        Ok(self.amount.into())
     }
 }
 
 impl<S: Symbol> Adjust for Coin<S> {
-    fn adjust(&mut self, multiplier: Ratio) -> Result<()> {
-        self.amount = (self.amount * multiplier)?.amount();
+    fn adjust(&mut self, multiplier: Decimal) -> Result<()> {
+        self.amount = (self.amount * multiplier)?.amount()?;
 
         Ok(())
     }

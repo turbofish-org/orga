@@ -1,8 +1,7 @@
 #[cfg(test)]
 use mutagen::mutate;
 
-use super::{Adjust, Amount, Balance, Give, RatioEncoding, Symbol, Take};
-use super::{Coin, Ratio};
+use super::{decimal::DecimalEncoding, Adjust, Amount, Balance, Coin, Decimal, Give, Symbol, Take};
 use crate::collections::map::{ChildMut as MapChildMut, Ref as MapRef};
 use crate::collections::{Map, Next};
 use crate::encoding::{Decode, Encode, Terminated};
@@ -21,8 +20,8 @@ where
     V: State,
     S: Symbol,
 {
-    pub(crate) multiplier: Ratio,
-    pub(crate) total: Ratio,
+    pub(crate) multiplier: Decimal,
+    pub(crate) total: Decimal,
     symbol: PhantomData<S>,
     map: Map<K, UnsafeCell<Entry<V, S>>>,
 }
@@ -37,8 +36,8 @@ where
 
     fn create(store: Store, data: Self::Encoding) -> Result<Self> {
         Ok(Self {
-            multiplier: Ratio::create(store.sub(&[0]), data.multiplier)?,
-            total: Ratio::create(store.sub(&[1]), data.total)?,
+            multiplier: Decimal::create(store.sub(&[0]), data.multiplier)?,
+            total: Decimal::create(store.sub(&[1]), data.total)?,
             symbol: PhantomData,
             map: Map::<_, _, _>::create(store.sub(&[2]), ())?,
         })
@@ -55,15 +54,17 @@ where
 
 #[derive(Encode, Decode)]
 pub struct PoolEncoding {
-    multiplier: RatioEncoding,
-    total: RatioEncoding,
+    multiplier: DecimalEncoding,
+    total: DecimalEncoding,
 }
 
 impl Default for PoolEncoding {
     fn default() -> Self {
+        let multiplier: Decimal = 1.into();
+        let total: Decimal = 0.into();
         PoolEncoding {
-            multiplier: Ratio::new(1, 1).unwrap().into(),
-            total: Ratio::new(0, 1).unwrap().into(),
+            multiplier: multiplier.into(),
+            total: total.into(),
         }
     }
 }
@@ -82,14 +83,14 @@ where
     }
 }
 
-impl<K, V, S> Balance<S, Ratio> for Pool<K, V, S>
+impl<K, V, S> Balance<S, Decimal> for Pool<K, V, S>
 where
     K: Terminated + Encode,
     V: State,
     S: Symbol,
 {
-    fn balance(&self) -> Ratio {
-        self.total
+    fn balance(&self) -> Result<Decimal> {
+        Ok(self.total)
     }
 }
 
@@ -99,7 +100,7 @@ where
     V: State,
     S: Symbol,
 {
-    fn adjust(&mut self, multiplier: Ratio) -> Result<()> {
+    fn adjust(&mut self, multiplier: Decimal) -> Result<()> {
         self.multiplier = (self.multiplier * multiplier)?;
         self.total = (self.total * multiplier)?;
 
@@ -113,7 +114,7 @@ where
     T: State,
     S: Symbol,
 {
-    last_multiplier: Ratio,
+    last_multiplier: Decimal,
     symbol: PhantomData<S>,
     inner: T,
 }
@@ -136,14 +137,14 @@ impl<K, V, S> Pool<K, V, S>
 where
     S: Symbol,
     K: Encode + Terminated + Clone,
-    V: State + Adjust + Balance<S, Ratio>,
+    V: State + Adjust + Balance<S, Decimal>,
     V::Encoding: Default,
 {
     #[cfg_attr(test, mutate)]
     pub fn get_mut(&mut self, key: K) -> Result<ChildMut<K, V, S>> {
         let mut child = self.map.entry(key)?.or_default()?;
         let mut entry = child.get_mut();
-        if *entry.last_multiplier.0.numer() == 0 {
+        if entry.last_multiplier == 0 {
             entry.last_multiplier = self.multiplier;
         }
 
@@ -152,7 +153,7 @@ where
             entry.inner.adjust(adjustment)?;
             entry.last_multiplier = self.multiplier;
         }
-        let initial_balance = entry.inner.balance();
+        let initial_balance = entry.inner.balance()?;
 
         Ok(ChildMut {
             parent_total: &mut self.total,
@@ -175,7 +176,7 @@ impl<K, V, S> Pool<K, V, S>
 where
     S: Symbol,
     K: Encode + Decode + Terminated + Clone + Next,
-    V: State + Adjust + Balance<S, Ratio>,
+    V: State + Adjust + Balance<S, Decimal>,
     V::Encoding: Default,
 {
     #[cfg_attr(test, mutate)]
@@ -203,18 +204,18 @@ where
     V: State,
 {
     fn give(&mut self, coin: Coin<S>) -> Result<()> {
-        if self.total == Ratio::new(0, 1)? {
+        if self.total == 0 {
             return Err(Error::Coins("Cannot add directly to an empty pool".into()));
         }
 
-        let amount_ratio: Ratio = coin.amount.into();
+        let amount_ratio: Decimal = coin.amount.into();
 
         if self.total.0 > 0.into() {
             let base: Amount = 1.into();
             let increase = base + (amount_ratio / self.total)?;
             self.multiplier = (self.multiplier * increase)?;
         } else {
-            self.multiplier = Ratio::new(1, 1)?;
+            self.multiplier = 1.into();
         }
 
         self.total = (self.total + amount_ratio)?;
@@ -236,8 +237,8 @@ where
         A: Into<Amount>,
     {
         let amount = amount.into();
-        let amount_ratio: Ratio = amount.into();
-        let base: Ratio = 1.into();
+        let amount_ratio: Decimal = amount.into();
+        let base: Decimal = 1.into();
         let decrease = base - (amount_ratio / self.total);
         self.total = (self.total - amount_ratio)?;
         self.multiplier = (self.multiplier * decrease)?;
@@ -250,12 +251,12 @@ pub struct ChildMut<'a, K, V, S>
 where
     S: Symbol,
     K: Encode + Clone,
-    V: State + Balance<S, Ratio> + Adjust,
+    V: State + Balance<S, Decimal> + Adjust,
     V::Encoding: Default,
 {
-    parent_total: &'a mut Ratio,
+    parent_total: &'a mut Decimal,
     entry: MapChildMut<'a, K, UnsafeCell<Entry<V, S>>>,
-    initial_balance: Ratio,
+    initial_balance: Decimal,
     _symbol: PhantomData<S>,
 }
 
@@ -263,13 +264,13 @@ impl<'a, K, V, S> Drop for ChildMut<'a, K, V, S>
 where
     S: Symbol,
     K: Encode + Clone,
-    V: State + Balance<S, Ratio> + Adjust,
+    V: State + Balance<S, Decimal> + Adjust,
     V::Encoding: Default,
 {
     fn drop(&mut self) {
         use std::cmp::Ordering::*;
         let start_balance = self.initial_balance;
-        let end_balance = self.entry.get_mut().balance();
+        let end_balance = self.entry.get_mut().balance().unwrap();
         match end_balance.cmp(&start_balance) {
             Greater => {
                 *self.parent_total = (*self.parent_total + (end_balance - start_balance))
@@ -291,7 +292,7 @@ impl<'a, K, V, S> Deref for ChildMut<'a, K, V, S>
 where
     S: Symbol,
     K: Encode + Clone,
-    V: State + Balance<S, Ratio> + Adjust,
+    V: State + Balance<S, Decimal> + Adjust,
     V::Encoding: Default,
 {
     type Target = V;
@@ -306,7 +307,7 @@ impl<'a, K, V, S> DerefMut for ChildMut<'a, K, V, S>
 where
     S: Symbol,
     K: Encode + Clone,
-    V: State + Balance<S, Ratio> + Adjust,
+    V: State + Balance<S, Decimal> + Adjust,
     V::Encoding: Default,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
@@ -322,7 +323,7 @@ mod child {
     pub struct Child<'a, V, S>
     where
         S: Symbol,
-        V: State + Balance<S, Ratio> + Adjust,
+        V: State + Balance<S, Decimal> + Adjust,
         V::Encoding: Default,
     {
         entry: MapRef<'a, UnsafeCell<Entry<V, S>>>,
@@ -332,16 +333,16 @@ mod child {
     impl<'a, V, S> Child<'a, V, S>
     where
         S: Symbol,
-        V: State + Balance<S, Ratio> + Adjust,
+        V: State + Balance<S, Decimal> + Adjust,
         V::Encoding: Default,
     {
         #[cfg_attr(test, mutate)]
         pub fn new(
             entry_ref: MapRef<'a, UnsafeCell<Entry<V, S>>>,
-            current_multiplier: Ratio,
+            current_multiplier: Decimal,
         ) -> Result<Self> {
             let mut entry = unsafe { &mut *entry_ref.get() };
-            let zero: Ratio = 0.into();
+            let zero: Decimal = 0.into();
             if entry.last_multiplier == zero {
                 entry.last_multiplier = current_multiplier;
             }
@@ -362,7 +363,7 @@ mod child {
     impl<'a, V, S> Deref for Child<'a, V, S>
     where
         S: Symbol,
-        V: State + Balance<S, Ratio> + Adjust,
+        V: State + Balance<S, Decimal> + Adjust,
         V::Encoding: Default,
     {
         type Target = V;
@@ -412,33 +413,33 @@ mod tests {
 
         {
             let alice_child = pool.get(alice)?;
-            let alice_balance: Ratio = alice_child.balance();
-            let target: Ratio = 0.into();
+            let alice_balance: Decimal = alice_child.balance()?;
+            let target: Decimal = 0.into();
             assert_eq!(alice_balance, target);
         }
 
-        let pool_balance = pool.balance();
-        let target: Ratio = 0.into();
+        let pool_balance = pool.balance()?;
+        let target: Decimal = 0.into();
         assert_eq!(pool_balance, target);
 
         {
             let mut alice_child = pool.get_mut(alice)?;
             alice_child.add(10)?;
         }
-        let target: Ratio = 10.into();
-        assert_eq!(pool.balance(), target);
+        let target: Decimal = 10.into();
+        assert_eq!(pool.balance()?, target);
 
         {
             let mut bob_child = pool.get_mut(bob)?;
             bob_child.add(2)?;
         }
 
-        let target: Ratio = 12.into();
-        assert_eq!(pool.balance(), target);
+        let target: Decimal = 12.into();
+        assert_eq!(pool.balance()?, target);
         {
             let alice_child = pool.get_mut(alice)?;
-            let alice_balance: Ratio = alice_child.balance();
-            let target: Ratio = 10.into();
+            let alice_balance: Decimal = alice_child.balance()?;
+            let target: Decimal = 10.into();
             assert_eq!(alice_balance, target);
         }
 
@@ -446,23 +447,23 @@ mod tests {
 
         {
             let alice_child = pool.get(alice)?;
-            let target: Ratio = 20.into();
-            let alice_balance: Ratio = alice_child.balance();
+            let target: Decimal = 20.into();
+            let alice_balance: Decimal = alice_child.balance()?;
             assert_eq!(alice_balance, target);
         }
 
-        let target: Ratio = 24.into();
-        assert_eq!(pool.balance(), target);
+        let target: Decimal = 24.into();
+        assert_eq!(pool.balance()?, target);
 
         let taken_coins = pool.take(6)?;
         taken_coins.burn();
 
-        let target: Ratio = 18.into();
-        assert_eq!(pool.balance(), target);
+        let target: Decimal = 18.into();
+        assert_eq!(pool.balance()?, target);
         {
             let alice_child = pool.get_mut(alice)?;
-            let target: Ratio = 15.into();
-            let alice_balance: Ratio = alice_child.balance();
+            let target: Decimal = 15.into();
+            let alice_balance: Decimal = alice_child.balance()?;
             assert_eq!(alice_balance, target);
         }
 
@@ -472,24 +473,24 @@ mod tests {
             taken_coins.burn();
         }
 
-        let target: Ratio = 14.into();
-        assert_eq!(pool.balance(), target);
+        let target: Decimal = 14.into();
+        assert_eq!(pool.balance()?, target);
 
         {
             let bob_child = pool.get_mut(bob)?;
-            let target: Ratio = 3.into();
-            let bob_balance: Ratio = bob_child.balance();
+            let target: Decimal = 3.into();
+            let bob_balance: Decimal = bob_child.balance()?;
             assert_eq!(bob_balance, target);
         }
 
         pool.adjust(2.into())?;
-        let target: Ratio = 28.into();
-        assert_eq!(pool.balance(), target);
+        let target: Decimal = 28.into();
+        assert_eq!(pool.balance()?, target);
 
         {
             let bob_child = pool.get(bob)?;
-            let bob_balance: Ratio = bob_child.balance();
-            let target: Ratio = 6.into();
+            let bob_balance: Decimal = bob_child.balance()?;
+            let target: Decimal = 6.into();
             assert_eq!(bob_balance, target);
         }
 
@@ -503,8 +504,8 @@ mod tests {
             alice_child.take(22)?.burn();
         }
 
-        let target: Ratio = 0.into();
-        assert_eq!(pool.balance(), target);
+        let target: Decimal = 0.into();
+        assert_eq!(pool.balance()?, target);
 
         {
             let mut bob_child = pool.get_mut(bob)?;
@@ -522,9 +523,9 @@ mod tests {
             let mut bob_child = pool.get_mut(bob)?;
             let taken_coins = bob_child.take(6)?;
             taken_coins.burn();
-            let bob_balance: Ratio = bob_child.balance();
-            let expected_share_fraction = Ratio::new(3, 14)?;
-            assert_eq!(bob_balance, expected_share_fraction);
+            let bob_balance = bob_child.amount()?;
+            let target: Amount = 0.into();
+            assert_eq!(bob_balance, target);
         }
 
         Ok(())

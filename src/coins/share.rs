@@ -1,19 +1,18 @@
-use std::marker::PhantomData;
-
-use super::{Adjust, Amount, Balance, Coin, Give, Ratio, Symbol, Take};
+use super::{Adjust, Amount, Balance, Coin, Decimal, Give, Symbol, Take};
 use crate::state::State;
-use crate::Result;
+use crate::{Error, Result};
+use std::marker::PhantomData;
 
 #[derive(State, Debug)]
 pub struct Share<S: Symbol> {
-    pub amount: Ratio,
+    pub shares: Decimal,
     symbol: PhantomData<S>,
 }
 
 impl<S: Symbol> Default for Share<S> {
     fn default() -> Self {
         Self {
-            amount: Default::default(),
+            shares: Default::default(),
             symbol: PhantomData,
         }
     }
@@ -22,27 +21,31 @@ impl<S: Symbol> Default for Share<S> {
 impl<S: Symbol> Share<S> {
     pub fn new() -> Self {
         Share {
-            amount: 0.into(),
+            shares: 0.into(),
             symbol: PhantomData,
         }
+    }
+
+    pub fn amount(&self) -> Result<Amount> {
+        self.shares.amount()
     }
 }
 
 impl<S: Symbol> Balance<S, Amount> for Share<S> {
-    fn balance(&self) -> Amount {
-        self.amount.amount()
+    fn balance(&self) -> Result<Amount> {
+        self.shares.amount()
     }
 }
 
-impl<S: Symbol> Balance<S, Ratio> for Share<S> {
-    fn balance(&self) -> Ratio {
-        self.amount
+impl<S: Symbol> Balance<S, Decimal> for Share<S> {
+    fn balance(&self) -> Result<Decimal> {
+        Ok(self.shares)
     }
 }
 
 impl<S: Symbol> Adjust for Share<S> {
-    fn adjust(&mut self, multiplier: Ratio) -> Result<()> {
-        self.amount = (self.amount * multiplier)?;
+    fn adjust(&mut self, multiplier: Decimal) -> Result<()> {
+        self.shares = (self.shares * multiplier)?;
 
         Ok(())
     }
@@ -52,7 +55,10 @@ impl<S: Symbol> Take<S, Amount> for Share<S> {
     type Value = Coin<S>;
     fn take<A: Into<Amount>>(&mut self, amount: A) -> Result<Self::Value> {
         let amount: Amount = amount.into();
-        self.amount = (self.amount - amount)?;
+        if self.shares < amount {
+            return Err(Error::Coins("Insufficient balance".into()));
+        }
+        self.shares = (self.shares - amount)?;
 
         Ok(Coin::mint(amount))
     }
@@ -60,16 +66,16 @@ impl<S: Symbol> Take<S, Amount> for Share<S> {
 
 impl<S: Symbol> Give<S> for Share<S> {
     fn give(&mut self, coin: Coin<S>) -> Result<()> {
-        self.amount = (self.amount + coin.amount)?;
+        self.shares = (self.shares + coin.amount)?;
 
         Ok(())
     }
 }
 
-impl<S: Symbol> From<Ratio> for Share<S> {
-    fn from(amount: Ratio) -> Self {
+impl<S: Symbol> From<Decimal> for Share<S> {
+    fn from(amount: Decimal) -> Self {
         Self {
-            amount,
+            shares: amount,
             ..Default::default()
         }
     }
@@ -78,7 +84,7 @@ impl<S: Symbol> From<Ratio> for Share<S> {
 impl<S: Symbol> From<Coin<S>> for Share<S> {
     fn from(coins: Coin<S>) -> Self {
         Self {
-            amount: coins.amount.into(),
+            shares: coins.amount.into(),
             ..Default::default()
         }
     }

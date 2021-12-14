@@ -11,7 +11,7 @@ where
     T: Balance<S, A> + Take<S, A>,
 {
     fn take_all(&mut self) -> Result<T::Value> {
-        let balance = self.balance();
+        let balance = self.balance()?;
         let taken = self.take(balance)?;
 
         Ok(taken)

@@ -1,19 +1,22 @@
-use super::super::{Amount, MathResult, Ratio};
+use super::super::{Amount, Decimal, MathResult, Ratio};
 use crate::Error;
 use num_traits::CheckedDiv;
 use std::ops::Div;
 
 // Amount / amount
 impl Div<Amount> for Amount {
-    type Output = MathResult<Ratio>;
+    type Output = MathResult<Decimal>;
 
     fn div(self, other: Amount) -> Self::Output {
-        Ratio::new(self.0, other.0).into()
+        let self_dec: Decimal = self.into();
+        let other_dec: Decimal = other.into();
+
+        self_dec / other_dec
     }
 }
 
 impl Div<Amount> for MathResult<Amount> {
-    type Output = MathResult<Ratio>;
+    type Output = MathResult<Decimal>;
 
     fn div(self, other: Amount) -> Self::Output {
         self? / other
@@ -21,7 +24,7 @@ impl Div<Amount> for MathResult<Amount> {
 }
 
 impl Div<MathResult<Amount>> for Amount {
-    type Output = MathResult<Ratio>;
+    type Output = MathResult<Decimal>;
 
     fn div(self, other: MathResult<Amount>) -> Self::Output {
         self / other?
@@ -29,7 +32,7 @@ impl Div<MathResult<Amount>> for Amount {
 }
 
 impl Div<MathResult<Amount>> for MathResult<Amount> {
-    type Output = MathResult<Ratio>;
+    type Output = MathResult<Decimal>;
 
     fn div(self, other: MathResult<Amount>) -> Self::Output {
         self? / other?
@@ -144,22 +147,81 @@ impl Div<MathResult<Amount>> for MathResult<Ratio> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::Result;
+// Decimal / decimal
 
-    #[test]
-    fn amount_div() -> Result<()> {
-        let fifty: Amount = 50.into();
-        let hundred: Amount = 100.into();
-        let four: Amount = 4.into();
-        let half = Ratio::new(1, 2)?;
-        let quotient = (fifty / hundred / four / half)?;
+impl Div<Decimal> for Decimal {
+    type Output = MathResult<Decimal>;
 
-        let target = Ratio::new(1, 4)?;
-        assert_eq!(quotient.0, target.0);
+    fn div(self, other: Decimal) -> Self::Output {
+        self.0
+            .checked_div(other.0)
+            .map(Self)
+            .ok_or(Error::DivideByZero)
+            .into()
+    }
+}
 
-        Ok(())
+impl Div<Decimal> for MathResult<Decimal> {
+    type Output = MathResult<Decimal>;
+
+    fn div(self, other: Decimal) -> Self::Output {
+        self? / other
+    }
+}
+
+impl Div<MathResult<Decimal>> for Decimal {
+    type Output = MathResult<Decimal>;
+
+    fn div(self, other: MathResult<Decimal>) -> Self::Output {
+        self / other?
+    }
+}
+
+impl Div<MathResult<Decimal>> for MathResult<Decimal> {
+    type Output = MathResult<Decimal>;
+
+    fn div(self, other: MathResult<Decimal>) -> Self::Output {
+        self? / other?
+    }
+}
+
+// Amount / decimal
+
+impl Div<Decimal> for Amount {
+    type Output = MathResult<Decimal>;
+
+    fn div(self, other: Decimal) -> Self::Output {
+        let self_decimal: Decimal = self.into();
+
+        self_decimal
+            .0
+            .checked_div(other.0)
+            .map(Decimal)
+            .ok_or(Error::DivideByZero)
+            .into()
+    }
+}
+
+impl Div<Decimal> for MathResult<Amount> {
+    type Output = MathResult<Decimal>;
+
+    fn div(self, other: Decimal) -> Self::Output {
+        self? / other
+    }
+}
+
+impl Div<MathResult<Decimal>> for Amount {
+    type Output = MathResult<Decimal>;
+
+    fn div(self, other: MathResult<Decimal>) -> Self::Output {
+        self / other?
+    }
+}
+
+impl Div<MathResult<Decimal>> for MathResult<Amount> {
+    type Output = MathResult<Decimal>;
+
+    fn div(self, other: MathResult<Decimal>) -> Self::Output {
+        self? / other?
     }
 }
