@@ -1,4 +1,4 @@
-use super::super::{Amount, Ratio};
+use super::super::{Amount, Decimal, Ratio};
 use std::cmp::PartialEq;
 
 impl PartialEq<Amount> for Amount {
@@ -52,5 +52,18 @@ impl PartialEq<u64> for Ratio {
     fn eq(&self, other: &u64) -> bool {
         let other_ratio: Ratio = (*other).into();
         self.0 == other_ratio.0
+    }
+}
+
+impl PartialEq<Decimal> for Decimal {
+    fn eq(&self, other: &Decimal) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl PartialEq<u64> for Decimal {
+    fn eq(&self, other: &u64) -> bool {
+        let other_dec: Decimal = (*other).into();
+        self.0 == other_dec.0
     }
 }
