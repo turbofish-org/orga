@@ -1,5 +1,7 @@
 use crate::encoding::{Decode, Encode};
 use crate::{Error, Result};
+use std::error::Error as StdError;
+use std::result::Result as StdResult;
 
 pub use orga_macros::{query, Query};
 
@@ -17,7 +19,7 @@ impl<T: Query> Query for &T {
     }
 }
 
-impl<T: Query> Query for Result<T> {
+impl<T: Query, E: StdError> Query for StdResult<T, E> {
     type Query = T::Query;
 
     fn query(&self, query: Self::Query) -> Result<()> {

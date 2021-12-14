@@ -3,10 +3,10 @@ use mutagen::mutate;
 
 use crate::encoding::{Decode, Encode};
 use crate::{Error, Result};
-use std::result::Result as StdResult;
-use std::error::Error as StdError;
 use std::cell::RefCell;
+use std::error::Error as StdError;
 use std::rc::Rc;
+use std::result::Result as StdResult;
 
 pub use orga_macros::{call, Call};
 
