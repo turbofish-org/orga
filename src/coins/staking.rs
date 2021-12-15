@@ -259,12 +259,14 @@ impl<S: Symbol> Staking<S> {
         let consensus_key = self.consensus_key(val_address)?;
         let amount = amount.into();
         let mut validator = self.validators.get_mut(val_address)?;
+        let vp_before = validator.staked();
+        let jailed = validator.jailed;
         {
             let mut delegator = validator.get_mut(delegator_address)?;
             delegator.unbond(amount)?;
         }
 
-        if !validator.jailed {
+        if !jailed {
             self.amount_delegated = (self.amount_delegated - amount)?;
             validator.amount_staked = (validator.amount_staked - amount)?;
         }
@@ -272,9 +274,11 @@ impl<S: Symbol> Staking<S> {
         let vp = validator.staked().into();
         drop(validator);
 
-        self.context::<Validators>()
-            .ok_or_else(|| Error::Coins("No Validators context available".into()))?
-            .set_voting_power(consensus_key, vp);
+        if vp_before > 0 && !jailed {
+            self.context::<Validators>()
+                .ok_or_else(|| Error::Coins("No Validators context available".into()))?
+                .set_voting_power(consensus_key, vp);
+        }
 
         Ok(())
     }
