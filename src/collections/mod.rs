@@ -21,7 +21,7 @@ pub trait Entry {
     type Key: Encode + Decode;
 
     /// Represents the value type for the key/value pair.
-    type Value: Encode + Decode;
+    type Value;
 
     /// Converts the entry type into its corresponding key and value types.
     fn into_entry(self) -> (Self::Key, Self::Value);
