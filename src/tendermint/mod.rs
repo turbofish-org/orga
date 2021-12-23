@@ -13,21 +13,21 @@ use tar::Archive;
 use toml_edit::{value, Document};
 
 #[cfg(target_os = "macos")]
-static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.11/tendermint_0.34.11_darwin_amd64.tar.gz";
+static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.11/tendermint_0.34.15_darwin_amd64.tar.gz";
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.11/tendermint_0.34.11_linux_amd64.tar.gz";
+static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.11/tendermint_0.34.15_linux_amd64.tar.gz";
 #[cfg(all(target_os = "linux", target_arch = "arm"))]
-static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.11/tendermint_0.34.11_linux_arm64.tar.gz";
+static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.11/tendermint_0.34.15_linux_arm64.tar.gz";
 
 #[cfg(target_os = "macos")]
 static TENDERMINT_ZIP_HASH: [u8; 32] =
-    hex!("e565ec1b90a950093d7d77745f1579d87322f5900c67ec51ff2cd02b988b6d52");
+    hex!("b493354bc8a711b670763e3ddf5765c3d7e94aaf6dbd138b16b8ab288495a4d1");
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 static TENDERMINT_ZIP_HASH: [u8; 32] =
-    hex!("1496d3808ed1caaf93722983f34d4ba38392ea6530f070a09e7abf1ea4cc5106");
+    hex!("cf4bd4b5a57f49007d18b9287214daf364dbc11094dec8e4c1bc33f207c6c57c");
 #[cfg(all(target_os = "linux", target_arch = "arm"))]
 static TENDERMINT_ZIP_HASH: [u8; 32] =
-    hex!("01a076d3297a5381587a77621b7f45dca7acb7fc21ce2e29ca327ccdaee41757");
+    hex!("6d4d771ae26c207f1a4f9f1399db2cbcac2e3c8afdf5d55d15bb984bbb986d2e");
 
 const TENDERMINT_BINARY_NAME: &str = "tendermint-v0.34.11";
 
