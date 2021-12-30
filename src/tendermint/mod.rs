@@ -550,7 +550,7 @@ impl Tendermint {
     ///
     /// Note: This will locally install the Tendermint binary if it is
     /// not already contained in the Tendermint home directory
-    #[must_use]
+    #[allow(clippy::return_self_not_must_use)]
     pub fn init(mut self) -> Self {
         self.install();
         self.process.set_arg("init");
