@@ -97,6 +97,7 @@ where
             .expect("Failed to start ABCI server");
     }
 
+    #[must_use]
     pub fn reset(self) -> Self {
         if self.merk_home.exists() {
             std::fs::remove_dir_all(&self.merk_home).expect("Failed to clear Merk data");
@@ -109,30 +110,35 @@ where
         self
     }
 
+    #[must_use]
     pub fn rpc_port(mut self, port: u16) -> Self {
         self.rpc_port = port;
 
         self
     }
 
+    #[must_use]
     pub fn p2p_port(mut self, port: u16) -> Self {
         self.p2p_port = port;
 
         self
     }
 
+    #[must_use]
     pub fn abci_port(mut self, port: u16) -> Self {
         self.abci_port = port;
 
         self
     }
 
+    #[must_use]
     pub fn with_genesis<const N: usize>(mut self, genesis_bytes: &'static [u8; N]) -> Self {
         self.genesis_bytes.replace(genesis_bytes.to_vec());
 
         self
     }
 
+    #[must_use]
     pub fn peers<T: Borrow<str>>(mut self, peers: &[T]) -> Self {
         let peers = peers.iter().map(|p| p.borrow().to_string()).collect();
         self.p2p_persistent_peers.replace(peers);
@@ -140,12 +146,14 @@ where
         self
     }
 
+    #[must_use]
     pub fn stdout<T: Into<Stdio>>(mut self, stdout: T) -> Self {
         self.stdout = stdout.into();
 
         self
     }
 
+    #[must_use]
     pub fn stderr<T: Into<Stdio>>(mut self, stderr: T) -> Self {
         self.stderr = stderr.into();
 
