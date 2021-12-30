@@ -448,7 +448,6 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
                     pub(super) parent: #parent_client_ty,
                 }
             };
- 
             let output = quote! {
                 #struct_def
                 impl#generics_sanitized #struct_name#generic_params_bracketed_with_parent
@@ -459,7 +458,6 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
                         Self { parent }
                     }
                 }
- 
                 #[::orga::async_trait]
                 impl#generics_sanitized ::orga::client::AsyncCall for #struct_name#generic_params_bracketed_with_parent
                 where
@@ -467,7 +465,6 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
                     #parent_client_ty: ::orga::client::AsyncCall<Call = <#item_ty as ::orga::call::Call>::Call>,
                 {
                     type Call = <#field_ty as ::orga::call::Call>::Call;
- 
                     async fn call(&mut self, call: Self::Call) -> ::orga::Result<()> {
                         // assumes that the call has a tuple variant called "Field" +
                         // the camel-cased name as the field
@@ -477,7 +474,6 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
                     }
                 }
             };
- 
             (output, struct_def)
         })
         .collect();
