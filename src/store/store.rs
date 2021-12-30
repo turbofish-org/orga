@@ -51,6 +51,7 @@ impl<S> Store<S> {
     /// Creates a substore of this store by concatenating `prefix` to this
     /// store's own prefix, and pointing to the same backing store.
     #[inline]
+    #[must_use]
     #[cfg_attr(test, mutate)]
     pub fn sub(&self, prefix: &[u8]) -> Self {
         Store {

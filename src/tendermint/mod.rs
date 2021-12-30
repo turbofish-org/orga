@@ -182,6 +182,7 @@ impl Tendermint {
     ///     start
     ///     init
     ///     unsafe_reset_all
+    #[must_use]
     pub fn log_level(mut self, level: &str) -> Self {
         self.process.set_arg("--log_level");
         self.process.set_arg(level);
@@ -195,6 +196,7 @@ impl Tendermint {
     ///     start
     ///     init
     ///     unsafe_reset_all
+    #[must_use]
     pub fn trace(mut self) -> Self {
         self.process.set_arg("--trace");
         self
@@ -205,6 +207,7 @@ impl Tendermint {
     ///
     /// Compatible Commands:
     ///     start
+    #[must_use]
     pub fn moniker(mut self, moniker: &str) -> Self {
         self.process.set_arg("--moniker");
         self.process.set_arg(moniker);
@@ -221,6 +224,7 @@ impl Tendermint {
     ///
     /// Note: Using this configuration command with incompatible
     /// terminating methods will cause the tendermint process to fail
+    #[must_use]
     pub fn p2p_laddr(mut self, addr: &str) -> Self {
         self.process.set_arg("--p2p.laddr");
         self.process.set_arg(addr);
@@ -254,6 +258,7 @@ impl Tendermint {
     ///
     /// Note: Using this configuration command with incompatible
     /// terminating methods will cause the tendermint process to fail
+    #[must_use]
     pub fn rpc_laddr(mut self, addr: &str) -> Self {
         self.process.set_arg("--rpc.laddr");
         self.process.set_arg(addr);
@@ -271,6 +276,7 @@ impl Tendermint {
     ///
     /// Note: Using this configuration command with incompatible terminating
     /// methods will cause the tendermint process to fail
+    #[must_use]
     pub fn proxy_app(mut self, addr: &str) -> Self {
         self.process.set_arg("--proxy_app");
         self.process.set_arg(addr);
@@ -304,6 +310,7 @@ impl Tendermint {
     ///     .stdout(log_file)
     ///     .start();
     /// ```
+    #[must_use]
     pub fn stdout<T: Into<Stdio>>(mut self, cfg: T) -> Self {
         self.process.command.stdout(cfg);
         self
@@ -336,6 +343,7 @@ impl Tendermint {
     ///     .stderr(log_file)
     ///     .start();
     /// ```
+    #[must_use]
     pub fn stderr<T: Into<Stdio>>(mut self, cfg: T) -> Self {
         self.process.command.stderr(cfg);
         self
@@ -348,6 +356,7 @@ impl Tendermint {
     ///
     /// Note: Using this configuration command with incompatible
     /// terminating methods will cause the tendermint process to fail
+    #[must_use]
     pub fn keep_addr_book(mut self) -> Self {
         self.process.set_arg("--keep_addr_book");
         self
@@ -366,6 +375,7 @@ impl Tendermint {
         genesis_file.write_all(genesis_bytes.as_slice()).unwrap();
     }
 
+    #[must_use]
     pub fn with_genesis(mut self, genesis_bytes: Vec<u8>) -> Self {
         self.genesis_bytes.replace(genesis_bytes);
 
@@ -407,6 +417,7 @@ impl Tendermint {
     /// Note: This update happens upon calling a terminating method in order to
     /// ensure a single file read and to ensure that the config.toml is not
     /// overwritten by called tendermint process
+    #[must_use]
     pub fn state_sync(mut self, enable: bool) -> Self {
         let mut document = match &self.config_contents {
             Some(inner) => inner.clone(),
@@ -430,6 +441,7 @@ impl Tendermint {
     /// Note: This update happens upon calling a terminating method in order to
     /// ensure a single file read and to ensure that the config.toml is not
     /// overwritten by called tendermint process
+    #[must_use]
     pub fn rpc_servers<const N: usize>(mut self, rpc_servers: [&str; N]) -> Self {
         let mut document = match &self.config_contents {
             Some(inner) => inner.clone(),
@@ -457,6 +469,7 @@ impl Tendermint {
     /// Note: This update happens upon calling a terminating method in order to
     /// ensure a single file read and to ensure that the config.toml is not
     /// overwritten by called tendermint process
+    #[must_use]
     pub fn trust_height(mut self, height: u32) -> Self {
         let mut document = match &self.config_contents {
             Some(inner) => inner.clone(),
@@ -478,6 +491,7 @@ impl Tendermint {
     /// Note: This update happens upon calling a terminating method in order to
     /// ensure a single file read and to ensure that the config.toml is not
     /// overwritten by called tendermint process
+    #[must_use]
     pub fn trust_hash(mut self, hash: &str) -> Self {
         let mut document = match &self.config_contents {
             Some(inner) => inner.clone(),
@@ -503,6 +517,7 @@ impl Tendermint {
     /// Note: This update happens upon calling a terminating method in order to
     /// ensure a single file read and to ensure that the config.toml is not
     /// overwritten by called tendermint process
+    #[must_use]
     pub fn block_time(mut self, time: &str) -> Self {
         let mut document = match &self.config_contents {
             Some(inner) => inner.clone(),
@@ -534,6 +549,7 @@ impl Tendermint {
     ///
     /// Note: This will locally install the Tendermint binary if it is
     /// not already contained in the Tendermint home directory
+    #[must_use]
     pub fn init(mut self) -> Self {
         self.install();
         self.process.set_arg("init");
