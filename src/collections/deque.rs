@@ -3,6 +3,7 @@ use mutagen::mutate;
 
 use super::map::{ChildMut, Map, ReadOnly, Ref};
 use crate::call::Call;
+use crate::collections::map::Iter as MapIter;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
@@ -10,6 +11,7 @@ use crate::store::DefaultBackingStore;
 use crate::store::{Read, Store, Write};
 use crate::Result;
 
+use std::ops::RangeBounds;
 #[derive(Query)]
 pub struct Deque<T, S = DefaultBackingStore> {
     meta: Meta,
@@ -102,6 +104,15 @@ impl<T: State<S>, S: Read> Deque<T, S> {
     }
 }
 
+impl<'a, T: State<S>, S: Read> Deque<T, S> {
+    #[cfg_attr(test, mutate)]
+    pub fn iter(&'a self) -> Result<Iter<'a, T, S>> {
+        Ok(Iter {
+            map_iter: self.map.iter()?,
+        })
+    }
+}
+
 impl<T: State<S>, S: Write> Deque<T, S> {
     #[cfg_attr(test, mutate)]
     pub fn get_mut(&mut self, index: u64) -> Result<Option<ChildMut<u64, T, S>>> {
@@ -145,6 +156,29 @@ impl<T: State<S>, S: Write> Deque<T, S> {
     }
 }
 
+pub struct Iter<'a, T, S>
+where
+    T: State<S>,
+    S: Read,
+{
+    map_iter: MapIter<'a, u64, T, S>,
+}
+
+impl<'a, T, S> Iterator for Iter<'a, T, S>
+where
+    T: State<S>,
+    S: Read,
+{
+    type Item = Result<Ref<'a, T>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.map_iter.next().map(|entry| match entry {
+            Ok(entry) => Ok(entry.1),
+            Err(err) => Err(err),
+        })
+    }
+}
+
 #[allow(unused_imports)]
 mod test {
     use super::{Deque as OrgaDeque, Map as OrgaMap, *};
@@ -184,7 +218,6 @@ mod test {
 
         assert!(deque.pop_front().unwrap().is_none());
     }
-
     #[test]
     fn deque_u32_pop_front() {
         let store = Store::new(MapStore::new());
@@ -289,5 +322,22 @@ mod test {
         let map = deque.pop_front().unwrap().unwrap();
 
         assert!(map.get(1).unwrap().is_none());
+    }
+
+    #[test]
+    fn deque_u32_iter() {
+        let store = Store::new(MapStore::new());
+        let mut deque: Deque<u32> = Deque::create(store, Meta::default()).unwrap();
+
+        deque.push_front(42).unwrap();
+        deque.push_back(43).unwrap();
+        deque.push_front(1).unwrap();
+
+        let mut iter = deque.iter().unwrap();
+
+        assert_eq!(*iter.next().unwrap().unwrap(), 1);
+        assert_eq!(*iter.next().unwrap().unwrap(), 42);
+        assert_eq!(*iter.next().unwrap().unwrap(), 43);
+        assert!(iter.next().is_none());
     }
 }

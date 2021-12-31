@@ -960,7 +960,7 @@ impl<'a, K: Encode, V, S> From<Entry<'a, K, V, S>> for Option<ChildMut<'a, K, V,
 
 #[cfg(test)]
 mod tests {
-    use super::super::deque::{Deque as OrgaDeque, *};
+    use super::super::deque::{Deque as OrgaDeque, Meta};
     use super::{Map as OrgaMap, *};
     use crate::store::{MapStore, Store};
     type Map<K, V> = OrgaMap<K, V, MapStore>;
