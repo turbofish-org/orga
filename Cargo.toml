@@ -48,7 +48,6 @@ v1 = { git = "https://github.com/nomic-io/orga", branch = "legacy-v1", features 
 
 [dev-dependencies]
 tempdir = "0.3.7"
-tokio = { version = "1.11.0", features = ["rt", "macros"] }
 mutagen = {git = "https://github.com/llogiq/mutagen"}
 serial_test = "0.5.1"
 

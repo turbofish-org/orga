@@ -279,13 +279,20 @@ where
     fn deliver_tx(&self, store: WrappedMerk, req: RequestDeliverTx) -> Result<ResponseDeliverTx> {
         let run_res = self.run(store, move |state| -> Result<_> {
             let inner_call = Decode::decode(req.tx.as_slice())?;
-            state.call(ABCICall::DeliverTx(inner_call))
+            state.call(ABCICall::DeliverTx(inner_call))?;
+
+            Ok(state.events.take().unwrap_or_default())
         })?;
 
         let mut deliver_tx_res = ResponseDeliverTx::default();
-        if let Err(err) = run_res {
-            deliver_tx_res.code = 1;
-            deliver_tx_res.log = err.to_string();
+        match run_res {
+            Ok(events) => {
+                deliver_tx_res.events = events;
+            }
+            Err(err) => {
+                deliver_tx_res.code = 1;
+                deliver_tx_res.log = err.to_string();
+            }
         }
 
         Ok(deliver_tx_res)
@@ -294,12 +301,21 @@ where
     fn check_tx(&self, store: WrappedMerk, req: RequestCheckTx) -> Result<ResponseCheckTx> {
         let run_res = self.run(store, move |state| -> Result<_> {
             let inner_call = Decode::decode(req.tx.as_slice())?;
-            state.call(ABCICall::CheckTx(inner_call))
+            state.call(ABCICall::DeliverTx(inner_call))?;
+
+            Ok(state.events.take().unwrap_or_default())
         })?;
+
         let mut check_tx_res = ResponseCheckTx::default();
-        if let Err(err) = run_res {
-            check_tx_res.code = 1;
-            check_tx_res.log = err.to_string();
+
+        match run_res {
+            Ok(events) => {
+                check_tx_res.events = events;
+            }
+            Err(err) => {
+                check_tx_res.code = 1;
+                check_tx_res.log = err.to_string();
+            }
         }
 
         Ok(check_tx_res)
