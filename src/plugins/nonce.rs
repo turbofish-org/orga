@@ -90,7 +90,7 @@ impl<T: Query + State> Query for NoncePlugin<T> {
 
 pub struct NonceClient<T, U: Clone> {
     parent: U,
-    marker: std::marker::PhantomData<T>,
+    marker: std::marker::PhantomData<fn() -> T>,
 }
 
 unsafe impl<T, U: Send + Clone> Send for NonceClient<T, U> {}

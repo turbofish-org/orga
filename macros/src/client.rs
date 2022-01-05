@@ -259,15 +259,8 @@ fn create_client_struct(
                     {
                         pub(super) parent: #parent_ty,
                         args: (#(#arg_types,)*),
-                        _marker: std::marker::PhantomData<(#name#generic_params_bracketed, __Return)>,
+                        _marker: std::marker::PhantomData<fn() -> (#name#generic_params_bracketed, __Return)>,
                     }
-
-                    unsafe impl#generics_sanitized_with_return Send for #adapter_name<#generic_params __Return, #parent_ty>
-                    where
-                        #parent_ty: Clone + Send,
-                        #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call>,
-                        #call_preds
-                    {}
 
                     impl#generics_sanitized_with_return Clone for #adapter_name<#generic_params __Return, #parent_ty>
                     where
@@ -341,7 +334,7 @@ fn create_client_struct(
         {
             pub(super) parent: #parent_ty,
             #(#field_fields,)*
-            __Marker: std::marker::PhantomData<(#generic_params)>,
+            __Marker: std::marker::PhantomData<fn() -> (#generic_params)>,
         }
 
         impl#generics_sanitized Clone for Client#generic_params_bracketed_with_parent

@@ -83,7 +83,7 @@ impl<T: Client<TendermintAdapter<T>> + Query + State> TendermintClient<T> {
 }
 
 pub struct TendermintAdapter<T> {
-    marker: std::marker::PhantomData<T>,
+    marker: std::marker::PhantomData<fn() -> T>,
     client: tm::HttpClient,
 }
 

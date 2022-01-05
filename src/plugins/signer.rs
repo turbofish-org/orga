@@ -75,7 +75,7 @@ impl<T: Query> Query for SignerPlugin<T> {
 
 pub struct SignerClient<T, U: Clone> {
     parent: U,
-    marker: std::marker::PhantomData<T>,
+    marker: std::marker::PhantomData<fn() -> T>,
     keypair: Keypair,
 }
 

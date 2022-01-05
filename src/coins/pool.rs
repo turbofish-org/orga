@@ -268,6 +268,7 @@ where
     V::Encoding: Default,
 {
     fn drop(&mut self) {
+        // TODO: pass Err values to parent so we can return it rather than panicking
         use std::cmp::Ordering::*;
         let start_balance = self.initial_balance;
         let end_balance = self.entry.get_mut().balance().unwrap();

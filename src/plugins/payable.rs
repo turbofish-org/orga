@@ -137,7 +137,7 @@ impl<T: Query + State> Query for PayablePlugin<T> {
 
 pub struct UnpaidAdapter<T, U: Clone> {
     parent: U,
-    marker: std::marker::PhantomData<T>,
+    marker: std::marker::PhantomData<fn() -> T>,
 }
 
 unsafe impl<T, U: Send + Clone> Send for UnpaidAdapter<T, U> {}
@@ -169,7 +169,7 @@ where
 pub struct PaidAdapter<T: Call, U: Clone> {
     payer_call: Vec<u8>,
     parent: U,
-    marker: std::marker::PhantomData<T>,
+    marker: std::marker::PhantomData<fn() -> T>,
 }
 
 unsafe impl<T: Call, U: Send + Clone> Send for PaidAdapter<T, U> {}
@@ -209,7 +209,7 @@ pub struct PayableClient<T: Client<UnpaidAdapter<T, U>>, U: Clone + Send> {
 
 pub struct PayerAdapter<T: Call> {
     intercepted_call: std::sync::Arc<std::sync::Mutex<Option<Vec<u8>>>>,
-    marker: std::marker::PhantomData<T>,
+    marker: std::marker::PhantomData<fn() -> T>,
 }
 
 unsafe impl<T: Call> Send for PayerAdapter<T> {}
