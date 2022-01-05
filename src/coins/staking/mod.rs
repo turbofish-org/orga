@@ -1,27 +1,30 @@
 use super::pool::{Child as PoolChild, ChildMut as PoolChildMut};
-use super::{Address, Adjust, Amount, Balance, Coin, Decimal, Give, Pool, Share, Symbol, Take};
+use super::{Address, Amount, Coin, Decimal, Give, Pool, Symbol};
 use crate::abci::BeginBlock;
 use crate::call::Call;
 use crate::client::Client;
-use crate::collections::{Deque, Map};
+use crate::collections::Map;
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
-use crate::plugins::{BeginBlockCtx, Paid, Signer, Time, Validators};
+use crate::plugins::{BeginBlockCtx, Paid, Signer, Validators};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::{Error, Result};
-use ed::Terminated;
 use sha2::{Digest, Sha256};
 use std::convert::TryInto;
+
+mod delegator;
+pub use delegator::*;
+
+mod validator;
+pub use validator::*;
 
 #[cfg(test)]
 const UNBONDING_SECONDS: u64 = 10; // 10 seconds
 #[cfg(not(test))]
 const UNBONDING_SECONDS: u64 = 60 * 60 * 24 * 7 * 2; // 2 weeks
 const MAX_OFFLINE_BLOCKS: u64 = 100;
-
-type Delegators<S> = Pool<Address, Delegator<S>, S>;
 
 #[derive(Call, Query, Client)]
 pub struct Staking<S: Symbol> {
@@ -206,7 +209,6 @@ impl<S: Symbol> Staking<S> {
     }
 
     pub fn staked(&self) -> Amount {
-        // debug_assert_eq!(self.validators.total, self.amount_delegated);
         self.amount_delegated
     }
 
@@ -215,7 +217,6 @@ impl<S: Symbol> Staking<S> {
         let jailed = self.get_mut(val_address)?.jailed;
         if !jailed {
             let reduction = self.slashable_balance(val_address)?;
-            self.validators.total = (self.validators.total - reduction)?;
             self.amount_delegated = (self.amount_delegated - reduction)?;
         }
         let amount = amount.into();
@@ -257,7 +258,7 @@ impl<S: Symbol> Staking<S> {
         let mut delegator = validator.get_mut(delegator_address)?;
         delegator.process_unbonds()?;
 
-        delegator.liquid.take(amount)
+        delegator.withdraw_liquid(amount)
     }
 
     pub fn unbond<A: Into<Amount>>(
@@ -278,7 +279,6 @@ impl<S: Symbol> Staking<S> {
 
         if !jailed {
             self.amount_delegated = (self.amount_delegated - amount)?;
-            validator.delegators.total = (validator.delegators.total - amount)?;
             validator.amount_staked = (validator.amount_staked - amount)?;
         }
 
@@ -402,325 +402,12 @@ impl<S: Symbol> Give<S> for Staking<S> {
     }
 }
 
-#[derive(State)]
-pub struct Validator<S: Symbol> {
-    jailed: bool,
-    address: Address,
-    commission: Decimal,
-    delegators: Delegators<S>,
-    jailed_coins: Amount,
-    amount_staked: Amount,
-    info: ValidatorInfo,
-}
-
-#[derive(Default)]
-pub struct ValidatorInfo {
-    pub bytes: Vec<u8>,
-}
-
-impl From<Vec<u8>> for ValidatorInfo {
-    fn from(bytes: Vec<u8>) -> Self {
-        ValidatorInfo { bytes }
-    }
-}
-
-impl Encode for ValidatorInfo {
-    fn encoding_length(&self) -> ed::Result<usize> {
-        Ok(self.bytes.len() + 2)
-    }
-
-    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
-        let info_byte_len = self.bytes.len() as u16;
-
-        dest.write_all(&info_byte_len.encode()?)?;
-        dest.write_all(&self.bytes)?;
-
-        Ok(())
-    }
-}
-
-impl Terminated for ValidatorInfo {}
-
-impl Decode for ValidatorInfo {
-    fn decode<R: std::io::Read>(mut reader: R) -> ed::Result<Self> {
-        let info_byte_len = u16::decode(&mut reader)?;
-        let mut bytes = vec![0u8; info_byte_len as usize];
-        reader.read_exact(&mut bytes)?;
-
-        Ok(ValidatorInfo { bytes })
-    }
-}
-
-impl State for ValidatorInfo {
-    type Encoding = Self;
-
-    fn create(_store: Store, data: Self::Encoding) -> Result<Self> {
-        Ok(data)
-    }
-
-    fn flush(self) -> Result<Self::Encoding> {
-        Ok(self)
-    }
-}
-impl From<ValidatorInfo> for Vec<u8> {
-    fn from(info: ValidatorInfo) -> Self {
-        info.bytes
-    }
-}
-
-impl<S: Symbol> Validator<S> {
-    fn get_mut(&mut self, address: Address) -> Result<PoolChildMut<Address, Delegator<S>, S>> {
-        self.delegators.get_mut(address)
-    }
-
-    pub fn get(&self, address: Address) -> Result<PoolChild<Delegator<S>, S>> {
-        self.delegators.get(address)
-    }
-
-    pub fn staked(&self) -> Amount {
-        self.amount_staked
-    }
-
-    fn slash(&mut self, amount: Amount) -> Result<Coin<S>> {
-        self.jailed = true;
-        let one: Decimal = 1.into();
-        let slash_multiplier = (one - (amount / self.slashable_balance()?))?;
-        let delegator_keys = self.delegator_keys()?;
-        delegator_keys.iter().try_for_each(|k| -> Result<()> {
-            let mut delegator = self.get_mut(*k)?;
-            delegator.slash(slash_multiplier)?;
-            Ok(())
-        })?;
-        self.amount_staked = 0.into();
-
-        Ok(amount.into())
-    }
-
-    pub fn slashable_balance(&mut self) -> Result<Amount> {
-        let mut sum: Decimal = 0.into();
-        let delegator_keys = self.delegator_keys()?;
-        delegator_keys.iter().try_for_each(|k| -> Result<_> {
-            let mut delegator = self.get_mut(*k)?;
-            sum = (sum + delegator.slashable_balance()?)?;
-
-            Ok(())
-        })?;
-
-        sum.amount()
-    }
-
-    fn delegator_keys(&self) -> Result<Vec<Address>> {
-        let mut delegator_keys: Vec<Address> = vec![];
-        self.delegators
-            .iter()?
-            .try_for_each(|entry| -> Result<()> {
-                let (k, _v) = entry?;
-                delegator_keys.push(*k);
-
-                Ok(())
-            })?;
-
-        Ok(delegator_keys)
-    }
-}
-
-impl<S: Symbol> Adjust for Validator<S> {
-    fn adjust(&mut self, multiplier: Decimal) -> Result<()> {
-        self.delegators.adjust(multiplier)
-    }
-}
-
-impl<S: Symbol> Balance<S, Decimal> for Validator<S> {
-    fn balance(&self) -> Result<Decimal> {
-        if self.jailed {
-            Ok(0.into())
-        } else {
-            // println!(
-            //     "{:?} staked for validator {:?}",
-            //     self.amount_staked, self.address
-            // );
-            Ok(self.amount_staked.into())
-        }
-    }
-}
-
-impl<S: Symbol> Give<S> for Validator<S> {
-    fn give(&mut self, coins: Coin<S>) -> Result<()> {
-        let one: Decimal = 1.into();
-        let delegator_amount = (coins.amount * (one - self.commission))?.amount()?;
-        let validator_amount = (coins.amount * self.commission)?.amount()?;
-
-        debug_assert_eq!(
-            (delegator_amount + validator_amount).result().unwrap(),
-            coins.amount
-        );
-
-        self.delegators.give(delegator_amount.into())?;
-        self.delegators
-            .get_mut(self.address)?
-            .liquid
-            .give(validator_amount.into())?;
-
-        Ok(())
-    }
-}
-
-#[derive(State)]
-pub struct Unbond<S: Symbol> {
-    coins: Share<S>,
-    start_seconds: i64,
-}
-#[derive(State)]
-pub struct Delegator<S: Symbol> {
-    liquid: Share<S>,
-    staked: Share<S>,
-    jailed: bool,
-    unbonding: Deque<Unbond<S>>,
-    multiplier: Decimal,
-}
-
-impl<S: Symbol> Delegator<S> {
-    fn unbond<A: Into<Amount>>(&mut self, amount: A) -> Result<()> {
-        let amount = amount.into();
-        let coins = self.staked.take(amount)?.into();
-        let start_seconds = self
-            .context::<Time>()
-            .ok_or_else(|| Error::Coins("No Time context available".into()))?
-            .seconds;
-        let unbond = Unbond {
-            coins,
-            start_seconds,
-        };
-        self.unbonding.push_back(unbond.into())?;
-
-        Ok(())
-    }
-
-    fn info(&self) -> Result<DelegationInfo> {
-        Ok(DelegationInfo {
-            liquid: self.liquid.shares.amount()?,
-            staked: self.staked.shares.amount()?,
-        })
-    }
-
-    fn slashable_balance(&mut self) -> Result<Decimal> {
-        self.process_unbonds()?;
-        let mut sum: Decimal = 0.into();
-        sum = (sum + self.staked.shares)?;
-        for i in 0..self.unbonding.len() {
-            let unbond = self
-                .unbonding
-                .get(i)?
-                .ok_or_else(|| Error::Coins("Failed to iterate over unbonds".into()))?;
-            sum = (sum + unbond.coins.shares)?;
-        }
-
-        Ok(sum)
-    }
-
-    fn slash(&mut self, multiplier: Decimal) -> Result<()> {
-        self.staked.shares = (self.staked.shares * multiplier)?;
-        for i in 0..self.unbonding.len() {
-            let mut unbond = self
-                .unbonding
-                .get_mut(i)?
-                .ok_or_else(|| Error::Coins("Failed to iterate over unbonds".into()))?;
-            unbond.coins.shares = (unbond.coins.shares * multiplier)?;
-        }
-        self.jailed = true;
-        Ok(())
-    }
-
-    fn process_unbonds(&mut self) -> Result<()> {
-        let now_seconds = self
-            .context::<Time>()
-            .ok_or_else(|| Error::Coins("No Time context available".into()))?
-            .seconds;
-        while let Some(unbond) = self.unbonding.front()? {
-            let unbond_matured = now_seconds - unbond.start_seconds >= UNBONDING_SECONDS as i64;
-            if unbond_matured {
-                let unbond = self
-                    .unbonding
-                    .pop_front()?
-                    .ok_or_else(|| Error::Coins("Failed to pop unbond".into()))?;
-                self.liquid.add(unbond.coins.shares.amount()?)?;
-            } else {
-                break;
-            }
-        }
-
-        Ok(())
-    }
-
-    fn add_stake(&mut self, coins: Coin<S>) -> Result<()> {
-        self.staked.give(coins)
-    }
-}
-
-/// If a delegator is adjusted upward (ie. multiplier greater than one), the
-/// validator has earned some reward. The reward is paid out to the delegator's
-/// liquid balance.
-///
-/// Adjusting a jailed delegator is a no-op.
-impl<S: Symbol> Adjust for Delegator<S> {
-    fn adjust(&mut self, multiplier: Decimal) -> Result<()> {
-        use std::cmp::Ordering::*;
-        if self.multiplier == 0 {
-            self.multiplier = multiplier;
-        } else {
-            self.multiplier = (self.multiplier * multiplier)?;
-        }
-        if self.jailed {
-            return Ok(());
-        }
-
-        let one = 1.into();
-
-        match multiplier.cmp(&one) {
-            Greater => {
-                let reward = (self.staked.shares * self.multiplier)
-                    - (self.staked.shares * (self.multiplier / multiplier))?;
-                self.liquid.shares = (self.liquid.shares + reward)?;
-            }
-            Less => {
-                debug_assert!(false, "Adjusting a delegator downward is not supported");
-            }
-            Equal => (),
-        }
-
-        Ok(())
-    }
-}
-
-/// A delegator's balance is its staked coins, since Balance here is used in the
-/// parent collection to calculate the validator's voting power.
-impl<S: Symbol> Balance<S, Decimal> for Delegator<S> {
-    fn balance(&self) -> Result<Decimal> {
-        if self.jailed {
-            Ok(0.into())
-        } else {
-            Ok(self.staked.shares)
-        }
-    }
-}
-
-impl<S: Symbol> Balance<S, Amount> for Delegator<S> {
-    fn balance(&self) -> Result<Amount> {
-        self.staked.amount()
-    }
-}
-
-#[derive(Encode, Decode)]
-pub struct DelegationInfo {
-    pub staked: Amount,
-    pub liquid: Amount,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
         context::Context,
+        plugins::Time,
         store::{MapStore, Shared, Store},
     };
     use rust_decimal_macros::dec;
@@ -935,9 +622,9 @@ mod tests {
         let carol_liquid = staking.get(edith)?.get(carol)?.liquid.amount()?;
         assert_eq!(carol_liquid, 125);
 
-        // staking.slash(dave, 0)?.burn();
-        // assert_eq!(ctx.updates.get(&dave_con.bytes).unwrap().power, 0);
-        // staking.slash(dave, 0)?.burn();
+        staking.slash(dave, 0)?.burn();
+        assert_eq!(ctx.updates.get(&dave_con.bytes).unwrap().power, 0);
+        staking.slash(dave, 0)?.burn();
 
         Ok(())
     }
