@@ -58,6 +58,12 @@ impl<T: Client<TendermintAdapter<T>> + Query + State> TendermintClient<T> {
             .tm_client
             .abci_query(None, query_bytes, None, true)
             .await?;
+
+        if let tendermint::abci::Code::Err(code) = res.code {
+            let msg = format!("code {}: {}", code, res.log);
+            return Err(Error::Query(msg));
+        }
+
         let root_hash = match res.value[0..32].try_into() {
             Ok(inner) => inner,
             _ => {
