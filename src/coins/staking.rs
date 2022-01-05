@@ -26,7 +26,7 @@ type Delegators<S> = Pool<Address, Delegator<S>, S>;
 pub struct Staking<S: Symbol> {
     validators: Pool<Address, Validator<S>, S>,
     amount_delegated: Amount,
-    consensus_keys: Map<Address, Address>,
+    consensus_keys: Map<Address, [u8; 32]>,
     last_signed_block: Map<[u8; 20], u64>,
 }
 
@@ -169,7 +169,7 @@ impl<S: Symbol> Staking<S> {
         Ok(())
     }
 
-    fn consensus_key(&self, val_address: Address) -> Result<Address> {
+    fn consensus_key(&self, val_address: Address) -> Result<[u8; 32]> {
         let consensus_key = match self.consensus_keys.get(val_address)? {
             Some(key) => *key,
             None => return Err(Error::Coins("Validator is not declared".into())),
@@ -181,7 +181,7 @@ impl<S: Symbol> Staking<S> {
     pub fn declare(
         &mut self,
         val_address: Address,
-        consensus_key: Address,
+        consensus_key: [u8; 32],
         coins: Coin<S>,
     ) -> Result<()> {
         let declared = self.consensus_keys.contains_key(val_address)?;
@@ -315,7 +315,7 @@ impl<S: Symbol> Staking<S> {
     }
 
     #[call]
-    pub fn declare_self(&mut self, consensus_key: Address, amount: Amount) -> Result<()> {
+    pub fn declare_self(&mut self, consensus_key: [u8; 32], amount: Amount) -> Result<()> {
         let signer = self.signer()?;
         let payment = self.paid()?.take(amount)?;
         self.declare(signer, consensus_key, payment)
@@ -351,7 +351,7 @@ impl<S: Symbol> Staking<S> {
         &self,
         consensus_key_hash: Vec<u8>,
     ) -> Result<Vec<Address>> {
-        let mut consensus_keys: Vec<(Address, Address)> = vec![];
+        let mut consensus_keys: Vec<(Address, [u8; 32])> = vec![];
         self.consensus_keys
             .iter()?
             .try_for_each(|entry| -> Result<()> {
@@ -364,8 +364,9 @@ impl<S: Symbol> Staking<S> {
         let val_addresses = consensus_keys
             .into_iter()
             .filter_map(|(k, v)| {
+                // TODO: are we sure this shouldn't be tmhash? (ripemd160(sha256(x)))
                 let mut hasher = Sha256::new();
-                hasher.update(v.bytes);
+                hasher.update(v);
                 let hash = hasher.finalize().to_vec();
                 if hash[..20] == consensus_key_hash[..20] {
                     Some(k)

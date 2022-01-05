@@ -43,7 +43,7 @@ impl SignerCall {
                 let signature = Signature::from_bytes(&signature)?;
                 pubkey.verify_strict(&self.call_bytes, &signature)?;
 
-                Ok(Some(pubkey_bytes.into()))
+                Ok(Some(Address::from_pubkey(pubkey_bytes)))
             }
             (None, None) => Ok(None),
             _ => Err(Error::Signer("Malformed transaction".into())),
