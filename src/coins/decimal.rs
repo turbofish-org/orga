@@ -102,6 +102,12 @@ impl TryFrom<Result<Decimal>> for Decimal {
     }
 }
 
+impl From<NumDecimal> for Decimal {
+    fn from(value: NumDecimal) -> Self {
+        Decimal(value)
+    }
+}
+
 impl From<Amount> for Decimal {
     fn from(amount: Amount) -> Self {
         Self(amount.0.into())

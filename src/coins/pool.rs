@@ -148,7 +148,7 @@ where
             entry.last_multiplier = self.multiplier;
         }
 
-        if entry.last_multiplier.0 != self.multiplier.0 {
+        if entry.last_multiplier != self.multiplier {
             let adjustment = (self.multiplier / entry.last_multiplier)?;
             entry.inner.adjust(adjustment)?;
             entry.last_multiplier = self.multiplier;
