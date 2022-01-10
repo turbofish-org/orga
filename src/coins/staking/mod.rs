@@ -194,6 +194,12 @@ impl<S: Symbol> Staking<S> {
         if declared {
             return Err(Error::Coins("Validator is already declared".into()));
         }
+        use rust_decimal_macros::dec;
+        let max_comm: Decimal = dec!(1.0).into();
+        let min_comm: Decimal = dec!(0.0).into();
+        if commission < min_comm || commission > max_comm {
+            return Err(Error::Coins("Commission must be between 0 and 1".into()));
+        }
         self.consensus_keys
             .insert(val_address, consensus_key.into())?;
 
