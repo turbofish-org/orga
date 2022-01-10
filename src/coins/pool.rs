@@ -27,6 +27,7 @@ where
     map: Map<K, UnsafeCell<Entry<V, S>>>,
     rewards_this_period: Decimal,
     last_period_entry: Decimal,
+    maybe_drop_err: Option<Error>,
 }
 
 #[derive(State)]
@@ -51,10 +52,12 @@ where
             map: Map::<_, _, _>::create(store.sub(&[3]), ())?,
             rewards_this_period: Decimal::create(store.sub(&[4]), data.rewards_this_period)?,
             last_period_entry: Decimal::create(store.sub(&[5]), data.last_period_entry)?,
+            maybe_drop_err: None,
         })
     }
 
     fn flush(self) -> Result<Self::Encoding> {
+        self.assert_no_unhandled_drop_err()?;
         self.map.flush()?;
         Ok(Self::Encoding {
             contributions: self.contributions.flush()?,
@@ -148,12 +151,29 @@ impl<T: State, S: Symbol> DerefMut for Entry<T, S> {
 
 impl<K, V, S> Pool<K, V, S>
 where
+    K: Terminated + Encode,
+    V: State,
+    S: Symbol,
+{
+    fn assert_no_unhandled_drop_err(&self) -> Result<()> {
+        if let Some(err) = &self.maybe_drop_err {
+            return Err(Error::Coins(
+                "Unhandled pool child drop error: ".to_string() + err.to_string().as_str(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+impl<K, V, S> Pool<K, V, S>
+where
     S: Symbol,
     K: Encode + Terminated + Clone,
     V: State + Balance<S, Decimal> + Give<S> + Take<S>,
     V::Encoding: Default,
 {
     pub fn get_mut(&mut self, key: K) -> Result<ChildMut<K, V, S>> {
+        self.assert_no_unhandled_drop_err()?;
         let mut child = self.map.entry(key)?.or_default()?;
         let entry = child.get_mut();
 
@@ -178,6 +198,7 @@ where
         Ok(ChildMut {
             parent_num_tokens: &mut self.contributions,
             parent_shares_issued: &mut self.shares_issued,
+            maybe_drop_err: &mut self.maybe_drop_err,
             entry: child,
             initial_balance,
             _symbol: PhantomData,
@@ -220,6 +241,7 @@ where
     }
 
     pub fn get(&self, key: K) -> Result<Child<V, S>> {
+        self.assert_no_unhandled_drop_err()?;
         let last_period_entry = self.last_period_entry;
         let new_period_entry = if self.shares_issued > 0 {
             ((self.rewards_this_period / self.shares_issued) + last_period_entry)?
@@ -318,6 +340,7 @@ where
 {
     parent_num_tokens: &'a mut Decimal,
     parent_shares_issued: &'a mut Decimal,
+    maybe_drop_err: &'a mut Option<Error>,
     entry: MapChildMut<'a, K, UnsafeCell<Entry<V, S>>>,
     initial_balance: Decimal,
     _symbol: PhantomData<S>,
@@ -332,10 +355,20 @@ where
 {
     fn drop(&mut self) {
         let start_balance = self.initial_balance;
-        let end_balance = self.entry.get_mut().balance().unwrap();
-        let balance_change: Decimal = (end_balance - start_balance)
-            .result()
-            .expect("Overflow calculating balance change");
+        let end_balance = match self.entry.get_mut().balance() {
+            Ok(bal) => bal,
+            Err(err) => {
+                self.maybe_drop_err.replace(err);
+                return;
+            }
+        };
+        let balance_change: Decimal = match (end_balance - start_balance).result() {
+            Ok(bal) => bal,
+            Err(err) => {
+                self.maybe_drop_err.replace(err);
+                return;
+            }
+        };
 
         debug_assert_eq!(
             self.parent_num_tokens.0.is_sign_positive(),
@@ -345,24 +378,42 @@ where
             let new_shares = if self.parent_num_tokens.0.is_zero() {
                 balance_change
             } else {
-                (*self.parent_shares_issued * balance_change / *self.parent_num_tokens)
+                match (*self.parent_shares_issued * balance_change / *self.parent_num_tokens)
                     .result()
-                    .expect("Error calculating new pool shares in pool child drop")
+                {
+                    Ok(value) => value,
+                    Err(err) => {
+                        self.maybe_drop_err.replace(err);
+                        return;
+                    }
+                }
             };
 
             let mut entry = self.entry.get_mut();
 
-            entry.shares = (entry.shares + new_shares)
-                .result()
-                .expect("Overflow changing pool child entry shares");
+            entry.shares = match (entry.shares + new_shares).result() {
+                Ok(value) => value,
+                Err(err) => {
+                    self.maybe_drop_err.replace(err);
+                    return;
+                }
+            };
 
-            *self.parent_num_tokens = (*self.parent_num_tokens + balance_change)
-                .result()
-                .expect("Overflow changing parent pool num_tokens");
+            *self.parent_num_tokens = match (*self.parent_num_tokens + balance_change).result() {
+                Ok(value) => value,
+                Err(err) => {
+                    self.maybe_drop_err.replace(err);
+                    return;
+                }
+            };
 
-            *self.parent_shares_issued = (*self.parent_shares_issued + new_shares)
-                .result()
-                .expect("Overflow changing parent pool shares_issued");
+            *self.parent_shares_issued = match (*self.parent_shares_issued + new_shares).result() {
+                Ok(value) => value,
+                Err(err) => {
+                    self.maybe_drop_err.replace(err);
+                    return;
+                }
+            };
         };
     }
 }
