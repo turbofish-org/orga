@@ -122,13 +122,6 @@ impl<S: Symbol> Give<S> for Delegator<S> {
     }
 }
 
-impl<S: Symbol> Take<S> for Delegator<S> {
-    type Value = Coin<S>;
-    fn take<A: Into<Amount>>(&mut self, _amount: A) -> Result<Coin<S>> {
-        todo!()
-    }
-}
-
 #[derive(Encode, Decode)]
 pub struct DelegationInfo {
     pub staked: Amount,

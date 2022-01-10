@@ -1,5 +1,5 @@
 use crate::coins::pool::{Child as PoolChild, ChildMut as PoolChildMut};
-use crate::coins::{Address, Amount, Balance, Coin, Decimal, Give, Pool, Symbol, Take};
+use crate::coins::{Address, Amount, Balance, Coin, Decimal, Give, Pool, Symbol};
 use crate::encoding::{Decode, Encode};
 use crate::state::State;
 use crate::store::Store;
@@ -162,16 +162,5 @@ impl<S: Symbol> Give<S> for Validator<S> {
             .give(validator_amount.into())?;
 
         Ok(())
-    }
-}
-
-impl<S: Symbol> Take<S> for Validator<S> {
-    type Value = Coin<S>;
-    fn take<A: Into<Amount>>(&mut self, _amount: A) -> Result<Coin<S>> {
-        debug_assert!(
-            false,
-            "Taking from a validator is a no-op and should never happen"
-        );
-        Ok(0.into())
     }
 }

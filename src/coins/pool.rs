@@ -1,7 +1,7 @@
 #[cfg(test)]
 use mutagen::mutate;
 
-use super::{decimal::DecimalEncoding, Amount, Balance, Coin, Decimal, Give, Symbol, Take};
+use super::{decimal::DecimalEncoding, Balance, Coin, Decimal, Give, Symbol};
 use crate::collections::map::{ChildMut as MapChildMut, Ref as MapRef};
 use crate::collections::{Map, Next};
 use crate::encoding::{Decode, Encode, Terminated};
@@ -169,7 +169,7 @@ impl<K, V, S> Pool<K, V, S>
 where
     S: Symbol,
     K: Encode + Terminated + Clone,
-    V: State + Balance<S, Decimal> + Give<S> + Take<S>,
+    V: State + Balance<S, Decimal> + Give<S>,
     V::Encoding: Default,
 {
     pub fn get_mut(&mut self, key: K) -> Result<ChildMut<K, V, S>> {
@@ -219,11 +219,10 @@ where
             use std::cmp::Ordering::*;
             match delta.cmp(&0.into()) {
                 Less => {
-                    let zero: Amount = 0.into();
-                    let coins_to_take = (zero - delta)?.amount()?;
-                    if coins_to_take >= 1 {
-                        entry.take(coins_to_take)?;
-                    }
+                    debug_assert!(false, "Taking from pools is currently not supported");
+                    return Err(Error::Coins(
+                        "Taking from pools is currently not supported".to_string(),
+                    ));
                 }
                 Greater => {
                     let coins_to_give = delta.amount()?;
@@ -302,32 +301,6 @@ where
         self.rewards_this_period = (self.rewards_this_period + coin.amount)?;
 
         Ok(())
-    }
-}
-
-impl<K, V, S> Take<S> for Pool<K, V, S>
-where
-    S: Symbol,
-    K: Encode + Terminated,
-    V: State,
-{
-    type Value = Coin<S>;
-
-    fn take<A>(&mut self, amount: A) -> Result<Self::Value>
-    where
-        A: Into<Amount>,
-    {
-        let amount = amount.into();
-
-        if amount > self.contributions {
-            return Err(Error::Coins(
-                "Cannot take more than the pool contains".into(),
-            ));
-        }
-
-        self.contributions = (self.contributions - amount)?;
-
-        Ok(Coin::mint(amount))
     }
 }
 
@@ -494,7 +467,7 @@ pub use child::Child;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::coins::{Address, Share};
+    use crate::coins::{Address, Amount, Share};
     use crate::encoding::{Decode, Encode};
     use crate::store::{MapStore, Shared, Store};
 
@@ -576,12 +549,7 @@ mod tests {
             Ok(())
         }
     }
-    impl Take<Simp> for SimpAccount {
-        type Value = Coin<Simp>;
-        fn take<A: Into<Amount>>(&mut self, _amount: A) -> Result<Coin<Simp>> {
-            unimplemented!()
-        }
-    }
+
     impl Balance<Simp, Decimal> for SimpAccount {
         fn balance(&self) -> Result<Decimal> {
             Ok(self.locked)
@@ -619,6 +587,7 @@ mod tests {
 
     #[test]
     fn emptied_pool() -> Result<()> {
+        use crate::coins::Take;
         let store = Store::new(Shared::new(MapStore::new()).into());
         let enc = Default::default();
         let mut pool = Pool::<Address, Share<Simp>, Simp>::create(store, enc)?;
