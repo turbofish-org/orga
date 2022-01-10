@@ -20,11 +20,18 @@ where
     V: State,
     S: Symbol,
 {
-    num_tokens: Decimal,
+    contributions: Decimal,
     rewards: Decimal,
     shares_issued: Decimal,
     symbol: PhantomData<S>,
     map: Map<K, UnsafeCell<Entry<V, S>>>,
+    rewards_this_period: Decimal,
+    last_period_entry: Decimal,
+}
+
+#[derive(State)]
+struct PeriodEntry {
+    shares_issued: Decimal,
 }
 
 impl<K, V, S> State for Pool<K, V, S>
@@ -37,40 +44,50 @@ where
 
     fn create(store: Store, data: Self::Encoding) -> Result<Self> {
         Ok(Self {
-            num_tokens: Decimal::create(store.sub(&[0]), data.num_tokens)?,
+            contributions: Decimal::create(store.sub(&[0]), data.contributions)?,
             rewards: Decimal::create(store.sub(&[1]), data.rewards)?,
             shares_issued: Decimal::create(store.sub(&[2]), data.shares_issued)?,
             symbol: PhantomData,
             map: Map::<_, _, _>::create(store.sub(&[3]), ())?,
+            rewards_this_period: Decimal::create(store.sub(&[4]), data.rewards_this_period)?,
+            last_period_entry: Decimal::create(store.sub(&[5]), data.last_period_entry)?,
         })
     }
 
     fn flush(self) -> Result<Self::Encoding> {
         self.map.flush()?;
         Ok(Self::Encoding {
-            num_tokens: self.num_tokens.flush()?,
+            contributions: self.contributions.flush()?,
             rewards: self.rewards.flush()?,
             shares_issued: self.shares_issued.flush()?,
+            rewards_this_period: self.rewards_this_period.flush()?,
+            last_period_entry: self.last_period_entry.flush()?,
         })
     }
 }
 
 #[derive(Encode, Decode)]
 pub struct PoolEncoding {
-    num_tokens: DecimalEncoding,
+    contributions: DecimalEncoding,
     rewards: DecimalEncoding,
     shares_issued: DecimalEncoding,
+    rewards_this_period: DecimalEncoding,
+    last_period_entry: DecimalEncoding,
 }
 
 impl Default for PoolEncoding {
     fn default() -> Self {
-        let num_tokens: Decimal = 0.into();
+        let contributions: Decimal = 0.into();
         let shares_issued: Decimal = 0.into();
         let rewards: Decimal = 0.into();
+        let last_period_entry: Decimal = 0.into();
+        let rewards_this_period: Decimal = 0.into();
         PoolEncoding {
-            num_tokens: num_tokens.into(),
+            contributions: contributions.into(),
             rewards: rewards.into(),
             shares_issued: shares_issued.into(),
+            rewards_this_period: rewards_this_period.into(),
+            last_period_entry: last_period_entry.into(),
         }
     }
 }
@@ -83,9 +100,11 @@ where
 {
     fn from(pool: Pool<K, V, S>) -> Self {
         PoolEncoding {
-            num_tokens: pool.num_tokens.into(),
+            contributions: pool.contributions.into(),
             rewards: pool.rewards.into(),
             shares_issued: pool.shares_issued.into(),
+            rewards_this_period: pool.rewards_this_period.into(),
+            last_period_entry: pool.last_period_entry.into(),
         }
     }
 }
@@ -97,7 +116,7 @@ where
     S: Symbol,
 {
     fn balance(&self) -> Result<Decimal> {
-        Ok(self.num_tokens)
+        Ok(self.contributions)
     }
 }
 
@@ -108,7 +127,7 @@ where
     S: Symbol,
 {
     shares: Decimal,
-    amount_given: Decimal,
+    last_update_period_entry: Decimal,
     symbol: PhantomData<S>,
     inner: T,
 }
@@ -134,19 +153,30 @@ where
     V: State + Balance<S, Decimal> + Give<S> + Take<S>,
     V::Encoding: Default,
 {
-    #[cfg_attr(test, mutate)]
     pub fn get_mut(&mut self, key: K) -> Result<ChildMut<K, V, S>> {
-        let rewards = self.rewards;
-        let shares_issued = self.shares_issued;
-        let num_tokens = self.num_tokens + rewards;
         let mut child = self.map.entry(key)?.or_default()?;
         let entry = child.get_mut();
 
+        self.rewards = (self.rewards + self.rewards_this_period)?;
         let initial_balance = entry.balance()?;
-        Self::adjust_entry(rewards, shares_issued, num_tokens, entry)?;
+        let last_period_entry = self.last_period_entry;
+        let new_period_entry = if self.shares_issued > 0 {
+            ((self.rewards_this_period / self.shares_issued) + last_period_entry)?
+        } else {
+            0.into()
+        };
+        self.last_period_entry = new_period_entry;
+        self.rewards_this_period = 0.into();
+
+        Self::adjust_entry(
+            self.contributions,
+            self.shares_issued,
+            new_period_entry,
+            entry,
+        )?;
 
         Ok(ChildMut {
-            parent_num_tokens: &mut self.num_tokens,
+            parent_num_tokens: &mut self.contributions,
             parent_shares_issued: &mut self.shares_issued,
             entry: child,
             initial_balance,
@@ -155,47 +185,55 @@ where
     }
 
     fn adjust_entry(
-        rewards: Decimal,
+        contributions: Decimal,
         shares_issued: Decimal,
-        num_tokens: Decimal,
+        new_period_entry: Decimal,
         entry: &mut Entry<V, S>,
     ) -> Result<()> {
         if shares_issued > 0 {
-            let rightful_coins = (rewards * entry.shares / shares_issued)?;
-            let given = entry.amount_given;
-            dbg!(rightful_coins, given);
-
+            let delta = ((new_period_entry - entry.last_update_period_entry)
+                * contributions
+                * entry.shares
+                / shares_issued)?;
             use std::cmp::Ordering::*;
-            match given.cmp(&rightful_coins) {
-                Greater => {
-                    let coins_to_take = (given - rightful_coins)?.amount()?;
+            match delta.cmp(&0.into()) {
+                Less => {
+                    let zero: Amount = 0.into();
+                    let coins_to_take = (zero - delta)?.amount()?;
                     if coins_to_take >= 1 {
                         entry.take(coins_to_take)?;
-                        entry.amount_given = (given - coins_to_take)?;
                     }
                 }
-                Less => {
-                    let coins_to_give = (rightful_coins - given)?.amount()?;
+                Greater => {
+                    let coins_to_give = delta.amount()?;
                     if coins_to_give >= 1 {
                         entry.give(coins_to_give.into())?;
-                        entry.amount_given = (given + coins_to_give)?;
                     }
                 }
                 Equal => {}
             };
         }
 
+        entry.last_update_period_entry = new_period_entry;
+
         Ok(())
     }
 
-    #[cfg_attr(test, mutate)]
     pub fn get(&self, key: K) -> Result<Child<V, S>> {
-        let rewards = self.rewards;
-        let shares_issued = self.shares_issued;
+        let last_period_entry = self.last_period_entry;
+        let new_period_entry = if self.shares_issued > 0 {
+            ((self.rewards_this_period / self.shares_issued) + last_period_entry)?
+        } else {
+            0.into()
+        };
         let entry = self.map.get_or_default(key)?;
         let entry_mut = unsafe { &mut *entry.get() };
-
-        Self::adjust_entry(rewards, shares_issued, entry_mut)?;
+        Self::adjust_entry(
+            self.contributions,
+            self.shares_issued,
+            new_period_entry,
+            entry_mut,
+        )?;
 
         Child::new(entry)
     }
@@ -235,11 +273,11 @@ where
     V: State,
 {
     fn give(&mut self, coin: Coin<S>) -> Result<()> {
-        if self.num_tokens == 0 {
+        if self.contributions == 0 {
             return Err(Error::Coins("Cannot add directly to an empty pool".into()));
         }
 
-        self.rewards = (self.rewards + coin.amount)?;
+        self.rewards_this_period = (self.rewards_this_period + coin.amount)?;
 
         Ok(())
     }
@@ -259,13 +297,13 @@ where
     {
         let amount = amount.into();
 
-        if amount > self.num_tokens {
+        if amount > self.contributions {
             return Err(Error::Coins(
                 "Cannot take more than the pool contains".into(),
             ));
         }
 
-        self.num_tokens = (self.num_tokens - amount)?;
+        self.contributions = (self.contributions - amount)?;
 
         Ok(Coin::mint(amount))
     }
@@ -426,139 +464,6 @@ mod tests {
     }
 
     #[test]
-    fn simple_pool() -> Result<()> {
-        let store = Store::new(Shared::new(MapStore::new()).into());
-        let enc = Default::default();
-        let mut pool = Pool::<Address, Share<Simp>, Simp>::create(store, enc)?;
-
-        let alice = [0; 32].into();
-        let bob = [1; 32].into();
-
-        pool.add(1)
-            .expect_err("Should not be able to add to empty pool");
-
-        {
-            let alice_child = pool.get(alice)?;
-            let alice_balance: Decimal = alice_child.balance()?;
-            let target: Decimal = 0.into();
-            assert_eq!(alice_balance, target);
-        }
-
-        let pool_balance = pool.balance()?;
-        let target: Decimal = 0.into();
-        assert_eq!(pool_balance, target);
-
-        {
-            let mut alice_child = pool.get_mut(alice)?;
-            alice_child.add(100)?;
-        }
-        let target: Decimal = 100.into();
-        assert_eq!(pool.balance()?, target);
-
-        {
-            let mut bob_child = pool.get_mut(bob)?;
-            bob_child.add(20)?;
-        }
-
-        let target: Decimal = 120.into();
-        assert_eq!(pool.balance()?, target);
-        {
-            let alice_child = pool.get_mut(alice)?;
-            let alice_balance: Decimal = alice_child.balance()?;
-            let target: Decimal = 100.into();
-            assert_eq!(alice_balance, target);
-        }
-
-        pool.add(120)?;
-
-        {
-            let alice_child = pool.get_mut(alice)?;
-            let target: Decimal = 200.into();
-            let alice_balance: Decimal = alice_child.balance()?;
-            assert_eq!(alice_balance, target);
-        }
-
-        let target: Decimal = 240.into();
-        assert_eq!(pool.balance()?, target);
-
-        let taken_coins = pool.take(60)?;
-        taken_coins.burn();
-
-        let target: Decimal = 180.into();
-        assert_eq!(pool.balance()?, target);
-        {
-            let alice_child = pool.get_mut(alice)?;
-            let target: Decimal = 150.into();
-            let alice_balance: Decimal = alice_child.balance()?;
-            assert_eq!(alice_balance, target);
-        }
-
-        {
-            let mut alice_child = pool.get_mut(alice)?;
-            let taken_coins = alice_child.take(40)?;
-            taken_coins.burn();
-        }
-
-        let target: Decimal = 140.into();
-        assert_eq!(pool.balance()?, target);
-
-        {
-            let bob_child = pool.get_mut(bob)?;
-            let target: Decimal = 30.into();
-            let bob_balance: Decimal = bob_child.balance()?;
-            assert_eq!(bob_balance, target);
-        }
-
-        pool.add(140)?;
-
-        let target: Decimal = 280.into();
-        assert_eq!(pool.balance()?, target);
-
-        {
-            let bob_child = pool.get(bob)?;
-            let bob_balance: Decimal = bob_child.balance()?;
-            let target: Decimal = 60.into();
-            assert_eq!(bob_balance, target);
-        }
-
-        {
-            let mut bob_child = pool.get_mut(bob)?;
-            bob_child.take(60)?.burn();
-        }
-
-        {
-            let mut alice_child = pool.get_mut(alice)?;
-            alice_child.take(220)?.burn();
-        }
-
-        let target: Decimal = 0.into();
-        assert_eq!(pool.balance()?, target);
-
-        {
-            let mut bob_child = pool.get_mut(bob)?;
-            bob_child.add(60)?;
-        }
-
-        {
-            let mut alice_child = pool.get_mut(alice)?;
-            alice_child.add(220)?;
-        }
-
-        pool.add(10)?;
-
-        {
-            let mut bob_child = pool.get_mut(bob)?;
-            let taken_coins = bob_child.take(60)?;
-            taken_coins.burn();
-            let bob_balance = bob_child.amount()?;
-            let target: Amount = 2.into();
-            assert_eq!(bob_balance, target);
-        }
-
-        Ok(())
-    }
-
-    #[test]
     fn order_a() -> Result<()> {
         let store = Store::new(Shared::new(MapStore::new()).into());
         let enc = Default::default();
@@ -571,6 +476,8 @@ mod tests {
         pool.give(100.into())?;
         pool.get_mut(bob)?.give(50.into())?;
 
+        assert_eq!(pool.balance()?, 100);
+        pool.get_mut(alice)?;
         assert_eq!(pool.balance()?, 200);
         assert_eq!(pool.get(alice)?.amount()?, 150);
         assert_eq!(pool.get(bob)?.amount()?, 50);
@@ -591,9 +498,11 @@ mod tests {
         pool.get_mut(bob)?.give(50.into())?;
         pool.give(100.into())?;
 
-        assert_eq!(pool.balance()?, 200);
+        assert_eq!(pool.balance()?, 100);
         assert_eq!(pool.get(alice)?.amount()?, 100);
         assert_eq!(pool.get(bob)?.amount()?, 100);
+        pool.get_mut(alice)?;
+        pool.get_mut(bob)?;
 
         Ok(())
     }
@@ -608,12 +517,6 @@ mod tests {
             self.locked = (self.locked + amount.into())?;
             Ok(())
         }
-
-        fn withdraw_liquid<A: Into<Amount>>(&mut self, amount: A) -> Result<Coin<Simp>> {
-            let amount = amount.into();
-            self.liquid = (self.liquid - amount)?;
-            Ok(amount.into())
-        }
     }
     impl Give<Simp> for SimpAccount {
         fn give(&mut self, value: Coin<Simp>) -> Result<()> {
@@ -624,13 +527,8 @@ mod tests {
     }
     impl Take<Simp> for SimpAccount {
         type Value = Coin<Simp>;
-        fn take<A: Into<Amount>>(&mut self, amount: A) -> Result<Coin<Simp>> {
-            let amount = amount.into();
-            dbg!(&amount);
-            todo!();
-            self.liquid = (self.liquid - amount)?;
-
-            Ok(amount.into())
+        fn take<A: Into<Amount>>(&mut self, _amount: A) -> Result<Coin<Simp>> {
+            unimplemented!()
         }
     }
     impl Balance<Simp, Decimal> for SimpAccount {
@@ -649,18 +547,16 @@ mod tests {
         let bob = [1; 32].into();
 
         pool.get_mut(alice)?.deposit_locked(50)?;
-        assert_eq!(pool.num_tokens, 50);
+        assert_eq!(pool.contributions, 50);
         assert_eq!(pool.get_mut(alice)?.balance()?, 50);
         pool.give(100.into())?;
-        assert_eq!(pool.num_tokens, 50);
-        assert_eq!(pool.rewards, 100);
+        assert_eq!(pool.contributions, 50);
         assert_eq!(pool.get_mut(alice)?.balance()?, 50);
         assert_eq!(pool.get_mut(alice)?.liquid, 100);
-        assert_eq!(pool.rewards, 100);
-        assert_eq!(pool.num_tokens, 50);
+        assert_eq!(pool.contributions, 50);
         pool.get_mut(bob)?.deposit_locked(50)?;
         pool.give(100.into())?;
-        assert_eq!(pool.rewards, 200);
+        pool.get_mut(alice)?;
 
         assert_eq!(pool.get_mut(alice)?.balance()?, 50);
         assert_eq!(pool.get_mut(alice)?.liquid, 150);
@@ -686,9 +582,9 @@ mod tests {
         pool.get_mut(alice)?.give(50.into())?;
         pool.give(50.into())?;
         pool.get_mut(alice)?.take(100)?.burn();
-        // assert_eq!(pool.balance()?, 0);
-        // pool.give(50.into())
-        // .expect_err("Should not be able to give to emptied pool");
+        assert_eq!(pool.balance()?, 0);
+        pool.give(50.into())
+            .expect_err("Should not be able to give to emptied pool");
 
         Ok(())
     }

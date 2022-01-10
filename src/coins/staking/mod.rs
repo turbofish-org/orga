@@ -603,8 +603,6 @@ mod tests {
         let edith = [7; 32].into();
         let edith_con = [201; 32].into();
 
-        dbg!(staking.staked());
-
         staking.declare(
             edith,
             edith_con,
