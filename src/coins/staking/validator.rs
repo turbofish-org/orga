@@ -18,6 +18,7 @@ pub struct Validator<S: Symbol> {
     pub(super) jailed_coins: Amount,
     pub(super) amount_staked: Amount,
     pub(super) info: ValidatorInfo,
+    pub(super) in_active_set: bool,
 }
 
 #[derive(Default)]
@@ -87,8 +88,13 @@ impl<S: Symbol> Validator<S> {
         self.delegators.get(address)
     }
 
-    pub fn staked(&self) -> Amount {
-        self.amount_staked
+    pub fn staked(&mut self) -> Result<Amount> {
+        let in_active_set_before = self.in_active_set;
+        self.in_active_set = true;
+        let res = self.balance()?.amount();
+        self.in_active_set = in_active_set_before;
+
+        res
     }
 
     pub(super) fn slash(&mut self, amount: Amount) -> Result<Coin<S>> {
@@ -136,10 +142,9 @@ impl<S: Symbol> Validator<S> {
 
 impl<S: Symbol> Balance<S, Decimal> for Validator<S> {
     fn balance(&self) -> Result<Decimal> {
-        if self.jailed {
+        if self.jailed || !self.in_active_set {
             Ok(0.into())
         } else {
-            // Ok(self.amount_staked.into())
             self.delegators.balance()
         }
     }

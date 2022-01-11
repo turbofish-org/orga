@@ -1,12 +1,12 @@
 use super::pool::{Child as PoolChild, ChildMut as PoolChildMut};
-use super::{Address, Amount, Coin, Decimal, Give, Pool, Symbol};
-use crate::abci::BeginBlock;
+use super::{Address, Amount, Balance, Coin, Decimal, Give, Pool, Symbol};
+use crate::abci::{BeginBlock, EndBlock};
 use crate::call::Call;
 use crate::client::Client;
-use crate::collections::Map;
+use crate::collections::{Entry, EntryMap, Map};
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
-use crate::plugins::{BeginBlockCtx, Paid, Signer, Validators};
+use crate::plugins::{BeginBlockCtx, EndBlockCtx, Paid, Signer, Validators};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
@@ -25,6 +25,7 @@ const UNBONDING_SECONDS: u64 = 10; // 10 seconds
 #[cfg(not(test))]
 const UNBONDING_SECONDS: u64 = 60 * 60 * 24 * 7 * 2; // 2 weeks
 const MAX_OFFLINE_BLOCKS: u64 = 100;
+const MAX_VALIDATORS: u64 = 100;
 
 #[derive(Call, Query, Client)]
 pub struct Staking<S: Symbol> {
@@ -32,6 +33,30 @@ pub struct Staking<S: Symbol> {
     amount_delegated: Amount,
     consensus_keys: Map<Address, Address>,
     last_signed_block: Map<[u8; 20], u64>,
+    max_validators: u64,
+    validators_by_power: EntryMap<ValidatorPowerEntry>,
+    last_indexed_power: Map<Address, u64>,
+    last_validator_powers: Map<Address, u64>,
+}
+
+#[derive(Entry)]
+struct ValidatorPowerEntry {
+    #[key]
+    inverted_power: u64,
+    #[key]
+    address_bytes: [u8; 32],
+}
+
+impl ValidatorPowerEntry {
+    fn power(&self) -> u64 {
+        u64::max_value() - self.inverted_power
+    }
+}
+
+impl<S: Symbol> EndBlock for Staking<S> {
+    fn end_block(&mut self, _ctx: &EndBlockCtx) -> Result<()> {
+        self.end_block_step()
+    }
 }
 
 impl<S: Symbol> State for Staking<S> {
@@ -43,6 +68,10 @@ impl<S: Symbol> State for Staking<S> {
             amount_delegated: State::create(store.sub(&[1]), data.amount_delegated)?,
             consensus_keys: State::create(store.sub(&[2]), ())?,
             last_signed_block: State::create(store.sub(&[3]), ())?,
+            validators_by_power: State::create(store.sub(&[4]), ())?,
+            last_validator_powers: State::create(store.sub(&[5]), ())?,
+            max_validators: State::create(store.sub(&[6]), data.max_validators)?,
+            last_indexed_power: State::create(store.sub(&[7]), ())?,
         })
     }
 
@@ -50,6 +79,7 @@ impl<S: Symbol> State for Staking<S> {
         self.consensus_keys.flush()?;
         self.last_signed_block.flush()?;
         Ok(Self::Encoding {
+            max_validators: self.max_validators,
             validators: self.validators.flush()?,
             amount_delegated: self.amount_delegated.flush()?,
         })
@@ -59,6 +89,7 @@ impl<S: Symbol> State for Staking<S> {
 impl<S: Symbol> From<Staking<S>> for StakingEncoding<S> {
     fn from(staking: Staking<S>) -> Self {
         Self {
+            max_validators: staking.max_validators,
             validators: staking.validators.into(),
             amount_delegated: staking.amount_delegated.into(),
         }
@@ -133,6 +164,7 @@ impl<S: Symbol> BeginBlock for Staking<S> {
 
 #[derive(Encode, Decode)]
 pub struct StakingEncoding<S: Symbol> {
+    max_validators: u64,
     validators: <Pool<Address, Validator<S>, S> as State>::Encoding,
     amount_delegated: <Amount as State>::Encoding,
 }
@@ -140,6 +172,7 @@ pub struct StakingEncoding<S: Symbol> {
 impl<S: Symbol> Default for StakingEncoding<S> {
     fn default() -> Self {
         Self {
+            max_validators: MAX_VALIDATORS,
             validators: Default::default(),
             amount_delegated: Default::default(),
         }
@@ -153,7 +186,7 @@ impl<S: Symbol> Staking<S> {
         delegator_address: Address,
         coins: Coin<S>,
     ) -> Result<()> {
-        let consensus_key = self.consensus_key(val_address)?;
+        let _ = self.consensus_key(val_address)?;
         let mut validator = self.validators.get_mut(val_address)?;
         if validator.jailed {
             return Err(Error::Coins("Cannot delegate to jailed validator".into()));
@@ -163,12 +196,10 @@ impl<S: Symbol> Staking<S> {
         self.amount_delegated = (self.amount_delegated + coins.amount)?;
         delegator.add_stake(coins)?;
         drop(delegator);
-        let voting_power = validator.staked().into();
+        let voting_power = validator.staked()?.into();
         drop(validator);
 
-        self.context::<Validators>()
-            .ok_or_else(|| Error::Coins("No Validators context available".into()))?
-            .set_voting_power(consensus_key, voting_power);
+        self.set_potential_voting_power(val_address, voting_power)?;
 
         Ok(())
     }
@@ -214,12 +245,12 @@ impl<S: Symbol> Staking<S> {
         Ok(())
     }
 
-    pub fn staked(&self) -> Amount {
-        self.amount_delegated
+    pub fn staked(&self) -> Result<Amount> {
+        self.validators.balance()?.amount()
     }
 
     pub fn slash<A: Into<Amount>>(&mut self, val_address: Address, amount: A) -> Result<Coin<S>> {
-        let consensus_key = self.consensus_key(val_address)?;
+        let _consensus_key = self.consensus_key(val_address)?;
         let jailed = self.get_mut(val_address)?.jailed;
         if !jailed {
             let reduction = self.slashable_balance(val_address)?;
@@ -231,9 +262,7 @@ impl<S: Symbol> Staking<S> {
         drop(validator);
 
         if !jailed {
-            self.context::<Validators>()
-                .ok_or_else(|| Error::Coins("No Validators context available".into()))?
-                .set_voting_power(consensus_key, 0);
+            self.set_potential_voting_power(val_address, 0)?;
         }
 
         Ok(slashed_coins)
@@ -273,10 +302,8 @@ impl<S: Symbol> Staking<S> {
         delegator_address: Address,
         amount: A,
     ) -> Result<()> {
-        let consensus_key = self.consensus_key(val_address)?;
         let amount = amount.into();
         let mut validator = self.validators.get_mut(val_address)?;
-        let vp_before = validator.staked();
         let jailed = validator.jailed;
         {
             let mut delegator = validator.get_mut(delegator_address)?;
@@ -288,13 +315,11 @@ impl<S: Symbol> Staking<S> {
             validator.amount_staked = (validator.amount_staked - amount)?;
         }
 
-        let vp = validator.staked().into();
+        let vp = validator.staked()?.into();
         drop(validator);
 
-        if vp_before > 0 && !jailed {
-            self.context::<Validators>()
-                .ok_or_else(|| Error::Coins("No Validators context available".into()))?
-                .set_voting_power(consensus_key, vp);
+        if !jailed {
+            self.set_potential_voting_power(val_address, vp)?;
         }
 
         Ok(())
@@ -370,6 +395,22 @@ impl<S: Symbol> Staking<S> {
             .ok_or_else(|| Error::Coins("No Payment context available".into()))
     }
 
+    fn set_potential_voting_power(&mut self, address: Address, power: u64) -> Result<()> {
+        if let Some(last_indexed) = self.last_indexed_power.get(address)? {
+            self.validators_by_power.delete(ValidatorPowerEntry {
+                address_bytes: address.bytes(),
+                inverted_power: u64::MAX - *last_indexed,
+            })?;
+        }
+
+        self.validators_by_power.insert(ValidatorPowerEntry {
+            address_bytes: address.bytes(),
+            inverted_power: u64::MAX - power,
+        })?;
+
+        self.last_indexed_power.insert(address, power)
+    }
+
     fn val_address_for_consensus_key_hash(
         &self,
         consensus_key_hash: Vec<u8>,
@@ -399,6 +440,89 @@ impl<S: Symbol> Staking<S> {
             .collect();
 
         Ok(val_addresses)
+    }
+
+    fn end_block_step(&mut self) -> Result<()> {
+        use std::collections::HashSet;
+        let max_vals = self.max_validators;
+        let mut new_val_entries: Vec<(Address, u64)> = vec![];
+        let mut i = 0;
+        // Collect the top validators by voting power
+        for entry in self.validators_by_power.iter()? {
+            let entry = entry?;
+            let address: Address = entry.address_bytes.into();
+            let new_power = entry.power();
+
+            new_val_entries.push((address, new_power));
+
+            i += 1;
+            if i == max_vals {
+                break;
+            }
+        }
+
+        // Find the minimal set of updates required to send back to Tendermint
+        let mut new_power_updates = vec![];
+        for (address, power) in new_val_entries.iter() {
+            match self.last_validator_powers.get(*address)? {
+                Some(prev_power) => {
+                    if *power != *prev_power {
+                        new_power_updates.push((*address, *power));
+                    }
+                }
+                None => new_power_updates.push((*address, *power)),
+            }
+        }
+
+        let validators_in_active_set: HashSet<_> = new_val_entries
+            .iter()
+            .map(|(address, _)| *address)
+            .collect();
+
+        let min_vp = new_power_updates.last().map(|update| update.1).unwrap_or(0);
+        // Check for validators bumped from the active validator set
+        for entry in self.last_validator_powers.iter()? {
+            let (address, power) = entry?;
+            if !validators_in_active_set.contains(&address) && *power < min_vp {
+                new_power_updates.push((*address, 0));
+            }
+        }
+
+        // Tell newly-updated validators whether they're in the active set for
+        // proper fee accounting
+        for (address, power) in new_power_updates.iter() {
+            let mut validator = self.validators.get_mut(*address)?;
+            validator.in_active_set = *power > 0;
+        }
+
+        // Map to consensus key before we send back the updates
+        let mut new_power_updates_con = vec![];
+        for (address, power) in new_power_updates.iter() {
+            let consensus_key = self
+                .consensus_keys
+                .get(*address)?
+                .ok_or_else(|| Error::Coins("No consensus key for validator".into()))?;
+            new_power_updates_con.push((*consensus_key, *power));
+        }
+
+        let val_ctx = self
+            .context::<Validators>()
+            .ok_or_else(|| Error::Coins("No Validators context available".into()))?;
+
+        for (consensus_key, power) in new_power_updates_con.into_iter() {
+            val_ctx.set_voting_power(consensus_key, power);
+        }
+
+        // Update the last validator powers for use in the next block
+        for (address, power) in new_power_updates.iter() {
+            if *power > 0 {
+                self.last_validator_powers.insert(*address, *power)?;
+            } else {
+                self.last_validator_powers.remove(*address)?;
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -441,7 +565,7 @@ mod tests {
         staking
             .give(100.into())
             .expect_err("Cannot give to empty validator set");
-        assert_eq!(staking.staked(), 0);
+        assert_eq!(staking.staked()?, 0);
         staking
             .delegate(alice, alice, Coin::mint(100))
             .expect_err("Should not be able to delegate to an undeclared validator");
@@ -450,20 +574,22 @@ mod tests {
             .declare(alice, alice_con, dec!(0.0).into(), vec![].into(), 50.into())
             .expect_err("Should not be able to redeclare validator");
 
-        assert_eq!(staking.staked(), 50);
+        staking.end_block_step()?;
+        assert_eq!(staking.staked()?, 50);
         staking.delegate(alice, alice, Coin::mint(50))?;
-        assert_eq!(staking.staked(), 100);
+        assert_eq!(staking.staked()?, 100);
         staking.declare(bob, bob_con, dec!(0.0).into(), vec![].into(), 50.into())?;
-        assert_eq!(staking.staked(), 150);
+        staking.end_block_step()?;
+        assert_eq!(staking.staked()?, 150);
 
         staking.delegate(bob, bob, Coin::mint(250))?;
         staking.delegate(bob, carol, Coin::mint(100))?;
         staking.delegate(bob, carol, Coin::mint(200))?;
         staking.delegate(bob, dave, Coin::mint(400))?;
-        assert_eq!(staking.staked(), 1100);
+        assert_eq!(staking.staked()?, 1100);
 
         let ctx = Context::resolve::<Validators>().unwrap();
-
+        staking.end_block_step()?;
         let alice_vp = ctx.updates.get(&alice_con.bytes).unwrap().power;
         assert_eq!(alice_vp, 100);
 
@@ -479,16 +605,16 @@ mod tests {
         let carol_to_bob_delegation = staking.get(bob)?.get(carol)?.staked.amount()?;
         assert_eq!(carol_to_bob_delegation, 300);
 
-        let alice_val_balance = staking.get(alice)?.staked();
+        let alice_val_balance = staking.get_mut(alice)?.staked()?;
         assert_eq!(alice_val_balance, 100);
 
-        let bob_val_balance = staking.get(bob)?.staked();
+        let bob_val_balance = staking.get_mut(bob)?.staked()?;
         assert_eq!(bob_val_balance, 1000);
 
         // Big block rewards, doubling all balances
         staking.give(Coin::mint(600))?;
         staking.give(Coin::mint(500))?;
-        assert_eq!(staking.staked(), 1100);
+        assert_eq!(staking.staked()?, 1100);
 
         let alice_liquid = staking.get(alice)?.get(alice)?.liquid.amount()?;
         assert_eq!(alice_liquid, 100);
@@ -498,7 +624,7 @@ mod tests {
         let carol_to_bob_liquid = staking.get(bob)?.get(carol)?.liquid.amount()?;
         assert_eq!(carol_to_bob_liquid, 300);
 
-        let bob_val_balance = staking.get(bob)?.staked();
+        let bob_val_balance = staking.get_mut(bob)?.staked()?;
         assert_eq!(bob_val_balance, 1000);
 
         let bob_vp = ctx.updates.get(&bob_con.bytes).unwrap().power;
@@ -517,22 +643,23 @@ mod tests {
             .delegate(bob, bob, 200.into())
             .expect_err("Should not be able to delegate to jailed validator");
 
+        staking.end_block_step()?;
         // Bob has been jailed and should no longer have any voting power
         let bob_vp = ctx.updates.get(&bob_con.bytes).unwrap().power;
         assert_eq!(bob_vp, 0);
 
         // Bob's staked coins should no longer be present in the global staking
         // balance
-        assert_eq!(staking.staked(), 100);
+        assert_eq!(staking.staked()?, 100);
 
         // Carol can still withdraw her 300 coins from Bob's jailed validator
         {
             staking.unbond(bob, carol, 150)?;
-            assert_eq!(staking.staked(), 100);
+            assert_eq!(staking.staked()?, 100);
             staking
                 .withdraw(bob, carol, 450)
                 .expect_err("Should not be able to take coins before unbonding period has elapsed");
-            assert_eq!(staking.staked(), 100);
+            assert_eq!(staking.staked()?, 100);
             Context::add(Time::from_seconds(10));
             let carol_recovered_coins = staking.withdraw(bob, carol, 450)?;
 
@@ -557,7 +684,7 @@ mod tests {
             staking.withdraw(bob, bob, 350)?.burn();
         }
 
-        assert_eq!(staking.staked(), 100);
+        assert_eq!(staking.staked()?, 100);
         let alice_liquid = staking.get(alice)?.get(alice)?.liquid.amount()?;
         assert_eq!(alice_liquid, 100);
         let alice_staked = staking.get(alice)?.get(alice)?.staked.amount()?;
@@ -566,8 +693,8 @@ mod tests {
         // More block reward, but bob's delegators are jailed and should not
         // earn from it
         staking.give(Coin::mint(200))?;
-        assert_eq!(staking.staked(), 100);
-        let alice_val_balance = staking.get(alice)?.staked();
+        assert_eq!(staking.staked()?, 100);
+        let alice_val_balance = staking.get_mut(alice)?.staked()?;
         assert_eq!(alice_val_balance, 100);
         let alice_liquid = staking.get(alice)?.get(alice)?.liquid.amount()?;
         assert_eq!(alice_liquid, 300);
@@ -593,16 +720,21 @@ mod tests {
         staking.withdraw(bob, dave, 500)?.burn();
         assert_eq!(staking.slashable_balance(bob)?, 0);
 
-        assert_eq!(staking.staked(), 100);
+        assert_eq!(staking.staked()?, 100);
         staking.declare(dave, dave_con, dec!(0.0).into(), vec![].into(), 300.into())?;
-        assert_eq!(staking.staked(), 400);
+        staking.end_block_step()?;
+        assert_eq!(staking.staked()?, 400);
+        staking.end_block_step()?;
         assert_eq!(ctx.updates.get(&alice_con.bytes).unwrap().power, 100);
         assert_eq!(ctx.updates.get(&dave_con.bytes).unwrap().power, 300);
         staking.delegate(dave, carol, 300.into())?;
-        assert_eq!(staking.staked(), 700);
+        assert_eq!(staking.staked()?, 700);
+
+        staking.end_block_step()?;
         assert_eq!(ctx.updates.get(&dave_con.bytes).unwrap().power, 600);
         staking.unbond(dave, dave, 150)?;
-        assert_eq!(staking.staked(), 550);
+        assert_eq!(staking.staked()?, 550);
+        staking.end_block_step()?;
         assert_eq!(ctx.updates.get(&dave_con.bytes).unwrap().power, 450);
 
         // Test commissions
@@ -627,8 +759,102 @@ mod tests {
         assert_eq!(carol_liquid, 125);
 
         staking.slash(dave, 0)?.burn();
+        staking.end_block_step()?;
         assert_eq!(ctx.updates.get(&dave_con.bytes).unwrap().power, 0);
         staking.slash(dave, 0)?.burn();
+
+        Ok(())
+    }
+
+    #[test]
+    fn val_size_limit() -> Result<()> {
+        let store = Store::new(Shared::new(MapStore::new()).into());
+        let mut staking: Staking<Simp> = Staking::create(store, Default::default())?;
+
+        Context::add(Validators::default());
+        Context::add(Time::from_seconds(0));
+        let ctx = Context::resolve::<Validators>().unwrap();
+        staking.max_validators = 2;
+
+        for i in 1..10 {
+            staking.declare(
+                [i; 32].into(),
+                [i; 32].into(),
+                dec!(0.0).into(),
+                vec![].into(),
+                Amount::new(i as u64 * 100).into(),
+            )?;
+        }
+        staking.end_block_step()?;
+        assert_eq!(staking.staked()?, 1700);
+        assert!(ctx.updates.get(&[7; 32]).is_none());
+        assert_eq!(ctx.updates.get(&[8; 32]).unwrap().power, 800);
+        assert_eq!(ctx.updates.get(&[9; 32]).unwrap().power, 900);
+        staking.give(3400.into())?;
+        assert_eq!(
+            staking
+                .get([4; 32].into())?
+                .get([4; 32].into())?
+                .liquid
+                .amount()?,
+            0
+        );
+        assert_eq!(
+            staking
+                .get([8; 32].into())?
+                .get([8; 32].into())?
+                .liquid
+                .amount()?,
+            1600
+        );
+        assert_eq!(
+            staking
+                .get([9; 32].into())?
+                .get([9; 32].into())?
+                .liquid
+                .amount()?,
+            1800
+        );
+
+        staking.declare(
+            [10; 32].into(),
+            [10; 32].into(),
+            dec!(0.0).into(),
+            vec![].into(),
+            Amount::new(1000).into(),
+        )?;
+
+        staking.end_block_step()?;
+
+        assert_eq!(ctx.updates.get(&[8; 32]).unwrap().power, 0);
+        assert_eq!(ctx.updates.get(&[9; 32]).unwrap().power, 900);
+        assert_eq!(ctx.updates.get(&[10; 32]).unwrap().power, 1000);
+        staking.give(1900.into())?;
+
+        assert_eq!(
+            staking
+                .get([8; 32].into())?
+                .get([8; 32].into())?
+                .liquid
+                .amount()?,
+            1600
+        );
+        assert_eq!(
+            staking
+                .get([9; 32].into())?
+                .get([9; 32].into())?
+                .liquid
+                .amount()?,
+            2700
+        );
+        assert_eq!(
+            staking
+                .get([10; 32].into())?
+                .get([10; 32].into())?
+                .liquid
+                .amount()?,
+            1000
+        );
 
         Ok(())
     }

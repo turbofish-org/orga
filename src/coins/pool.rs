@@ -30,11 +30,6 @@ where
     maybe_drop_err: Option<Error>,
 }
 
-#[derive(State)]
-struct PeriodEntry {
-    shares_issued: Decimal,
-}
-
 impl<K, V, S> State for Pool<K, V, S>
 where
     K: Terminated + Encode,
