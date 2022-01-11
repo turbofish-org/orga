@@ -68,13 +68,13 @@ impl Address {
     const LENGTH: usize = 20;
 
     pub fn from_pubkey(bytes: [u8; 32]) -> Self {
-        let mut ripemd = Ripemd160::new();
-        ripemd.update(&bytes);
-        let hash = ripemd.finalize();
-
         let mut sha = Sha256::new();
-        sha.update(&hash);
+        sha.update(&bytes);
         let hash = sha.finalize();
+
+        let mut ripemd = Ripemd160::new();
+        ripemd.update(&hash);
+        let hash = ripemd.finalize();
 
         let mut bytes = [0; Address::LENGTH];
         bytes.copy_from_slice(hash.as_slice());
@@ -89,7 +89,7 @@ impl Address {
 
 impl Display for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        encode_to_fmt(f, "nomic", self.bytes.to_base32(), Variant::Bech32m).unwrap()
+        encode_to_fmt(f, "nomic", self.bytes.to_base32(), Variant::Bech32).unwrap()
     }
 }
 
@@ -104,8 +104,6 @@ impl FromStr for Address {
             return Err(bech32::Error::InvalidData(0));
         }
         let data: Vec<u8> = FromBase32::from_base32(&data)?;
-
-        dbg!(&data, data.len());
 
         if data.len() != Address::LENGTH {
             return Err(bech32::Error::InvalidData(1));
