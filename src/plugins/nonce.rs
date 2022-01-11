@@ -1,5 +1,4 @@
-use super::{BeginBlockCtx, EndBlockCtx, InitChainCtx, Signer};
-use crate::abci::{BeginBlock, EndBlock, InitChain};
+use super::Signer;
 use crate::call::Call;
 use crate::client::Client;
 use crate::coins::Address;
@@ -139,6 +138,7 @@ impl<T: Client<NonceClient<T, U>> + State, U: Clone> Client<U> for NoncePlugin<T
     }
 }
 
+#[cfg(not(feature = "wasm"))]
 fn nonce_path() -> Result<PathBuf> {
     let orga_home = home::home_dir()
         .expect("No home directory set")
@@ -160,37 +160,55 @@ fn load_nonce() -> Result<u64> {
     }
 }
 
+#[cfg(feature = "wasm")]
+fn write_nonce(nonce: u64) -> Result<()> {
+    let window = web_sys::window().unwrap();
+    let storage = window.local_storage()
+        .map_err(|_| Error::Nonce("Could not get local storage".into()))?
+        .unwrap();
+    storage.set("orga/nonce", nonce.to_string().as_str())
+        .map_err(|_| Error::Nonce("Could not write to local storage".into()))?;
+    Ok(())
+}
+
+#[cfg(not(feature = "wasm"))]
 fn write_nonce(nonce: u64) -> Result<()> {
     let nonce_path = nonce_path()?;
     Ok(std::fs::write(&nonce_path, nonce.encode()?)?)
 }
 
 // TODO: Remove dependency on ABCI for this otherwise-pure plugin.
+#[cfg(abci)]
+mod abci {
+    use super::*;
+    use super::super::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
+    use crate::abci::{BeginBlock, EndBlock, InitChain};
 
-impl<T> BeginBlock for NoncePlugin<T>
-where
-    T: BeginBlock + State,
-{
-    fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
-        self.inner.begin_block(ctx)
+    impl<T> BeginBlock for NoncePlugin<T>
+    where
+        T: BeginBlock + State,
+    {
+        fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
+            self.inner.begin_block(ctx)
+        }
     }
-}
 
-impl<T> EndBlock for NoncePlugin<T>
-where
-    T: EndBlock + State,
-{
-    fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
-        self.inner.end_block(ctx)
+    impl<T> EndBlock for NoncePlugin<T>
+    where
+        T: EndBlock + State,
+    {
+        fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
+            self.inner.end_block(ctx)
+        }
     }
-}
 
-impl<T> InitChain for NoncePlugin<T>
-where
-    T: InitChain + State + Call,
-{
-    fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
-        self.inner.init_chain(ctx)
+    impl<T> InitChain for NoncePlugin<T>
+    where
+        T: InitChain + State + Call,
+    {
+        fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
+            self.inner.init_chain(ctx)
+        }
     }
 }
 

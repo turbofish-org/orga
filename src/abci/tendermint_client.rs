@@ -64,6 +64,8 @@ impl<T: Client<TendermintAdapter<T>> + Query + State> TendermintClient<T> {
             return Err(Error::Query(msg));
         }
 
+        // TODO: we shouldn't need to include the root hash in the result, it
+        // should come from a trusted source
         let root_hash = match res.value[0..32].try_into() {
             Ok(inner) => inner,
             _ => {

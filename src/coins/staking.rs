@@ -1,12 +1,15 @@
 use super::pool::{Child as PoolChild, ChildMut as PoolChildMut};
 use super::{Address, Adjust, Amount, Balance, Coin, Decimal, Give, Pool, Share, Symbol, Take};
+#[cfg(abci)]
 use crate::abci::BeginBlock;
 use crate::call::Call;
 use crate::client::Client;
 use crate::collections::{Deque, Map};
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
-use crate::plugins::{BeginBlockCtx, Paid, Signer, Time, Validators};
+#[cfg(abci)]
+use crate::plugins::{BeginBlockCtx, Time, Validators};
+use crate::plugins::{Paid, Signer};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
@@ -61,6 +64,7 @@ impl<S: Symbol> From<Staking<S>> for StakingEncoding<S> {
     }
 }
 
+#[cfg(abci)]
 impl<S: Symbol> BeginBlock for Staking<S> {
     fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
         if let Some(last_commit_info) = &ctx.last_commit_info {
@@ -159,12 +163,13 @@ impl<S: Symbol> Staking<S> {
         self.amount_delegated = (self.amount_delegated + coins.amount)?;
         delegator.give(coins)?;
         drop(delegator);
-        let voting_power = validator.staked().into();
+        let voting_power = validator.staked();
         drop(validator);
 
+        #[cfg(abci)]
         self.context::<Validators>()
             .ok_or_else(|| Error::Coins("No Validators context available".into()))?
-            .set_voting_power(consensus_key, voting_power);
+            .set_voting_power(consensus_key, voting_power.into());
 
         Ok(())
     }
@@ -214,6 +219,7 @@ impl<S: Symbol> Staking<S> {
         drop(validator);
 
         if !jailed {
+            #[cfg(abci)]
             self.context::<Validators>()
                 .ok_or_else(|| Error::Coins("No Validators context available".into()))?
                 .set_voting_power(consensus_key, 0);
@@ -271,13 +277,14 @@ impl<S: Symbol> Staking<S> {
             validator.amount_staked = (validator.amount_staked - amount)?;
         }
 
-        let vp = validator.staked().into();
+        let vp = validator.staked();
         drop(validator);
 
         if vp_before > 0 && !jailed {
+            #[cfg(abci)]
             self.context::<Validators>()
                 .ok_or_else(|| Error::Coins("No Validators context available".into()))?
-                .set_voting_power(consensus_key, vp);
+                .set_voting_power(consensus_key, vp.into());
         }
 
         Ok(())
@@ -490,10 +497,13 @@ impl<S: Symbol> Delegator<S> {
     fn unbond<A: Into<Amount>>(&mut self, amount: A) -> Result<()> {
         let amount = amount.into();
         let coins = self.staked.take(amount)?.into();
+        #[cfg(abci)]
         let start_seconds = self
             .context::<Time>()
             .ok_or_else(|| Error::Coins("No Time context available".into()))?
             .seconds;
+        #[cfg(not(abci))]
+        let start_seconds = 0;
         let unbond = Unbond {
             coins,
             start_seconds,
@@ -539,10 +549,14 @@ impl<S: Symbol> Delegator<S> {
     }
 
     fn process_unbonds(&mut self) -> Result<()> {
+        #[cfg(abci)]
         let now_seconds = self
             .context::<Time>()
             .ok_or_else(|| Error::Coins("No Time context available".into()))?
             .seconds;
+        #[cfg(not(abci))]
+        let now_seconds = 0;
+        
         while let Some(unbond) = self.unbonding.front()? {
             let unbond_matured = now_seconds - unbond.start_seconds >= UNBONDING_SECONDS as i64;
             if unbond_matured {
@@ -635,6 +649,7 @@ mod tests {
     struct Simp(());
     impl Symbol for Simp {}
 
+    #[cfg(abci)]
     #[test]
     fn staking() -> Result<()> {
         let store = Store::new(Shared::new(MapStore::new()).into());

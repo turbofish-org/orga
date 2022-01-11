@@ -8,7 +8,7 @@ license = "MIT"
 
 [dependencies]
 abci2 = { git = "https://github.com/nomic-io/abci2", rev = "fcc7a1d68aa492f0f7e60be05b6ce3146b290f0d", optional = true }
-merk = { git = "https://github.com/nomic-io/merk", rev = "b777c52f6ceb1e3c3857657c1607893e0f3af991", optional = true }
+merk = { git = "https://github.com/nomic-io/merk", rev = "3c30b41415423af5e165d64cc8646c59da4acfd6", optional = true, default-features = false }
 tendermint-rpc = { version = "0.21.0", features = ["http-client"], optional = true }
 tendermint = { version = "0.21.0", optional = true }
 tendermint-proto = { version = "0.21.0", optional = true }
@@ -17,17 +17,15 @@ seq-macro = "0.1.4"
 log = "0.4.8"
 hex-literal = "0.3.3"
 sha2 = "0.9.5"
-is_executable = "1.0.1"
+is_executable = { version = "1.0.1", optional = true }
 reqwest = {version = "0.11.4", features = ["blocking"]}
 flate2 = "1.0.20"
 tar = "0.4.33"
 ed = { git = "https://github.com/nomic-io/ed.git", rev = "6d327abacf0c6068ceaed36fb67410ae65f2abbe"}
 toml_edit = "0.2.0"
-datetime = "0.5.2"
 prost = {version = "0.7", optional = true}
-home = "0.5.3"
-rand_core = { version = "0.5", optional = true}
-ed25519-dalek = {version = "1", optional = true}
+home = { version = "0.5.3", optional = true }
+ed25519-dalek = "1"
 thiserror = "1.0.29"
 bech32 = "0.8.1"
 async-trait = "0.1.51"
@@ -36,6 +34,8 @@ num-rational = "0.4.0"
 num-traits = "0.2.14"
 rust_decimal = "1.18"
 ripemd = "0.1.0"
+rand = { version = "0.7" }
+web-sys = { version = "0.3.55", features = ["Window", "Storage"], optional = true }
 
 [dev-dependencies]
 tempdir = "0.3.7"
@@ -46,7 +46,10 @@ mutagen = {git = "https://github.com/llogiq/mutagen"}
 features = ["abci", "merk"]
 
 [features]
-abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto", "prost", "rand_core", "ed25519-dalek"]
+abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto", "prost", "is_executable", "home"]
+merk-verify = ["merk/verify"]
+merk-full = ["merk/full"]
+wasm = ["web-sys"]
 
 [profile.release]
 lto = true

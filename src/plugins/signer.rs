@@ -1,5 +1,3 @@
-use super::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
-use crate::abci::{BeginBlock, EndBlock, InitChain};
 use crate::call::Call;
 use crate::client::{AsyncCall, Client};
 use crate::coins::Address;
@@ -151,10 +149,18 @@ where
     }
 }
 
+#[cfg(feature = "wasm")]
 pub fn load_keypair() -> Result<Keypair> {
-    use rand_core::OsRng;
-    // Ensure orga home directory exists
+    use rand::SeedableRng;
+    // TODO: generate seed from browser random
+    let mut csprng = rand::rngs::StdRng::from_seed([0; 32]);
+    let keypair = Keypair::generate(&mut csprng);
+    Ok(keypair)
+}
 
+#[cfg(not(feature = "wasm"))]
+pub fn load_keypair() -> Result<Keypair> {
+    // Ensure orga home directory exists
     let orga_home = home::home_dir()
         .expect("No home directory set")
         .join(".orga");
@@ -177,30 +183,37 @@ pub fn load_keypair() -> Result<Keypair> {
 // TODO: In the future, Signer shouldn't need to know about ABCI, but
 // implementing passthrough of ABCI lifecycle methods as below seems preferable to creating a formal
 // distinction between Contexts and normal State / Call / Query types for now.
-impl<T> BeginBlock for SignerPlugin<T>
-where
-    T: BeginBlock + State,
-{
-    fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
-        self.inner.begin_block(ctx)
-    }
-}
+#[cfg(abci)]
+mod abci {
+    use super::*;
+    use super::super::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
+    use crate::abci::{BeginBlock, EndBlock, InitChain};
 
-impl<T> EndBlock for SignerPlugin<T>
-where
-    T: EndBlock + State,
-{
-    fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
-        self.inner.end_block(ctx)
+    impl<T> BeginBlock for SignerPlugin<T>
+    where
+        T: BeginBlock + State,
+    {
+        fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
+            self.inner.begin_block(ctx)
+        }
     }
-}
 
-impl<T> InitChain for SignerPlugin<T>
-where
-    T: InitChain + State,
-{
-    fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
-        self.inner.init_chain(ctx)
+    impl<T> EndBlock for SignerPlugin<T>
+    where
+        T: EndBlock + State,
+    {
+        fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
+            self.inner.end_block(ctx)
+        }
+    }
+
+    impl<T> InitChain for SignerPlugin<T>
+    where
+        T: InitChain + State,
+    {
+        fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
+            self.inner.init_chain(ctx)
+        }
     }
 }
 

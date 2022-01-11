@@ -1,5 +1,3 @@
-use super::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
-use crate::abci::{BeginBlock, EndBlock, InitChain};
 use crate::call::Call;
 use crate::client::{AsyncCall, Client};
 use crate::coins::{Amount, Coin, Symbol};
@@ -332,29 +330,35 @@ where
     }
 }
 
-impl<T> BeginBlock for PayablePlugin<T>
-where
-    T: BeginBlock + State,
-{
-    fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
-        self.inner.begin_block(ctx)
+#[cfg(abci)]
+mod abci {
+    use super::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
+    use crate::abci::{BeginBlock, EndBlock, InitChain};
+        
+    impl<T> BeginBlock for PayablePlugin<T>
+    where
+        T: BeginBlock + State,
+    {
+        fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
+            self.inner.begin_block(ctx)
+        }
     }
-}
 
-impl<T> EndBlock for PayablePlugin<T>
-where
-    T: EndBlock + State,
-{
-    fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
-        self.inner.end_block(ctx)
+    impl<T> EndBlock for PayablePlugin<T>
+    where
+        T: EndBlock + State,
+    {
+        fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
+            self.inner.end_block(ctx)
+        }
     }
-}
 
-impl<T> InitChain for PayablePlugin<T>
-where
-    T: InitChain + State + Call,
-{
-    fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
-        self.inner.init_chain(ctx)
+    impl<T> InitChain for PayablePlugin<T>
+    where
+        T: InitChain + State + Call,
+    {
+        fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
+            self.inner.init_chain(ctx)
+        }
     }
 }
