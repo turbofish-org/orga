@@ -104,9 +104,7 @@ impl<T> Clone for TendermintAdapter<T> {
     }
 }
 
-unsafe impl<T> Send for TendermintAdapter<T> {}
-
-#[async_trait::async_trait]
+#[async_trait::async_trait(?Send)]
 impl<T: Call> AsyncCall for TendermintAdapter<T>
 where
     T::Call: Send,

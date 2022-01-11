@@ -149,7 +149,7 @@ impl<T, U: Clone> Clone for UnpaidAdapter<T, U> {
     }
 }
 
-#[async_trait::async_trait]
+#[async_trait::async_trait(?Send)]
 impl<T: Call, U: AsyncCall<Call = PayableCall<T::Call>> + Clone> AsyncCall for UnpaidAdapter<T, U>
 where
     T::Call: Send,
@@ -182,7 +182,7 @@ impl<T: Call, U: Clone> Clone for PaidAdapter<T, U> {
     }
 }
 
-#[async_trait::async_trait]
+#[async_trait::async_trait(?Send)]
 impl<T: Call, U: AsyncCall<Call = PayableCall<T::Call>> + Clone> AsyncCall for PaidAdapter<T, U>
 where
     T::Call: Send,
@@ -221,7 +221,7 @@ impl<T: Call> Clone for PayerAdapter<T> {
     }
 }
 
-#[async_trait::async_trait]
+#[async_trait::async_trait(?Send)]
 impl<T: Call> AsyncCall for PayerAdapter<T>
 where
     T::Call: Send,

@@ -279,7 +279,7 @@ fn create_client_struct(
                         }
                     }
 
-                    #[::orga::async_trait]
+                    #[::orga::async_trait(?Send)]
                     impl#generics_sanitized_with_return ::orga::client::AsyncCall for #adapter_name<#generic_params __Return, #parent_ty>
                     where
                         #parent_ty: Clone + Send,
@@ -453,7 +453,7 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
                     }
                 }
         
-                #[::orga::async_trait]
+                #[::orga::async_trait(?Send)]
                 impl#generics_sanitized ::orga::client::AsyncCall for #struct_name#generic_params_bracketed_with_parent
                 where
                     #parent_client_ty: Clone + Send,

@@ -69,14 +69,14 @@ impl<T: Client<U>, U: Clone, E> Client<U> for std::result::Result<T, E> {
 }
 
 // TODO: move to call module? or will these always be client-specific?
-#[async_trait::async_trait]
+#[async_trait::async_trait(?Send)]
 pub trait AsyncCall {
     type Call: Send;
 
     async fn call(&mut self, call: Self::Call) -> Result<()>;
 }
 
-#[async_trait::async_trait]
+#[async_trait::async_trait(?Send)]
 pub trait AsyncQuery {
     type Query;
     type Response;

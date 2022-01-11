@@ -103,7 +103,7 @@ impl<T, U: Clone> Clone for NonceClient<T, U> {
     }
 }
 
-#[async_trait::async_trait]
+#[async_trait::async_trait(?Send)]
 impl<T: Call, U: AsyncCall<Call = NonceCall<T::Call>> + Clone> AsyncCall for NonceClient<T, U>
 where
     T::Call: Send,

@@ -89,7 +89,7 @@ impl<T, U: Clone> Clone for SignerClient<T, U> {
 
 unsafe impl<T, U: Clone + Send> Send for SignerClient<T, U> {}
 
-#[async_trait::async_trait]
+#[async_trait::async_trait(?Send)]
 impl<T: Call, U: AsyncCall<Call = SignerCall> + Clone> AsyncCall for SignerClient<T, U>
 where
     T::Call: Send,
