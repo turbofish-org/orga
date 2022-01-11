@@ -148,6 +148,21 @@ fn nonce_path() -> Result<PathBuf> {
     Ok(orga_home.join("nonce"))
 }
 
+#[cfg(feature = "wasm")]
+fn load_nonce() -> Result<u64> {
+    let window = web_sys::window().unwrap();
+    let storage = window.local_storage()
+        .map_err(|_| Error::Nonce("Could not get local storage".into()))?
+        .unwrap();
+    let res = storage.get("orga/nonce")
+        .map_err(|_| Error::Nonce("Could not load from local storage".into()))?;
+    match res {
+        Some(nonce) => Ok(nonce.parse()?),
+        None => Ok(1),
+    }
+}
+
+#[cfg(not(feature = "wasm"))]
 fn load_nonce() -> Result<u64> {
     let nonce_path = nonce_path()?;
     if nonce_path.exists() {

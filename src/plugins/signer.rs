@@ -173,7 +173,7 @@ pub fn load_keypair() -> Result<Keypair> {
         Ok(Keypair::from_bytes(bytes.as_slice())?)
     } else {
         // Create and save a new key
-        let mut csprng = OsRng {};
+        let mut csprng = rand::thread_rng();
         let keypair = Keypair::generate(&mut csprng);
         std::fs::write(&keypair_path, keypair.to_bytes())?;
         Ok(keypair)
