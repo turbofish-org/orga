@@ -193,7 +193,7 @@ fn write_nonce(nonce: u64) -> Result<()> {
 }
 
 // TODO: Remove dependency on ABCI for this otherwise-pure plugin.
-#[cfg(abci)]
+#[cfg(feature = "abci")]
 mod abci {
     use super::*;
     use super::super::{BeginBlockCtx, EndBlockCtx, InitChainCtx};

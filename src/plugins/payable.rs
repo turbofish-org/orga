@@ -330,7 +330,7 @@ where
     }
 }
 
-#[cfg(abci)]
+#[cfg(feature = "abci")]
 mod abci {
     use super::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
     use crate::abci::{BeginBlock, EndBlock, InitChain};

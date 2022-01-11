@@ -183,7 +183,7 @@ pub fn load_keypair() -> Result<Keypair> {
 // TODO: In the future, Signer shouldn't need to know about ABCI, but
 // implementing passthrough of ABCI lifecycle methods as below seems preferable to creating a formal
 // distinction between Contexts and normal State / Call / Query types for now.
-#[cfg(abci)]
+#[cfg(feature = "abci")]
 mod abci {
     use super::*;
     use super::super::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
