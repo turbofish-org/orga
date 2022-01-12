@@ -4,9 +4,7 @@ pub use signer::*;
 mod nonce;
 pub use nonce::*;
 
-#[cfg(feature = "abci")]
 mod abci;
-#[cfg(feature = "abci")]
 pub use abci::*;
 
 mod payable;

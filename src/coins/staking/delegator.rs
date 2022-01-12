@@ -2,7 +2,6 @@ use crate::coins::{Amount, Balance, Coin, Decimal, Give, Share, Symbol, Take};
 use crate::collections::Deque;
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
-#[cfg(feature = "abci")]
 use crate::plugins::Time;
 use crate::state::State;
 use crate::{Error, Result};
@@ -28,15 +27,10 @@ impl<S: Symbol> Delegator<S> {
         let amount = amount.into();
         let coins = self.staked.take(amount)?.into();
 
-        #[cfg(feature = "abci")]
         let start_seconds = self
             .context::<Time>()
             .ok_or_else(|| Error::Coins("No Time context available".into()))?
             .seconds;
-        #[cfg(not(feature = "abci"))]
-        unimplemented!();
-        #[cfg(not(feature = "abci"))]
-        let start_seconds = 0;
 
         let unbond = Unbond {
             coins,
@@ -83,15 +77,10 @@ impl<S: Symbol> Delegator<S> {
     }
 
     pub(super) fn process_unbonds(&mut self) -> Result<()> {
-        #[cfg(feature = "abci")]
         let now_seconds = self
             .context::<Time>()
             .ok_or_else(|| Error::Coins("No Time context available".into()))?
             .seconds;
-        #[cfg(not(feature = "abci"))]
-        unimplemented!();
-        #[cfg(not(feature = "abci"))]
-        let now_seconds = 0;
 
         while let Some(unbond) = self.unbonding.front()? {
             let unbond_matured = now_seconds - unbond.start_seconds >= UNBONDING_SECONDS as i64;
