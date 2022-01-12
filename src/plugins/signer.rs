@@ -186,8 +186,8 @@ pub fn load_keypair() -> Result<Keypair> {
 // distinction between Contexts and normal State / Call / Query types for now.
 #[cfg(feature = "abci")]
 mod abci {
-    use super::*;
     use super::super::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
+    use super::*;
     use crate::abci::{BeginBlock, EndBlock, InitChain};
 
     impl<T> BeginBlock for SignerPlugin<T>

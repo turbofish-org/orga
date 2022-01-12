@@ -509,7 +509,7 @@ mod tests {
         let store = Store::new(Shared::new(MapStore::new()).into());
         let enc = Default::default();
         let mut pool = Pool::<Address, Share<Simp>, Simp>::create(store, enc)?;
-        
+
         let alice = Address::from_pubkey([0; 32]);
         let bob = Address::from_pubkey([1; 32]);
 

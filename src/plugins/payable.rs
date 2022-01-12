@@ -332,10 +332,10 @@ where
 
 #[cfg(feature = "abci")]
 mod abci {
-    use super::*;
     use super::super::*;
+    use super::*;
     use crate::abci::{BeginBlock, EndBlock, InitChain};
-        
+
     impl<T> BeginBlock for PayablePlugin<T>
     where
         T: BeginBlock + State,

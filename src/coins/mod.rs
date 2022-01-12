@@ -54,8 +54,8 @@ use crate::collections::Next;
 use crate::macros::State;
 use crate::query::Query;
 use ed::{Decode, Encode};
-use ripemd::{Ripemd160, Digest as _};
-use sha2::{Sha256, Digest as _};
+use ripemd::{Digest as _, Ripemd160};
+use sha2::{Digest as _, Sha256};
 
 #[derive(
     Encode, Decode, State, Next, Query, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Copy,

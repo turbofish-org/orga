@@ -77,7 +77,7 @@ impl Write for BackingStore {
 }
 
 impl BackingStore {
-    #[cfg(feature = "merk-full")]    
+    #[cfg(feature = "merk-full")]
     #[cfg_attr(test, mutate)]
     pub fn into_proof_builder(self) -> Result<ProofBuilder> {
         match self {

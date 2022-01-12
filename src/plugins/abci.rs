@@ -28,7 +28,8 @@ mod full {
     use std::collections::HashMap;
     use std::convert::TryInto;
     use tendermint_proto::abci::{
-        Evidence, LastCommitInfo, RequestBeginBlock, RequestEndBlock, RequestInitChain, ValidatorUpdate,
+        Evidence, LastCommitInfo, RequestBeginBlock, RequestEndBlock, RequestInitChain,
+        ValidatorUpdate,
     };
     use tendermint_proto::crypto::{public_key::Sum, PublicKey};
     use tendermint_proto::google::protobuf::Timestamp;

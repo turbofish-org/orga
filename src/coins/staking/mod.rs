@@ -542,12 +542,12 @@ impl<S: Symbol> Give<S> for Staking<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "abci")]
+    use crate::plugins::Time;
     use crate::{
         context::Context,
         store::{MapStore, Shared, Store},
     };
-    #[cfg(feature = "abci")]
-    use crate::plugins::Time;
     use rust_decimal_macros::dec;
 
     #[derive(State, Debug, Clone)]

@@ -151,10 +151,12 @@ fn nonce_path() -> Result<PathBuf> {
 #[cfg(feature = "wasm")]
 fn load_nonce() -> Result<u64> {
     let window = web_sys::window().unwrap();
-    let storage = window.local_storage()
+    let storage = window
+        .local_storage()
         .map_err(|_| Error::Nonce("Could not get local storage".into()))?
         .unwrap();
-    let res = storage.get("orga/nonce")
+    let res = storage
+        .get("orga/nonce")
         .map_err(|_| Error::Nonce("Could not load from local storage".into()))?;
     match res {
         Some(nonce) => Ok(nonce.parse()?),
@@ -178,10 +180,12 @@ fn load_nonce() -> Result<u64> {
 #[cfg(feature = "wasm")]
 fn write_nonce(nonce: u64) -> Result<()> {
     let window = web_sys::window().unwrap();
-    let storage = window.local_storage()
+    let storage = window
+        .local_storage()
         .map_err(|_| Error::Nonce("Could not get local storage".into()))?
         .unwrap();
-    storage.set("orga/nonce", nonce.to_string().as_str())
+    storage
+        .set("orga/nonce", nonce.to_string().as_str())
         .map_err(|_| Error::Nonce("Could not write to local storage".into()))?;
     Ok(())
 }
@@ -195,8 +199,8 @@ fn write_nonce(nonce: u64) -> Result<()> {
 // TODO: Remove dependency on ABCI for this otherwise-pure plugin.
 #[cfg(feature = "abci")]
 mod abci {
-    use super::*;
     use super::super::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
+    use super::*;
     use crate::abci::{BeginBlock, EndBlock, InitChain};
 
     impl<T> BeginBlock for NoncePlugin<T>
