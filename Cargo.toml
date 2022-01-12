@@ -36,6 +36,7 @@ rust_decimal = "1.18"
 ripemd = "0.1.0"
 rand = { version = "0.7" }
 web-sys = { version = "0.3.55", features = ["Window", "Storage"], optional = true }
+rust_decimal_macros = "1.18"
 
 [dev-dependencies]
 tempdir = "0.3.7"

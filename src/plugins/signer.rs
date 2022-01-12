@@ -39,6 +39,7 @@ impl SignerCall {
             (Some(pubkey_bytes), Some(signature)) => {
                 let pubkey = PublicKey::from_bytes(&pubkey_bytes)?;
                 let signature = Signature::from_bytes(&signature)?;
+                #[cfg(not(fuzzing))]
                 pubkey.verify_strict(&self.call_bytes, &signature)?;
 
                 Ok(Some(Address::from_pubkey(pubkey_bytes)))

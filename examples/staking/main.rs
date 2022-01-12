@@ -83,7 +83,12 @@ async fn main() {
     rpc_client()
         .pay_from(async move |mut client| client.accounts.take_as_funding(350.into()).await)
         .staking
-        .declare_self(my_tm_key.into(), 350.into())
+        .declare_self(
+            my_tm_key.into(),
+            rust_decimal_macros::dec!(0.0).into(),
+            350.into(),
+            vec![].into(),
+        )
         .await
         .unwrap();
 

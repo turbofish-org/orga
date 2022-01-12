@@ -48,6 +48,15 @@ impl<S: Symbol> Accounts<S> {
         Ok(taken_coins)
     }
 
+    #[call]
+    pub fn fuzz_grant_self_coins(&mut self, _amount: Amount) -> Result<()> {
+        let _address = self.signer()?;
+        #[cfg(fuzzing)]
+        self.deposit(_address, _amount.into())?;
+
+        Ok(())
+    }
+
     fn signer(&mut self) -> Result<Address> {
         self.context::<Signer>()
             .ok_or_else(|| Error::Signer("No Signer context available".into()))?

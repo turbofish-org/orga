@@ -91,8 +91,19 @@ pub struct EncodedArray<T: State<S>, S, const N: usize> {
 
 impl<T: State<S>, S, const N: usize> From<[T; N]> for EncodedArray<T, S, N> {
     fn from(value: [T; N]) -> Self {
-        EncodedArray {
+        Self {
             inner: value.map(|val| val.into()),
+        }
+    }
+}
+
+impl<T: State<S>, S, const N: usize> Default for EncodedArray<T, S, N>
+where
+    T::Encoding: Default,
+{
+    fn default() -> Self {
+        Self {
+            inner: [(); N].map(|_| T::Encoding::default()),
         }
     }
 }
