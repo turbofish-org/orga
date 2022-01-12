@@ -10,7 +10,6 @@ use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
 use std::ops::Deref;
-use std::path::PathBuf;
 
 const NONCE_INCREASE_LIMIT: u64 = 1000;
 

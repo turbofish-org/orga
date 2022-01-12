@@ -8,7 +8,7 @@ use crate::collections::{Entry, EntryMap, Map};
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
 #[cfg(feature = "abci")]
-use crate::plugins::{BeginBlockCtx, EndBlockCtx, Time, Validators};
+use crate::plugins::{BeginBlockCtx, EndBlockCtx, Validators};
 use crate::plugins::{Paid, Signer};
 use crate::query::Query;
 use crate::state::State;
