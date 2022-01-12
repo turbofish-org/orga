@@ -138,7 +138,7 @@ impl<T: Client<NonceClient<T, U>> + State, U: Clone> Client<U> for NoncePlugin<T
 }
 
 #[cfg(not(feature = "wasm"))]
-fn nonce_path() -> Result<PathBuf> {
+fn nonce_path() -> Result<std::path::PathBuf> {
     let orga_home = home::home_dir()
         .expect("No home directory set")
         .join(".orga");
@@ -170,7 +170,7 @@ fn load_nonce() -> Result<u64> {
         let bytes = std::fs::read(&nonce_path)?;
         Ok(Decode::decode(bytes.as_slice())?)
     } else {
-        let bytes = 0.encode()?;
+        let bytes = 0u64.encode()?;
         std::fs::write(&nonce_path, bytes)?;
         Ok(0)
     }
