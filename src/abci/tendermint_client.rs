@@ -58,6 +58,14 @@ impl<T: Client<TendermintAdapter<T>> + Query + State> TendermintClient<T> {
             .tm_client
             .abci_query(None, query_bytes, None, true)
             .await?;
+
+        if let tendermint::abci::Code::Err(code) = res.code {
+            let msg = format!("code {}: {}", code, res.log);
+            return Err(Error::Query(msg));
+        }
+
+        // TODO: we shouldn't need to include the root hash in the result, it
+        // should come from a trusted source
         let root_hash = match res.value[0..32].try_into() {
             Ok(inner) => inner,
             _ => {
@@ -83,7 +91,7 @@ impl<T: Client<TendermintAdapter<T>> + Query + State> TendermintClient<T> {
 }
 
 pub struct TendermintAdapter<T> {
-    marker: std::marker::PhantomData<T>,
+    marker: std::marker::PhantomData<fn() -> T>,
     client: tm::HttpClient,
 }
 
@@ -96,9 +104,7 @@ impl<T> Clone for TendermintAdapter<T> {
     }
 }
 
-unsafe impl<T> Send for TendermintAdapter<T> {}
-
-#[async_trait::async_trait]
+#[async_trait::async_trait(?Send)]
 impl<T: Call> AsyncCall for TendermintAdapter<T>
 where
     T::Call: Send,

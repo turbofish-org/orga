@@ -16,7 +16,6 @@ pub enum Error {
     Client(String),
     #[error("Coins Error: {0}")]
     Coins(String),
-    #[cfg(feature = "abci")]
     #[error(transparent)]
     Dalek(#[from] ed25519_dalek::ed25519::Error),
     #[error("Divide by Zero Error: Cannot divide by zero")]
@@ -43,7 +42,7 @@ pub enum Error {
     #[cfg(feature = "abci")]
     #[error(transparent)]
     TendermintRPC(#[from] tendermint_rpc::Error),
-    #[cfg(feature = "merk")]
+    #[cfg(feature = "merk-full")]
     #[error(transparent)]
     RocksDB(#[from] merk::rocksdb::Error),
     #[error("Signer Error: {0}")]

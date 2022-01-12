@@ -46,7 +46,7 @@ impl<T> Clone for Adapter<T> {
     }
 }
 
-#[async_trait::async_trait]
+#[async_trait::async_trait(?Send)]
 impl<T: Call> AsyncCall for Adapter<T>
 where
     T: Send + Sync,

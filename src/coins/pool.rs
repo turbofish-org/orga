@@ -488,8 +488,8 @@ mod tests {
         let enc = Default::default();
         let mut pool = Pool::<Address, Share<Simp>, Simp>::create(store, enc)?;
 
-        let alice = [0; 32].into();
-        let bob = [1; 32].into();
+        let alice = Address::from_pubkey([0; 32]);
+        let bob = Address::from_pubkey([1; 32]);
 
         pool.get_mut(alice)?.give(50.into())?;
         pool.give(100.into())?;
@@ -510,8 +510,8 @@ mod tests {
         let enc = Default::default();
         let mut pool = Pool::<Address, Share<Simp>, Simp>::create(store, enc)?;
 
-        let alice = [0; 32].into();
-        let bob = [1; 32].into();
+        let alice = Address::from_pubkey([0; 32]);
+        let bob = Address::from_pubkey([1; 32]);
 
         pool.get_mut(alice)?.give(50.into())?;
         pool.get_mut(bob)?.give(50.into())?;
@@ -557,8 +557,8 @@ mod tests {
         let enc = Default::default();
         let mut pool = Pool::<Address, SimpAccount, Simp>::create(store, enc)?;
 
-        let alice = [0; 32].into();
-        let bob = [1; 32].into();
+        let alice = Address::from_pubkey([0; 32]);
+        let bob = Address::from_pubkey([1; 32]);
 
         pool.get_mut(alice)?.deposit_locked(50)?;
         assert_eq!(pool.contributions, 50);
@@ -587,7 +587,7 @@ mod tests {
         let enc = Default::default();
         let mut pool = Pool::<Address, Share<Simp>, Simp>::create(store, enc)?;
 
-        let alice = [0; 32].into();
+        let alice = Address::from_pubkey([0; 32]);
 
         pool.get_mut(alice)?.give(50.into())?;
         pool.get_mut(alice)?.take(50)?.burn();

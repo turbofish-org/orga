@@ -26,10 +26,12 @@ impl<S: Symbol> Delegator<S> {
     pub(super) fn unbond<A: Into<Amount>>(&mut self, amount: A) -> Result<()> {
         let amount = amount.into();
         let coins = self.staked.take(amount)?.into();
+
         let start_seconds = self
             .context::<Time>()
             .ok_or_else(|| Error::Coins("No Time context available".into()))?
             .seconds;
+
         let unbond = Unbond {
             coins,
             start_seconds,
@@ -79,6 +81,7 @@ impl<S: Symbol> Delegator<S> {
             .context::<Time>()
             .ok_or_else(|| Error::Coins("No Time context available".into()))?
             .seconds;
+
         while let Some(unbond) = self.unbonding.front()? {
             let unbond_matured = now_seconds - unbond.start_seconds >= UNBONDING_SECONDS as i64;
             if unbond_matured {

@@ -174,7 +174,7 @@ where
 {
 }
 
-#[async_trait::async_trait]
+#[async_trait::async_trait(?Send)]
 impl<K: Clone, V: Call, U: Clone> AsyncCall for Client<K, V, U>
 where
     U: AsyncCall<Call = <Map<K, V> as Call>::Call>,

@@ -1,5 +1,3 @@
-use super::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
-use crate::abci::{BeginBlock, EndBlock, InitChain};
 use crate::call::Call;
 use crate::client::{AsyncCall, Client};
 use crate::coins::{Amount, Coin, Symbol};
@@ -137,7 +135,7 @@ impl<T: Query + State> Query for PayablePlugin<T> {
 
 pub struct UnpaidAdapter<T, U: Clone> {
     parent: U,
-    marker: std::marker::PhantomData<T>,
+    marker: std::marker::PhantomData<fn() -> T>,
 }
 
 unsafe impl<T, U: Send + Clone> Send for UnpaidAdapter<T, U> {}
@@ -151,7 +149,7 @@ impl<T, U: Clone> Clone for UnpaidAdapter<T, U> {
     }
 }
 
-#[async_trait::async_trait]
+#[async_trait::async_trait(?Send)]
 impl<T: Call, U: AsyncCall<Call = PayableCall<T::Call>> + Clone> AsyncCall for UnpaidAdapter<T, U>
 where
     T::Call: Send,
@@ -169,7 +167,7 @@ where
 pub struct PaidAdapter<T: Call, U: Clone> {
     payer_call: Vec<u8>,
     parent: U,
-    marker: std::marker::PhantomData<T>,
+    marker: std::marker::PhantomData<fn() -> T>,
 }
 
 unsafe impl<T: Call, U: Send + Clone> Send for PaidAdapter<T, U> {}
@@ -184,7 +182,7 @@ impl<T: Call, U: Clone> Clone for PaidAdapter<T, U> {
     }
 }
 
-#[async_trait::async_trait]
+#[async_trait::async_trait(?Send)]
 impl<T: Call, U: AsyncCall<Call = PayableCall<T::Call>> + Clone> AsyncCall for PaidAdapter<T, U>
 where
     T::Call: Send,
@@ -209,7 +207,7 @@ pub struct PayableClient<T: Client<UnpaidAdapter<T, U>>, U: Clone + Send> {
 
 pub struct PayerAdapter<T: Call> {
     intercepted_call: std::sync::Arc<std::sync::Mutex<Option<Vec<u8>>>>,
-    marker: std::marker::PhantomData<T>,
+    marker: std::marker::PhantomData<fn() -> T>,
 }
 
 unsafe impl<T: Call> Send for PayerAdapter<T> {}
@@ -223,7 +221,7 @@ impl<T: Call> Clone for PayerAdapter<T> {
     }
 }
 
-#[async_trait::async_trait]
+#[async_trait::async_trait(?Send)]
 impl<T: Call> AsyncCall for PayerAdapter<T>
 where
     T::Call: Send,
@@ -332,29 +330,36 @@ where
     }
 }
 
-impl<T> BeginBlock for PayablePlugin<T>
-where
-    T: BeginBlock + State,
-{
-    fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
-        self.inner.begin_block(ctx)
-    }
-}
+#[cfg(feature = "abci")]
+mod abci {
+    use super::super::*;
+    use super::*;
+    use crate::abci::{BeginBlock, EndBlock, InitChain};
 
-impl<T> EndBlock for PayablePlugin<T>
-where
-    T: EndBlock + State,
-{
-    fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
-        self.inner.end_block(ctx)
+    impl<T> BeginBlock for PayablePlugin<T>
+    where
+        T: BeginBlock + State,
+    {
+        fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
+            self.inner.begin_block(ctx)
+        }
     }
-}
 
-impl<T> InitChain for PayablePlugin<T>
-where
-    T: InitChain + State + Call,
-{
-    fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
-        self.inner.init_chain(ctx)
+    impl<T> EndBlock for PayablePlugin<T>
+    where
+        T: EndBlock + State,
+    {
+        fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
+            self.inner.end_block(ctx)
+        }
+    }
+
+    impl<T> InitChain for PayablePlugin<T>
+    where
+        T: InitChain + State + Call,
+    {
+        fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
+            self.inner.init_chain(ctx)
+        }
     }
 }

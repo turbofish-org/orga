@@ -1,5 +1,4 @@
-use super::{BeginBlockCtx, EndBlockCtx, InitChainCtx, Signer};
-use crate::abci::{BeginBlock, EndBlock, InitChain};
+use super::Signer;
 use crate::call::Call;
 use crate::client::Client;
 use crate::coins::Address;
@@ -11,7 +10,6 @@ use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
 use std::ops::Deref;
-use std::path::PathBuf;
 
 const NONCE_INCREASE_LIMIT: u64 = 1000;
 
@@ -90,7 +88,7 @@ impl<T: Query + State> Query for NoncePlugin<T> {
 
 pub struct NonceClient<T, U: Clone> {
     parent: U,
-    marker: std::marker::PhantomData<T>,
+    marker: std::marker::PhantomData<fn() -> T>,
 }
 
 unsafe impl<T, U: Send + Clone> Send for NonceClient<T, U> {}
@@ -104,7 +102,7 @@ impl<T, U: Clone> Clone for NonceClient<T, U> {
     }
 }
 
-#[async_trait::async_trait]
+#[async_trait::async_trait(?Send)]
 impl<T: Call, U: AsyncCall<Call = NonceCall<T::Call>> + Clone> AsyncCall for NonceClient<T, U>
 where
     T::Call: Send,
@@ -139,7 +137,8 @@ impl<T: Client<NonceClient<T, U>> + State, U: Clone> Client<U> for NoncePlugin<T
     }
 }
 
-fn nonce_path() -> Result<PathBuf> {
+#[cfg(not(target_arch = "wasm32"))]
+fn nonce_path() -> Result<std::path::PathBuf> {
     let orga_home = home::home_dir()
         .expect("No home directory set")
         .join(".orga");
@@ -148,49 +147,86 @@ fn nonce_path() -> Result<PathBuf> {
     Ok(orga_home.join("nonce"))
 }
 
+#[cfg(target_arch = "wasm32")]
+fn load_nonce() -> Result<u64> {
+    let window = web_sys::window().unwrap();
+    let storage = window
+        .local_storage()
+        .map_err(|_| Error::Nonce("Could not get local storage".into()))?
+        .unwrap();
+    let res = storage
+        .get("orga/nonce")
+        .map_err(|_| Error::Nonce("Could not load from local storage".into()))?;
+    match res {
+        Some(nonce) => Ok(nonce.parse()?),
+        None => Ok(1),
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn load_nonce() -> Result<u64> {
     let nonce_path = nonce_path()?;
     if nonce_path.exists() {
         let bytes = std::fs::read(&nonce_path)?;
         Ok(Decode::decode(bytes.as_slice())?)
     } else {
-        let bytes = 0.encode()?;
+        let bytes = 0u64.encode()?;
         std::fs::write(&nonce_path, bytes)?;
         Ok(0)
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+fn write_nonce(nonce: u64) -> Result<()> {
+    let window = web_sys::window().unwrap();
+    let storage = window
+        .local_storage()
+        .map_err(|_| Error::Nonce("Could not get local storage".into()))?
+        .unwrap();
+    storage
+        .set("orga/nonce", nonce.to_string().as_str())
+        .map_err(|_| Error::Nonce("Could not write to local storage".into()))?;
+    Ok(())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn write_nonce(nonce: u64) -> Result<()> {
     let nonce_path = nonce_path()?;
     Ok(std::fs::write(&nonce_path, nonce.encode()?)?)
 }
 
 // TODO: Remove dependency on ABCI for this otherwise-pure plugin.
+#[cfg(feature = "abci")]
+mod abci {
+    use super::super::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
+    use super::*;
+    use crate::abci::{BeginBlock, EndBlock, InitChain};
 
-impl<T> BeginBlock for NoncePlugin<T>
-where
-    T: BeginBlock + State,
-{
-    fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
-        self.inner.begin_block(ctx)
+    impl<T> BeginBlock for NoncePlugin<T>
+    where
+        T: BeginBlock + State,
+    {
+        fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
+            self.inner.begin_block(ctx)
+        }
     }
-}
 
-impl<T> EndBlock for NoncePlugin<T>
-where
-    T: EndBlock + State,
-{
-    fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
-        self.inner.end_block(ctx)
+    impl<T> EndBlock for NoncePlugin<T>
+    where
+        T: EndBlock + State,
+    {
+        fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
+            self.inner.end_block(ctx)
+        }
     }
-}
 
-impl<T> InitChain for NoncePlugin<T>
-where
-    T: InitChain + State + Call,
-{
-    fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
-        self.inner.init_chain(ctx)
+    impl<T> InitChain for NoncePlugin<T>
+    where
+        T: InitChain + State + Call,
+    {
+        fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
+            self.inner.init_chain(ctx)
+        }
     }
 }
 
@@ -260,7 +296,7 @@ mod tests {
         assert_eq!(state.inner.count, 1);
         Context::remove::<Signer>();
         Context::add(Signer {
-            signer: Some([0; 32].into()),
+            signer: Some(Address::from_pubkey([0; 32])),
         });
 
         // Signed, correct nonce

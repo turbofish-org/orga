@@ -1,5 +1,4 @@
 #![feature(map_first_last)]
-#![feature(entry_insert)]
 #![feature(bound_map)]
 #![feature(once_cell)]
 #![feature(associated_type_defaults)]
@@ -7,7 +6,6 @@
 #![allow(incomplete_features)]
 #![feature(specialization)]
 #![feature(generic_associated_types)]
-#![feature(const_generics_defaults)]
 #![feature(try_trait_v2)]
 #![feature(never_type)]
 
@@ -47,11 +45,11 @@ pub mod state_machine;
 pub mod store;
 
 /// Tendermint process handler.
+#[cfg(feature = "abci")]
 pub mod tendermint;
 
 pub mod plugins;
 
-#[cfg(feature = "abci")]
 pub mod coins;
 
 pub mod context;
@@ -69,11 +67,12 @@ pub mod prelude {
     pub use crate::abci::*;
     pub use crate::call::*;
     pub use crate::client::{AsyncCall, Client};
-    #[cfg(feature = "abci")]
     pub use crate::coins::*;
     pub use crate::collections::*;
     pub use crate::context::*;
     pub use crate::encoding::*;
+    #[cfg(merk)]
+    pub use crate::merk;
     pub use crate::plugins::*;
     pub use crate::query::*;
     pub use crate::state::*;

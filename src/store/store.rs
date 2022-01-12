@@ -10,9 +10,9 @@ use crate::{Error, Result};
 /// The default backing store used as the type parameter given to `Store`. This
 /// is used to prevent generic parameters bubbling up to the application level
 /// for state types when they often all use the same backing store.
-#[cfg(feature = "merk")]
+#[cfg(any(feature = "merk", feature = "merk-verify"))]
 pub type DefaultBackingStore = crate::merk::BackingStore;
-#[cfg(not(feature = "merk"))]
+#[cfg(all(not(feature = "merk"), not(feature = "merk-verify")))]
 pub type DefaultBackingStore = Shared<super::MapStore>;
 
 /// Wraps a "backing store" (an implementation of `Read` and possibly `Write`),

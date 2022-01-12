@@ -54,16 +54,42 @@ use crate::collections::Next;
 use crate::macros::State;
 use crate::query::Query;
 use ed::{Decode, Encode};
+use ripemd::{Digest as _, Ripemd160};
+use sha2::{Digest as _, Sha256};
+
 #[derive(
     Encode, Decode, State, Next, Query, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Copy,
 )]
 pub struct Address {
-    bytes: [u8; 32],
+    bytes: [u8; Address::LENGTH],
+}
+
+impl Address {
+    const LENGTH: usize = 20;
+
+    pub fn from_pubkey(bytes: [u8; 32]) -> Self {
+        let mut sha = Sha256::new();
+        sha.update(&bytes);
+        let hash = sha.finalize();
+
+        let mut ripemd = Ripemd160::new();
+        ripemd.update(&hash);
+        let hash = ripemd.finalize();
+
+        let mut bytes = [0; Address::LENGTH];
+        bytes.copy_from_slice(hash.as_slice());
+
+        Self { bytes }
+    }
+
+    pub fn bytes(&self) -> [u8; Address::LENGTH] {
+        self.bytes
+    }
 }
 
 impl Display for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        encode_to_fmt(f, "nomic", self.bytes.to_base32(), Variant::Bech32m).unwrap()
+        encode_to_fmt(f, "nomic", self.bytes.to_base32(), Variant::Bech32).unwrap()
     }
 }
 
@@ -74,35 +100,29 @@ impl FromStr for Address {
         if hrp != "nomic" {
             return Err(bech32::Error::MissingSeparator);
         }
-        if variant != Variant::Bech32m {
+        if variant != Variant::Bech32 {
             return Err(bech32::Error::InvalidData(0));
         }
         let data: Vec<u8> = FromBase32::from_base32(&data)?;
 
-        if data.len() != 32 {
-            return Err(bech32::Error::InvalidData(0));
+        if data.len() != Address::LENGTH {
+            return Err(bech32::Error::InvalidData(1));
         }
-        let mut bytes = [0u8; 32];
+        let mut bytes = [0u8; Address::LENGTH];
         bytes.copy_from_slice(&data);
 
         Ok(Address { bytes })
     }
 }
 
-impl From<[u8; 32]> for Address {
-    fn from(bytes: [u8; 32]) -> Self {
+impl From<[u8; Address::LENGTH]> for Address {
+    fn from(bytes: [u8; Address::LENGTH]) -> Self {
         Address { bytes }
     }
 }
 
-impl From<Address> for [u8; 32] {
+impl From<Address> for [u8; Address::LENGTH] {
     fn from(addr: Address) -> Self {
         addr.bytes()
-    }
-}
-
-impl Address {
-    pub fn bytes(&self) -> [u8; 32] {
-        self.bytes
     }
 }
