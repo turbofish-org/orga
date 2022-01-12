@@ -293,7 +293,7 @@ mod tests {
         assert_eq!(state.inner.count, 1);
         Context::remove::<Signer>();
         Context::add(Signer {
-            signer: Some([0; 32].into()),
+            signer: Some(Address::from_pubkey([0; 32])),
         });
 
         // Signed, correct nonce

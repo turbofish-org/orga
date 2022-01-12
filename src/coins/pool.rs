@@ -406,8 +406,8 @@ mod tests {
         let enc = Default::default();
         let mut pool = Pool::<Address, Share<Simp>, Simp>::create(store, enc)?;
 
-        let alice = [0; 32].into();
-        let bob = [1; 32].into();
+        let alice = Address::from_pubkey([0; 32]);
+        let bob = Address::from_pubkey([1; 32]);
 
         pool.add(1)
             .expect_err("Should not be able to add to empty pool");

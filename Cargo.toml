@@ -24,7 +24,7 @@ tar = "0.4.33"
 ed = { git = "https://github.com/nomic-io/ed.git", rev = "6d327abacf0c6068ceaed36fb67410ae65f2abbe"}
 toml_edit = "0.2.0"
 prost = {version = "0.7", optional = true}
-home = { version = "0.5.3", optional = true }
+home = { version = "0.5.3" }
 ed25519-dalek = "1"
 thiserror = "1.0.29"
 bech32 = "0.8.1"
@@ -46,7 +46,7 @@ mutagen = {git = "https://github.com/llogiq/mutagen"}
 features = ["abci", "merk"]
 
 [features]
-abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto", "prost", "is_executable", "home"]
+abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto", "prost", "is_executable"]
 merk-verify = ["merk/verify"]
 merk-full = ["merk/full"]
 wasm = ["web-sys"]
