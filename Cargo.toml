@@ -35,7 +35,7 @@ num-traits = "0.2.14"
 rust_decimal = "1.18"
 ripemd = "0.1.0"
 rand = { version = "0.7" }
-web-sys = { version = "0.3.55", features = ["Window", "Storage"], optional = true }
+web-sys = { version = "0.3.55", features = ["Window", "Storage"] }
 rust_decimal_macros = "1.18"
 
 [dev-dependencies]
@@ -44,25 +44,24 @@ tokio = { version = "1.11.0", features = ["rt", "macros"] }
 mutagen = {git = "https://github.com/llogiq/mutagen"}
 
 [package.metadata.docs.rs]
-features = ["abci", "merk"]
+features = ["abci", "merk/full"]
 
 [features]
 abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto", "prost", "is_executable"]
 merk-verify = ["merk/verify"]
 merk-full = ["merk/full"]
-wasm = ["web-sys"]
 
 [profile.release]
 lto = true
 
 [[example]]
 name = "counter"
-required-features = ["merk", "abci"]
+required-features = ["merk/full", "abci"]
 
 [[example]]
 name = "simple-coin"
-required-features = ["merk", "abci"]
+required-features = ["merk/full", "abci"]
 
 [[example]]
 name = "staking"
-required-features = ["merk", "abci"]
+required-features = ["merk/full", "abci"]

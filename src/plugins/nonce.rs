@@ -137,7 +137,7 @@ impl<T: Client<NonceClient<T, U>> + State, U: Clone> Client<U> for NoncePlugin<T
     }
 }
 
-#[cfg(not(feature = "wasm"))]
+#[cfg(not(target_arch = "wasm32"))]
 fn nonce_path() -> Result<std::path::PathBuf> {
     let orga_home = home::home_dir()
         .expect("No home directory set")
@@ -147,7 +147,7 @@ fn nonce_path() -> Result<std::path::PathBuf> {
     Ok(orga_home.join("nonce"))
 }
 
-#[cfg(feature = "wasm")]
+#[cfg(target_arch = "wasm32")]
 fn load_nonce() -> Result<u64> {
     let window = web_sys::window().unwrap();
     let storage = window
@@ -163,7 +163,7 @@ fn load_nonce() -> Result<u64> {
     }
 }
 
-#[cfg(not(feature = "wasm"))]
+#[cfg(not(target_arch = "wasm32"))]
 fn load_nonce() -> Result<u64> {
     let nonce_path = nonce_path()?;
     if nonce_path.exists() {
@@ -176,7 +176,7 @@ fn load_nonce() -> Result<u64> {
     }
 }
 
-#[cfg(feature = "wasm")]
+#[cfg(target_arch = "wasm32")]
 fn write_nonce(nonce: u64) -> Result<()> {
     let window = web_sys::window().unwrap();
     let storage = window
@@ -189,7 +189,7 @@ fn write_nonce(nonce: u64) -> Result<()> {
     Ok(())
 }
 
-#[cfg(not(feature = "wasm"))]
+#[cfg(not(target_arch = "wasm32"))]
 fn write_nonce(nonce: u64) -> Result<()> {
     let nonce_path = nonce_path()?;
     Ok(std::fs::write(&nonce_path, nonce.encode()?)?)

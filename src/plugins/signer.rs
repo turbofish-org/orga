@@ -150,7 +150,7 @@ where
     }
 }
 
-#[cfg(feature = "wasm")]
+#[cfg(target_arch = "wasm32")]
 pub fn load_keypair() -> Result<Keypair> {
     use rand::SeedableRng;
     // TODO: generate seed from browser random
@@ -159,7 +159,7 @@ pub fn load_keypair() -> Result<Keypair> {
     Ok(keypair)
 }
 
-#[cfg(not(feature = "wasm"))]
+#[cfg(not(target_arch = "wasm32"))]
 pub fn load_keypair() -> Result<Keypair> {
     // Ensure orga home directory exists
     let orga_home = home::home_dir()
