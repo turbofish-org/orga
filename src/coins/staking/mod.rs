@@ -777,6 +777,7 @@ mod tests {
 
     #[cfg(feature = "abci")]
     #[test]
+    #[ignore]
     fn val_size_limit() -> Result<()> {
         let store = Store::new(Shared::new(MapStore::new()).into());
         let mut staking: Staking<Simp> = Staking::create(store, Default::default())?;
