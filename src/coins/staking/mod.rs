@@ -560,13 +560,13 @@ mod tests {
         let store = Store::new(Shared::new(MapStore::new()).into());
         let mut staking: Staking<Simp> = Staking::create(store, Default::default())?;
 
-        let alice = [0; 32].into();
-        let alice_con = [4; 32].into();
-        let bob = [1; 32].into();
-        let bob_con = [5; 32].into();
-        let carol = [2; 32].into();
-        let dave = [3; 32].into();
-        let dave_con = [6; 32].into();
+        let alice = Address::from_pubkey([0; 32]);
+        let alice_con = [4; 32];
+        let bob = Address::from_pubkey([1; 32]);
+        let bob_con = [5; 32];
+        let carol = Address::from_pubkey([2; 32]);
+        let dave = Address::from_pubkey([3; 32]);
+        let dave_con = [6; 32];
 
         Context::add(Validators::default());
         Context::add(Time::from_seconds(0));
@@ -599,10 +599,10 @@ mod tests {
 
         let ctx = Context::resolve::<Validators>().unwrap();
         staking.end_block_step()?;
-        let alice_vp = ctx.updates.get(&alice_con.bytes).unwrap().power;
+        let alice_vp = ctx.updates.get(&alice_con).unwrap().power;
         assert_eq!(alice_vp, 100);
 
-        let bob_vp = ctx.updates.get(&bob_con.bytes).unwrap().power;
+        let bob_vp = ctx.updates.get(&bob_con).unwrap().power;
         assert_eq!(bob_vp, 1000);
 
         let alice_self_delegation = staking.get(alice)?.get(alice)?.staked.amount()?;
@@ -636,7 +636,7 @@ mod tests {
         let bob_val_balance = staking.get_mut(bob)?.staked()?;
         assert_eq!(bob_val_balance, 1000);
 
-        let bob_vp = ctx.updates.get(&bob_con.bytes).unwrap().power;
+        let bob_vp = ctx.updates.get(&bob_con).unwrap().power;
         assert_eq!(bob_vp, 1000);
 
         // Bob gets slashed 50%
@@ -654,7 +654,7 @@ mod tests {
 
         staking.end_block_step()?;
         // Bob has been jailed and should no longer have any voting power
-        let bob_vp = ctx.updates.get(&bob_con.bytes).unwrap().power;
+        let bob_vp = ctx.updates.get(&bob_con).unwrap().power;
         assert_eq!(bob_vp, 0);
 
         // Bob's staked coins should no longer be present in the global staking
@@ -734,21 +734,21 @@ mod tests {
         staking.end_block_step()?;
         assert_eq!(staking.staked()?, 400);
         staking.end_block_step()?;
-        assert_eq!(ctx.updates.get(&alice_con.bytes).unwrap().power, 100);
-        assert_eq!(ctx.updates.get(&dave_con.bytes).unwrap().power, 300);
+        assert_eq!(ctx.updates.get(&alice_con).unwrap().power, 100);
+        assert_eq!(ctx.updates.get(&dave_con).unwrap().power, 300);
         staking.delegate(dave, carol, 300.into())?;
         assert_eq!(staking.staked()?, 700);
 
         staking.end_block_step()?;
-        assert_eq!(ctx.updates.get(&dave_con.bytes).unwrap().power, 600);
+        assert_eq!(ctx.updates.get(&dave_con).unwrap().power, 600);
         staking.unbond(dave, dave, 150)?;
         assert_eq!(staking.staked()?, 550);
         staking.end_block_step()?;
-        assert_eq!(ctx.updates.get(&dave_con.bytes).unwrap().power, 450);
+        assert_eq!(ctx.updates.get(&dave_con).unwrap().power, 450);
 
         // Test commissions
-        let edith = [7; 32].into();
-        let edith_con = [201; 32].into();
+        let edith = Address::from_pubkey([7; 32]);
+        let edith_con = [201; 32];
 
         staking.declare(
             edith,
@@ -769,7 +769,7 @@ mod tests {
 
         staking.slash(dave, 0)?.burn();
         staking.end_block_step()?;
-        assert_eq!(ctx.updates.get(&dave_con.bytes).unwrap().power, 0);
+        assert_eq!(ctx.updates.get(&dave_con).unwrap().power, 0);
         staking.slash(dave, 0)?.burn();
 
         Ok(())
@@ -788,7 +788,7 @@ mod tests {
 
         for i in 1..10 {
             staking.declare(
-                [i; 32].into(),
+                Address::from_pubkey([i; 32]),
                 [i; 32].into(),
                 dec!(0.0).into(),
                 vec![].into(),
@@ -803,32 +803,32 @@ mod tests {
         staking.give(3400.into())?;
         assert_eq!(
             staking
-                .get([4; 32].into())?
-                .get([4; 32].into())?
+                .get(Address::from_pubkey([4; 32]))?
+                .get(Address::from_pubkey([4; 32]))?
                 .liquid
                 .amount()?,
             0
         );
         assert_eq!(
             staking
-                .get([8; 32].into())?
-                .get([8; 32].into())?
+                .get(Address::from_pubkey([8; 32]))?
+                .get(Address::from_pubkey([8; 32]))?
                 .liquid
                 .amount()?,
             1600
         );
         assert_eq!(
             staking
-                .get([9; 32].into())?
-                .get([9; 32].into())?
+                .get(Address::from_pubkey([9; 32]))?
+                .get(Address::from_pubkey([9; 32]))?
                 .liquid
                 .amount()?,
             1800
         );
 
         staking.declare(
-            [10; 32].into(),
-            [10; 32].into(),
+            Address::from_pubkey([10; 32]),
+            [10; 32],
             dec!(0.0).into(),
             vec![].into(),
             Amount::new(1000).into(),
@@ -843,24 +843,24 @@ mod tests {
 
         assert_eq!(
             staking
-                .get([8; 32].into())?
-                .get([8; 32].into())?
+                .get(Address::from_pubkey([8; 32]))?
+                .get(Address::from_pubkey([8; 32]))?
                 .liquid
                 .amount()?,
             1600
         );
         assert_eq!(
             staking
-                .get([9; 32].into())?
-                .get([9; 32].into())?
+                .get(Address::from_pubkey([9; 32]))?
+                .get(Address::from_pubkey([9; 32]))?
                 .liquid
                 .amount()?,
             2700
         );
         assert_eq!(
             staking
-                .get([10; 32].into())?
-                .get([10; 32].into())?
+                .get(Address::from_pubkey([10; 32]))?
+                .get(Address::from_pubkey([10; 32]))?
                 .liquid
                 .amount()?,
             1000

@@ -18,11 +18,10 @@ type MapQuery = <Map<Address, Counter> as Query>::Query;
 pub async fn run_client() -> Result<()> {
     let mut client = TendermintClient::<CounterApp>::new("http://localhost:26657")?;
 
-    let my_address = [
+    let my_address = Address::from_pubkey([
         194, 42, 183, 160, 59, 68, 203, 90, 200, 61, 123, 126, 110, 150, 217, 245, 196, 90, 179,
         178, 179, 193, 107, 118, 13, 117, 195, 236, 191, 213, 145, 148,
-    ]
-    .into();
+    ]);
 
     let query_my_count = || {
         let count = CounterQuery::FieldCount(()).encode().unwrap();
