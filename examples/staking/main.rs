@@ -14,9 +14,24 @@ pub struct StakingApp {
     pub staking: Staking<MyCoin>,
 }
 
+impl BeginBlock for StakingApp {
+    fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
+        self.staking.begin_block(ctx)?;
+        Ok(())
+    }
+}
+
+impl EndBlock for StakingApp {
+    fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
+        self.staking.end_block(ctx)?;
+        Ok(())
+    }
+}
 impl InitChain for StakingApp {
     fn init_chain(&mut self, _ctx: &InitChainCtx) -> Result<()> {
         self.accounts.deposit(my_address(), 100_000_000.into())?;
+        self.accounts.allow_transfers(true);
+        self.staking.set_min_self_delegation(100);
 
         Ok(())
     }
@@ -77,14 +92,14 @@ async fn main() {
         .unwrap();
 
     let my_tm_key = [
-        192, 94, 78, 47, 253, 98, 126, 10, 212, 45, 52, 65, 247, 15, 4, 147, 239, 77, 99, 125, 196,
-        37, 162, 200, 239, 171, 237, 137, 24, 36, 69, 37,
+        201, 225, 191, 2, 35, 17, 176, 124, 63, 174, 96, 139, 146, 170, 57, 162, 84, 58, 108, 78,
+        93, 173, 77, 235, 53, 183, 132, 146, 213, 150, 196, 144,
     ];
     rpc_client()
         .pay_from(async move |mut client| client.accounts.take_as_funding(350.into()).await)
         .staking
         .declare_self(
-            my_tm_key.into(),
+            my_tm_key,
             rust_decimal_macros::dec!(0.0).into(),
             350.into(),
             vec![].into(),
