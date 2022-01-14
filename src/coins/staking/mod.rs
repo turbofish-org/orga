@@ -397,6 +397,7 @@ impl<S: Symbol> Staking<S> {
 
     #[call]
     pub fn unbond_self(&mut self, val_address: Address, amount: Amount) -> Result<()> {
+        assert_positive(amount)?;
         let signer = self.signer()?;
         self.unbond(val_address, signer, amount)
     }
@@ -409,6 +410,7 @@ impl<S: Symbol> Staking<S> {
         amount: Amount,
         validator_info: ValidatorInfo,
     ) -> Result<()> {
+        assert_positive(amount)?;
         let signer = self.signer()?;
         let payment = self.paid()?.take(amount)?;
         self.declare(signer, consensus_key, commission, validator_info, payment)
@@ -416,6 +418,7 @@ impl<S: Symbol> Staking<S> {
 
     #[call]
     pub fn delegate_from_self(&mut self, validator_address: Address, amount: Amount) -> Result<()> {
+        assert_positive(amount)?;
         let signer = self.signer()?;
         let payment = self.paid()?.take(amount)?;
         self.delegate(validator_address, signer, payment)
@@ -423,6 +426,7 @@ impl<S: Symbol> Staking<S> {
 
     #[call]
     pub fn take_as_funding(&mut self, validator_address: Address, amount: Amount) -> Result<()> {
+        assert_positive(amount)?;
         let signer = self.signer()?;
         let taken_coins = self.withdraw(validator_address, signer, amount)?;
         self.paid()?.give::<S, _>(taken_coins.amount)
@@ -538,6 +542,14 @@ impl<S: Symbol> Staking<S> {
         }
 
         Ok(())
+    }
+}
+
+fn assert_positive(amount: Amount) -> Result<()> {
+    if amount > 0 {
+        Ok(())
+    } else {
+        Err(Error::Coins("Amount must be positive".into()))
     }
 }
 
