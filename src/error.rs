@@ -18,6 +18,8 @@ pub enum Error {
     Coins(String),
     #[error(transparent)]
     Dalek(#[from] ed25519_dalek::ed25519::Error),
+    #[error(transparent)]
+    Decimal(#[from] rust_decimal::Error),
     #[error("Divide by Zero Error: Cannot divide by zero")]
     DivideByZero,
     #[error("Downcast Error: {0}")]

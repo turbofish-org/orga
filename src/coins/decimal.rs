@@ -113,3 +113,11 @@ impl From<Amount> for Decimal {
         Self(amount.0.into())
     }
 }
+
+impl FromStr for Decimal {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        Ok(Self(NumDecimal::from_str(s)?))
+    }
+}
