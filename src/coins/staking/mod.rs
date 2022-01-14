@@ -40,6 +40,7 @@ pub struct Staking<S: Symbol> {
     validators_by_power: EntryMap<ValidatorPowerEntry>,
     last_indexed_power: Map<Address, u64>,
     last_validator_powers: Map<Address, u64>,
+    address_for_tm_hash: Map<[u8; 20], Address>,
 }
 
 #[derive(Entry)]
@@ -119,39 +120,37 @@ impl<S: Symbol> BeginBlock for Staking<S> {
                 .map(|vote_info| vote_info.validator.as_ref().unwrap())
                 .try_for_each(|validator| {
                     self.last_signed_block.insert(
-                        validator.address[..]
-                            .try_into()
-                            .expect("Invalid pub key hash length"),
+                        validator.address[..].try_into().map_err(|_| {
+                            Error::Coins("Invalid pubkey length from Tendermint".into())
+                        })?,
                         height,
                     )
                 })?;
 
-            let mut offline_validator_hashes: Vec<Vec<u8>> = vec![];
+            let mut offline_validator_hashes: Vec<[u8; 20]> = vec![];
             self.last_signed_block
                 .iter()?
                 .try_for_each(|res| -> Result<()> {
                     let (hash, last_height) = res?;
                     if *last_height + MAX_OFFLINE_BLOCKS < height {
-                        offline_validator_hashes.push(hash.to_vec());
+                        offline_validator_hashes.push(hash.to_vec().try_into().map_err(|_| {
+                            Error::Coins("Invalid pub key hash length from Tendermint".into())
+                        })?);
                     }
 
                     Ok(())
                 })?;
 
             for hash in offline_validator_hashes.iter() {
-                let val_addresses = self.val_address_for_consensus_key_hash(hash.clone())?;
-                for address in val_addresses {
-                    let validator = self.get_mut(address)?;
+                if let Some(address) = self.address_for_tm_hash.get(*hash)? {
+                    let address = *address;
+                    let validator = self.validators.get(address)?;
                     let in_active_set = validator.in_active_set;
                     drop(validator);
                     if in_active_set && self.slashable_balance(address)? > 0 {
                         self.slash(address, 0)?.burn();
                     }
-                    let key: [u8; 20] = hash
-                        .clone()
-                        .try_into()
-                        .map_err(|_e| Error::Coins("Invalid pubkey hash length".into()))?;
-                    self.last_signed_block.remove(key)?;
+                    self.last_signed_block.remove(*hash)?;
                 }
             }
         }
@@ -159,11 +158,20 @@ impl<S: Symbol> BeginBlock for Staking<S> {
         for evidence in &ctx.byzantine_validators {
             match &evidence.validator {
                 Some(validator) => {
-                    let val_addresses =
-                        self.val_address_for_consensus_key_hash(validator.address.clone())?;
-                    for address in val_addresses {
-                        if self.slashable_balance(address)? > 0 {
-                            self.slash(address, 0)?.burn();
+                    let hash: [u8; 20] = validator.address.clone().try_into().map_err(|_| {
+                        Error::Coins("Invalid pubkey length from Tendermint".into())
+                    })?;
+                    match self.address_for_tm_hash.get(hash)? {
+                        Some(address) => {
+                            let address = *address;
+                            if self.slashable_balance(address)? > 0 {
+                                self.slash(address, 0)?.burn();
+                            }
+                        }
+                        None => {
+                            return Err(Error::Coins(
+                                "Invalid pubkey length from Tendermint".into(),
+                            ));
                         }
                     }
                 }
@@ -238,6 +246,13 @@ impl<S: Symbol> Staking<S> {
         if declared {
             return Err(Error::Coins("Validator is already declared".into()));
         }
+        let tm_hash = tm_pubkey_hash(consensus_key)?;
+        let tm_hash_exists = self.address_for_tm_hash.contains_key(tm_hash)?;
+        if tm_hash_exists {
+            return Err(Error::Coins(
+                "Tendermint public key is already in use".into(),
+            ));
+        }
         use rust_decimal_macros::dec;
         let max_comm: Decimal = dec!(1.0).into();
         let min_comm: Decimal = dec!(0.0).into();
@@ -246,6 +261,9 @@ impl<S: Symbol> Staking<S> {
         }
         self.consensus_keys
             .insert(val_address, consensus_key.into())?;
+
+        self.address_for_tm_hash
+            .insert(tm_hash, val_address.into())?;
 
         let mut validator = self.validators.get_mut(val_address)?;
         validator.commission = commission;
@@ -424,37 +442,6 @@ impl<S: Symbol> Staking<S> {
         self.last_indexed_power.insert(address, power)
     }
 
-    fn val_address_for_consensus_key_hash(
-        &self,
-        consensus_key_hash: Vec<u8>,
-    ) -> Result<Vec<Address>> {
-        let mut consensus_keys: Vec<(Address, [u8; 32])> = vec![];
-        self.consensus_keys
-            .iter()?
-            .try_for_each(|entry| -> Result<()> {
-                let (k, v) = entry?;
-                consensus_keys.push((*k, *v));
-
-                Ok(())
-            })?;
-
-        let val_addresses = consensus_keys
-            .into_iter()
-            .filter_map(|(k, v)| {
-                let mut hasher = Sha256::new();
-                hasher.update(v);
-                let hash = hasher.finalize().to_vec();
-                if hash[..20] == consensus_key_hash[..20] {
-                    Some(k)
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        Ok(val_addresses)
-    }
-
     #[cfg(feature = "abci")]
     fn end_block_step(&mut self) -> Result<()> {
         use std::collections::HashSet;
@@ -546,6 +533,15 @@ impl<S: Symbol> Give<S> for Staking<S> {
     }
 }
 
+fn tm_pubkey_hash(consensus_key: [u8; 32]) -> Result<[u8; 20]> {
+    let mut hasher = Sha256::new();
+    hasher.update(consensus_key);
+    let hash = hasher.finalize().to_vec()[..20].to_vec();
+
+    hash.try_into()
+        .map_err(|_| Error::Coins("Invalid consensus key".into()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -563,6 +559,7 @@ mod tests {
 
     #[cfg(feature = "abci")]
     #[test]
+    // #[ignore]
     fn staking() -> Result<()> {
         let store = Store::new(Shared::new(MapStore::new()).into());
         let mut staking: Staking<Simp> = Staking::create(store, Default::default())?;
@@ -589,6 +586,9 @@ mod tests {
         staking
             .declare(alice, alice_con, dec!(0.0).into(), vec![].into(), 50.into())
             .expect_err("Should not be able to redeclare validator");
+        staking
+            .declare(carol, alice_con, dec!(0.0).into(), vec![].into(), 50.into())
+            .expect_err("Should not be able to declare using an existing consensus key");
 
         staking.end_block_step()?;
         assert_eq!(staking.staked()?, 50);
