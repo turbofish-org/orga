@@ -2,6 +2,7 @@ use std::convert::TryInto;
 use std::ops::{Deref, DerefMut};
 
 use tendermint_rpc as tm;
+use tendermint_rpc::Error as TmError;
 use tm::Client as _;
 
 use crate::call::Call;
@@ -119,7 +120,9 @@ where
 }
 
 pub struct NoReturn<'a>(
-    std::pin::Pin<Box<dyn std::future::Future<Output = tm::Result<TxResponse>> + Send + 'a>>,
+    std::pin::Pin<
+        Box<dyn std::future::Future<Output = std::result::Result<TxResponse, TmError>> + Send + 'a>,
+    >,
 );
 
 impl<'a> std::future::Future for NoReturn<'a> {

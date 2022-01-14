@@ -41,7 +41,7 @@ where
         if !home.exists() {
             std::fs::create_dir(&home).expect("Failed to initialize application home directory");
         }
-        Tendermint::new(tm_home.clone())
+        let _ = Tendermint::new(tm_home.clone())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .init();
