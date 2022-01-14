@@ -47,6 +47,8 @@ pub enum Error {
     #[cfg(feature = "merk-full")]
     #[error(transparent)]
     RocksDB(#[from] merk::rocksdb::Error),
+    #[error(transparent)]
+    Secp256k1(#[from] secp256k1::Error),
     #[error("Signer Error: {0}")]
     Signer(String),
     #[error("Store Error: {0}")]
