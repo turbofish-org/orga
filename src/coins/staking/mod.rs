@@ -136,7 +136,10 @@ impl<S: Symbol> BeginBlock for Staking<S> {
             for hash in offline_validator_hashes.iter() {
                 let val_addresses = self.val_address_for_consensus_key_hash(hash.clone())?;
                 for address in val_addresses {
-                    if self.slashable_balance(address)? > 0 {
+                    let validator = self.get_mut(address)?;
+                    let in_active_set = validator.in_active_set;
+                    drop(validator);
+                    if in_active_set && self.slashable_balance(address)? > 0 {
                         self.slash(address, 0)?.burn();
                     }
                     let key: [u8; 20] = hash
@@ -433,7 +436,6 @@ impl<S: Symbol> Staking<S> {
         let val_addresses = consensus_keys
             .into_iter()
             .filter_map(|(k, v)| {
-                // TODO: are we sure this shouldn't be tmhash? (ripemd160(sha256(x)))
                 let mut hasher = Sha256::new();
                 hasher.update(v);
                 let hash = hasher.finalize().to_vec();
@@ -790,7 +792,7 @@ mod tests {
         for i in 1..10 {
             staking.declare(
                 Address::from_pubkey([i; 32]),
-                [i; 32].into(),
+                [i; 32],
                 dec!(0.0).into(),
                 vec![].into(),
                 Amount::new(i as u64 * 100).into(),
