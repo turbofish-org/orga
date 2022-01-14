@@ -29,12 +29,11 @@ const UNBONDING_SECONDS: u64 = 10; // 10 seconds
 const UNBONDING_SECONDS: u64 = 60 * 60 * 24 * 7 * 2; // 2 weeks
 const MAX_OFFLINE_BLOCKS: u64 = 100;
 const MAX_VALIDATORS: u64 = 100;
-const MIN_SELF_DELEGATION: u64 = 1000;
+const MIN_SELF_DELEGATION: u64 = 1;
 
 #[derive(Call, Query, Client)]
 pub struct Staking<S: Symbol> {
     validators: Pool<Address, Validator<S>, S>,
-    amount_delegated: Amount,
     consensus_keys: Map<Address, [u8; 32]>,
     last_signed_block: Map<[u8; 20], u64>,
     max_validators: u64,
@@ -72,7 +71,7 @@ impl<S: Symbol> State for Staking<S> {
     fn create(store: Store, data: Self::Encoding) -> Result<Self> {
         Ok(Self {
             validators: State::create(store.sub(&[0]), data.validators)?,
-            amount_delegated: State::create(store.sub(&[1]), data.amount_delegated)?,
+            min_self_delegation: State::create(store.sub(&[1]), data.min_self_delegation)?,
             consensus_keys: State::create(store.sub(&[2]), ())?,
             last_signed_block: State::create(store.sub(&[3]), ())?,
             validators_by_power: State::create(store.sub(&[4]), ())?,
@@ -80,7 +79,6 @@ impl<S: Symbol> State for Staking<S> {
             max_validators: State::create(store.sub(&[6]), data.max_validators)?,
             last_indexed_power: State::create(store.sub(&[7]), ())?,
             address_for_tm_hash: State::create(store.sub(&[8]), ())?,
-            min_self_delegation: State::create(store.sub(&[6]), data.min_self_delegation)?,
         })
     }
 
@@ -95,7 +93,6 @@ impl<S: Symbol> State for Staking<S> {
             max_validators: self.max_validators,
             min_self_delegation: self.min_self_delegation,
             validators: self.validators.flush()?,
-            amount_delegated: self.amount_delegated.flush()?,
         })
     }
 }
@@ -106,7 +103,6 @@ impl<S: Symbol> From<Staking<S>> for StakingEncoding<S> {
             max_validators: staking.max_validators,
             min_self_delegation: staking.min_self_delegation,
             validators: staking.validators.into(),
-            amount_delegated: staking.amount_delegated.into(),
         }
     }
 }
@@ -193,7 +189,6 @@ pub struct StakingEncoding<S: Symbol> {
     max_validators: u64,
     min_self_delegation: u64,
     validators: <Pool<Address, Validator<S>, S> as State>::Encoding,
-    amount_delegated: <Amount as State>::Encoding,
 }
 
 impl<S: Symbol> Default for StakingEncoding<S> {
@@ -202,7 +197,6 @@ impl<S: Symbol> Default for StakingEncoding<S> {
             max_validators: MAX_VALIDATORS,
             min_self_delegation: MIN_SELF_DELEGATION,
             validators: Default::default(),
-            amount_delegated: Default::default(),
         }
     }
 }
@@ -220,7 +214,6 @@ impl<S: Symbol> Staking<S> {
             return Err(Error::Coins("Cannot delegate to jailed validator".into()));
         }
         let mut delegator = validator.get_mut(delegator_address)?;
-        self.amount_delegated = (self.amount_delegated + coins.amount)?;
         delegator.add_stake(coins)?;
         drop(delegator);
         let voting_power = validator.staked()?.into();
@@ -300,10 +293,7 @@ impl<S: Symbol> Staking<S> {
     pub fn slash<A: Into<Amount>>(&mut self, val_address: Address, amount: A) -> Result<Coin<S>> {
         let _consensus_key = self.consensus_key(val_address)?;
         let jailed = self.get_mut(val_address)?.jailed;
-        if !jailed {
-            let reduction = self.slashable_balance(val_address)?;
-            self.amount_delegated = (self.amount_delegated - reduction)?;
-        }
+
         let amount = amount.into();
         let mut validator = self.get_mut(val_address)?;
         let slashed_coins = validator.slash(amount)?;
@@ -356,10 +346,6 @@ impl<S: Symbol> Staking<S> {
         {
             let mut delegator = validator.get_mut(delegator_address)?;
             delegator.unbond(amount)?;
-        }
-
-        if !jailed {
-            self.amount_delegated = (self.amount_delegated - amount)?;
         }
 
         let vp = validator.staked()?.into();

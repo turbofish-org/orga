@@ -15,7 +15,6 @@ pub struct Validator<S: Symbol> {
     pub(super) address: Address,
     pub(super) commission: Decimal,
     pub(super) delegators: Delegators<S>,
-    pub(super) jailed_coins: Amount,
     pub(super) info: ValidatorInfo,
     pub(super) in_active_set: bool,
 }

@@ -19,7 +19,6 @@ pub struct Delegator<S: Symbol> {
     pub(super) staked: Share<S>,
     pub(super) jailed: bool,
     pub(super) unbonding: Deque<Unbond<S>>,
-    pub(super) multiplier: Decimal,
 }
 
 impl<S: Symbol> Delegator<S> {
