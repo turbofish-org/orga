@@ -29,6 +29,7 @@ const UNBONDING_SECONDS: u64 = 10; // 10 seconds
 const UNBONDING_SECONDS: u64 = 60 * 60 * 24 * 7 * 2; // 2 weeks
 const MAX_OFFLINE_BLOCKS: u64 = 100;
 const MAX_VALIDATORS: u64 = 100;
+const MIN_SELF_DELEGATION: u64 = 1000;
 
 #[derive(Call, Query, Client)]
 pub struct Staking<S: Symbol> {
@@ -37,6 +38,7 @@ pub struct Staking<S: Symbol> {
     consensus_keys: Map<Address, [u8; 32]>,
     last_signed_block: Map<[u8; 20], u64>,
     max_validators: u64,
+    min_self_delegation: u64,
     validators_by_power: EntryMap<ValidatorPowerEntry>,
     last_indexed_power: Map<Address, u64>,
     last_validator_powers: Map<Address, u64>,
@@ -78,6 +80,7 @@ impl<S: Symbol> State for Staking<S> {
             max_validators: State::create(store.sub(&[6]), data.max_validators)?,
             last_indexed_power: State::create(store.sub(&[7]), ())?,
             address_for_tm_hash: State::create(store.sub(&[8]), ())?,
+            min_self_delegation: State::create(store.sub(&[6]), data.min_self_delegation)?,
         })
     }
 
@@ -90,6 +93,7 @@ impl<S: Symbol> State for Staking<S> {
         self.address_for_tm_hash.flush()?;
         Ok(Self::Encoding {
             max_validators: self.max_validators,
+            min_self_delegation: self.min_self_delegation,
             validators: self.validators.flush()?,
             amount_delegated: self.amount_delegated.flush()?,
         })
@@ -100,6 +104,7 @@ impl<S: Symbol> From<Staking<S>> for StakingEncoding<S> {
     fn from(staking: Staking<S>) -> Self {
         Self {
             max_validators: staking.max_validators,
+            min_self_delegation: staking.min_self_delegation,
             validators: staking.validators.into(),
             amount_delegated: staking.amount_delegated.into(),
         }
@@ -186,6 +191,7 @@ impl<S: Symbol> BeginBlock for Staking<S> {
 #[derive(Encode, Decode)]
 pub struct StakingEncoding<S: Symbol> {
     max_validators: u64,
+    min_self_delegation: u64,
     validators: <Pool<Address, Validator<S>, S> as State>::Encoding,
     amount_delegated: <Amount as State>::Encoding,
 }
@@ -194,6 +200,7 @@ impl<S: Symbol> Default for StakingEncoding<S> {
     fn default() -> Self {
         Self {
             max_validators: MAX_VALIDATORS,
+            min_self_delegation: MIN_SELF_DELEGATION,
             validators: Default::default(),
             amount_delegated: Default::default(),
         }
@@ -245,6 +252,9 @@ impl<S: Symbol> Staking<S> {
         if declared {
             return Err(Error::Coins("Validator is already declared".into()));
         }
+        if coins.amount < self.min_self_delegation {
+            return Err(Error::Coins("Insufficient self-delegation".into()));
+        }
         let tm_hash = tm_pubkey_hash(consensus_key)?;
         let tm_hash_exists = self.address_for_tm_hash.contains_key(tm_hash)?;
         if tm_hash_exists {
@@ -277,6 +287,14 @@ impl<S: Symbol> Staking<S> {
 
     pub fn staked(&self) -> Result<Amount> {
         self.validators.balance()?.amount()
+    }
+
+    pub fn set_min_self_delegation(&mut self, min_self_delegation: u64) {
+        self.min_self_delegation = min_self_delegation;
+    }
+
+    pub fn set_max_validators(&mut self, max_validators: u64) {
+        self.max_validators = max_validators;
     }
 
     pub fn slash<A: Into<Amount>>(&mut self, val_address: Address, amount: A) -> Result<Coin<S>> {
