@@ -76,12 +76,17 @@ impl<S: Symbol> State for Staking<S> {
             last_validator_powers: State::create(store.sub(&[5]), ())?,
             max_validators: State::create(store.sub(&[6]), data.max_validators)?,
             last_indexed_power: State::create(store.sub(&[7]), ())?,
+            address_for_tm_hash: State::create(store.sub(&[8]), ())?,
         })
     }
 
     fn flush(self) -> Result<Self::Encoding> {
         self.consensus_keys.flush()?;
         self.last_signed_block.flush()?;
+        self.last_validator_powers.flush()?;
+        self.last_indexed_power.flush()?;
+        self.validators_by_power.flush()?;
+        self.address_for_tm_hash.flush()?;
         Ok(Self::Encoding {
             max_validators: self.max_validators,
             validators: self.validators.flush()?,
