@@ -12,12 +12,18 @@ use crate::{Error, Result};
 
 #[derive(State, Encode, Decode, Call, Query, Client)]
 pub struct Accounts<S: Symbol> {
+    transfers_allowed: bool,
+    transfer_exceptions: Map<Address, ()>,
     accounts: Map<Address, Coin<S>>,
 }
 
 impl<S: Symbol> Accounts<S> {
     #[call]
     pub fn transfer(&mut self, to: Address, amount: Amount) -> Result<()> {
+        let signer = self.signer()?;
+        if !self.transfers_allowed && !self.transfer_exceptions.contains_key(signer)? {
+            return Err(Error::Coins("Transfers are currently disabled".into()));
+        }
         let taken_coins = self.take_own_coins(amount)?;
         let mut receiver = self.accounts.entry(to)?.or_insert_default()?;
         receiver.give(taken_coins)?;
@@ -46,15 +52,6 @@ impl<S: Symbol> Accounts<S> {
             .take(amount)?;
 
         Ok(taken_coins)
-    }
-
-    #[call]
-    pub fn fuzz_grant_self_coins(&mut self, _amount: Amount) -> Result<()> {
-        let _address = self.signer()?;
-        #[cfg(fuzzing)]
-        self.deposit(_address, _amount.into())?;
-
-        Ok(())
     }
 
     fn signer(&mut self) -> Result<Address> {
@@ -91,6 +88,14 @@ impl<S: Symbol> Accounts<S> {
             Some(coin) => Ok(coin.amount),
             None => Ok(0.into()),
         }
+    }
+
+    pub fn allow_transfers(&mut self, enabled: bool) {
+        self.transfers_allowed = enabled;
+    }
+
+    pub fn add_transfer_exception(&mut self, address: Address) -> Result<()> {
+        self.transfer_exceptions.insert(address, ())
     }
 
     pub fn deposit(&mut self, address: Address, coins: Coin<S>) -> Result<()> {
