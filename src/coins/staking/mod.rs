@@ -212,7 +212,6 @@ impl<S: Symbol> Staking<S> {
         if validator.jailed {
             return Err(Error::Coins("Cannot delegate to jailed validator".into()));
         }
-        validator.amount_staked = (validator.amount_staked + coins.amount)?;
         let mut delegator = validator.get_mut(delegator_address)?;
         self.amount_delegated = (self.amount_delegated + coins.amount)?;
         delegator.add_stake(coins)?;
@@ -343,7 +342,6 @@ impl<S: Symbol> Staking<S> {
 
         if !jailed {
             self.amount_delegated = (self.amount_delegated - amount)?;
-            validator.amount_staked = (validator.amount_staked - amount)?;
         }
 
         let vp = validator.staked()?.into();
@@ -373,10 +371,22 @@ impl<S: Symbol> Staking<S> {
             .iter()?
             .map(|entry| {
                 let (val_address, validator) = entry?;
-
                 let delegator = validator.get(delegator_address)?;
 
                 Ok((*val_address, delegator.info()?))
+            })
+            .collect()
+    }
+
+    #[query]
+    pub fn all_validators(&self) -> Result<Vec<ValidatorQueryInfo>> {
+        self.validators
+            .iter()?
+            .map(|entry| {
+                let (_, validator) = entry?;
+                let info = validator.query_info()?;
+
+                Ok(info)
             })
             .collect()
     }

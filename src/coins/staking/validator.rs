@@ -16,12 +16,21 @@ pub struct Validator<S: Symbol> {
     pub(super) commission: Decimal,
     pub(super) delegators: Delegators<S>,
     pub(super) jailed_coins: Amount,
-    pub(super) amount_staked: Amount,
     pub(super) info: ValidatorInfo,
     pub(super) in_active_set: bool,
 }
 
-#[derive(Default)]
+#[derive(Encode, Decode)]
+pub struct ValidatorQueryInfo {
+    pub jailed: bool,
+    pub address: Address,
+    pub commission: Decimal,
+    pub in_active_set: bool,
+    pub info: ValidatorInfo,
+    pub amount_staked: Amount,
+}
+
+#[derive(Default, Clone)]
 pub struct ValidatorInfo {
     pub bytes: Vec<u8>,
 }
@@ -107,7 +116,6 @@ impl<S: Symbol> Validator<S> {
             delegator.slash(slash_multiplier)?;
             Ok(())
         })?;
-        self.amount_staked = 0.into();
 
         Ok(amount.into())
     }
@@ -137,6 +145,17 @@ impl<S: Symbol> Validator<S> {
             })?;
 
         Ok(delegator_keys)
+    }
+
+    pub(super) fn query_info(&self) -> Result<ValidatorQueryInfo> {
+        Ok(ValidatorQueryInfo {
+            jailed: self.jailed,
+            address: self.address,
+            commission: self.commission,
+            in_active_set: self.in_active_set,
+            info: self.info.clone(),
+            amount_staked: self.delegators.balance()?.amount()?,
+        })
     }
 }
 
