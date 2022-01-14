@@ -34,8 +34,58 @@ pub struct SignerCall {
     pub call_bytes: Vec<u8>,
 }
 
-fn sdk_compat_serialize(call_bytes: &[u8], address: Address) -> Result<Vec<u8>> {
-    todo!()
+use serde::Serialize;
+
+#[derive(Serialize)]
+struct SdkCompatMsg {
+    pub account_number: String,
+    pub chain_id: String,
+    pub fee: Fee,
+    pub memo: String,
+    pub msgs: [SignMsg; 1],
+    pub sequence: String,
+}
+
+#[derive(Serialize)]
+struct Fee {
+    pub amount: [u8; 0],
+    pub gas: String,
+}
+
+#[derive(Serialize)]
+struct SignMsg {
+    #[serde(rename = "type")]
+    pub type_: String,
+    pub value: Value,
+}
+
+#[derive(Serialize)]
+struct Value {
+    pub data: String,
+    pub signer: String,
+}
+
+fn sdk_compat_wrap(call_bytes: &[u8], address: Address) -> Result<Vec<u8>> {
+    let data_b64 = base64::encode(call_bytes);
+    let msg = SdkCompatMsg {
+        chain_id: "".to_string(),
+        account_number: "0".to_string(),
+        sequence: "0".to_string(),
+        fee: Fee {
+            gas: "0".to_string(),
+            amount: [0; 0],
+        },
+        msgs: [SignMsg {
+            type_: "sign/MsgSignData".to_string(),
+            value: Value {
+                signer: address.to_string(),
+                data: data_b64,
+            },
+        }],
+        memo: "".to_string(),
+    };
+    Ok(serde_json::to_vec(&msg)
+        .map_err(|e| Error::App(format!("{}", e)))?)
 }
 
 impl SignerCall {
@@ -48,7 +98,7 @@ impl SignerCall {
                 let address = Address::from_pubkey(pubkey_bytes);
 
                 let bytes = if self.sdk_compat {
-                    sdk_compat_serialize(self.call_bytes.as_slice(), address)?
+                    sdk_compat_wrap(self.call_bytes.as_slice(), address)?
                 } else {
                     self.call_bytes.to_vec()
                 };
