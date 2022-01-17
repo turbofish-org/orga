@@ -48,8 +48,10 @@ pub mod store;
 #[cfg(feature = "abci")]
 pub mod tendermint;
 
+#[cfg(any(target_arch = "wasm32", feature = "abci"))]
 pub mod plugins;
 
+#[cfg(any(target_arch = "wasm32", feature = "abci"))]
 pub mod coins;
 
 pub mod context;
@@ -69,12 +71,14 @@ pub mod prelude {
     pub use crate::abci::*;
     pub use crate::call::*;
     pub use crate::client::{AsyncCall, Client};
+    #[cfg(any(target_arch = "wasm32", feature = "abci"))]
     pub use crate::coins::*;
     pub use crate::collections::*;
     pub use crate::context::*;
     pub use crate::encoding::*;
     #[cfg(merk)]
     pub use crate::merk;
+    #[cfg(any(target_arch = "wasm32", feature = "abci"))]
     pub use crate::plugins::*;
     pub use crate::query::*;
     pub use crate::state::*;
