@@ -7,7 +7,7 @@ use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::{Error, Result};
-use secp256k1::{PublicKey, SecretKey, Secp256k1, ecdsa::Signature, Message};
+use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
 use std::ops::Deref;
 
 pub struct SignerPlugin<T> {
@@ -84,8 +84,7 @@ fn sdk_compat_wrap(call_bytes: &[u8], address: Address) -> Result<Vec<u8>> {
         }],
         memo: "".to_string(),
     };
-    Ok(serde_json::to_vec(&msg)
-        .map_err(|e| Error::App(format!("{}", e)))?)
+    Ok(serde_json::to_vec(&msg).map_err(|e| Error::App(format!("{}", e)))?)
 }
 
 impl SignerCall {
@@ -253,10 +252,9 @@ where
 #[cfg(target_arch = "wasm32")]
 pub mod keplr {
     use js_sys::{
-        Array, Function, Promise,
+        Array, Function, Object, Promise,
         Reflect::{apply, get},
         Uint8Array,
-        Object,
     };
     use wasm_bindgen::JsValue;
     use wasm_bindgen_futures::JsFuture;
@@ -271,15 +269,16 @@ pub mod keplr {
             unsafe {
                 let window = web_sys::window().expect("no global `window` exists");
                 let keplr = window.get("keplr").expect("no `keplr` in global `window`");
-                
+
                 let enable: Function = get(&keplr, &"enable".to_string().into()).unwrap().into();
                 let args = Array::new();
                 Array::push(&args, &"guccinet".to_string().into());
                 apply(&enable, &keplr, &args).unwrap();
 
-                let getOfflineSigner: Function = get(&keplr, &"getOfflineSigner".to_string().into())
-                    .unwrap()
-                    .into();
+                let getOfflineSigner: Function =
+                    get(&keplr, &"getOfflineSigner".to_string().into())
+                        .unwrap()
+                        .into();
                 let signer = apply(&getOfflineSigner, &keplr, &args).unwrap();
 
                 Self { keplr, signer }
@@ -296,9 +295,8 @@ pub mod keplr {
                     .into();
                 let accounts = JsFuture::from(accounts_promise).await.unwrap();
                 let account = get(&accounts, &0i32.into()).unwrap();
-                let pubkey: Uint8Array = get(&account, &"pubkey".to_string().into())
-                    .unwrap()
-                    .into();
+                let pubkey: Uint8Array =
+                    get(&account, &"pubkey".to_string().into()).unwrap().into();
                 let pubkey_vec = pubkey.to_vec();
                 let mut pubkey_arr = [0u8; 33];
                 pubkey_arr.copy_from_slice(&pubkey_vec);
@@ -335,11 +333,17 @@ pub mod keplr {
                 Array::push(&args, &self.address().await.into());
                 Array::push(&args, &msg.into());
 
-                let signArbitrary: Function = get(&self.keplr, &"signArbitrary".to_string().into()).unwrap().into();
-                let sign_promise: Promise = apply(&signArbitrary, &self.keplr, &args).unwrap().into();
+                let signArbitrary: Function = get(&self.keplr, &"signArbitrary".to_string().into())
+                    .unwrap()
+                    .into();
+                let sign_promise: Promise =
+                    apply(&signArbitrary, &self.keplr, &args).unwrap().into();
                 let res = JsFuture::from(sign_promise).await.unwrap();
 
-                let signature_b64: String = get(&res, &"signature".to_string().into()).unwrap().as_string().unwrap();
+                let signature_b64: String = get(&res, &"signature".to_string().into())
+                    .unwrap()
+                    .as_string()
+                    .unwrap();
                 let signature_vec = base64::decode(&signature_b64).unwrap();
                 let mut signature_arr = [0u8; 64];
                 signature_arr.copy_from_slice(&signature_vec);
@@ -365,11 +369,28 @@ pub fn load_privkey() -> Result<SecretKey> {
     } else {
         // Create and save a new key
         let mut rng = secp256k1::rand::thread_rng();
-        let secp = Secp256k1::new();
         let privkey = SecretKey::new(&mut rng);
         std::fs::write(&keypair_path, privkey.serialize_secret())?;
         Ok(privkey)
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub struct KeyPair {
+    pub private: SecretKey,
+    pub public: PublicKey,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn load_keypair() -> Result<KeyPair> {
+    let secp = Secp256k1::new();
+    let privkey = load_privkey()?;
+    let pubkey = PublicKey::from_secret_key(&secp, &privkey);
+
+    Ok(KeyPair {
+        private: privkey,
+        public: pubkey,
+    })
 }
 
 // TODO: In the future, Signer shouldn't need to know about ABCI, but

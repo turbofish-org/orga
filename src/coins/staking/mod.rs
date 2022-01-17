@@ -590,12 +590,12 @@ mod tests {
         let store = Store::new(Shared::new(MapStore::new()).into());
         let mut staking: Staking<Simp> = Staking::create(store, Default::default())?;
 
-        let alice = Address::from_pubkey([0; 32]);
+        let alice = Address::from_pubkey([0; 33]);
         let alice_con = [4; 32];
-        let bob = Address::from_pubkey([1; 32]);
+        let bob = Address::from_pubkey([1; 33]);
         let bob_con = [5; 32];
-        let carol = Address::from_pubkey([2; 32]);
-        let dave = Address::from_pubkey([3; 32]);
+        let carol = Address::from_pubkey([2; 33]);
+        let dave = Address::from_pubkey([3; 33]);
         let dave_con = [6; 32];
 
         Context::add(Validators::default());
@@ -780,7 +780,7 @@ mod tests {
         assert_eq!(ctx.updates.get(&dave_con).unwrap().power, 450);
 
         // Test commissions
-        let edith = Address::from_pubkey([7; 32]);
+        let edith = Address::from_pubkey([7; 33]);
         let edith_con = [201; 32];
 
         staking.declare(
@@ -822,7 +822,7 @@ mod tests {
 
         for i in 1..10 {
             staking.declare(
-                Address::from_pubkey([i; 32]),
+                Address::from_pubkey([i; 33]),
                 [i; 32],
                 dec!(0.0).into(),
                 vec![].into(),
@@ -837,31 +837,31 @@ mod tests {
         staking.give(3400.into())?;
         assert_eq!(
             staking
-                .get(Address::from_pubkey([4; 32]))?
-                .get(Address::from_pubkey([4; 32]))?
+                .get(Address::from_pubkey([4; 33]))?
+                .get(Address::from_pubkey([4; 33]))?
                 .liquid
                 .amount()?,
             0
         );
         assert_eq!(
             staking
-                .get(Address::from_pubkey([8; 32]))?
-                .get(Address::from_pubkey([8; 32]))?
+                .get(Address::from_pubkey([8; 33]))?
+                .get(Address::from_pubkey([8; 33]))?
                 .liquid
                 .amount()?,
             1600
         );
         assert_eq!(
             staking
-                .get(Address::from_pubkey([9; 32]))?
-                .get(Address::from_pubkey([9; 32]))?
+                .get(Address::from_pubkey([9; 33]))?
+                .get(Address::from_pubkey([9; 33]))?
                 .liquid
                 .amount()?,
             1800
         );
 
         staking.declare(
-            Address::from_pubkey([10; 32]),
+            Address::from_pubkey([10; 33]),
             [10; 32],
             dec!(0.0).into(),
             vec![].into(),
@@ -877,24 +877,24 @@ mod tests {
 
         assert_eq!(
             staking
-                .get(Address::from_pubkey([8; 32]))?
-                .get(Address::from_pubkey([8; 32]))?
+                .get(Address::from_pubkey([8; 33]))?
+                .get(Address::from_pubkey([8; 33]))?
                 .liquid
                 .amount()?,
             1600
         );
         assert_eq!(
             staking
-                .get(Address::from_pubkey([9; 32]))?
-                .get(Address::from_pubkey([9; 32]))?
+                .get(Address::from_pubkey([9; 33]))?
+                .get(Address::from_pubkey([9; 33]))?
                 .liquid
                 .amount()?,
             2700
         );
         assert_eq!(
             staking
-                .get(Address::from_pubkey([10; 32]))?
-                .get(Address::from_pubkey([10; 32]))?
+                .get(Address::from_pubkey([10; 33]))?
+                .get(Address::from_pubkey([10; 33]))?
                 .liquid
                 .amount()?,
             1000

@@ -44,7 +44,7 @@ fn rpc_client() -> TendermintClient<MyApp> {
 }
 
 fn my_address() -> Address {
-    Address::from_pubkey(load_keypair().unwrap().public.to_bytes())
+    Address::from_pubkey(load_keypair().unwrap().public.serialize())
 }
 
 async fn my_balance() -> Result<Amount> {
@@ -71,13 +71,13 @@ async fn main() {
         Node::<MyApp>::new("staking_app").reset().run()
     });
 
-    sleep(Duration::from_secs(1));
+    sleep(Duration::from_secs(30));
     let bal = my_balance().await.unwrap();
     println!("My balance: {:?}", bal);
 
     rpc_client()
         .accounts
-        .transfer(Address::from_pubkey([0; 32]), 100.into())
+        .transfer(Address::from_pubkey([0; 33]), 100.into())
         .await
         .unwrap();
     println!("Sent coins");
@@ -123,7 +123,7 @@ async fn main() {
     rpc_client()
         .pay_from(async move |mut client| client.accounts.take_as_funding(100.into()).await)
         .staking
-        .delegate_from_self(Address::from_pubkey([0; 32]), 100.into())
+        .delegate_from_self(Address::from_pubkey([0; 33]), 100.into())
         .await
         .unwrap_or_else(|e| {
             println!("{:?}", e);
