@@ -84,7 +84,7 @@ fn sdk_compat_wrap(call_bytes: &[u8], address: Address) -> Result<Vec<u8>> {
         }],
         memo: "".to_string(),
     };
-    Ok(serde_json::to_vec(&msg).map_err(|e| Error::App(format!("{}", e)))?)
+    serde_json::to_vec(&msg).map_err(|e| Error::App(format!("{}", e)))
 }
 
 impl SignerCall {
