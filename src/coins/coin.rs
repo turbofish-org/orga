@@ -80,6 +80,9 @@ impl<S: Symbol> Adjust for Coin<S> {
 impl<S: Symbol> Take<S> for Coin<S> {
     fn take<A: Into<Amount>>(&mut self, amount: A) -> Result<Self::Value> {
         let amount = amount.into();
+        if amount > self.amount {
+            return Err(Error::Coins("Insufficient funds".into()));
+        }
         self.amount = (self.amount - amount)?;
 
         Ok(Coin::mint(amount))
