@@ -60,8 +60,10 @@ impl<S: Symbol, T: Call + State> Call for FeePlugin<S, T> {
             .context::<Paid>()
             .ok_or_else(|| Error::Coins("Minimum fee not paid".into()))?;
 
-        let fee_payment: Coin<S> = paid.take(MIN_FEE)?;
-        fee_payment.burn();
+        if !paid.running_payer {
+            let fee_payment: Coin<S> = paid.take(MIN_FEE)?;
+            fee_payment.burn();
+        }
 
         self.inner.call(call)
     }

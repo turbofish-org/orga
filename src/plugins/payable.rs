@@ -26,6 +26,7 @@ impl<T: State> Deref for PayablePlugin<T> {
 #[derive(Default)]
 pub struct Paid {
     map: HashMap<TypeId, Amount>,
+    pub running_payer: bool,
 }
 
 impl Paid {
@@ -116,8 +117,13 @@ where
         match call {
             PayableCall::Unpaid(call) => self.inner.call(call),
             PayableCall::Paid(calls) => {
+                let mut ctx = Paid {
+                    running_payer: true,
+                    ..Default::default()
+                };
                 Context::add(Paid::default());
                 self.inner.call(calls.payer)?;
+                ctx.running_payer = false;
                 let res = self.inner.call(calls.paid)?;
                 Ok(res)
             }
