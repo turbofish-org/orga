@@ -10,4 +10,7 @@ pub use abci::*;
 mod payable;
 pub use payable::*;
 
-pub type DefaultPlugins<T> = SignerPlugin<NoncePlugin<PayablePlugin<T>>>;
+mod fee;
+pub use fee::*;
+
+pub type DefaultPlugins<S, T> = SignerPlugin<NoncePlugin<PayablePlugin<FeePlugin<S, T>>>>;

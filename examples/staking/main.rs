@@ -37,7 +37,7 @@ impl InitChain for StakingApp {
     }
 }
 
-type MyApp = DefaultPlugins<StakingApp>;
+type MyApp = DefaultPlugins<MyCoin, StakingApp>;
 
 fn rpc_client() -> TendermintClient<MyApp> {
     TendermintClient::new("http://localhost:26657").unwrap()
