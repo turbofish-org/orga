@@ -88,3 +88,41 @@ impl<S, T> DerefMut for FeePlugin<S, T> {
         &mut self.inner
     }
 }
+
+// TODO: Remove dependency on ABCI for this otherwise-pure plugin.
+#[cfg(feature = "abci")]
+mod abci {
+    use super::super::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
+    use super::*;
+    use crate::abci::{BeginBlock, EndBlock, InitChain};
+
+    impl<S, T> BeginBlock for FeePlugin<S, T>
+    where
+        S: Symbol,
+        T: BeginBlock + State,
+    {
+        fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
+            self.inner.begin_block(ctx)
+        }
+    }
+
+    impl<S, T> EndBlock for FeePlugin<S, T>
+    where
+        S: Symbol,
+        T: EndBlock + State,
+    {
+        fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
+            self.inner.end_block(ctx)
+        }
+    }
+
+    impl<S, T> InitChain for FeePlugin<S, T>
+    where
+        S: Symbol,
+        T: InitChain + State + Call,
+    {
+        fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
+            self.inner.init_chain(ctx)
+        }
+    }
+}
