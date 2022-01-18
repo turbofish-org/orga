@@ -1,7 +1,7 @@
 use crate::call::Call;
 use crate::client::{AsyncCall, Client};
 use crate::coins::{Amount, Coin, Symbol};
-use crate::context::Context;
+use crate::context::{Context, GetContext};
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
@@ -117,12 +117,14 @@ where
         match call {
             PayableCall::Unpaid(call) => self.inner.call(call),
             PayableCall::Paid(calls) => {
-                let mut ctx = Paid {
+                let ctx = Paid {
                     running_payer: true,
                     ..Default::default()
                 };
-                Context::add(Paid::default());
+                Context::add(ctx);
                 self.inner.call(calls.payer)?;
+
+                let ctx = self.context::<Paid>().unwrap();
                 ctx.running_payer = false;
                 let res = self.inner.call(calls.paid)?;
                 Ok(res)

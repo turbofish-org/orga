@@ -275,11 +275,11 @@ pub mod keplr {
                 Array::push(&args, &"guccinet".to_string().into());
                 apply(&enable, &keplr, &args).unwrap();
 
-                let getOfflineSigner: Function =
+                let get_offline_signer: Function =
                     get(&keplr, &"getOfflineSigner".to_string().into())
                         .unwrap()
                         .into();
-                let signer = apply(&getOfflineSigner, &keplr, &args).unwrap();
+                let signer = apply(&get_offline_signer, &keplr, &args).unwrap();
 
                 Self { keplr, signer }
             }

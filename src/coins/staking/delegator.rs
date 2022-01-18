@@ -140,6 +140,7 @@ pub struct UnbondInfo {
     pub start_seconds: i64,
     pub amount: Amount,
 }
+
 #[derive(Encode, Decode)]
 pub struct DelegationInfo {
     pub unbonding: Vec<UnbondInfo>,
