@@ -11,6 +11,12 @@ use std::convert::TryFrom;
 #[derive(Clone, Copy, Debug)]
 pub struct Decimal(pub(crate) NumDecimal);
 
+impl std::fmt::Display for Decimal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 impl Encode for Decimal {
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
         dest.write_all(&self.0.serialize())?;
@@ -119,5 +125,17 @@ impl FromStr for Decimal {
 
     fn from_str(s: &str) -> Result<Self> {
         Ok(Self(NumDecimal::from_str(s)?))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Decimal;
+
+    #[test]
+    fn format() {
+        let formatted: Decimal = rust_decimal_macros::dec!(1.23).into();
+
+        assert_eq!(format!("{}", formatted), "1.23");
     }
 }
