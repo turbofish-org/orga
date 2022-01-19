@@ -174,11 +174,6 @@ impl<S: Symbol> Give<S> for Validator<S> {
         let delegator_amount = (coins.amount * (one - self.commission))?.amount()?;
         let validator_amount = (coins.amount * self.commission)?.amount()?;
 
-        debug_assert_eq!(
-            (delegator_amount + validator_amount).result().unwrap(),
-            coins.amount
-        );
-
         self.delegators.give(delegator_amount.into())?;
         self.delegators
             .get_mut(self.address)?
