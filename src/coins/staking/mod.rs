@@ -432,6 +432,19 @@ impl<S: Symbol> Staking<S> {
         self.paid()?.give::<S, _>(taken_coins.amount)
     }
 
+    #[call]
+    pub fn claim_all(&mut self) -> Result<()> {
+        let signer = self.signer()?;
+        let delegations = self.delegations(signer)?;
+        delegations
+            .iter()
+            .try_for_each(|(val_address, delegation)| {
+                self.take_as_funding(*val_address, delegation.liquid)
+            })?;
+
+        Ok(())
+    }
+
     fn signer(&mut self) -> Result<Address> {
         self.context::<Signer>()
             .ok_or_else(|| Error::Coins("No Signer context available".into()))?

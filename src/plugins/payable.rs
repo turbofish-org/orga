@@ -55,6 +55,15 @@ impl Paid {
 
         Ok(amount.into())
     }
+
+    pub fn balance<S: Symbol>(&self) -> Result<Amount> {
+        let entry = match self.map.get(&TypeId::of::<S>()) {
+            Some(amt) => *amt,
+            None => 0.into(),
+        };
+
+        Ok(entry)
+    }
 }
 
 pub struct PaidCall<T> {

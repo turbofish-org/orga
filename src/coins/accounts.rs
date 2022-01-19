@@ -71,6 +71,17 @@ impl<S: Symbol> Accounts<S> {
         self.give_own_coins(taken_coins)
     }
 
+    #[call]
+    pub fn give_from_funding_all(&mut self) -> Result<()> {
+        let paid = self
+            .context::<Paid>()
+            .ok_or_else(|| Error::Coins("No Paid context found".into()))?;
+        let balance = paid.balance::<S>()?;
+        let taken_coins = paid.take(balance)?;
+
+        self.give_own_coins(taken_coins)
+    }
+
     fn give_own_coins(&mut self, coins: Coin<S>) -> Result<()> {
         let signer = self.signer()?;
 
