@@ -138,7 +138,7 @@ impl<S: Symbol> Validator<S> {
             .iter()?
             .try_for_each(|entry| -> Result<()> {
                 let (k, _v) = entry?;
-                delegator_keys.push(*k);
+                delegator_keys.push(k);
 
                 Ok(())
             })?;

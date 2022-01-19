@@ -255,28 +255,27 @@ where
     }
 }
 
-pub type IterEntry<'a, K, V, S> = Result<(MapRef<'a, K>, Child<'a, V, S>)>;
+pub type IterEntry<'a, K, V, S> = Result<(K, Child<'a, V, S>)>;
 
 impl<K, V, S> Pool<K, V, S>
 where
     S: Symbol,
     K: Encode + Decode + Terminated + Clone + Next,
-    V: State + Balance<S, Decimal>,
+    V: State + Balance<S, Decimal> + Give<S>,
     V::Encoding: Default,
 {
-    #[cfg_attr(test, mutate)]
     pub fn range<B>(&self, bounds: B) -> Result<impl Iterator<Item = IterEntry<K, V, S>>>
     where
         B: RangeBounds<K>,
     {
         Ok(self.map.range(bounds)?.map(move |entry| {
-            let entry = entry?;
-            let child = Child::new(entry.1)?;
-            Ok((entry.0, child))
+            let (key, _child) = entry?;
+
+            let child = self.get(key.clone())?;
+            Ok((key.clone(), child))
         }))
     }
 
-    #[cfg_attr(test, mutate)]
     pub fn iter(&self) -> Result<impl Iterator<Item = IterEntry<K, V, S>>> {
         self.range(..)
     }

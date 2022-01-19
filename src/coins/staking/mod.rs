@@ -377,7 +377,7 @@ impl<S: Symbol> Staking<S> {
                 let (val_address, validator) = entry?;
                 let delegator = validator.get(delegator_address)?;
 
-                Ok((*val_address, delegator.info()?))
+                Ok((val_address, delegator.info()?))
             })
             .collect()
     }
