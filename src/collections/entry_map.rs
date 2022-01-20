@@ -499,8 +499,8 @@ mod test {
     #[test]
     fn iter_multi_key() {
         let store = Store::new(MapStore::new());
-        let mut entry_map: EntryMap<MultiKeyMapEntry> = EntryMap::create(store, ()).unwrap();
 
+        let mut entry_map: EntryMap<MultiKeyMapEntry> = EntryMap::create(store.sub(&[]), ()).unwrap();
         entry_map
             .insert(MultiKeyMapEntry {
                 key_1: 0,
@@ -525,8 +525,9 @@ mod test {
                 value: 4,
             })
             .unwrap();
+        entry_map.flush().unwrap();
 
-        let actual: Vec<MultiKeyMapEntry> = vec![
+        let expected: Vec<MultiKeyMapEntry> = vec![
             MultiKeyMapEntry {
                 key_1: 0,
                 key_2: 0,
