@@ -548,10 +548,11 @@ mod test {
             },
         ];
 
+        let entry_map: EntryMap<MultiKeyMapEntry> = EntryMap::create(store.sub(&[]), ()).unwrap();
         let result: bool = entry_map
             .iter()
             .unwrap()
-            .zip(actual.iter())
+            .zip(expected.iter())
             .map(|(actual, expected)| *actual.unwrap() == *expected)
             .fold(true, |accumulator, item| item & accumulator);
 
