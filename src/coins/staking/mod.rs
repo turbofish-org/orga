@@ -439,7 +439,11 @@ impl<S: Symbol> Staking<S> {
         delegations
             .iter()
             .try_for_each(|(val_address, delegation)| {
-                self.take_as_funding(*val_address, delegation.liquid)
+                if delegation.liquid > 0 {
+                    self.take_as_funding(*val_address, delegation.liquid)
+                } else {
+                    Ok(())
+                }
             })?;
 
         Ok(())
