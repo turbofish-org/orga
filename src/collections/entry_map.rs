@@ -125,14 +125,14 @@ where
     S: Read,
 {
     #[cfg_attr(test, mutate)]
-    pub fn iter(&'a mut self) -> Result<Iter<'a, T, S>> {
+    pub fn iter(&'a self) -> Result<Iter<'a, T, S>> {
         Ok(Iter {
             map_iter: self.map.iter()?,
         })
     }
 
     #[cfg_attr(test, mutate)]
-    pub fn range<B: RangeBounds<T::Key>>(&'a mut self, range: B) -> Result<Iter<'a, T, S>> {
+    pub fn range<B: RangeBounds<T::Key>>(&'a self, range: B) -> Result<Iter<'a, T, S>> {
         Ok(Iter {
             map_iter: self.map.range(range)?,
         })
