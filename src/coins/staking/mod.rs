@@ -519,11 +519,10 @@ impl<S: Symbol> Staking<S> {
             .map(|(address, _)| *address)
             .collect();
 
-        let min_vp = new_power_updates.last().map(|update| update.1).unwrap_or(0);
         // Check for validators bumped from the active validator set
         for entry in self.last_validator_powers.iter()? {
-            let (address, power) = entry?;
-            if !validators_in_active_set.contains(&address) && *power < min_vp {
+            let (address, _power) = entry?;
+            if !validators_in_active_set.contains(&address) {
                 new_power_updates.push((*address, 0));
             }
         }
