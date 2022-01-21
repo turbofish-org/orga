@@ -489,6 +489,10 @@ impl<S: Symbol> Staking<S> {
             let address: Address = entry.address_bytes.into();
             let new_power = entry.power();
 
+            if new_power == 0 {
+                break;
+            }
+
             new_val_entries.push((address, new_power));
 
             i += 1;
