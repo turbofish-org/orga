@@ -86,8 +86,8 @@ impl<S: Symbol> Accounts<S> {
         let signer = self.signer()?;
 
         self.accounts
-            .get_mut(signer)?
-            .ok_or_else(|| Error::Coins("Insufficient funds".into()))?
+            .entry(signer)?
+            .or_insert_default()?
             .give(coins)?;
 
         Ok(())
