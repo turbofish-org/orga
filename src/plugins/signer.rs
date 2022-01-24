@@ -260,21 +260,22 @@ pub mod keplr {
     use wasm_bindgen_futures::JsFuture;
 
     pub struct Signer {
+        handle: Option<KeplrHandle>,
+    }
+
+    pub struct KeplrHandle {
         keplr: Object,
         signer: JsValue,
     }
 
-    impl Signer {
+    impl KeplrHandle {
         pub fn new() -> Self {
             unsafe {
                 let window = web_sys::window().expect("no global `window` exists");
                 let keplr = window.get("keplr").expect("no `keplr` in global `window`");
 
-                let enable: Function = get(&keplr, &"enable".to_string().into()).unwrap().into();
                 let args = Array::new();
                 Array::push(&args, &"guccinet".to_string().into());
-                apply(&enable, &keplr, &args).unwrap();
-
                 let get_offline_signer: Function =
                     get(&keplr, &"getOfflineSigner".to_string().into())
                         .unwrap()
@@ -284,13 +285,27 @@ pub mod keplr {
                 Self { keplr, signer }
             }
         }
+    }
 
-        pub async fn pubkey(&self) -> [u8; 33] {
+    impl Signer {
+        pub fn new() -> Self {
+            Self { handle: None }
+        }
+
+        fn handle(&mut self) -> &KeplrHandle {
+            if self.handle.is_none() {
+                self.handle = Some(KeplrHandle::new());
+            }
+
+            self.handle.as_ref().unwrap()
+        }
+
+        pub async fn pubkey(&mut self) -> [u8; 33] {
             unsafe {
-                let getAccounts: Function = get(&self.signer, &"getAccounts".to_string().into())
+                let get_accounts: Function = get(&self.handle().signer, &"getAccounts".to_string().into())
                     .unwrap()
                     .into();
-                let accounts_promise: Promise = apply(&getAccounts, &self.signer, &Array::new())
+                let accounts_promise: Promise = apply(&get_accounts, &self.handle().signer, &Array::new())
                     .unwrap()
                     .into();
                 let accounts = JsFuture::from(accounts_promise).await.unwrap();
@@ -304,12 +319,12 @@ pub mod keplr {
             }
         }
 
-        pub async fn address(&self) -> String {
+        pub async fn address(&mut self) -> String {
             unsafe {
-                let getAccounts: Function = get(&self.signer, &"getAccounts".to_string().into())
+                let get_accounts: Function = get(&self.handle().signer, &"getAccounts".to_string().into())
                     .unwrap()
                     .into();
-                let accounts_promise: Promise = apply(&getAccounts, &self.signer, &Array::new())
+                let accounts_promise: Promise = apply(&get_accounts, &self.handle().signer, &Array::new())
                     .unwrap()
                     .into();
                 let accounts = JsFuture::from(accounts_promise).await.unwrap();
@@ -321,7 +336,7 @@ pub mod keplr {
             }
         }
 
-        pub async fn sign(&self, call_bytes: &[u8]) -> [u8; 64] {
+        pub async fn sign(&mut self, call_bytes: &[u8]) -> [u8; 64] {
             unsafe {
                 let msg = Array::new();
                 for byte in call_bytes {
@@ -333,11 +348,11 @@ pub mod keplr {
                 Array::push(&args, &self.address().await.into());
                 Array::push(&args, &msg.into());
 
-                let signArbitrary: Function = get(&self.keplr, &"signArbitrary".to_string().into())
+                let sign_arbitrary: Function = get(&self.handle().keplr, &"signArbitrary".to_string().into())
                     .unwrap()
                     .into();
                 let sign_promise: Promise =
-                    apply(&signArbitrary, &self.keplr, &args).unwrap().into();
+                    apply(&sign_arbitrary, &self.handle().keplr, &args).unwrap().into();
                 let res = JsFuture::from(sign_promise).await.unwrap();
 
                 let signature_b64: String = get(&res, &"signature".to_string().into())
