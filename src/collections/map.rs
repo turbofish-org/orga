@@ -645,7 +645,10 @@ where
 
         let (key, value) = match get_res {
             Err(e) => return Some(Err(e)),
-            Ok(None) => return None,
+            Ok(None) => {
+                self.done = true;
+                return None
+            },
             Ok(Some((key, value))) => (key, value),
         };
 
