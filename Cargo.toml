@@ -57,6 +57,7 @@ features = ["abci", "merk/full"]
 abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto", "prost", "is_executable", "home", "secp256k1/rand-std"]
 merk-verify = ["merk/verify"]
 merk-full = ["merk/full"]
+state-sync = []
 
 [profile.release]
 lto = true

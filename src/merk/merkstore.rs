@@ -227,7 +227,10 @@ impl ABCIStore for MerkStore {
         self.write(metadata)?;
         self.merk.as_mut().unwrap().flush()?;
 
-        self.maybe_create_snapshot()
+        #[cfg(feature = "state-sync")]
+        self.maybe_create_snapshot()?;
+
+        Ok(())
     }
 
     fn list_snapshots(&self) -> Result<Vec<Snapshot>> {
