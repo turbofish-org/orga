@@ -101,6 +101,11 @@ impl<S: Symbol> Accounts<S> {
         }
     }
 
+    #[query]
+    pub fn exists(&self, address: Address) -> Result<bool> {
+        Ok(self.accounts.get(address)?.is_some())
+    }
+
     pub fn allow_transfers(&mut self, enabled: bool) {
         self.transfers_allowed = enabled;
     }
