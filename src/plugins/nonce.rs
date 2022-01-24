@@ -72,7 +72,7 @@ where
             // Unhappy paths:
             (Some(_), None) => Err(Error::Nonce("Signed calls must include a nonce".into())),
             (None, Some(_)) => Err(Error::Nonce(
-                "Unsinged calls must not include a nonce".into(),
+                "Unsigned calls must not include a nonce".into(),
             )),
         }
     }
@@ -170,9 +170,9 @@ fn load_nonce() -> Result<u64> {
         let bytes = std::fs::read(&nonce_path)?;
         Ok(Decode::decode(bytes.as_slice())?)
     } else {
-        let bytes = 0u64.encode()?;
+        let bytes = 1u64.encode()?;
         std::fs::write(&nonce_path, bytes)?;
-        Ok(0)
+        Ok(1)
     }
 }
 
