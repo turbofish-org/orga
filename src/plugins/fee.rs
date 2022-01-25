@@ -10,7 +10,7 @@ use crate::{Error, Result};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
-pub const MIN_FEE: u64 = 100_000;
+pub const MIN_FEE: u64 = 10_000;
 
 pub struct FeePlugin<S, T> {
     inner: T,
