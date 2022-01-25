@@ -275,7 +275,8 @@ pub mod keplr {
                 let keplr = window.get("keplr").expect("no `keplr` in global `window`");
 
                 let args = Array::new();
-                Array::push(&args, &"guccinet".to_string().into());
+                // TODO: get chainid from somewhere
+                Array::push(&args, &"nomic-stakenet-rc".to_string().into());
                 let get_offline_signer: Function =
                     get(&keplr, &"getOfflineSigner".to_string().into())
                         .unwrap()
@@ -344,7 +345,8 @@ pub mod keplr {
                 }
 
                 let args = Array::new();
-                Array::push(&args, &"guccinet".to_string().into());
+                // TOOD: get chainid from somewhere
+                Array::push(&args, &"nomic-stakenet-rc".to_string().into());
                 Array::push(&args, &self.address().await.into());
                 Array::push(&args, &msg.into());
 
