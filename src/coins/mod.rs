@@ -45,6 +45,9 @@ pub use decimal::Decimal;
 pub mod math;
 pub use math::*;
 
+pub mod faucet;
+pub use faucet::*;
+
 mod ops;
 pub use ops::*;
 
