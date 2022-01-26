@@ -598,6 +598,7 @@ mod tests {
         store::{MapStore, Shared, Store},
     };
     use rust_decimal_macros::dec;
+    use serial_test::serial;
 
     #[derive(State, Debug, Clone)]
     struct Simp(());
@@ -605,7 +606,7 @@ mod tests {
 
     #[cfg(feature = "abci")]
     #[test]
-    // #[ignore]
+    #[serial]
     fn staking() -> Result<()> {
         let store = Store::new(Shared::new(MapStore::new()).into());
         let mut staking: Staking<Simp> = Staking::create(store, Default::default())?;
@@ -830,7 +831,7 @@ mod tests {
 
     #[cfg(feature = "abci")]
     #[test]
-    #[ignore]
+    #[serial]
     fn val_size_limit() -> Result<()> {
         let store = Store::new(Shared::new(MapStore::new()).into());
         let mut staking: Staking<Simp> = Staking::create(store, Default::default())?;
