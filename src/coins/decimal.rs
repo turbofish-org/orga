@@ -3,8 +3,7 @@ use crate::encoding::{Decode, Encode};
 use crate::state::State;
 use crate::store::Store;
 use crate::{Error, Result};
-use rust_decimal::prelude::*;
-use rust_decimal::Decimal as NumDecimal;
+use rust_decimal::prelude::{Decimal as NumDecimal, *};
 use std::cmp::Ordering;
 use std::convert::TryFrom;
 
