@@ -169,7 +169,6 @@ mod full {
     impl<T: App> Call for ABCIPlugin<T> {
         type Call = ABCICall<T::Call>;
 
-        #[cfg_attr(test, mutate)]
         fn call(&mut self, call: Self::Call) -> Result<()> {
             use ABCICall::*;
             Context::add(Validators::default());
@@ -184,7 +183,9 @@ mod full {
             create_time_ctx(&self.time);
             let res = match call {
                 InitChain(req) => {
-                    let ctx = req.into_inner().into();
+                    let ctx: InitChainCtx = req.into_inner().into();
+                    self.time = ctx.time.clone();
+                    create_time_ctx(&self.time);
                     self.inner.init_chain(&ctx)?;
 
                     Ok(())
