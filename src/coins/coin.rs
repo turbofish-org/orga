@@ -46,7 +46,6 @@ impl<S: Symbol> Coin<S> {
 
     pub fn burn(self) {}
 
-    #[call]
     pub fn take_as_funding(&mut self, amount: Amount) -> Result<()> {
         let taken_coins = self.take(amount)?;
         let paid = self
