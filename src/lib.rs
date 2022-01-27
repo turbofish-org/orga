@@ -8,6 +8,7 @@
 #![feature(generic_associated_types)]
 #![feature(try_trait_v2)]
 #![feature(never_type)]
+#![feature(adt_const_params)]
 
 extern crate self as orga;
 
