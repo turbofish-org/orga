@@ -259,6 +259,9 @@ pub mod keplr {
     use wasm_bindgen::JsValue;
     use wasm_bindgen_futures::JsFuture;
 
+    // TODO: this should be specified by consumer, not hardcoded here
+    const CHAIN_ID: &str = "nomic-stakenet-rc2";
+
     pub struct Signer {
         handle: Option<KeplrHandle>,
     }
@@ -276,7 +279,7 @@ pub mod keplr {
 
                 let args = Array::new();
                 // TODO: get chainid from somewhere
-                Array::push(&args, &"nomic-stakenet-rc".to_string().into());
+                Array::push(&args, &CHAIN_ID.to_string().into());
                 let get_offline_signer: Function =
                     get(&keplr, &"getOfflineSigner".to_string().into())
                         .unwrap()
@@ -346,7 +349,7 @@ pub mod keplr {
 
                 let args = Array::new();
                 // TOOD: get chainid from somewhere
-                Array::push(&args, &"nomic-stakenet-rc".to_string().into());
+                Array::push(&args, &CHAIN_ID.to_string().into());
                 Array::push(&args, &self.address().await.into());
                 Array::push(&args, &msg.into());
 
