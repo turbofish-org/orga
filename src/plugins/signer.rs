@@ -260,7 +260,7 @@ pub mod keplr {
     use wasm_bindgen_futures::JsFuture;
 
     // TODO: this should be specified by consumer, not hardcoded here
-    const CHAIN_ID: &str = "nomic-stakenet-rc2";
+    const CHAIN_ID: &str = "nomic-stakenet";
 
     pub struct Signer {
         handle: Option<KeplrHandle>,
