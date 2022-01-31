@@ -378,7 +378,7 @@ pub fn load_privkey() -> Result<SecretKey> {
     // Ensure orga home directory exists
     let orga_home = home::home_dir()
         .expect("No home directory set")
-        .join(".orga");
+        .join(".orga-wallet");
 
     std::fs::create_dir_all(&orga_home)?;
     let keypair_path = orga_home.join("privkey");

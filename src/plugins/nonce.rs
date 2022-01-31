@@ -141,7 +141,7 @@ impl<T: Client<NonceClient<T, U>> + State, U: Clone> Client<U> for NoncePlugin<T
 fn nonce_path() -> Result<std::path::PathBuf> {
     let orga_home = home::home_dir()
         .expect("No home directory set")
-        .join(".orga");
+        .join(".orga-wallet");
 
     std::fs::create_dir_all(&orga_home)?;
     Ok(orga_home.join("nonce"))
