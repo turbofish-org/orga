@@ -54,7 +54,13 @@ where
             (Some(pub_key), Some(nonce)) => {
                 let mut expected_nonce = self.map.entry(pub_key)?.or_default()?;
                 if nonce <= *expected_nonce {
-                    return Err(Error::Nonce("Nonce is not valid".into()));
+                    return Err(Error::Nonce(
+                        format!(
+                            "Nonce is not valid. Expected {}, got {}",
+                            *expected_nonce, nonce,
+                        )
+                        .into(),
+                    ));
                 }
 
                 if nonce - *expected_nonce > NONCE_INCREASE_LIMIT {
