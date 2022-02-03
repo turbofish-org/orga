@@ -13,10 +13,16 @@ use std::ops::Deref;
 
 const NONCE_INCREASE_LIMIT: u64 = 1000;
 
-#[derive(State, Encode, Decode)]
+#[derive(State)]
 pub struct NoncePlugin<T: State> {
     map: Map<Address, u64>,
     inner: T,
+}
+
+impl<T: State> NoncePlugin<T> {
+    pub fn nonce(&self, address: Address) -> Result<u64> {
+        Ok(*self.map.get_or_default(address)?)
+    }
 }
 
 impl<T: State> Deref for NoncePlugin<T> {
@@ -24,6 +30,26 @@ impl<T: State> Deref for NoncePlugin<T> {
 
     fn deref(&self) -> &Self::Target {
         &self.inner
+    }
+}
+
+#[derive(Encode, Decode)]
+pub enum NonceQuery<T: Query> {
+    Nonce(Address),
+    Inner(T::Query),
+}
+
+impl<T: State + Query> Query for NoncePlugin<T> {
+    type Query = NonceQuery<T>;
+
+    fn query(&self, query: Self::Query) -> Result<()> {
+        match query {
+            NonceQuery::Nonce(address) => {
+                self.nonce(address)?;
+                Ok(())
+            }
+            NonceQuery::Inner(query) => self.inner.query(query),
+        }
     }
 }
 
@@ -84,24 +110,16 @@ where
     }
 }
 
-impl<T: Query + State> Query for NoncePlugin<T> {
-    type Query = T::Query;
-
-    fn query(&self, query: Self::Query) -> Result<()> {
-        self.inner.query(query)
-    }
-}
-
-pub struct NonceClient<T, U: Clone> {
+pub struct NonceAdapter<T, U: Clone> {
     parent: U,
     marker: std::marker::PhantomData<fn() -> T>,
 }
 
-unsafe impl<T, U: Send + Clone> Send for NonceClient<T, U> {}
+unsafe impl<T, U: Send + Clone> Send for NonceAdapter<T, U> {}
 
-impl<T, U: Clone> Clone for NonceClient<T, U> {
+impl<T, U: Clone> Clone for NonceAdapter<T, U> {
     fn clone(&self) -> Self {
-        NonceClient {
+        NonceAdapter {
             parent: self.parent.clone(),
             marker: std::marker::PhantomData,
         }
@@ -109,7 +127,7 @@ impl<T, U: Clone> Clone for NonceClient<T, U> {
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Call, U: AsyncCall<Call = NonceCall<T::Call>> + Clone> AsyncCall for NonceClient<T, U>
+impl<T: Call, U: AsyncCall<Call = NonceCall<T::Call>> + Clone> AsyncCall for NonceAdapter<T, U>
 where
     T::Call: Send,
     U: Send,
@@ -132,11 +150,11 @@ where
     }
 }
 
-impl<T: Client<NonceClient<T, U>> + State, U: Clone> Client<U> for NoncePlugin<T> {
+impl<T: Client<NonceAdapter<T, U>> + State, U: Clone> Client<U> for NoncePlugin<T> {
     type Client = T::Client;
 
     fn create_client(parent: U) -> Self::Client {
-        T::create_client(NonceClient {
+        T::create_client(NonceAdapter {
             parent,
             marker: std::marker::PhantomData,
         })
