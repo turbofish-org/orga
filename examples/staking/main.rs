@@ -50,10 +50,13 @@ fn my_address() -> Address {
 async fn my_balance() -> Result<Amount> {
     let address = my_address();
     let client = rpc_client();
-    type AppQuery = <MyApp as Query>::Query;
+    type AppQuery = <StakingApp as Query>::Query;
     type AcctQuery = <Accounts<MyCoin> as Query>::Query;
 
-    let q = AppQuery::FieldAccounts(AcctQuery::MethodBalance(address, vec![]));
+    let q = NonceQuery::Inner(AppQuery::FieldAccounts(AcctQuery::MethodBalance(
+        address,
+        vec![],
+    )));
     let balance = client
         .query(q, |state| state.accounts.balance(address))
         .await?;

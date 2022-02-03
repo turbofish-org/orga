@@ -26,7 +26,7 @@ pub async fn run_client() -> Result<()> {
     let query_my_count = || {
         let count = CounterQuery::FieldCount(()).encode().unwrap();
         let map_get = MapQuery::MethodGet(my_address, count);
-        MultiCounterQuery::FieldCounters(map_get)
+        NonceQuery::Inner(MultiCounterQuery::FieldCounters(map_get))
     };
 
     println!(
