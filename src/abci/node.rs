@@ -19,8 +19,6 @@ pub struct Node<A> {
     _app: PhantomData<A>,
     tm_home: PathBuf,
     merk_home: PathBuf,
-    p2p_port: u16,
-    rpc_port: u16,
     abci_port: u16,
     genesis_bytes: Option<Vec<u8>>,
     p2p_persistent_peers: Option<Vec<String>>,
@@ -45,14 +43,31 @@ where
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .init();
+        let cfg_path = tm_home.join("config/config.toml");
+        let abci_port: u16 = if cfg_path.exists() {
+            let config =
+                std::fs::read_to_string(cfg_path).expect("Failed to read tendermint config");
+            let toml = config
+                .parse::<toml_edit::Document>()
+                .expect("Failed to parse config");
+            let abci_laddr = toml["proxy_app"]
+                .as_str()
+                .expect("config.toml is missing proxy_app");
 
+            abci_laddr
+                .rsplit(':')
+                .next()
+                .expect("Failed to parse abci_laddr")
+                .parse()
+                .expect("Failed to parse proxy_app port")
+        } else {
+            26658
+        };
         Node {
             _app: PhantomData,
             merk_home,
             tm_home,
-            p2p_port: 26656,
-            rpc_port: 26657,
-            abci_port: 26658,
+            abci_port,
             genesis_bytes: None,
             p2p_persistent_peers: None,
             stdout: Stdio::null(),
@@ -64,8 +79,6 @@ where
         // Start tendermint process
         let tm_home = self.tm_home.clone();
         let abci_port = self.abci_port;
-        let p2p_port = self.p2p_port;
-        let rpc_port = self.rpc_port;
         let stdout = self.stdout;
         let stderr = self.stderr;
         let maybe_genesis_bytes = self.genesis_bytes;
@@ -74,9 +87,7 @@ where
             let mut tm_process = Tendermint::new(&tm_home)
                 .stdout(stdout)
                 .stderr(stderr)
-                .proxy_app(format!("tcp://0.0.0.0:{}", abci_port).as_str())
-                .p2p_laddr(format!("tcp://0.0.0.0:{}", p2p_port).as_str())
-                .rpc_laddr(format!("tcp://0.0.0.0:{}", rpc_port).as_str()); // Note: public by default
+                .proxy_app(format!("tcp://0.0.0.0:{}", abci_port).as_str());
 
             if let Some(genesis_bytes) = maybe_genesis_bytes {
                 tm_process = tm_process.with_genesis(genesis_bytes);
@@ -106,27 +117,6 @@ where
         Tendermint::new(&self.tm_home)
             .stdout(std::process::Stdio::null())
             .unsafe_reset_all();
-
-        self
-    }
-
-    #[must_use]
-    pub fn rpc_port(mut self, port: u16) -> Self {
-        self.rpc_port = port;
-
-        self
-    }
-
-    #[must_use]
-    pub fn p2p_port(mut self, port: u16) -> Self {
-        self.p2p_port = port;
-
-        self
-    }
-
-    #[must_use]
-    pub fn abci_port(mut self, port: u16) -> Self {
-        self.abci_port = port;
 
         self
     }
