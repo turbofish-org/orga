@@ -16,5 +16,10 @@ pub use fee::*;
 pub mod chain_commitment;
 pub use chain_commitment::ChainCommitmentPlugin;
 
-pub type DefaultPlugins<S, T, const ID: &'static str> =
-    SignerPlugin<ChainCommitmentPlugin<NoncePlugin<PayablePlugin<FeePlugin<S, T>>>, ID>>;
+pub mod sdk_compat;
+pub use sdk_compat::SdkCompatPlugin;
+
+pub type DefaultPlugins<S, T, const ID: &'static str> = SdkCompatPlugin<
+    SignerPlugin<NoncePlugin<ChainCommitmentPlugin<PayablePlugin<FeePlugin<S, T>>, ID>>>,
+    ID,
+>;
