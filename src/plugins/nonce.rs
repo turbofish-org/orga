@@ -84,8 +84,7 @@ where
                         format!(
                             "Nonce is not valid. Expected {}, got {}",
                             *expected_nonce, nonce,
-                        )
-                        .into(),
+                        ),
                     ));
                 }
 

@@ -1,19 +1,21 @@
 use super::{NonceCall, NoncePlugin, SigType, SignerCall, SignerPlugin};
 use crate::call::Call as CallTrait;
 use crate::client::{AsyncCall, Client};
-use crate::coins::Address;
+use crate::coins::{Address, Symbol};
 use crate::context::{Context, GetContext};
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
 use std::ops::{Deref, DerefMut};
+use std::marker::PhantomData;
 
-pub struct SdkCompatPlugin<T, const ID: &'static str> {
+pub struct SdkCompatPlugin<S, T, const ID: &'static str> {
     inner: T,
+    symbol: PhantomData<S>,
 }
 
-impl<T, const ID: &'static str> Deref for SdkCompatPlugin<T, ID> {
+impl<S, T, const ID: &'static str> Deref for SdkCompatPlugin<S, T, ID> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -21,18 +23,19 @@ impl<T, const ID: &'static str> Deref for SdkCompatPlugin<T, ID> {
     }
 }
 
-impl<T, const ID: &'static str> DerefMut for SdkCompatPlugin<T, ID> {
+impl<S, T, const ID: &'static str> DerefMut for SdkCompatPlugin<S, T, ID> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }
 }
 
-impl<T: State, const ID: &'static str> State for SdkCompatPlugin<T, ID> {
+impl<S, T: State, const ID: &'static str> State for SdkCompatPlugin<S, T, ID> {
     type Encoding = (T::Encoding,);
 
     fn create(store: orga::store::Store, data: Self::Encoding) -> Result<Self> {
         Ok(Self {
             inner: T::create(store, data.0)?,
+            symbol: PhantomData,
         })
     }
 
@@ -41,8 +44,8 @@ impl<T: State, const ID: &'static str> State for SdkCompatPlugin<T, ID> {
     }
 }
 
-impl<T: State, const ID: &'static str> From<SdkCompatPlugin<T, ID>> for (T::Encoding,) {
-    fn from(plugin: SdkCompatPlugin<T, ID>) -> Self {
+impl<S, T: State, const ID: &'static str> From<SdkCompatPlugin<S, T, ID>> for (T::Encoding,) {
+    fn from(plugin: SdkCompatPlugin<S, T, ID>) -> Self {
         (plugin.inner.into(),)
     }
 }
@@ -190,17 +193,9 @@ pub mod sdk {
     }
 }
 
-pub struct ConvertFn<T>(fn(sdk::Msg) -> Result<T>);
+pub type ConvertFn<T> = fn(sdk::Msg) -> Result<T>;
 
-impl<T> Deref for ConvertFn<T> {
-    type Target = fn(sdk::Msg) -> Result<T>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<T, const ID: &'static str> CallTrait for SdkCompatPlugin<SignerPlugin<NoncePlugin<T>>, ID>
+impl<S: Symbol, T, const ID: &'static str> CallTrait for super::DefaultPlugins<S, T, ID>
 where
     T: CallTrait + State,
     T::Call: Encode + 'static,
@@ -230,7 +225,7 @@ where
         let mut calls = sdk_tx
             .msg
             .into_iter()
-            .map(|msg| convert(msg))
+            .map(convert)
             .collect::<Result<Vec<_>>>()?;
 
         // TODO: handle multiple calls
@@ -254,7 +249,7 @@ where
     }
 }
 
-impl<T: Query, const ID: &'static str> Query for SdkCompatPlugin<T, ID> {
+impl<S, T: Query, const ID: &'static str> Query for SdkCompatPlugin<S, T, ID> {
     type Query = T::Query;
 
     fn query(&self, query: Self::Query) -> Result<()> {
@@ -289,8 +284,8 @@ where
     }
 }
 
-impl<T: Client<SdkCompatAdapter<T, U>>, U: Clone, const ID: &'static str> Client<U>
-    for SdkCompatPlugin<T, ID>
+impl<S, T: Client<SdkCompatAdapter<T, U>>, U: Clone, const ID: &'static str> Client<U>
+    for SdkCompatPlugin<S, T, ID>
 {
     type Client = T::Client;
 
@@ -308,7 +303,7 @@ mod abci {
     use super::*;
     use crate::abci::{BeginBlock, EndBlock, InitChain};
 
-    impl<T, const ID: &'static str> BeginBlock for SdkCompatPlugin<T, ID>
+    impl<S, T, const ID: &'static str> BeginBlock for SdkCompatPlugin<S, T, ID>
     where
         T: BeginBlock + State,
     {
@@ -317,7 +312,7 @@ mod abci {
         }
     }
 
-    impl<T, const ID: &'static str> EndBlock for SdkCompatPlugin<T, ID>
+    impl<S, T, const ID: &'static str> EndBlock for SdkCompatPlugin<S, T, ID>
     where
         T: EndBlock + State,
     {
@@ -326,7 +321,7 @@ mod abci {
         }
     }
 
-    impl<T, const ID: &'static str> InitChain for SdkCompatPlugin<T, ID>
+    impl<S, T, const ID: &'static str> InitChain for SdkCompatPlugin<S, T, ID>
     where
         T: InitChain + State + CallTrait,
     {

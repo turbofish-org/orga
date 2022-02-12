@@ -20,6 +20,7 @@ pub mod sdk_compat;
 pub use sdk_compat::SdkCompatPlugin;
 
 pub type DefaultPlugins<S, T, const ID: &'static str> = SdkCompatPlugin<
+    S,
     SignerPlugin<NoncePlugin<ChainCommitmentPlugin<PayablePlugin<FeePlugin<S, T>>, ID>>>,
     ID,
 >;
