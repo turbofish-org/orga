@@ -55,8 +55,8 @@ impl<T: State + Query> Query for NoncePlugin<T> {
 
 #[derive(Encode, Decode)]
 pub struct NonceCall<T> {
-    nonce: Option<u64>,
-    inner_call: T,
+    pub nonce: Option<u64>,
+    pub inner_call: T,
 }
 
 impl<T> Call for NoncePlugin<T>
