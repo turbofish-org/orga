@@ -1,7 +1,7 @@
 use crate::call::Call;
 use crate::client::{AsyncCall, Client};
 use crate::coins::Address;
-use crate::context::Context;
+use crate::context::{Context, GetContext};
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
@@ -9,6 +9,7 @@ use crate::store::Store;
 use crate::{Error, Result};
 use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
 use std::ops::Deref;
+use super::sdk_compat;
 
 pub struct SignerPlugin<T> {
     inner: T,
@@ -30,14 +31,21 @@ pub struct Signer {
 pub struct SignerCall {
     pub signature: Option<[u8; 64]>,
     pub pubkey: Option<[u8; 33]>,
-    pub sdk_compat: bool,
+    pub sigtype: SigType,
     pub call_bytes: Vec<u8>,
+}
+
+#[derive(Encode, Decode)]
+pub enum SigType {
+    Native,
+    Sdk,
+    Adr36,
 }
 
 use serde::Serialize;
 
 #[derive(Serialize)]
-struct SdkCompatMsg {
+struct Adr36Msg {
     pub account_number: String,
     pub chain_id: String,
     pub fee: Fee,
@@ -65,9 +73,9 @@ struct Value {
     pub signer: String,
 }
 
-fn sdk_compat_wrap(call_bytes: &[u8], address: Address) -> Result<Vec<u8>> {
+fn adr36_bytes(call_bytes: &[u8], address: Address) -> Result<Vec<u8>> {
     let data_b64 = base64::encode(call_bytes);
-    let msg = SdkCompatMsg {
+    let msg = Adr36Msg {
         chain_id: "".to_string(),
         account_number: "0".to_string(),
         sequence: "0".to_string(),
@@ -87,19 +95,24 @@ fn sdk_compat_wrap(call_bytes: &[u8], address: Address) -> Result<Vec<u8>> {
     serde_json::to_vec(&msg).map_err(|e| Error::App(format!("{}", e)))
 }
 
-impl SignerCall {
-    fn verify(&self) -> Result<Option<Address>> {
-        match (self.pubkey, self.signature) {
+impl<T: State> SignerPlugin<T> {
+    fn verify(&mut self, call: &SignerCall) -> Result<Option<Address>> {
+        match (call.pubkey, call.signature) {
             (Some(pubkey_bytes), Some(signature)) => {
                 use secp256k1::hashes::sha256;
                 let secp = Secp256k1::verification_only();
                 let pubkey = PublicKey::from_slice(&pubkey_bytes)?;
                 let address = Address::from_pubkey(pubkey_bytes);
 
-                let bytes = if self.sdk_compat {
-                    sdk_compat_wrap(self.call_bytes.as_slice(), address)?
-                } else {
-                    self.call_bytes.to_vec()
+                let bytes = match &call.sigtype {
+                    SigType::Native => call.call_bytes.to_vec(),
+                    SigType::Adr36 => adr36_bytes(call.call_bytes.as_slice(), address)?,
+                    SigType::Sdk => {
+                        self.context::<sdk_compat::sdk::SignBytes>()
+                            .ok_or_else(|| Error::App("SDK sign bytes not found".to_string()))?
+                            .0
+                            .clone()
+                    }
                 };
 
                 let msg = Message::from_hashed_data::<sha256::Hash>(bytes.as_slice());
@@ -115,16 +128,17 @@ impl SignerCall {
     }
 }
 
-impl<T: Call> Call for SignerPlugin<T> {
+impl<T: Call + State> Call for SignerPlugin<T> {
     type Call = SignerCall;
+
     fn call(&mut self, call: Self::Call) -> Result<()> {
         Context::remove::<Signer>();
         let signer_ctx = Signer {
-            signer: call.verify()?,
+            signer: self.verify(&call)?,
         };
         Context::add(signer_ctx);
-        let inner_call = Decode::decode(call.call_bytes.as_slice())?;
 
+        let inner_call = Decode::decode(call.call_bytes.as_slice())?;
         self.inner.call(inner_call)
     }
 }
@@ -184,7 +198,7 @@ where
                 call_bytes,
                 pubkey: Some(pubkey),
                 signature: Some(signature),
-                sdk_compat: false,
+                sigtype: SigType::Native,
             })
             .await
     }
@@ -203,7 +217,7 @@ where
                 call_bytes,
                 pubkey: Some(pubkey),
                 signature: Some(signature),
-                sdk_compat: true,
+                sigtype: SigType::Adr36,
             })
             .await
     }
