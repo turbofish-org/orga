@@ -1,4 +1,4 @@
-use super::{NonceCall, NoncePlugin, SigType, SignerCall, SignerPlugin};
+use super::{NonceCall, SigType, SignerCall, PayableCall, PaidCall};
 use crate::call::Call as CallTrait;
 use crate::client::{AsyncCall, Client};
 use crate::coins::{Address, Symbol};
@@ -105,7 +105,7 @@ pub mod sdk {
 
     impl Tx {
         pub fn sign_bytes(&self, chain_id: String, nonce: u64) -> Result<SignBytes> {
-            let sign_tx = SignTx {
+            let sign_tx = SignDoc {
                 account_number: "0".to_string(),
                 chain_id,
                 fee: self.fee.clone(),
@@ -151,7 +151,7 @@ pub mod sdk {
     }
 
     #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-    pub struct SignTx {
+    pub struct SignDoc {
         pub account_number: String,
         pub chain_id: String,
         pub fee: Fee,
@@ -193,7 +193,7 @@ pub mod sdk {
     }
 }
 
-pub type ConvertFn<T> = fn(sdk::Msg) -> Result<T>;
+pub type ConvertFn<T> = fn(sdk::Msg) -> Result<(T, T)>;
 
 impl<S: Symbol, T, const ID: &'static str> CallTrait for super::DefaultPlugins<S, T, ID>
 where
@@ -213,7 +213,7 @@ where
         let pubkey = sdk_tx.pubkey()?;
         let signature = sdk_tx.signature()?;
         let address = Address::from_pubkey(pubkey);
-        let nonce = self.nonce(address)?;
+        let nonce = self.nonce(address)? + 1;
 
         let sign_bytes = sdk_tx.sign_bytes(ID.to_string(), nonce)?;
         Context::add(sign_bytes);
@@ -229,13 +229,24 @@ where
             .collect::<Result<Vec<_>>>()?;
 
         // TODO: handle multiple calls
-        let inner_call = calls
+        let (payer_call, paid_call) = calls
             .drain(..)
             .next()
             .ok_or_else(|| Error::App("No messages provided".into()))?;
+
+        let payable_call = PayableCall::Paid(PaidCall {
+            payer: payer_call,
+            paid: paid_call,
+        });
+
+        let id_bytes = ID.as_bytes();
+        let mut call_bytes = Vec::with_capacity(id_bytes.len() + payable_call.encoding_length()?);
+        call_bytes.extend_from_slice(id_bytes);
+        payable_call.encode_into(&mut call_bytes)?;
+
         let nonce_call = NonceCall {
             nonce: Some(nonce),
-            inner_call,
+            inner_call: call_bytes,
         };
         let call = SignerCall {
             signature: Some(signature),

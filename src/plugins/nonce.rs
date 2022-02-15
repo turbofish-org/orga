@@ -82,8 +82,10 @@ where
                 if nonce <= *expected_nonce {
                     return Err(Error::Nonce(
                         format!(
-                            "Nonce is not valid. Expected {}, got {}",
-                            *expected_nonce, nonce,
+                            "Nonce is not valid. Expected {}-{}, got {}",
+                            *expected_nonce + 1,
+                            *expected_nonce + NONCE_INCREASE_LIMIT,
+                            nonce,
                         ),
                     ));
                 }

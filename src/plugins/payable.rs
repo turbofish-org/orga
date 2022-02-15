@@ -67,8 +67,8 @@ impl Paid {
 }
 
 pub struct PaidCall<T> {
-    payer: T,
-    paid: T,
+    pub payer: T,
+    pub paid: T,
 }
 
 impl<T: Encode> Encode for PaidCall<T> {

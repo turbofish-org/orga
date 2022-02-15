@@ -27,7 +27,11 @@ impl<T: CallTrait, const ID: &'static str> CallTrait for ChainCommitmentPlugin<T
         let expected_id: Vec<u8> = ID.bytes().collect();
         let chain_id = &call[..expected_id.len()];
         if chain_id != expected_id {
-            return Err(Error::App("Invalid chain ID".into()));
+            return Err(Error::App(format!(
+                "Invalid chain ID (expected {}, got {})",
+                ID,
+                String::from_utf8(chain_id.to_vec()).unwrap_or_default()
+            )));
         }
 
         let inner_call = Decode::decode(&call[chain_id.len()..])?;
