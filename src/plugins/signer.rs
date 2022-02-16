@@ -1,3 +1,7 @@
+use super::{
+    sdk_compat::{self, sdk::Tx as SdkTx, ConvertSdkTx},
+    ChainId, GetNonce,
+};
 use crate::call::Call;
 use crate::client::{AsyncCall, Client};
 use crate::coins::Address;
@@ -9,7 +13,6 @@ use crate::store::Store;
 use crate::{Error, Result};
 use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
 use std::ops::Deref;
-use super::{sdk_compat::{self, sdk::Tx as SdkTx, ConvertSdkTx}, GetNonce, ChainId};
 
 pub struct SignerPlugin<T> {
     inner: T,
@@ -115,7 +118,8 @@ where
                     SigType::Sdk(tx) => {
                         let address = Address::from_pubkey(tx.sender_pubkey()?);
                         let nonce = self.inner.nonce(address)? + 1;
-                        let chain_id = self.context::<ChainId>()
+                        let chain_id = self
+                            .context::<ChainId>()
                             .ok_or_else(|| Error::App("Chain ID not found".to_string()))?
                             .deref()
                             .to_string();

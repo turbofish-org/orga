@@ -1,4 +1,4 @@
-use super::{NonceCall, SigType, SignerCall, PayableCall, PaidCall};
+use super::{NonceCall, PaidCall, PayableCall, SigType, SignerCall};
 use crate::call::Call as CallTrait;
 use crate::client::{AsyncCall, Client};
 use crate::coins::{Address, Symbol};
@@ -7,8 +7,8 @@ use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
-use std::ops::{Deref, DerefMut};
 use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 
 pub struct SdkCompatPlugin<S, T> {
     inner: T,
@@ -90,7 +90,7 @@ impl<T: Decode> Decode for Call<T> {
 }
 
 pub mod sdk {
-    use super::{Error, Result, Address};
+    use super::{Address, Error, Result};
     use serde::{Deserialize, Serialize};
 
     #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -257,9 +257,7 @@ where
     }
 }
 
-impl<S, T: Client<SdkCompatAdapter<T, U>>, U: Clone> Client<U>
-    for SdkCompatPlugin<S, T>
-{
+impl<S, T: Client<SdkCompatAdapter<T, U>>, U: Clone> Client<U> for SdkCompatPlugin<S, T> {
     type Client = T::Client;
 
     fn create_client(parent: U) -> T::Client {

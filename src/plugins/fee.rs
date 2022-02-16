@@ -1,3 +1,4 @@
+use super::sdk_compat::{sdk::Tx as SdkTx, ConvertSdkTx};
 use crate::call::Call;
 use crate::client::Client;
 use crate::coins::{Coin, Symbol};
@@ -9,7 +10,6 @@ use crate::store::Store;
 use crate::{Error, Result};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
-use super::sdk_compat::{ConvertSdkTx, sdk::Tx as SdkTx};
 
 pub const MIN_FEE: u64 = 10_000;
 

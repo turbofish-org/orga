@@ -17,7 +17,7 @@ pub mod chain_commitment;
 pub use chain_commitment::{ChainCommitmentPlugin, ChainId};
 
 pub mod sdk_compat;
-pub use sdk_compat::{SdkCompatPlugin, ConvertSdkTx};
+pub use sdk_compat::{ConvertSdkTx, SdkCompatPlugin};
 
 pub type DefaultPlugins<S, T, const ID: &'static str> = SdkCompatPlugin<
     S,
