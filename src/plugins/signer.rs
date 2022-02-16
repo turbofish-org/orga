@@ -9,7 +9,7 @@ use crate::store::Store;
 use crate::{Error, Result};
 use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
 use std::ops::Deref;
-use super::sdk_compat;
+use super::{sdk_compat::{self, sdk::Tx as SdkTx, ConvertSdkTx}, GetNonce, ChainId};
 
 pub struct SignerPlugin<T> {
     inner: T,
@@ -38,8 +38,9 @@ pub struct SignerCall {
 #[derive(Encode, Decode)]
 pub enum SigType {
     Native,
-    Sdk,
     Adr36,
+    #[skip]
+    Sdk(sdk_compat::sdk::Tx),
 }
 
 use serde::Serialize;
@@ -95,7 +96,11 @@ fn adr36_bytes(call_bytes: &[u8], address: Address) -> Result<Vec<u8>> {
     serde_json::to_vec(&msg).map_err(|e| Error::App(format!("{}", e)))
 }
 
-impl<T: State> SignerPlugin<T> {
+impl<T: State, U> SignerPlugin<T>
+where
+    T: Deref<Target = U>,
+    U: GetNonce,
+{
     fn verify(&mut self, call: &SignerCall) -> Result<Option<Address>> {
         match (call.pubkey, call.signature) {
             (Some(pubkey_bytes), Some(signature)) => {
@@ -107,11 +112,14 @@ impl<T: State> SignerPlugin<T> {
                 let bytes = match &call.sigtype {
                     SigType::Native => call.call_bytes.to_vec(),
                     SigType::Adr36 => adr36_bytes(call.call_bytes.as_slice(), address)?,
-                    SigType::Sdk => {
-                        self.context::<sdk_compat::sdk::SignBytes>()
-                            .ok_or_else(|| Error::App("SDK sign bytes not found".to_string()))?
-                            .0
-                            .clone()
+                    SigType::Sdk(tx) => {
+                        let address = Address::from_pubkey(tx.sender_pubkey()?);
+                        let nonce = self.inner.nonce(address)? + 1;
+                        let chain_id = self.context::<ChainId>()
+                            .ok_or_else(|| Error::App("Chain ID not found".to_string()))?
+                            .deref()
+                            .to_string();
+                        tx.sign_bytes(chain_id, nonce)?
                     }
                 };
 
@@ -128,7 +136,11 @@ impl<T: State> SignerPlugin<T> {
     }
 }
 
-impl<T: Call + State> Call for SignerPlugin<T> {
+impl<T: Call + State, U> Call for SignerPlugin<T>
+where
+    T: Deref<Target = U>,
+    U: GetNonce,
+{
     type Call = SignerCall;
 
     fn call(&mut self, call: Self::Call) -> Result<()> {
@@ -148,6 +160,27 @@ impl<T: Query> Query for SignerPlugin<T> {
 
     fn query(&self, query: Self::Query) -> Result<()> {
         self.inner.query(query)
+    }
+}
+
+impl<T, U> ConvertSdkTx for SignerPlugin<T>
+where
+    T: State + ConvertSdkTx<Output = T::Call> + Call + Deref<Target = U>,
+    U: GetNonce,
+{
+    type Output = SignerCall;
+
+    fn convert(&self, sdk_tx: &SdkTx) -> Result<SignerCall> {
+        let signature = sdk_tx.signature()?;
+        let pubkey = sdk_tx.sender_pubkey()?;
+        let inner_call = self.inner.convert(sdk_tx)?.encode()?;
+
+        Ok(SignerCall {
+            signature: Some(signature),
+            pubkey: Some(pubkey),
+            sigtype: SigType::Sdk(sdk_tx.clone()),
+            call_bytes: inner_call,
+        })
     }
 }
 

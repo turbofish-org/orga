@@ -1,5 +1,7 @@
+use super::{sdk_compat::sdk::Tx as SdkTx, ConvertSdkTx};
 use crate::call::Call as CallTrait;
 use crate::client::{AsyncCall, Client as ClientTrait};
+use crate::context::Context;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
@@ -10,6 +12,16 @@ use std::ops::Deref;
 
 pub struct ChainCommitmentPlugin<T, const ID: &'static str> {
     inner: T,
+}
+
+pub struct ChainId(pub &'static str);
+
+impl Deref for ChainId {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
 }
 
 impl<T, const ID: &'static str> Deref for ChainCommitmentPlugin<T, ID> {
@@ -44,6 +56,24 @@ impl<T: Query, const ID: &'static str> Query for ChainCommitmentPlugin<T, ID> {
 
     fn query(&self, query: Self::Query) -> Result<()> {
         self.inner.query(query)
+    }
+}
+
+impl<T, const ID: &'static str> ConvertSdkTx for ChainCommitmentPlugin<T, ID>
+where
+    T: ConvertSdkTx<Output = T::Call> + CallTrait,
+{
+    type Output = Vec<u8>;
+
+    fn convert(&self, sdk_tx: &SdkTx) -> Result<Vec<u8>> {
+        let id_bytes = ID.as_bytes();
+        let inner_call = self.inner.convert(sdk_tx)?;
+
+        let mut call_bytes = Vec::with_capacity(id_bytes.len() + inner_call.encoding_length()?);
+        call_bytes.extend_from_slice(id_bytes);
+        inner_call.encode_into(&mut call_bytes)?;
+
+        Ok(call_bytes)
     }
 }
 
@@ -103,6 +133,8 @@ where
     type Encoding = (T::Encoding,);
 
     fn create(store: Store, data: Self::Encoding) -> Result<Self> {
+        Context::add(ChainId(ID));
+
         Ok(Self {
             inner: T::create(store, data.0)?,
         })

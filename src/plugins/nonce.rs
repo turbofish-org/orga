@@ -1,4 +1,4 @@
-use super::Signer;
+use super::{Signer, ConvertSdkTx, sdk_compat::sdk::Tx as SdkTx};
 use crate::call::Call;
 use crate::client::Client;
 use crate::coins::Address;
@@ -30,6 +30,31 @@ impl<T: State> Deref for NoncePlugin<T> {
 
     fn deref(&self) -> &Self::Target {
         &self.inner
+    }
+}
+
+pub trait GetNonce {
+    fn nonce(&self, address: Address) -> Result<u64>;
+}
+
+impl<T: State> GetNonce for NoncePlugin<T> {
+    fn nonce(&self, address: Address) -> Result<u64> {
+        self.nonce(address)
+    }
+}
+
+impl<T> ConvertSdkTx for NoncePlugin<T>
+where
+    T: State + ConvertSdkTx<Output = T::Call> + Call 
+{
+    type Output = NonceCall<T::Call>;
+    
+    fn convert(&self, sdk_tx: &SdkTx) -> Result<NonceCall<T::Call>> {
+        let nonce = self.nonce(sdk_tx.sender_address()?)? + 1;
+        Ok(NonceCall {
+            inner_call: self.inner.convert(sdk_tx)?,
+            nonce: Some(nonce),
+        })
     }
 }
 

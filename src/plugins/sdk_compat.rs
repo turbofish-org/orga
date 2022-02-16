@@ -10,12 +10,12 @@ use crate::{Error, Result};
 use std::ops::{Deref, DerefMut};
 use std::marker::PhantomData;
 
-pub struct SdkCompatPlugin<S, T, const ID: &'static str> {
+pub struct SdkCompatPlugin<S, T> {
     inner: T,
     symbol: PhantomData<S>,
 }
 
-impl<S, T, const ID: &'static str> Deref for SdkCompatPlugin<S, T, ID> {
+impl<S, T> Deref for SdkCompatPlugin<S, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -23,13 +23,13 @@ impl<S, T, const ID: &'static str> Deref for SdkCompatPlugin<S, T, ID> {
     }
 }
 
-impl<S, T, const ID: &'static str> DerefMut for SdkCompatPlugin<S, T, ID> {
+impl<S, T> DerefMut for SdkCompatPlugin<S, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }
 }
 
-impl<S, T: State, const ID: &'static str> State for SdkCompatPlugin<S, T, ID> {
+impl<S, T: State> State for SdkCompatPlugin<S, T> {
     type Encoding = (T::Encoding,);
 
     fn create(store: orga::store::Store, data: Self::Encoding) -> Result<Self> {
@@ -44,8 +44,8 @@ impl<S, T: State, const ID: &'static str> State for SdkCompatPlugin<S, T, ID> {
     }
 }
 
-impl<S, T: State, const ID: &'static str> From<SdkCompatPlugin<S, T, ID>> for (T::Encoding,) {
-    fn from(plugin: SdkCompatPlugin<S, T, ID>) -> Self {
+impl<S, T: State> From<SdkCompatPlugin<S, T>> for (T::Encoding,) {
+    fn from(plugin: SdkCompatPlugin<S, T>) -> Self {
         (plugin.inner.into(),)
     }
 }
@@ -90,10 +90,8 @@ impl<T: Decode> Decode for Call<T> {
 }
 
 pub mod sdk {
-    use super::{Error, Result};
+    use super::{Error, Result, Address};
     use serde::{Deserialize, Serialize};
-
-    pub struct SignBytes(pub Vec<u8>);
 
     #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
     pub struct Tx {
@@ -104,7 +102,7 @@ pub mod sdk {
     }
 
     impl Tx {
-        pub fn sign_bytes(&self, chain_id: String, nonce: u64) -> Result<SignBytes> {
+        pub fn sign_bytes(&self, chain_id: String, nonce: u64) -> Result<Vec<u8>> {
             let sign_tx = SignDoc {
                 account_number: "0".to_string(),
                 chain_id,
@@ -114,11 +112,10 @@ pub mod sdk {
                 sequence: nonce.to_string(),
             };
 
-            let bytes = serde_json::to_vec(&sign_tx).map_err(|e| Error::App(e.to_string()))?;
-            Ok(SignBytes(bytes))
+            serde_json::to_vec(&sign_tx).map_err(|e| Error::App(e.to_string()))
         }
 
-        pub fn pubkey(&self) -> Result<[u8; 33]> {
+        pub fn sender_pubkey(&self) -> Result<[u8; 33]> {
             let pubkey_b64 = &self
                 .signatures
                 .first()
@@ -132,6 +129,10 @@ pub mod sdk {
             pubkey_arr.copy_from_slice(&pubkey_bytes);
 
             Ok(pubkey_arr)
+        }
+
+        pub fn sender_address(&self) -> Result<Address> {
+            Ok(Address::from_pubkey(self.sender_pubkey()?))
         }
 
         pub fn signature(&self) -> Result<[u8; 64]> {
@@ -193,74 +194,35 @@ pub mod sdk {
     }
 }
 
-pub type ConvertFn<T> = fn(sdk::Msg) -> Result<(T, T)>;
+pub trait ConvertSdkTx {
+    type Output;
 
-impl<S: Symbol, T, const ID: &'static str> CallTrait for super::DefaultPlugins<S, T, ID>
+    fn convert(&self, msg: &sdk::Tx) -> Result<Self::Output>;
+}
+
+impl<S: Symbol, T> CallTrait for SdkCompatPlugin<S, T>
 where
-    T: CallTrait + State,
+    T: CallTrait + State + ConvertSdkTx<Output = T::Call>,
     T::Call: Encode + 'static,
 {
-    type Call = Call<SignerCall>;
+    type Call = Call<T::Call>;
 
     fn call(&mut self, call: Self::Call) -> Result<()> {
-        Context::remove::<sdk::SignBytes>();
-
-        let sdk_tx = match call {
-            Call::Native(call) => return self.inner.call(call),
-            Call::Sdk(tx) => tx,
+        let call = match call {
+            Call::Native(call) => call,
+            Call::Sdk(tx) => self.inner.convert(&tx)?,
         };
 
-        let pubkey = sdk_tx.pubkey()?;
-        let signature = sdk_tx.signature()?;
-        let address = Address::from_pubkey(pubkey);
-        let nonce = self.nonce(address)? + 1;
+        self.inner.call(call)
 
-        let sign_bytes = sdk_tx.sign_bytes(ID.to_string(), nonce)?;
-        Context::add(sign_bytes);
-
-        let convert = self
-            .context::<ConvertFn<T::Call>>()
-            .ok_or_else(|| Error::App("SDK call conversion function not set".into()))?;
-
-        let mut calls = sdk_tx
-            .msg
-            .into_iter()
-            .map(convert)
-            .collect::<Result<Vec<_>>>()?;
-
-        // TODO: handle multiple calls
-        let (payer_call, paid_call) = calls
-            .drain(..)
-            .next()
-            .ok_or_else(|| Error::App("No messages provided".into()))?;
-
-        let payable_call = PayableCall::Paid(PaidCall {
-            payer: payer_call,
-            paid: paid_call,
-        });
-
-        let id_bytes = ID.as_bytes();
-        let mut call_bytes = Vec::with_capacity(id_bytes.len() + payable_call.encoding_length()?);
-        call_bytes.extend_from_slice(id_bytes);
-        payable_call.encode_into(&mut call_bytes)?;
-
-        let nonce_call = NonceCall {
-            nonce: Some(nonce),
-            inner_call: call_bytes,
-        };
-        let call = SignerCall {
-            signature: Some(signature),
-            pubkey: Some(pubkey),
-            sigtype: SigType::Sdk,
-            call_bytes: nonce_call.encode()?,
-        };
-        self.inner.call(call)?;
-
-        Ok(())
+        // let payable_call = PayableCall::Paid(PaidCall {
+        //     payer: payer_call,
+        //     paid: paid_call,
+        // });
     }
 }
 
-impl<S, T: Query, const ID: &'static str> Query for SdkCompatPlugin<S, T, ID> {
+impl<S, T: Query> Query for SdkCompatPlugin<S, T> {
     type Query = T::Query;
 
     fn query(&self, query: Self::Query) -> Result<()> {
@@ -295,8 +257,8 @@ where
     }
 }
 
-impl<S, T: Client<SdkCompatAdapter<T, U>>, U: Clone, const ID: &'static str> Client<U>
-    for SdkCompatPlugin<S, T, ID>
+impl<S, T: Client<SdkCompatAdapter<T, U>>, U: Clone> Client<U>
+    for SdkCompatPlugin<S, T>
 {
     type Client = T::Client;
 
@@ -314,7 +276,7 @@ mod abci {
     use super::*;
     use crate::abci::{BeginBlock, EndBlock, InitChain};
 
-    impl<S, T, const ID: &'static str> BeginBlock for SdkCompatPlugin<S, T, ID>
+    impl<S, T> BeginBlock for SdkCompatPlugin<S, T>
     where
         T: BeginBlock + State,
     {
@@ -323,7 +285,7 @@ mod abci {
         }
     }
 
-    impl<S, T, const ID: &'static str> EndBlock for SdkCompatPlugin<S, T, ID>
+    impl<S, T> EndBlock for SdkCompatPlugin<S, T>
     where
         T: EndBlock + State,
     {
@@ -332,7 +294,7 @@ mod abci {
         }
     }
 
-    impl<S, T, const ID: &'static str> InitChain for SdkCompatPlugin<S, T, ID>
+    impl<S, T> InitChain for SdkCompatPlugin<S, T>
     where
         T: InitChain + State + CallTrait,
     {

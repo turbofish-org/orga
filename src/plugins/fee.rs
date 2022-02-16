@@ -9,6 +9,7 @@ use crate::store::Store;
 use crate::{Error, Result};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
+use super::sdk_compat::{ConvertSdkTx, sdk::Tx as SdkTx};
 
 pub const MIN_FEE: u64 = 10_000;
 
@@ -66,6 +67,14 @@ impl<S: Symbol, T: Call + State> Call for FeePlugin<S, T> {
         }
 
         self.inner.call(call)
+    }
+}
+
+impl<S, T: ConvertSdkTx> ConvertSdkTx for FeePlugin<S, T> {
+    type Output = T::Output;
+
+    fn convert(&self, sdk_tx: &SdkTx) -> Result<T::Output> {
+        self.inner.convert(sdk_tx)
     }
 }
 

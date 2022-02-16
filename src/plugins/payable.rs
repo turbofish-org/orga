@@ -9,6 +9,7 @@ use crate::{Error, Result};
 use std::any::TypeId;
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
+use super::sdk_compat::{ConvertSdkTx, sdk::Tx as SdkTx};
 
 #[derive(State, Encode, Decode)]
 pub struct PayablePlugin<T: State> {
@@ -147,6 +148,18 @@ impl<T: Query + State> Query for PayablePlugin<T> {
 
     fn query(&self, query: Self::Query) -> Result<()> {
         self.inner.query(query)
+    }
+}
+
+impl<T> ConvertSdkTx for PayablePlugin<T>
+where
+    T: State + ConvertSdkTx<Output = PaidCall<T::Call>> + Call,
+{
+    type Output = PayableCall<T::Call>;
+
+    fn convert(&self, sdk_tx: &SdkTx) -> Result<PayableCall<T::Call>> {
+        let paid_call = self.inner.convert(sdk_tx)?;
+        Ok(PayableCall::Paid(paid_call))
     }
 }
 
