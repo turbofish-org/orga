@@ -104,6 +104,17 @@ where
     T: Deref<Target = U>,
     U: GetNonce,
 {
+    fn sdk_sign_bytes(&mut self, tx: &SdkTx) -> Result<Vec<u8>> {
+        let address = Address::from_pubkey(tx.sender_pubkey()?);
+        let nonce = self.inner.nonce(address)? + 1;
+        let chain_id = self
+            .context::<ChainId>()
+            .ok_or_else(|| Error::App("Chain ID not found".to_string()))?
+            .deref()
+            .to_string();
+        tx.sign_bytes(chain_id, nonce)
+    }
+
     fn verify(&mut self, call: &SignerCall) -> Result<Option<Address>> {
         match (call.pubkey, call.signature) {
             (Some(pubkey_bytes), Some(signature)) => {
@@ -115,16 +126,7 @@ where
                 let bytes = match &call.sigtype {
                     SigType::Native => call.call_bytes.to_vec(),
                     SigType::Adr36 => adr36_bytes(call.call_bytes.as_slice(), address)?,
-                    SigType::Sdk(tx) => {
-                        let address = Address::from_pubkey(tx.sender_pubkey()?);
-                        let nonce = self.inner.nonce(address)? + 1;
-                        let chain_id = self
-                            .context::<ChainId>()
-                            .ok_or_else(|| Error::App("Chain ID not found".to_string()))?
-                            .deref()
-                            .to_string();
-                        tx.sign_bytes(chain_id, nonce)?
-                    }
+                    SigType::Sdk(tx) => self.sdk_sign_bytes(tx)?,
                 };
 
                 let msg = Message::from_hashed_data::<sha256::Hash>(bytes.as_slice());
