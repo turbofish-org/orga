@@ -163,10 +163,9 @@ impl<T: Query> Query for SignerPlugin<T> {
     }
 }
 
-impl<T, U> ConvertSdkTx for SignerPlugin<T>
+impl<T> ConvertSdkTx for SignerPlugin<T>
 where
-    T: State + ConvertSdkTx<Output = T::Call> + Call + Deref<Target = U>,
-    U: GetNonce,
+    T: State + ConvertSdkTx<Output = T::Call> + Call,
 {
     type Output = SignerCall;
 

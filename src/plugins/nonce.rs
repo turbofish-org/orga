@@ -1,4 +1,4 @@
-use super::{Signer, ConvertSdkTx, sdk_compat::sdk::Tx as SdkTx};
+use super::{sdk_compat::sdk::Tx as SdkTx, ConvertSdkTx, Signer};
 use crate::call::Call;
 use crate::client::Client;
 use crate::coins::Address;
@@ -45,14 +45,17 @@ impl<T: State> GetNonce for NoncePlugin<T> {
 
 impl<T> ConvertSdkTx for NoncePlugin<T>
 where
-    T: State + ConvertSdkTx<Output = T::Call> + Call 
+    T: State + ConvertSdkTx<Output = T::Call> + Call,
 {
     type Output = NonceCall<T::Call>;
-    
+
     fn convert(&self, sdk_tx: &SdkTx) -> Result<NonceCall<T::Call>> {
-        let nonce = self.nonce(sdk_tx.sender_address()?)? + 1;
+        let address = sdk_tx.sender_address()?;
+        let nonce = self.nonce(address)? + 1;
+        let inner_call = self.inner.convert(sdk_tx)?;
+
         Ok(NonceCall {
-            inner_call: self.inner.convert(sdk_tx)?,
+            inner_call,
             nonce: Some(nonce),
         })
     }
@@ -105,14 +108,12 @@ where
             (Some(pub_key), Some(nonce)) => {
                 let mut expected_nonce = self.map.entry(pub_key)?.or_default()?;
                 if nonce <= *expected_nonce {
-                    return Err(Error::Nonce(
-                        format!(
-                            "Nonce is not valid. Expected {}-{}, got {}",
-                            *expected_nonce + 1,
-                            *expected_nonce + NONCE_INCREASE_LIMIT,
-                            nonce,
-                        ),
-                    ));
+                    return Err(Error::Nonce(format!(
+                        "Nonce is not valid. Expected {}-{}, got {}",
+                        *expected_nonce + 1,
+                        *expected_nonce + NONCE_INCREASE_LIMIT,
+                        nonce,
+                    )));
                 }
 
                 if nonce - *expected_nonce > NONCE_INCREASE_LIMIT {
