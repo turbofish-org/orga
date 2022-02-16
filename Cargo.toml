@@ -21,7 +21,7 @@ is_executable = { version = "1.0.1", optional = true }
 reqwest = {version = "0.11.4", features = ["blocking"]}
 flate2 = "1.0.20"
 tar = "0.4.33"
-ed = { git = "https://github.com/nomic-io/ed.git", rev = "6d327abacf0c6068ceaed36fb67410ae65f2abbe"}
+ed = "0.3.0" 
 toml_edit = "0.2.0"
 prost = {version = "0.9", optional = true}
 home = { version = "0.5.3", optional = true }
