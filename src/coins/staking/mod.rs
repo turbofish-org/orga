@@ -1,21 +1,24 @@
+use super::decimal::DecimalEncoding;
 use super::pool::{Child as PoolChild, ChildMut as PoolChildMut};
 use super::{Address, Amount, Balance, Coin, Decimal, Give, Pool, Symbol};
 #[cfg(feature = "abci")]
 use crate::abci::{BeginBlock, EndBlock};
 use crate::call::Call;
 use crate::client::Client;
-use crate::collections::{Entry, EntryMap, Map};
+use crate::collections::{Deque, Entry, EntryMap, Map};
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
 #[cfg(feature = "abci")]
-use crate::plugins::{BeginBlockCtx, EndBlockCtx, Validators};
+use crate::plugins::{BeginBlockCtx, EndBlockCtx, Time, Validators};
 use crate::plugins::{Paid, Signer};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::{Error, Result};
+use rust_decimal_macros::dec;
 use sha2::{Digest, Sha256};
 use std::convert::TryInto;
+use tendermint_proto::abci::EvidenceType;
 
 mod delegator;
 pub use delegator::*;
@@ -29,7 +32,9 @@ const UNBONDING_SECONDS: u64 = 10; // 10 seconds
 const UNBONDING_SECONDS: u64 = 60 * 60 * 24 * 7 * 2; // 2 weeks
 const MAX_OFFLINE_BLOCKS: u64 = 50_000; // ~14 hours for 1s blocks
 const MAX_VALIDATORS: u64 = 100;
-const MIN_SELF_DELEGATION: u64 = 1;
+const MIN_SELF_DELEGATION_MIN: u64 = 0;
+const DOWNTIME_JAIL_SECONDS: u64 = 60 * 60 * 24; // 1 day
+const EDIT_INTERVAL_SECONDS: u64 = 60 * 60 * 24; // 1 day
 
 #[derive(Call, Query, Client)]
 pub struct Staking<S: Symbol> {
@@ -37,11 +42,49 @@ pub struct Staking<S: Symbol> {
     consensus_keys: Map<Address, [u8; 32]>,
     last_signed_block: Map<[u8; 20], u64>,
     max_validators: u64,
-    min_self_delegation: u64,
+    min_self_delegation_min: u64,
     validators_by_power: EntryMap<ValidatorPowerEntry>,
     last_indexed_power: Map<Address, u64>,
     last_validator_powers: Map<Address, u64>,
     address_for_tm_hash: Map<[u8; 20], Address>,
+    unbonding_seconds: u64,
+    max_offline_blocks: u64,
+    slash_fraction_double_sign: Decimal,
+    slash_fraction_downtime: Decimal,
+    downtime_jail_seconds: u64,
+    validator_queue: EntryMap<ValidatorQueueEntry>,
+    unbonding_delegation_queue: Deque<UnbondingDelegationEntry>,
+}
+
+#[derive(Entry, Clone)]
+struct ValidatorQueueEntry {
+    #[key]
+    start_seconds: i64,
+    #[key]
+    address_bytes: [u8; 20],
+}
+
+impl EntryMap<ValidatorQueueEntry> {
+    fn remove_by_address(&mut self, address: Address) -> Result<()> {
+        let entries: Vec<Result<_>> = self.iter()?.collect();
+        for res in entries {
+            let entry = res?;
+            if entry.address_bytes == address.bytes() {
+                self.delete(ValidatorQueueEntry {
+                    start_seconds: entry.start_seconds,
+                    address_bytes: entry.address_bytes,
+                })?;
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(State)]
+pub struct UnbondingDelegationEntry {
+    validator_address: Address,
+    delegator_address: Address,
+    start_seconds: i64,
 }
 
 #[derive(Entry)]
@@ -71,7 +114,7 @@ impl<S: Symbol> State for Staking<S> {
     fn create(store: Store, data: Self::Encoding) -> Result<Self> {
         Ok(Self {
             validators: State::create(store.sub(&[0]), data.validators)?,
-            min_self_delegation: State::create(store.sub(&[1]), data.min_self_delegation)?,
+            min_self_delegation_min: State::create(store.sub(&[1]), data.min_self_delegation_min)?,
             consensus_keys: State::create(store.sub(&[2]), ())?,
             last_signed_block: State::create(store.sub(&[3]), ())?,
             validators_by_power: State::create(store.sub(&[4]), ())?,
@@ -79,6 +122,19 @@ impl<S: Symbol> State for Staking<S> {
             max_validators: State::create(store.sub(&[6]), data.max_validators)?,
             last_indexed_power: State::create(store.sub(&[7]), ())?,
             address_for_tm_hash: State::create(store.sub(&[8]), ())?,
+            unbonding_seconds: State::create(store.sub(&[9]), data.unbonding_seconds)?,
+            max_offline_blocks: State::create(store.sub(&[10]), data.max_offline_blocks)?,
+            slash_fraction_double_sign: State::create(
+                store.sub(&[11]),
+                data.slash_fraction_double_sign,
+            )?,
+            slash_fraction_downtime: State::create(store.sub(&[12]), data.slash_fraction_downtime)?,
+            downtime_jail_seconds: State::create(store.sub(&[13]), data.downtime_jail_seconds)?,
+            validator_queue: State::create(store.sub(&[14]), ())?,
+            unbonding_delegation_queue: State::create(
+                store.sub(&[15]),
+                data.unbonding_delegation_queue,
+            )?,
         })
     }
 
@@ -91,8 +147,14 @@ impl<S: Symbol> State for Staking<S> {
         self.address_for_tm_hash.flush()?;
         Ok(Self::Encoding {
             max_validators: self.max_validators,
-            min_self_delegation: self.min_self_delegation,
+            min_self_delegation_min: self.min_self_delegation_min,
             validators: self.validators.flush()?,
+            unbonding_seconds: self.unbonding_seconds,
+            max_offline_blocks: self.max_offline_blocks,
+            slash_fraction_double_sign: self.slash_fraction_double_sign.into(),
+            slash_fraction_downtime: self.slash_fraction_downtime.into(),
+            downtime_jail_seconds: self.downtime_jail_seconds,
+            unbonding_delegation_queue: self.unbonding_delegation_queue.flush()?,
         })
     }
 }
@@ -101,8 +163,14 @@ impl<S: Symbol> From<Staking<S>> for StakingEncoding<S> {
     fn from(staking: Staking<S>) -> Self {
         Self {
             max_validators: staking.max_validators,
-            min_self_delegation: staking.min_self_delegation,
+            min_self_delegation_min: staking.min_self_delegation_min,
+            unbonding_seconds: staking.unbonding_seconds,
+            max_offline_blocks: staking.max_offline_blocks,
+            slash_fraction_double_sign: staking.slash_fraction_double_sign.into(),
+            slash_fraction_downtime: staking.slash_fraction_downtime.into(),
+            downtime_jail_seconds: staking.downtime_jail_seconds,
             validators: staking.validators.into(),
+            unbonding_delegation_queue: staking.unbonding_delegation_queue.into(),
         }
     }
 }
@@ -148,8 +216,8 @@ impl<S: Symbol> BeginBlock for Staking<S> {
                     let validator = self.validators.get(address)?;
                     let in_active_set = validator.in_active_set;
                     drop(validator);
-                    if in_active_set && self.slashable_balance(address)? > 0 {
-                        self.slash(address, 0)?.burn();
+                    if in_active_set {
+                        self.punish_downtime(address)?;
                     }
                     self.last_signed_block.remove(*hash)?;
                 }
@@ -165,9 +233,15 @@ impl<S: Symbol> BeginBlock for Staking<S> {
                     match self.address_for_tm_hash.get(hash)? {
                         Some(address) => {
                             let address = *address;
-                            if self.slashable_balance(address)? > 0 {
-                                self.slash(address, 0)?.burn();
-                            }
+                            match evidence.r#type() {
+                                EvidenceType::DuplicateVote => {
+                                    self.punish_double_sign(address)?;
+                                }
+                                EvidenceType::LightClientAttack => {
+                                    self.punish_light_client_attack(address)?;
+                                }
+                                _ => {}
+                            };
                         }
                         None => {
                             return Err(Error::Coins(
@@ -187,16 +261,30 @@ impl<S: Symbol> BeginBlock for Staking<S> {
 #[derive(Encode, Decode)]
 pub struct StakingEncoding<S: Symbol> {
     max_validators: u64,
-    min_self_delegation: u64,
+    min_self_delegation_min: u64,
+    unbonding_seconds: u64,
+    max_offline_blocks: u64,
+    slash_fraction_double_sign: DecimalEncoding,
+    slash_fraction_downtime: DecimalEncoding,
+    downtime_jail_seconds: u64,
     validators: <Pool<Address, Validator<S>, S> as State>::Encoding,
+    unbonding_delegation_queue: <Deque<UnbondingDelegationEntry> as State>::Encoding,
 }
 
 impl<S: Symbol> Default for StakingEncoding<S> {
     fn default() -> Self {
+        let slash_fraction_double_sign: Decimal = dec!(0.05).into();
+        let slash_fraction_downtime: Decimal = dec!(0.01).into();
         Self {
             max_validators: MAX_VALIDATORS,
-            min_self_delegation: MIN_SELF_DELEGATION,
+            min_self_delegation_min: MIN_SELF_DELEGATION_MIN,
+            unbonding_seconds: UNBONDING_SECONDS,
+            max_offline_blocks: MAX_OFFLINE_BLOCKS,
+            slash_fraction_double_sign: slash_fraction_double_sign.into(),
+            slash_fraction_downtime: slash_fraction_downtime.into(),
+            downtime_jail_seconds: DOWNTIME_JAIL_SECONDS,
             validators: Default::default(),
+            unbonding_delegation_queue: Default::default(),
         }
     }
 }
@@ -209,19 +297,17 @@ impl<S: Symbol> Staking<S> {
         coins: Coin<S>,
     ) -> Result<()> {
         let _ = self.consensus_key(val_address)?;
-        let mut validator = self.validators.get_mut(val_address)?;
-        if validator.jailed {
-            return Err(Error::Coins("Cannot delegate to jailed validator".into()));
+        {
+            let mut validator = self.validators.get_mut(val_address)?;
+            let mut delegator = validator.get_mut(delegator_address)?;
+            delegator.add_stake(coins)?;
+            if val_address == delegator_address {
+                drop(delegator);
+                validator.update_self_delegation()?;
+            }
         }
-        let mut delegator = validator.get_mut(delegator_address)?;
-        delegator.add_stake(coins)?;
-        drop(delegator);
-        let voting_power = validator.staked()?.into();
-        drop(validator);
 
-        self.set_potential_voting_power(val_address, voting_power)?;
-
-        Ok(())
+        self.update_vp(val_address)
     }
 
     fn consensus_key(&self, val_address: Address) -> Result<[u8; 32]> {
@@ -233,11 +319,15 @@ impl<S: Symbol> Staking<S> {
         Ok(consensus_key)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn declare(
         &mut self,
         val_address: Address,
         consensus_key: [u8; 32],
         commission: Decimal,
+        commission_max: Decimal,
+        commission_max_change: Decimal,
+        min_self_delegation: Amount,
         validator_info: ValidatorInfo,
         coins: Coin<S>,
     ) -> Result<()> {
@@ -245,7 +335,7 @@ impl<S: Symbol> Staking<S> {
         if declared {
             return Err(Error::Coins("Validator is already declared".into()));
         }
-        if coins.amount < self.min_self_delegation {
+        if coins.amount < min_self_delegation {
             return Err(Error::Coins("Insufficient self-delegation".into()));
         }
         let tm_hash = tm_pubkey_hash(consensus_key)?;
@@ -255,12 +345,28 @@ impl<S: Symbol> Staking<S> {
                 "Tendermint public key is already in use".into(),
             ));
         }
-        use rust_decimal_macros::dec;
-        let max_comm: Decimal = dec!(1.0).into();
-        let min_comm: Decimal = dec!(0.0).into();
-        if commission < min_comm || commission > max_comm {
-            return Err(Error::Coins("Commission must be between 0 and 1".into()));
+
+        if commission < Decimal::zero() || commission > commission_max {
+            return Err(Error::Coins(
+                "Initial commission must be between 0 and max commission".into(),
+            ));
         }
+        if commission_max < Decimal::zero() || commission_max > Decimal::one() {
+            return Err(Error::Coins(
+                "Max commission must be between 0 and 1".into(),
+            ));
+        }
+        if commission_max_change < Decimal::zero() || commission_max_change > commission_max {
+            return Err(Error::Coins(
+                "Max commission change must be between 0 and max commission".into(),
+            ));
+        }
+        if min_self_delegation < self.min_self_delegation_min {
+            return Err(Error::Coins(
+                "Min self-delegation setting is too small".into(),
+            ));
+        }
+
         self.consensus_keys
             .insert(val_address, consensus_key.into())?;
 
@@ -268,12 +374,62 @@ impl<S: Symbol> Staking<S> {
             .insert(tm_hash, val_address.into())?;
 
         let mut validator = self.validators.get_mut(val_address)?;
-        validator.commission = commission;
-        validator.info = validator_info;
+        validator.commission.rate = commission;
+        validator.commission.max = commission_max;
+        validator.commission.max_change = commission_max_change;
+        validator.min_self_delegation = min_self_delegation;
         validator.address = val_address;
+        validator.info = validator_info;
+        validator.last_edited_seconds = i32::MIN as i64;
         drop(validator);
 
-        self.delegate(val_address, val_address, coins)?;
+        self.delegate(val_address, val_address, coins)
+    }
+
+    pub fn edit_validator(
+        &mut self,
+        val_address: Address,
+        commission: Decimal,
+        min_self_delegation: Amount,
+        validator_info: ValidatorInfo,
+    ) -> Result<()> {
+        let now = self.current_seconds()?;
+        let mut validator = self.validators.get_mut(val_address)?;
+
+        if validator.self_delegation < min_self_delegation {
+            return Err(Error::Coins(
+                "Min self-delegation cannot exceed current staked amount".into(),
+            ));
+        }
+
+        if min_self_delegation < validator.min_self_delegation {
+            return Err(Error::Coins(
+                "Min self-delegation setting may not decrease".into(),
+            ));
+        }
+
+        if commission < Decimal::zero() || commission > validator.commission.max {
+            return Err(Error::Coins(
+                "Commission must be between 0 and max commission".into(),
+            ));
+        }
+        let change = (commission - validator.commission.rate)?.abs();
+        if change > validator.commission.max_change {
+            return Err(Error::Coins(
+                "Commission change is greater than the validator's commission max change setting"
+                    .into(),
+            ));
+        }
+        if now - (EDIT_INTERVAL_SECONDS as i64) < validator.last_edited_seconds {
+            return Err(Error::Coins(
+                "Validators may only be edited once per 24 hours".into(),
+            ));
+        }
+        validator.commission.rate = commission;
+        validator.info = validator_info;
+        validator.min_self_delegation = min_self_delegation;
+
+        validator.last_edited_seconds = now;
 
         Ok(())
     }
@@ -283,41 +439,34 @@ impl<S: Symbol> Staking<S> {
     }
 
     pub fn set_min_self_delegation(&mut self, min_self_delegation: u64) {
-        self.min_self_delegation = min_self_delegation;
+        self.min_self_delegation_min = min_self_delegation;
     }
 
     pub fn set_max_validators(&mut self, max_validators: u64) {
         self.max_validators = max_validators;
     }
 
-    pub fn slash<A: Into<Amount>>(&mut self, val_address: Address, amount: A) -> Result<Coin<S>> {
-        let _consensus_key = self.consensus_key(val_address)?;
-        let jailed = self.get_mut(val_address)?.jailed;
-
-        let amount = amount.into();
-        let mut validator = self.get_mut(val_address)?;
-        let slashed_coins = validator.slash(amount)?;
-        drop(validator);
-
-        if !jailed {
-            self.set_potential_voting_power(val_address, 0)?;
+    fn punish_downtime(&mut self, val_address: Address) -> Result<()> {
+        {
+            let mut validator = self.validators.get_mut(val_address)?;
+            validator.jail_for_seconds(self.downtime_jail_seconds)?;
+            validator.slash(self.slash_fraction_downtime)?;
         }
-
-        Ok(slashed_coins)
+        self.update_vp(val_address)
     }
 
-    pub fn slashable_balance(&mut self, val_address: Address) -> Result<Amount> {
-        let mut validator = self.validators.get_mut(val_address)?;
-        let mut sum: Decimal = 0.into();
-        let delegator_keys = validator.delegator_keys()?;
-        delegator_keys.iter().try_for_each(|k| -> Result<_> {
-            let mut delegator = validator.get_mut(*k)?;
-            sum = (sum + delegator.slashable_balance()?)?;
+    fn punish_double_sign(&mut self, val_address: Address) -> Result<()> {
+        {
+            let mut validator = self.validators.get_mut(val_address)?;
+            validator.jail_forever();
+            validator.slash(self.slash_fraction_double_sign)?;
+        }
+        self.update_vp(val_address)
+    }
 
-            Ok(())
-        })?;
-
-        sum.amount()
+    fn punish_light_client_attack(&mut self, val_address: Address) -> Result<()> {
+        // Currently the same punishment as double sign evidence
+        self.punish_double_sign(val_address)
     }
 
     pub fn withdraw<A: Into<Amount>>(
@@ -336,33 +485,52 @@ impl<S: Symbol> Staking<S> {
 
     pub fn unbond<A: Into<Amount>>(
         &mut self,
-        val_address: Address,
+        validator_address: Address,
         delegator_address: Address,
         amount: A,
     ) -> Result<()> {
-        let amount = amount.into();
-        let mut validator = self.validators.get_mut(val_address)?;
-        let jailed = validator.jailed;
-        {
+        let start_seconds = {
+            let amount = amount.into();
+            let now = self.current_seconds()?;
+            let mut validator = self.validators.get_mut(validator_address)?;
+            let status = validator.status();
+            let start_seconds = match status {
+                Status::Unbonding { start_seconds } => Some(start_seconds),
+                Status::Bonded => Some(now),
+                Status::Unbonded => None,
+            };
             let mut delegator = validator.get_mut(delegator_address)?;
-            delegator.unbond(amount)?;
+
+            delegator.unbond(amount, start_seconds)?;
+            if validator_address == delegator_address {
+                drop(delegator);
+                validator.update_self_delegation()?;
+            }
+            start_seconds
+        };
+
+        if let Some(start_seconds) = start_seconds {
+            self.unbonding_delegation_queue.push_back(
+                UnbondingDelegationEntry {
+                    delegator_address,
+                    validator_address,
+                    start_seconds,
+                }
+                .into(),
+            )?;
         }
 
-        let vp = validator.staked()?.into();
-        drop(validator);
-
-        if !jailed {
-            self.set_potential_voting_power(val_address, vp)?;
-        }
-
-        Ok(())
+        self.update_vp(validator_address)
     }
 
     pub fn get(&self, val_address: Address) -> Result<PoolChild<Validator<S>, S>> {
         self.validators.get(val_address)
     }
 
-    fn get_mut(&mut self, val_address: Address) -> Result<PoolChildMut<Address, Validator<S>, S>> {
+    pub fn get_mut(
+        &mut self,
+        val_address: Address,
+    ) -> Result<PoolChildMut<Address, Validator<S>, S>> {
         self.validators.get_mut(val_address)
     }
 
@@ -403,17 +571,30 @@ impl<S: Symbol> Staking<S> {
     }
 
     #[call]
+    #[allow(clippy::too_many_arguments)]
     pub fn declare_self(
         &mut self,
         consensus_key: [u8; 32],
         commission: Decimal,
+        commission_max: Decimal,
+        commission_max_change: Decimal,
+        min_self_delegation: Amount,
         amount: Amount,
         validator_info: ValidatorInfo,
     ) -> Result<()> {
         assert_positive(amount)?;
         let signer = self.signer()?;
         let payment = self.paid()?.take(amount)?;
-        self.declare(signer, consensus_key, commission, validator_info, payment)
+        self.declare(
+            signer,
+            consensus_key,
+            commission,
+            commission_max,
+            commission_max_change,
+            min_self_delegation,
+            validator_info,
+            payment,
+        )
     }
 
     #[call]
@@ -449,6 +630,30 @@ impl<S: Symbol> Staking<S> {
         Ok(())
     }
 
+    #[call]
+    pub fn unjail(&mut self) -> Result<()> {
+        let signer = self.signer()?;
+        {
+            let mut validator = self.validators.get_mut(signer)?;
+            validator.try_unjail()?;
+        }
+
+        self.update_vp(signer)
+    }
+
+    #[call]
+    pub fn edit_validator_self(
+        &mut self,
+        commission: Decimal,
+        min_self_delegation: Amount,
+        validator_info: ValidatorInfo,
+    ) -> Result<()> {
+        let val_address = self.signer()?;
+        let _ = self.consensus_key(val_address)?;
+
+        self.edit_validator(val_address, commission, min_self_delegation, validator_info)
+    }
+
     fn signer(&mut self) -> Result<Address> {
         self.context::<Signer>()
             .ok_or_else(|| Error::Coins("No Signer context available".into()))?
@@ -459,6 +664,20 @@ impl<S: Symbol> Staking<S> {
     fn paid(&mut self) -> Result<&mut Paid> {
         self.context::<Paid>()
             .ok_or_else(|| Error::Coins("No Payment context available".into()))
+    }
+
+    fn update_vp(&mut self, val_address: Address) -> Result<()> {
+        let mut validator = self.validators.get_mut(val_address)?;
+
+        if validator.jailed {
+            drop(validator);
+            self.set_potential_voting_power(val_address, 0)
+        } else {
+            let vp = validator.staked()?.into();
+            drop(validator);
+
+            self.set_potential_voting_power(val_address, vp)
+        }
     }
 
     fn set_potential_voting_power(&mut self, address: Address, power: u64) -> Result<()> {
@@ -477,8 +696,61 @@ impl<S: Symbol> Staking<S> {
         self.last_indexed_power.insert(address, power)
     }
 
+    fn process_all_queues(&mut self) -> Result<()> {
+        self.process_validator_queue()?;
+        self.process_unbonding_delegation_queue()?;
+        self.process_redelegation_queue()
+    }
+
+    fn process_validator_queue(&mut self) -> Result<()> {
+        let now = self.current_seconds()?;
+        let mut entries_to_unbond: Vec<ValidatorQueueEntry> = vec![];
+        for entry in self.validator_queue.iter()? {
+            let entry = entry?;
+            let matured = now - entry.start_seconds >= self.unbonding_seconds as i64;
+            if matured {
+                entries_to_unbond.push(entry.clone());
+            } else {
+                break;
+            }
+        }
+
+        for entry in entries_to_unbond.into_iter() {
+            self.transition_to_unbonded(entry.address_bytes.into())?;
+            self.validator_queue.delete(entry)?;
+        }
+
+        Ok(())
+    }
+
+    fn process_unbonding_delegation_queue(&mut self) -> Result<()> {
+        let now = self.current_seconds()?;
+
+        while let Some(unbond) = self.unbonding_delegation_queue.front()? {
+            let matured = now - unbond.start_seconds >= self.unbonding_seconds as i64;
+            if matured {
+                let unbond = self
+                    .unbonding_delegation_queue
+                    .pop_front()?
+                    .ok_or_else(|| Error::Coins("Unbonding delegation queue is empty".into()))?;
+                let mut validator = self.validators.get_mut(unbond.validator_address)?;
+                let mut delegator = validator.get_mut(unbond.delegator_address)?;
+                delegator.process_unbonds()?;
+            } else {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn process_redelegation_queue(&mut self) -> Result<()> {
+        Ok(())
+    }
+
     #[cfg(feature = "abci")]
     fn end_block_step(&mut self) -> Result<()> {
+        self.process_all_queues()?;
         use std::collections::HashSet;
         let max_vals = self.max_validators;
         let mut new_val_entries: Vec<(Address, u64)> = vec![];
@@ -531,7 +803,20 @@ impl<S: Symbol> Staking<S> {
         // proper fee accounting
         for (address, power) in new_power_updates.iter() {
             let mut validator = self.validators.get_mut(*address)?;
+            let in_active_set_before = validator.in_active_set;
             validator.in_active_set = *power > 0;
+            let in_active_set_now = validator.in_active_set;
+            drop(validator);
+
+            match (in_active_set_before, in_active_set_now) {
+                (true, false) => {
+                    self.transition_to_unbonding(*address)?;
+                } // removed from active set
+                (false, true) => {
+                    self.transition_to_bonded(*address)?;
+                } // added to active set
+                _ => {}
+            }
         }
 
         // Map to consensus key before we send back the updates
@@ -562,6 +847,41 @@ impl<S: Symbol> Staking<S> {
         }
 
         Ok(())
+    }
+
+    fn transition_to_bonded(&mut self, val_address: Address) -> Result<()> {
+        let mut validator = self.validators.get_mut(val_address)?;
+        validator.unbonding = false;
+        self.validator_queue.remove_by_address(val_address)
+    }
+
+    fn transition_to_unbonding(&mut self, val_address: Address) -> Result<()> {
+        let now = self.current_seconds()?;
+        {
+            let mut validator = self.validators.get_mut(val_address)?;
+            validator.unbonding = true;
+            validator.unbonding_start_seconds = now;
+        }
+
+        self.validator_queue.insert(ValidatorQueueEntry {
+            start_seconds: now,
+            address_bytes: val_address.bytes(),
+        })
+    }
+
+    fn transition_to_unbonded(&mut self, val_address: Address) -> Result<()> {
+        let mut validator = self.validators.get_mut(val_address)?;
+        validator.unbonding = false;
+
+        Ok(())
+    }
+
+    fn current_seconds(&mut self) -> Result<i64> {
+        let time = self
+            .context::<Time>()
+            .ok_or_else(|| Error::Coins("No Time context available".into()))?;
+
+        Ok(time.seconds)
     }
 }
 
@@ -610,6 +930,7 @@ mod tests {
     fn staking() -> Result<()> {
         let store = Store::new(Shared::new(MapStore::new()).into());
         let mut staking: Staking<Simp> = Staking::create(store, Default::default())?;
+        staking.slash_fraction_downtime = (Amount::new(1) / Amount::new(2))?;
 
         let alice = Address::from_pubkey([0; 33]);
         let alice_con = [4; 32];
@@ -629,19 +950,55 @@ mod tests {
         staking
             .delegate(alice, alice, Coin::mint(100))
             .expect_err("Should not be able to delegate to an undeclared validator");
-        staking.declare(alice, alice_con, dec!(0.0).into(), vec![].into(), 50.into())?;
+        staking.declare(
+            alice,
+            alice_con,
+            dec!(0.0).into(),
+            dec!(1.0).into(),
+            dec!(0.1).into(),
+            0.into(),
+            vec![].into(),
+            50.into(),
+        )?;
         staking
-            .declare(alice, alice_con, dec!(0.0).into(), vec![].into(), 50.into())
+            .declare(
+                alice,
+                alice_con,
+                dec!(0.0).into(),
+                dec!(1.0).into(),
+                dec!(0.1).into(),
+                0.into(),
+                vec![].into(),
+                50.into(),
+            )
             .expect_err("Should not be able to redeclare validator");
         staking
-            .declare(carol, alice_con, dec!(0.0).into(), vec![].into(), 50.into())
+            .declare(
+                carol,
+                alice_con,
+                dec!(0.0).into(),
+                dec!(1.0).into(),
+                dec!(0.1).into(),
+                0.into(),
+                vec![].into(),
+                50.into(),
+            )
             .expect_err("Should not be able to declare using an existing consensus key");
 
         staking.end_block_step()?;
         assert_eq!(staking.staked()?, 50);
         staking.delegate(alice, alice, Coin::mint(50))?;
         assert_eq!(staking.staked()?, 100);
-        staking.declare(bob, bob_con, dec!(0.0).into(), vec![].into(), 50.into())?;
+        staking.declare(
+            bob,
+            bob_con,
+            dec!(0.0).into(),
+            dec!(1.0).into(),
+            dec!(0.1).into(),
+            0.into(),
+            vec![].into(),
+            50.into(),
+        )?;
         staking.end_block_step()?;
         assert_eq!(staking.staked()?, 150);
 
@@ -694,23 +1051,16 @@ mod tests {
         assert_eq!(bob_vp, 1000);
 
         // Bob gets slashed 50%
-        let slashed_coins = staking.slash(bob, 500)?;
-        assert_eq!(slashed_coins.amount, 500);
-        slashed_coins.burn();
-
-        // Make sure it's now impossible to delegate to Bob
-        staking
-            .delegate(bob, alice, 200.into())
-            .expect_err("Should not be able to delegate to jailed validator");
-        staking
-            .delegate(bob, bob, 200.into())
-            .expect_err("Should not be able to delegate to jailed validator");
+        staking.punish_downtime(bob)?;
 
         staking.end_block_step()?;
         // Bob has been jailed and should no longer have any voting power
         let bob_vp = ctx.updates.get(&bob_con).unwrap().power;
         assert_eq!(bob_vp, 0);
 
+        staking
+            .withdraw(bob, dave, 401)
+            .expect_err("Dave has not unbonded coins yet");
         // Bob's staked coins should no longer be present in the global staking
         // balance
         assert_eq!(staking.staked()?, 100);
@@ -766,25 +1116,28 @@ mod tests {
             .unbond(bob, dave, 401)
             .expect_err("Dave should only have 400 unbondable coins");
 
-        assert_eq!(staking.slashable_balance(bob)?, 200);
         staking.unbond(bob, dave, 200)?;
         // Bob slashed another 50% while Dave unbonds
-        assert_eq!(staking.slashable_balance(bob)?, 200);
-        staking.slash(bob, 100)?.burn();
-        assert_eq!(staking.slashable_balance(bob)?, 100);
-        staking
-            .withdraw(bob, dave, 401)
-            .expect_err("Dave cannot take coins yet");
+        staking.punish_downtime(bob)?;
+        // dbg!(&staking.get_mut(bob)?.get_mut(dave)?.liquid);
+
         Context::add(Time::from_seconds(40));
         staking
             .withdraw(bob, dave, 501)
             .expect_err("Dave cannot take so many coins");
-        assert_eq!(staking.slashable_balance(bob)?, 0);
         staking.withdraw(bob, dave, 500)?.burn();
-        assert_eq!(staking.slashable_balance(bob)?, 0);
 
         assert_eq!(staking.staked()?, 100);
-        staking.declare(dave, dave_con, dec!(0.0).into(), vec![].into(), 300.into())?;
+        staking.declare(
+            dave,
+            dave_con,
+            dec!(0.0).into(),
+            dec!(1.0).into(),
+            dec!(0.1).into(),
+            0.into(),
+            vec![].into(),
+            300.into(),
+        )?;
         staking.end_block_step()?;
         assert_eq!(staking.staked()?, 400);
         staking.end_block_step()?;
@@ -808,6 +1161,9 @@ mod tests {
             edith,
             edith_con,
             dec!(0.5).into(),
+            dec!(1.0).into(),
+            dec!(0.2).into(),
+            0.into(),
             vec![].into(),
             550.into(),
         )?;
@@ -821,10 +1177,9 @@ mod tests {
         let carol_liquid = staking.get(edith)?.get(carol)?.liquid.amount()?;
         assert_eq!(carol_liquid, 125);
 
-        staking.slash(dave, 0)?.burn();
+        staking.punish_double_sign(dave)?;
         staking.end_block_step()?;
         assert_eq!(ctx.updates.get(&dave_con).unwrap().power, 0);
-        staking.slash(dave, 0)?.burn();
 
         Ok(())
     }
@@ -846,6 +1201,9 @@ mod tests {
                 Address::from_pubkey([i; 33]),
                 [i; 32],
                 dec!(0.0).into(),
+                dec!(1.0).into(),
+                dec!(0.1).into(),
+                0.into(),
                 vec![].into(),
                 Amount::new(i as u64 * 100).into(),
             )?;
@@ -885,6 +1243,9 @@ mod tests {
             Address::from_pubkey([10; 33]),
             [10; 32],
             dec!(0.0).into(),
+            dec!(1.0).into(),
+            dec!(0.1).into(),
+            0.into(),
             vec![].into(),
             Amount::new(1000).into(),
         )?;

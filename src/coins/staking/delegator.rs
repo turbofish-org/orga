@@ -13,31 +13,39 @@ pub struct Unbond<S: Symbol> {
     pub(super) coins: Share<S>,
     pub(super) start_seconds: i64,
 }
+
+#[derive(State)]
+pub struct Redelegation<S: Symbol> {
+    pub(super) coins: Share<S>,
+    pub(super) start_seconds: i64,
+}
+
 #[derive(State)]
 pub struct Delegator<S: Symbol> {
     pub(super) liquid: Share<S>,
     pub(super) staked: Share<S>,
     pub(super) jailed: bool,
     pub(super) unbonding: Deque<Unbond<S>>,
+    pub(super) redelegations: Deque<Redelegation<S>>,
 }
 
 impl<S: Symbol> Delegator<S> {
-    pub(super) fn unbond<A: Into<Amount>>(&mut self, amount: A) -> Result<()> {
+    pub(super) fn unbond<A: Into<Amount>>(
+        &mut self,
+        amount: A,
+        start_seconds: Option<i64>,
+    ) -> Result<()> {
         let amount = amount.into();
         let coins = self.staked.take(amount)?.into();
-
-        let start_seconds = self
-            .context::<Time>()
-            .ok_or_else(|| Error::Coins("No Time context available".into()))?
-            .seconds;
-
-        let unbond = Unbond {
-            coins,
-            start_seconds,
-        };
-        self.unbonding.push_back(unbond.into())?;
-
-        Ok(())
+        if let Some(start_seconds) = start_seconds {
+            let unbond = Unbond {
+                coins,
+                start_seconds,
+            };
+            self.unbonding.push_back(unbond.into())
+        } else {
+            self.liquid.give(amount.into())
+        }
     }
 
     pub(super) fn info(&self) -> Result<DelegationInfo> {

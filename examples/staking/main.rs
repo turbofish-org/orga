@@ -3,6 +3,7 @@
 #![feature(async_closure)]
 
 use orga::prelude::*;
+use rust_decimal_macros::dec;
 
 #[derive(State, Debug, Clone)]
 pub struct MyCoin(());
@@ -103,7 +104,10 @@ async fn main() {
         .staking
         .declare_self(
             my_tm_key,
-            rust_decimal_macros::dec!(0.0).into(),
+            dec!(0.0).into(),
+            dec!(1.0).into(),
+            dec!(0.1).into(),
+            0.into(),
             350.into(),
             vec![].into(),
         )

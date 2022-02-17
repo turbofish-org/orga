@@ -1,22 +1,38 @@
 use crate::coins::pool::{Child as PoolChild, ChildMut as PoolChildMut};
 use crate::coins::{Address, Amount, Balance, Coin, Decimal, Give, Pool, Symbol};
+use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
+use crate::plugins::Time;
 use crate::state::State;
 use crate::store::Store;
-use crate::Result;
+use crate::{Error, Result};
 use ed::Terminated;
 
 use super::Delegator;
 
 type Delegators<S> = Pool<Address, Delegator<S>, S>;
+
 #[derive(State)]
 pub struct Validator<S: Symbol> {
     pub(super) jailed: bool,
+    pub(super) jailed_until: i64,
     pub(super) address: Address,
-    pub(super) commission: Decimal,
+    pub(super) commission: Commission,
     pub(super) delegators: Delegators<S>,
     pub(super) info: ValidatorInfo,
     pub(super) in_active_set: bool,
+    pub(super) unbonding: bool,
+    pub(super) unbonding_start_seconds: i64,
+    pub(super) last_edited_seconds: i64,
+    pub(super) min_self_delegation: Amount,
+    pub(super) self_delegation: Amount,
+}
+
+#[derive(State, Default)]
+pub struct Commission {
+    pub rate: Decimal,
+    pub max: Decimal,
+    pub max_change: Decimal,
 }
 
 #[derive(Encode, Decode)]
@@ -84,6 +100,13 @@ impl From<ValidatorInfo> for Vec<u8> {
     }
 }
 
+#[derive(Encode, Decode)]
+pub(super) enum Status {
+    Unbonded,
+    Bonded,
+    Unbonding { start_seconds: i64 },
+}
+
 impl<S: Symbol> Validator<S> {
     pub(super) fn get_mut(
         &mut self,
@@ -105,10 +128,47 @@ impl<S: Symbol> Validator<S> {
         res
     }
 
-    pub(super) fn slash(&mut self, amount: Amount) -> Result<Coin<S>> {
+    pub(super) fn status(&self) -> Status {
+        if self.unbonding {
+            Status::Unbonding {
+                start_seconds: self.unbonding_start_seconds,
+            }
+        } else if self.in_active_set {
+            Status::Bonded
+        } else {
+            Status::Unbonded
+        }
+    }
+
+    pub(super) fn jail_for_seconds(&mut self, seconds: u64) -> Result<()> {
         self.jailed = true;
+        let now = self.current_seconds()?;
+        self.jailed_until = (now + seconds as i64).max(self.jailed_until);
+
+        Ok(())
+    }
+
+    pub(super) fn jail_forever(&mut self) {
+        self.jailed = true;
+        self.jailed_until = i64::MAX;
+    }
+
+    pub(super) fn try_unjail(&mut self) -> Result<()> {
+        if !self.jailed {
+            return Err(Error::Coins("Validator is not jailed".into()));
+        }
+        let now = self.current_seconds()?;
+        if now > self.jailed_until {
+            self.jailed = false;
+            Ok(())
+        } else {
+            Err(Error::Coins("Validator cannot yet unjail".into()))
+        }
+    }
+
+    pub(super) fn slash(&mut self, penalty: Decimal) -> Result<()> {
         let one: Decimal = 1.into();
-        let slash_multiplier = (one - (amount / self.slashable_balance()?))?;
+        let slash_multiplier = (one - penalty)?;
         let delegator_keys = self.delegator_keys()?;
         delegator_keys.iter().try_for_each(|k| -> Result<()> {
             let mut delegator = self.get_mut(*k)?;
@@ -116,7 +176,7 @@ impl<S: Symbol> Validator<S> {
             Ok(())
         })?;
 
-        Ok(amount.into())
+        self.update_self_delegation()
     }
 
     pub fn slashable_balance(&mut self) -> Result<Amount> {
@@ -150,17 +210,38 @@ impl<S: Symbol> Validator<S> {
         Ok(ValidatorQueryInfo {
             jailed: self.jailed,
             address: self.address,
-            commission: self.commission,
+            commission: self.commission.rate,
             in_active_set: self.in_active_set,
             info: self.info.clone(),
             amount_staked: self.delegators.balance()?.amount()?,
         })
     }
+
+    fn current_seconds(&mut self) -> Result<i64> {
+        let time = self
+            .context::<Time>()
+            .ok_or_else(|| Error::Coins("No Time context available".into()))?;
+
+        Ok(time.seconds)
+    }
+
+    pub(super) fn update_self_delegation(&mut self) -> Result<()> {
+        let self_delegator = self.get_mut(self.address)?;
+        let self_delegation = self_delegator.staked.amount()?;
+        drop(self_delegator);
+        self.self_delegation = self_delegation;
+
+        Ok(())
+    }
+
+    fn below_required_self_delegation(&self) -> bool {
+        self.self_delegation < self.min_self_delegation
+    }
 }
 
 impl<S: Symbol> Balance<S, Decimal> for Validator<S> {
     fn balance(&self) -> Result<Decimal> {
-        if self.jailed || !self.in_active_set {
+        if self.jailed || !self.in_active_set || self.below_required_self_delegation() {
             Ok(0.into())
         } else {
             self.delegators.balance()
@@ -171,8 +252,8 @@ impl<S: Symbol> Balance<S, Decimal> for Validator<S> {
 impl<S: Symbol> Give<S> for Validator<S> {
     fn give(&mut self, coins: Coin<S>) -> Result<()> {
         let one: Decimal = 1.into();
-        let delegator_amount = (coins.amount * (one - self.commission))?.amount()?;
-        let validator_amount = (coins.amount * self.commission)?.amount()?;
+        let delegator_amount = (coins.amount * (one - self.commission.rate))?.amount()?;
+        let validator_amount = (coins.amount * self.commission.rate)?.amount()?;
 
         self.delegators.give(delegator_amount.into())?;
         self.delegators
