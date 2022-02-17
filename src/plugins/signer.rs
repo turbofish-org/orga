@@ -104,8 +104,7 @@ where
     T: Deref<Target = U>,
     U: GetNonce,
 {
-    fn sdk_sign_bytes(&mut self, tx: &SdkTx) -> Result<Vec<u8>> {
-        let address = Address::from_pubkey(tx.sender_pubkey()?);
+    fn sdk_sign_bytes(&mut self, tx: &SdkTx, address: Address) -> Result<Vec<u8>> {
         let nonce = self.inner.nonce(address)? + 1;
         let chain_id = self
             .context::<ChainId>()
@@ -126,7 +125,7 @@ where
                 let bytes = match &call.sigtype {
                     SigType::Native => call.call_bytes.to_vec(),
                     SigType::Adr36 => adr36_bytes(call.call_bytes.as_slice(), address)?,
-                    SigType::Sdk(tx) => self.sdk_sign_bytes(tx)?,
+                    SigType::Sdk(tx) => self.sdk_sign_bytes(tx, address)?,
                 };
 
                 let msg = Message::from_hashed_data::<sha256::Hash>(bytes.as_slice());
