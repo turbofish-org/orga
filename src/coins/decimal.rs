@@ -71,6 +71,18 @@ impl Decimal {
             }
         }
     }
+
+    pub fn abs(&self) -> Self {
+        Self(self.0.abs())
+    }
+
+    pub fn zero() -> Self {
+        Self(NumDecimal::ZERO)
+    }
+
+    pub fn one() -> Self {
+        Self(NumDecimal::ONE)
+    }
 }
 
 #[derive(Encode, Decode)]
