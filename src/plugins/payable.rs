@@ -1,6 +1,6 @@
 use super::sdk_compat::{sdk::Tx as SdkTx, ConvertSdkTx};
 use crate::call::Call;
-use crate::client::{AsyncCall, Client};
+use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Amount, Coin, Symbol};
 use crate::context::{Context, GetContext};
 use crate::encoding::{Decode, Encode};
@@ -191,6 +191,23 @@ where
         let res = self.parent.call(PayableCall::Unpaid(call));
 
         res.await
+    }
+}
+
+#[async_trait::async_trait(?Send)]
+impl<T: Query, U: AsyncQuery<Query = T::Query> + Clone> AsyncQuery for UnpaidAdapter<T, U>
+where
+    T::Query: Send,
+    U: Send,
+{
+    type Query = U::Query;
+    type Response = U::Response;
+
+    async fn query<F, R>(&self, query: Self::Query, check: F) -> Result<R>
+    where
+        F: FnMut(&Self::Response) -> Result<R>
+    {
+        self.parent.query(query, check).await
     }
 }
 

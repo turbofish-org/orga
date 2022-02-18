@@ -1,19 +1,12 @@
 use crate::query::Query;
+use crate::client::Client;
 use crate::state::State;
 use crate::{Error, Result};
 use ed::{Decode, Encode};
 use std::convert::TryFrom;
 
-#[derive(State, Encode, Decode, Debug, Default, Clone, Copy)]
+#[derive(State, Encode, Decode, Debug, Default, Clone, Copy, Query, Client)]
 pub struct Amount(pub(crate) u64);
-
-impl Query for Amount {
-    type Query = ();
-
-    fn query(&self, _: ()) -> Result<()> {
-        Ok(())
-    }
-}
 
 impl std::fmt::Display for Amount {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

@@ -3,12 +3,13 @@
 // use crate::Error;
 use crate::Result;
 
+pub use crate::call::Call;
 pub use crate::macros::Client;
-pub use call_chain::CallChain;
+pub use chain::{CallChain, QueryChain};
 pub use mock::Mock;
 pub use primitive_client::PrimitiveClient;
 
-mod call_chain;
+mod chain;
 mod mock;
 mod primitive_client;
 
@@ -43,6 +44,24 @@ primitive_impl!(i16);
 primitive_impl!(i32);
 primitive_impl!(i64);
 primitive_impl!(i128);
+
+// TODO: handle arrays of complex types
+impl<T, U: Clone, const N: usize> Client<U> for [T; N] {
+    type Client = PrimitiveClient<Self, U>;
+
+    fn create_client(parent: U) -> Self::Client {
+        PrimitiveClient::new(parent)
+    }
+}
+
+// TODO: handle vecs of complex types
+impl<T, U: Clone> Client<U> for Vec<T> {
+    type Client = PrimitiveClient<Self, U>;
+
+    fn create_client(parent: U) -> Self::Client {
+        PrimitiveClient::new(parent)
+    }
+}
 
 macro_rules! transparent_impl {
     ( $x:ty ) => {
@@ -81,9 +100,9 @@ pub trait AsyncQuery {
     type Query;
     type Response;
 
-    async fn query<F>(&self, query: Self::Query, check: F) -> Result<&Self::Response>
+    async fn query<F, R>(&self, query: Self::Query, check: F) -> Result<R>
     where
-        F: FnMut(&Self::Response) -> Result<()>;
+        F: FnMut(&Self::Response) -> Result<R>;
 }
 
 // TODO: support deriving for types inside module in macros, then move this into

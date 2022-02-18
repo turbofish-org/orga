@@ -1,6 +1,6 @@
 use super::{NonceCall, PaidCall, PayableCall, SigType, SignerCall};
 use crate::call::Call as CallTrait;
-use crate::client::{AsyncCall, Client};
+use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Address, Symbol};
 use crate::context::{Context, GetContext};
 use crate::encoding::{Decode, Encode};
@@ -254,6 +254,23 @@ where
 
     async fn call(&mut self, call: Self::Call) -> Result<()> {
         self.parent.call(Call::Native(call)).await
+    }
+}
+
+#[async_trait::async_trait(?Send)]
+impl<T: Query, U: AsyncQuery<Query = T::Query> + Clone> AsyncQuery for SdkCompatAdapter<T, U>
+where
+    T::Query: Send,
+    U: Send,
+{
+    type Query = U::Query;
+    type Response = U::Response;
+
+    async fn query<F, R>(&self, query: Self::Query, check: F) -> Result<R>
+    where
+        F: FnMut(&Self::Response) -> Result<R>
+    {
+        self.parent.query(query, check).await
     }
 }
 

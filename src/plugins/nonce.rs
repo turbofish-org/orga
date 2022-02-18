@@ -5,7 +5,7 @@ use crate::coins::Address;
 use crate::collections::Map;
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
-use crate::prelude::AsyncCall;
+use crate::client::{AsyncCall, AsyncQuery};
 use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
@@ -174,6 +174,23 @@ where
         write_nonce(nonce + 1)?;
 
         res.await
+    }
+}
+
+#[async_trait::async_trait(?Send)]
+impl<T: Query, U: AsyncQuery<Query = T::Query> + Clone> AsyncQuery for NonceAdapter<T, U>
+where
+    T::Query: Send,
+    U: Send,
+{
+    type Query = U::Query;
+    type Response = U::Response;
+
+    async fn query<F, R>(&self, query: Self::Query, check: F) -> Result<R>
+    where
+        F: FnMut(&Self::Response) -> Result<R>
+    {
+        self.parent.query(query, check).await
     }
 }
 

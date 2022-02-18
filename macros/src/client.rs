@@ -325,6 +325,150 @@ fn create_client_struct(
                 }
             });
 
+
+    let query_method_impls_and_adapters =
+    relevant_methods(name, "query", source)
+        .into_iter()
+        .map(|(method, impl_item)| {
+            let method_name = &method.sig.ident;
+
+            let method_inputs = &method.sig.inputs;
+            let arg_types: Vec<_> = method_inputs
+                .iter()
+                .filter_map(|arg| match arg {
+                    FnArg::Typed(arg) => Some(arg.ty.clone()),
+                    _ => None,
+                })
+                .map(|ty| quote!(#ty))
+                .collect();
+            let unrolled_args: Vec<_> = (0..arg_types.len()).map(|i| {
+                let i = Literal::usize_unsuffixed(i);
+                quote!(cloned_args.#i)
+            }).collect();
+            let method_input_names = method_inputs
+                .iter()
+                .filter_map(|arg| match arg {
+                    FnArg::Typed(arg) => Some(arg.pat.clone()),
+                    _ => None,
+                })
+                .map(|pat| quote!(#pat));
+
+            let adapter_name = Ident::new(
+                format!("Method{}Adapter", method_name.to_string().to_camel_case()).as_str(),
+                Span::call_site(),
+            );
+            let query_variant_name = Ident::new(
+                format!("Method{}", method_name.to_string().to_camel_case()).as_str(),
+                Span::call_site(),
+            );
+
+            let output_ty = match method.sig.output.clone() {
+                ReturnType::Default => quote!(()),
+                ReturnType::Type(_, mut ty) => {
+                    add_static_lifetimes(&mut ty);
+                    quote!(#ty)
+                },
+            };
+            let method_output = quote!(
+                ::orga::client::QueryChain<
+                    <#output_ty as ::orga::client::Client<#adapter_name<#generic_params #output_ty, #parent_ty>>>::Client,
+                    #adapter_name<#generic_params #output_ty, #parent_ty>,
+                >
+            );
+
+            let impl_preds = impl_item
+                .generics
+                .where_clause
+                .as_ref()
+                .map(|w| &w.predicates);
+
+            let source = parse_parent();
+            let query_enum = super::query::create_query_enum(&item, &source).1;
+            let query_impl = super::query::create_query_impl(&item, &source, &query_enum).1;
+            let query_preds = query_impl.generics.where_clause.as_ref().map(|w| &w.predicates);
+
+            quote! {
+                pub struct #adapter_name#generics_with_return_and_parent
+                where
+                    #parent_ty: Clone + Send,
+                    #parent_ty: ::orga::client::AsyncQuery<Query = <#name#generic_params_bracketed as ::orga::query::Query>::Query>,
+                    #parent_ty: ::orga::client::AsyncQuery<Response = #name#generic_params_bracketed>,
+                {
+                    pub(super) parent: #parent_ty,
+                    args: (#(#arg_types,)*),
+                    _marker: std::marker::PhantomData<fn() -> (#name#generic_params_bracketed, __Return)>,
+                }
+
+                impl#generics_sanitized_with_return Clone for #adapter_name<#generic_params __Return, #parent_ty>
+                where
+                    #parent_ty: Clone + Send,
+                    #parent_ty: ::orga::client::AsyncQuery<Query = <#name#generic_params_bracketed as ::orga::query::Query>::Query>,
+                    #parent_ty: ::orga::client::AsyncQuery<Response = #name#generic_params_bracketed>,
+                    #query_preds
+                {
+                    fn clone(&self) -> Self {
+                        let encoded_args = ::orga::encoding::Encode::encode(&self.args).unwrap();
+                        let cloned_args = ::orga::encoding::Decode::decode(encoded_args.as_slice()).unwrap();
+                        Self {
+                            parent: self.parent.clone(),
+                            args: cloned_args,
+                            _marker: std::marker::PhantomData,
+                        }
+                    }
+                }
+
+                #[::orga::async_trait(?Send)]
+                impl#generics_sanitized_with_return ::orga::client::AsyncQuery for #adapter_name<#generic_params __Return, #parent_ty>
+                where
+                    #parent_ty: Clone + Send,
+                    #parent_ty: ::orga::client::AsyncQuery<Query = <#name#generic_params_bracketed as ::orga::query::Query>::Query>,
+                    #parent_ty: ::orga::client::AsyncQuery<Response = #name#generic_params_bracketed>,
+                    __Return: ::orga::query::Query,
+                    __Return: Send + Sync,
+                    #query_preds
+                {
+                    type Query = <__Return as ::orga::query::Query>::Query;
+                    type Response = #output_ty;
+
+                    async fn query<F, R>(&self, query: Self::Query, mut check: F) -> ::orga::Result<R>
+                    where
+                        F: FnMut(&Self::Response) -> ::orga::Result<R>
+                    {
+                        let encoded_args = ::orga::encoding::Encode::encode(&self.args).unwrap();
+                        let cloned_args: (
+                            #(#arg_types,)*
+                        ) = ::orga::encoding::Decode::decode(encoded_args.as_slice()).unwrap();
+                        let query_bytes = ::orga::encoding::Encode::encode(&query)?;
+                        let parent_query = <#name#generic_params_bracketed as ::orga::query::Query>::Query::#query_variant_name(
+                            #(#unrolled_args,)*
+                            query_bytes
+                        );
+                        self.parent.query(parent_query, |s| check(&s.#method_name(#(#unrolled_args,)*))).await
+                    }
+                }
+
+                impl#generics_sanitized Client<#generic_params #parent_ty>
+                where
+                    #parent_ty: Clone + Send,
+                    #parent_ty: ::orga::client::AsyncQuery<Query = <#name#generic_params_bracketed as ::orga::query::Query>::Query>,
+                    #parent_ty: ::orga::client::AsyncQuery<Response = #name#generic_params_bracketed>,
+                    #where_preds
+                    #impl_preds
+                    #query_preds
+                {
+                    pub fn #method_name(#method_inputs) -> #method_output {
+                        let adapter = #adapter_name {
+                            parent: self.parent.clone(),
+                            args: (#(#method_input_names,)*),
+                            _marker: std::marker::PhantomData,
+                        };
+                        let client = <#output_ty as ::orga::client::Client<#adapter_name<#generic_params _, #parent_ty>>>::create_client(adapter.clone());
+                        ::orga::client::QueryChain::new(client, adapter)
+                    }
+                }
+            }
+        });
+
     quote! {
         #[must_use]
         pub struct Client#generics_with_parent
@@ -367,6 +511,7 @@ fn create_client_struct(
         }
 
         #(#call_method_impls_and_adapters)*
+        #(#query_method_impls_and_adapters)*
     }
 }
 
@@ -413,6 +558,8 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
         .iter()
         .enumerate()
         .map(|(i, field)| {
+            let field_name = &field.ident;
+
             let struct_name = field.ident.as_ref().map_or(
                 Ident::new(format!("Field{}Adapter", i).as_str(), Span::call_site()),
                 |f| {
@@ -471,6 +618,27 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
                         let subcall_bytes = ::orga::encoding::Encode::encode(&call)?; // TODO: error handling
                         let subcall = <#item_ty as ::orga::call::Call>::Call::#variant_name(subcall_bytes);
                         self.parent.call(subcall).await
+                    }
+                }
+
+                #[::orga::async_trait(?Send)]
+                impl#generics_sanitized ::orga::client::AsyncQuery for #struct_name#generic_params_bracketed_with_parent
+                where
+                    #parent_client_ty: Clone + Send,
+                    #parent_client_ty: ::orga::client::AsyncQuery<Query = <#item_ty as ::orga::query::Query>::Query>,
+                    #parent_client_ty: ::orga::client::AsyncQuery<Response = #item_ty>,
+                {
+                    type Query = <#field_ty as ::orga::query::Query>::Query;
+                    type Response = #field_ty;
+        
+                    async fn query<F, R>(&self, query: Self::Query, mut check: F) -> ::orga::Result<R>
+                    where
+                        F: FnMut(&Self::Response) -> ::orga::Result<R>
+                    {
+                        // assumes that the query has a tuple variant called "Field" +
+                        // the camel-cased name as the field
+                        let subcall = <#item_ty as ::orga::query::Query>::Query::#variant_name(query);
+                        self.parent.query(subcall, |s| check(&s.#field_name)).await
                     }
                 }
             };
