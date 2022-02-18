@@ -155,6 +155,7 @@ impl<S: Symbol> State for Staking<S> {
         self.last_indexed_power.flush()?;
         self.validators_by_power.flush()?;
         self.address_for_tm_hash.flush()?;
+        self.validator_queue.flush()?;
         Ok(Self::Encoding {
             max_validators: self.max_validators,
             min_self_delegation_min: self.min_self_delegation_min,
@@ -603,6 +604,18 @@ impl<S: Symbol> Staking<S> {
         assert_positive(amount)?;
         let signer = self.signer()?;
         self.unbond(val_address, signer, amount)
+    }
+
+    #[call]
+    pub fn redelegate_self(
+        &mut self,
+        src_val_address: Address,
+        dst_val_address: Address,
+        amount: Amount,
+    ) -> Result<()> {
+        assert_positive(amount)?;
+        let signer = self.signer()?;
+        self.redelegate(src_val_address, dst_val_address, signer, amount)
     }
 
     #[call]
