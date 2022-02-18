@@ -24,7 +24,6 @@ pub struct Redelegation<S: Symbol> {
 pub struct Delegator<S: Symbol> {
     pub(super) liquid: Share<S>,
     pub(super) staked: Share<S>,
-    pub(super) jailed: bool,
     pub(super) unbonding: Deque<Unbond<S>>,
     pub(super) redelegations: Deque<Redelegation<S>>,
 }
@@ -66,21 +65,6 @@ impl<S: Symbol> Delegator<S> {
         })
     }
 
-    pub(super) fn slashable_balance(&mut self) -> Result<Decimal> {
-        self.process_unbonds()?;
-        let mut sum: Decimal = 0.into();
-        sum = (sum + self.staked.shares)?;
-        for i in 0..self.unbonding.len() {
-            let unbond = self
-                .unbonding
-                .get(i)?
-                .ok_or_else(|| Error::Coins("Failed to iterate over unbonds".into()))?;
-            sum = (sum + unbond.coins.shares)?;
-        }
-
-        Ok(sum)
-    }
-
     pub(super) fn slash(&mut self, multiplier: Decimal) -> Result<()> {
         self.staked.shares = (self.staked.shares * multiplier)?;
         for i in 0..self.unbonding.len() {
@@ -90,7 +74,7 @@ impl<S: Symbol> Delegator<S> {
                 .ok_or_else(|| Error::Coins("Failed to iterate over unbonds".into()))?;
             unbond.coins.shares = (unbond.coins.shares * multiplier)?;
         }
-        self.jailed = true;
+
         Ok(())
     }
 
@@ -129,11 +113,7 @@ impl<S: Symbol> Delegator<S> {
 /// parent collection to calculate the validator's voting power.
 impl<S: Symbol> Balance<S, Decimal> for Delegator<S> {
     fn balance(&self) -> Result<Decimal> {
-        if self.jailed {
-            Ok(0.into())
-        } else {
-            Ok(self.staked.shares)
-        }
+        Ok(self.staked.shares)
     }
 }
 
