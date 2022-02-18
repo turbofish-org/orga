@@ -92,7 +92,7 @@ impl From<ValidatorInfo> for Vec<u8> {
 }
 
 #[derive(Encode, Decode)]
-pub(super) enum Status {
+pub enum Status {
     Unbonded,
     Bonded,
     Unbonding { start_seconds: i64 },
@@ -123,7 +123,7 @@ impl<S: Symbol> Validator<S> {
         self.jailed_until.is_some()
     }
 
-    pub(super) fn status(&self) -> Status {
+    pub fn status(&self) -> Status {
         if self.unbonding {
             Status::Unbonding {
                 start_seconds: self.unbonding_start_seconds,

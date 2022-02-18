@@ -1,3 +1,4 @@
+use crate::coins::Address;
 use crate::coins::{Amount, Balance, Coin, Decimal, Give, Share, Symbol, Take};
 use crate::collections::Deque;
 use crate::context::GetContext;
@@ -15,8 +16,9 @@ pub struct Unbond<S: Symbol> {
 }
 
 #[derive(State)]
-pub struct Redelegation<S: Symbol> {
-    pub(super) coins: Share<S>,
+pub struct Redelegation {
+    pub(super) amount: Amount,
+    pub(super) address: Address,
     pub(super) start_seconds: i64,
 }
 
@@ -25,7 +27,8 @@ pub struct Delegator<S: Symbol> {
     pub(super) liquid: Share<S>,
     pub(super) staked: Share<S>,
     pub(super) unbonding: Deque<Unbond<S>>,
-    pub(super) redelegations: Deque<Redelegation<S>>,
+    pub(super) redelegations_out: Deque<Redelegation>,
+    pub(super) redelegations_in: Deque<Redelegation>,
 }
 
 impl<S: Symbol> Delegator<S> {
@@ -79,13 +82,10 @@ impl<S: Symbol> Delegator<S> {
     }
 
     pub(super) fn process_unbonds(&mut self) -> Result<()> {
-        let now_seconds = self
-            .context::<Time>()
-            .ok_or_else(|| Error::Coins("No Time context available".into()))?
-            .seconds;
+        let now = self.current_seconds()?;
 
         while let Some(unbond) = self.unbonding.front()? {
-            let unbond_matured = now_seconds - unbond.start_seconds >= UNBONDING_SECONDS as i64;
+            let unbond_matured = now - unbond.start_seconds >= UNBONDING_SECONDS as i64;
             if unbond_matured {
                 let unbond = self
                     .unbonding
@@ -100,12 +100,95 @@ impl<S: Symbol> Delegator<S> {
         Ok(())
     }
 
+    pub(super) fn process_redelegations_in(&mut self) -> Result<()> {
+        let now = self.current_seconds()?;
+        while let Some(redelegation) = self.redelegations_in.front()? {
+            let matured = now - redelegation.start_seconds >= UNBONDING_SECONDS as i64;
+            if matured {
+                self.redelegations_in
+                    .pop_front()?
+                    .ok_or_else(|| Error::Coins("Failed to pop inbound redelegation".into()))?;
+            } else {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub(super) fn process_redelegations_out(&mut self) -> Result<()> {
+        let now = self.current_seconds()?;
+        while let Some(redelegation) = self.redelegations_out.front()? {
+            let matured = now - redelegation.start_seconds >= UNBONDING_SECONDS as i64;
+            if matured {
+                self.redelegations_out
+                    .pop_front()?
+                    .ok_or_else(|| Error::Coins("Failed to pop outbound redelegation".into()))?;
+            } else {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub(super) fn redelegate_out(
+        &mut self,
+        dst_val_address: Address,
+        amount: Amount,
+        start_seconds: i64,
+    ) -> Result<Coin<S>> {
+        if !self.redelegations_in.is_empty() {
+            return Err(Error::Coins(
+                "Cannot redelegate from validator with inbound redelegations".into(),
+            ));
+        }
+
+        let redelegated_coins = self.staked.take(amount)?;
+
+        self.redelegations_out.push_back(
+            Redelegation {
+                amount,
+                address: dst_val_address,
+                start_seconds,
+            }
+            .into(),
+        )?;
+
+        Ok(redelegated_coins)
+    }
+
+    pub(super) fn redelegate_in(
+        &mut self,
+        src_val_address: Address,
+        coins: Coin<S>,
+        start_seconds: i64,
+    ) -> Result<()> {
+        self.redelegations_in.push_back(
+            Redelegation {
+                address: src_val_address,
+                amount: coins.amount,
+                start_seconds,
+            }
+            .into(),
+        )?;
+
+        self.add_stake(coins)
+    }
+
     pub(super) fn add_stake(&mut self, coins: Coin<S>) -> Result<()> {
         self.staked.give(coins)
     }
 
     pub(super) fn withdraw_liquid<A: Into<Amount>>(&mut self, amount: A) -> Result<Coin<S>> {
         self.liquid.take(amount.into())
+    }
+
+    fn current_seconds(&mut self) -> Result<i64> {
+        Ok(self
+            .context::<Time>()
+            .ok_or_else(|| Error::Coins("No Time context available".into()))?
+            .seconds)
     }
 }
 

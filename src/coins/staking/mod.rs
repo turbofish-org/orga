@@ -54,6 +54,7 @@ pub struct Staking<S: Symbol> {
     pub downtime_jail_seconds: u64,
     validator_queue: EntryMap<ValidatorQueueEntry>,
     unbonding_delegation_queue: Deque<UnbondingDelegationEntry>,
+    redelegation_queue: Deque<RedelegationEntry>,
 }
 
 #[derive(Entry, Clone)]
@@ -83,6 +84,14 @@ impl EntryMap<ValidatorQueueEntry> {
 #[derive(State)]
 pub struct UnbondingDelegationEntry {
     validator_address: Address,
+    delegator_address: Address,
+    start_seconds: i64,
+}
+
+#[derive(State)]
+pub struct RedelegationEntry {
+    src_validator_address: Address,
+    dst_validator_address: Address,
     delegator_address: Address,
     start_seconds: i64,
 }
@@ -135,6 +144,7 @@ impl<S: Symbol> State for Staking<S> {
                 store.sub(&[15]),
                 data.unbonding_delegation_queue,
             )?,
+            redelegation_queue: State::create(store.sub(&[16]), data.redelegation_queue)?,
         })
     }
 
@@ -155,6 +165,7 @@ impl<S: Symbol> State for Staking<S> {
             slash_fraction_downtime: self.slash_fraction_downtime.into(),
             downtime_jail_seconds: self.downtime_jail_seconds,
             unbonding_delegation_queue: self.unbonding_delegation_queue.flush()?,
+            redelegation_queue: self.redelegation_queue.flush()?,
         })
     }
 }
@@ -171,6 +182,7 @@ impl<S: Symbol> From<Staking<S>> for StakingEncoding<S> {
             downtime_jail_seconds: staking.downtime_jail_seconds,
             validators: staking.validators.into(),
             unbonding_delegation_queue: staking.unbonding_delegation_queue.into(),
+            redelegation_queue: staking.redelegation_queue.into(),
         }
     }
 }
@@ -269,6 +281,7 @@ pub struct StakingEncoding<S: Symbol> {
     downtime_jail_seconds: u64,
     validators: <Pool<Address, Validator<S>, S> as State>::Encoding,
     unbonding_delegation_queue: <Deque<UnbondingDelegationEntry> as State>::Encoding,
+    redelegation_queue: <Deque<RedelegationEntry> as State>::Encoding,
 }
 
 impl<S: Symbol> Default for StakingEncoding<S> {
@@ -285,6 +298,7 @@ impl<S: Symbol> Default for StakingEncoding<S> {
             downtime_jail_seconds: DOWNTIME_JAIL_SECONDS,
             validators: Default::default(),
             unbonding_delegation_queue: Default::default(),
+            redelegation_queue: Default::default(),
         }
     }
 }
@@ -481,12 +495,7 @@ impl<S: Symbol> Staking<S> {
             let amount = amount.into();
             let now = self.current_seconds()?;
             let mut validator = self.validators.get_mut(validator_address)?;
-            let status = validator.status();
-            let start_seconds = match status {
-                Status::Unbonding { start_seconds } => Some(start_seconds),
-                Status::Bonded => Some(now),
-                Status::Unbonded => None,
-            };
+            let start_seconds = Some(now);
             let mut delegator = validator.get_mut(delegator_address)?;
 
             delegator.unbond(amount, start_seconds)?;
@@ -506,6 +515,47 @@ impl<S: Symbol> Staking<S> {
         }
 
         self.update_vp(validator_address)
+    }
+
+    pub fn redelegate<A: Into<Amount>>(
+        &mut self,
+        src_validator_address: Address,
+        dst_validator_address: Address,
+        delegator_address: Address,
+        amount: A,
+    ) -> Result<()> {
+        if src_validator_address == dst_validator_address {
+            return Err(Error::Coins(
+                "Cannot redelegate to the same validator".into(),
+            ));
+        }
+        let amount = amount.into();
+        let start_seconds = self.current_seconds()?;
+
+        let coins = {
+            let mut src_validator = self.validators.get_mut(src_validator_address)?;
+            let mut src_delegator = src_validator.get_mut(delegator_address)?;
+            src_delegator.redelegate_out(dst_validator_address, amount, start_seconds)?
+        };
+
+        {
+            let mut dst_validator = self.validators.get_mut(dst_validator_address)?;
+            let mut dst_delegator = dst_validator.get_mut(delegator_address)?;
+            dst_delegator.redelegate_in(src_validator_address, coins, start_seconds)?;
+        }
+
+        self.redelegation_queue.push_back(
+            RedelegationEntry {
+                src_validator_address,
+                dst_validator_address,
+                delegator_address,
+                start_seconds,
+            }
+            .into(),
+        )?;
+
+        self.update_vp(src_validator_address)?;
+        self.update_vp(dst_validator_address)
     }
 
     pub fn get(&self, val_address: Address) -> Result<PoolChild<Validator<S>, S>> {
@@ -708,6 +758,38 @@ impl<S: Symbol> Staking<S> {
     }
 
     fn process_redelegation_queue(&mut self) -> Result<()> {
+        let now = self.current_seconds()?;
+
+        while let Some(redelegation) = self.redelegation_queue.front()? {
+            let matured = now - redelegation.start_seconds >= self.unbonding_seconds as i64;
+            if matured {
+                let redelegation = self
+                    .redelegation_queue
+                    .pop_front()?
+                    .ok_or_else(|| Error::Coins("Redelegation queue is empty".into()))?;
+
+                {
+                    let mut src_validator = self
+                        .validators
+                        .get_mut(redelegation.src_validator_address)?;
+                    let mut src_delegator =
+                        src_validator.get_mut(redelegation.delegator_address)?;
+                    src_delegator.process_redelegations_out()?;
+                }
+
+                {
+                    let mut dst_validator = self
+                        .validators
+                        .get_mut(redelegation.dst_validator_address)?;
+                    let mut dst_delegator =
+                        dst_validator.get_mut(redelegation.delegator_address)?;
+                    dst_delegator.process_redelegations_in()?;
+                }
+            } else {
+                break;
+            }
+        }
+
         Ok(())
     }
 
