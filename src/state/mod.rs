@@ -320,3 +320,15 @@ state_tuple_impl!(A, B, C, D, E, F, G, H; I; 0, 1, 2, 3, 4, 5, 6, 7; 8; Encoded9
 state_tuple_impl!(A, B, C, D, E, F, G, H, I; J; 0, 1, 2, 3, 4, 5, 6, 7, 8; 9; Encoded10Tuple);
 state_tuple_impl!(A, B, C, D, E, F, G, H, I, J; K; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9; 10; Encoded11Tuple);
 state_tuple_impl!(A, B, C, D, E, F, G, H, I, J, K; L; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10; 11; Encoded12Tuple);
+
+impl<T: Encode + Decode> State for Option<T> {
+    type Encoding = Option<T>;
+
+    fn create(_: Store, data: Self) -> Result<Self> {
+        Ok(data)
+    }
+
+    fn flush(self) -> Result<Self> {
+        Ok(self)
+    }
+}
