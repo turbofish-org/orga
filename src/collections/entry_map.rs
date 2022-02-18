@@ -168,7 +168,8 @@ where
     }
 }
 
-mod test {
+#[cfg(test)]
+mod tests {
     use super::{EntryMap as OrgaEntryMap, *};
     #[allow(dead_code)]
     type EntryMap<T> = OrgaEntryMap<T, MapStore>;
@@ -500,7 +501,8 @@ mod test {
     fn iter_multi_key() {
         let store = Store::new(MapStore::new());
 
-        let mut entry_map: EntryMap<MultiKeyMapEntry> = EntryMap::create(store.sub(&[]), ()).unwrap();
+        let mut entry_map: EntryMap<MultiKeyMapEntry> =
+            EntryMap::create(store.sub(&[]), ()).unwrap();
         entry_map
             .insert(MultiKeyMapEntry {
                 key_1: 0,
