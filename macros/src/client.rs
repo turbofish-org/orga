@@ -432,7 +432,7 @@ fn create_client_struct(
 
                     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> ::orga::Result<R>
                     where
-                        F: FnMut(&Self::Response) -> ::orga::Result<R>
+                        F: FnMut(Self::Response) -> ::orga::Result<R>
                     {
                         let encoded_args = ::orga::encoding::Encode::encode(&self.args).unwrap();
                         let cloned_args: (
@@ -443,7 +443,7 @@ fn create_client_struct(
                             #(#unrolled_args,)*
                             query_bytes
                         );
-                        self.parent.query(parent_query, |s| check(&s.#method_name(#(#unrolled_args,)*))).await
+                        self.parent.query(parent_query, |s| check(s.#method_name(#(#unrolled_args,)*))).await
                     }
                 }
 
@@ -633,12 +633,12 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
         
                     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> ::orga::Result<R>
                     where
-                        F: FnMut(&Self::Response) -> ::orga::Result<R>
+                        F: FnMut(Self::Response) -> ::orga::Result<R>
                     {
                         // assumes that the query has a tuple variant called "Field" +
                         // the camel-cased name as the field
                         let subcall = <#item_ty as ::orga::query::Query>::Query::#variant_name(query);
-                        self.parent.query(subcall, |s| check(&s.#field_name)).await
+                        self.parent.query(subcall, |s| check(s.#field_name)).await
                     }
                 }
             };

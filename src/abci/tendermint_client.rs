@@ -50,6 +50,7 @@ impl<T: Client<TendermintAdapter<T>>> DerefMut for TendermintClient<T> {
 }
 
 impl<T: Client<TendermintAdapter<T>> + Query + State> TendermintClient<T> {
+    #[deprecated]
     pub async fn query<F, R>(&self, query: T::Query, check: F) -> Result<R>
     where
         F: Fn(&T) -> Result<R>,
@@ -120,19 +121,15 @@ where
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Query + State> AsyncQuery for TendermintAdapter<T>
-where
-    T::Query: Send,
-{
+impl<T: Query + State> AsyncQuery for TendermintAdapter<T> {
     type Query = T::Query;
     type Response = T;
 
     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
     where
-        F: FnMut(&Self::Response) -> Result<R>
+        F: FnMut(Self::Response) -> Result<R>
     {
         let query_bytes = query.encode()?;
-        println!("query bytes: {:?}", query_bytes);
         let res = self
             .client
             .abci_query(None, query_bytes, None, true)
@@ -165,7 +162,7 @@ where
         let state = T::create(Store::new(store.into()), encoding)?;
 
         // TODO: retry logic
-        check(&state)
+        check(state)
     }
 }
 

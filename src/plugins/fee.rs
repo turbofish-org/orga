@@ -1,6 +1,6 @@
 use super::sdk_compat::{sdk::Tx as SdkTx, ConvertSdkTx};
 use crate::call::Call;
-use crate::client::Client;
+use crate::client::{Client, AsyncCall, AsyncQuery};
 use crate::coins::{Coin, Symbol};
 use crate::context::GetContext;
 use crate::plugins::Paid;
@@ -78,11 +78,56 @@ impl<S, T: ConvertSdkTx> ConvertSdkTx for FeePlugin<S, T> {
     }
 }
 
-impl<S, T: Client<U>, U: Clone> Client<U> for FeePlugin<S, T> {
+pub struct FeeAdapter<T, U: Clone, S> {
+    parent: U,
+    marker: std::marker::PhantomData<fn(S, T)>,
+}
+
+unsafe impl<T, U: Send + Clone, S> Send for FeeAdapter<T, U, S> {}
+
+impl<T, U: Clone, S> Clone for FeeAdapter<T, U, S> {
+    fn clone(&self) -> Self {
+        FeeAdapter {
+            parent: self.parent.clone(),
+            marker: std::marker::PhantomData,
+        }
+    }
+}
+
+#[async_trait::async_trait(?Send)]
+impl<T: Call, U: AsyncCall<Call = T::Call> + Clone, S> AsyncCall for FeeAdapter<T, U, S>
+where
+    T::Call: Send,
+    U: Send,
+{
+    type Call = T::Call;
+
+    async fn call(&mut self, call: Self::Call) -> Result<()> {
+        self.parent.call(call).await
+    }
+}
+
+#[async_trait::async_trait(?Send)]
+impl<T: Query + State, U: AsyncQuery<Query = T::Query, Response = FeePlugin<S, T>> + Clone, S> AsyncQuery for FeeAdapter<T, U, S> {
+    type Query = T::Query;
+    type Response = T;
+
+    async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
+    where
+        F: FnMut(Self::Response) -> Result<R>
+    {
+        self.parent.query(query, |plugin| check(plugin.inner)).await
+    }
+}
+
+impl<S, T: Client<FeeAdapter<T, U, S>>, U: Clone> Client<U> for FeePlugin<S, T> {
     type Client = T::Client;
 
     fn create_client(parent: U) -> Self::Client {
-        T::create_client(parent)
+        T::create_client(FeeAdapter {
+            parent,
+            marker: std::marker::PhantomData,
+        })
     }
 }
 

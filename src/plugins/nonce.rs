@@ -178,19 +178,15 @@ where
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Query, U: AsyncQuery<Query = T::Query> + Clone> AsyncQuery for NonceAdapter<T, U>
-where
-    T::Query: Send,
-    U: Send,
-{
-    type Query = U::Query;
-    type Response = U::Response;
+impl<T: Query + State, U: AsyncQuery<Query = NonceQuery<T>, Response = NoncePlugin<T>> + Clone> AsyncQuery for NonceAdapter<T, U> {
+    type Query = T::Query;
+    type Response = T;
 
-    async fn query<F, R>(&self, query: Self::Query, check: F) -> Result<R>
+    async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
     where
-        F: FnMut(&Self::Response) -> Result<R>
+        F: FnMut(Self::Response) -> Result<R>
     {
-        self.parent.query(query, check).await
+        self.parent.query(NonceQuery::Inner(query), |plugin| check(plugin.inner)).await
     }
 }
 

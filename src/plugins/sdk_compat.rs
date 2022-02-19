@@ -230,12 +230,12 @@ impl<S, T: Query> Query for SdkCompatPlugin<S, T> {
     }
 }
 
-pub struct SdkCompatAdapter<T, U> {
-    inner: std::marker::PhantomData<fn(T)>,
+pub struct SdkCompatAdapter<T, U, S> {
+    inner: std::marker::PhantomData<fn(T, S)>,
     parent: U,
 }
 
-impl<T, U: Clone> Clone for SdkCompatAdapter<T, U> {
+impl<T, U: Clone, S> Clone for SdkCompatAdapter<T, U, S> {
     fn clone(&self) -> Self {
         Self {
             inner: std::marker::PhantomData,
@@ -245,7 +245,7 @@ impl<T, U: Clone> Clone for SdkCompatAdapter<T, U> {
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: CallTrait, U> AsyncCall for SdkCompatAdapter<T, U>
+impl<T: CallTrait, U, S> AsyncCall for SdkCompatAdapter<T, U, S>
 where
     U: AsyncCall<Call = Call<T::Call>>,
     T::Call: Send,
@@ -258,23 +258,19 @@ where
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Query, U: AsyncQuery<Query = T::Query> + Clone> AsyncQuery for SdkCompatAdapter<T, U>
-where
-    T::Query: Send,
-    U: Send,
-{
-    type Query = U::Query;
-    type Response = U::Response;
+impl<T: Query, U: AsyncQuery<Query = T::Query, Response = SdkCompatPlugin<S, T>> + Clone, S> AsyncQuery for SdkCompatAdapter<T, U, S> {
+    type Query = T::Query;
+    type Response = T;
 
-    async fn query<F, R>(&self, query: Self::Query, check: F) -> Result<R>
+    async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
     where
-        F: FnMut(&Self::Response) -> Result<R>
+        F: FnMut(Self::Response) -> Result<R>
     {
-        self.parent.query(query, check).await
+        self.parent.query(query, |plugin| check(plugin.inner)).await
     }
 }
 
-impl<S, T: Client<SdkCompatAdapter<T, U>>, U: Clone> Client<U> for SdkCompatPlugin<S, T> {
+impl<S, T: Client<SdkCompatAdapter<T, U, S>>, U: Clone> Client<U> for SdkCompatPlugin<S, T> {
     type Client = T::Client;
 
     fn create_client(parent: U) -> T::Client {

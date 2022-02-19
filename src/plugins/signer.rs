@@ -3,7 +3,7 @@ use super::{
     ChainId, GetNonce,
 };
 use crate::call::Call;
-use crate::client::{AsyncCall, Client};
+use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::Address;
 use crate::context::{Context, GetContext};
 use crate::encoding::{Decode, Encode};
@@ -257,6 +257,19 @@ where
                 sigtype: SigType::Adr36,
             })
             .await
+    }
+}
+
+#[async_trait::async_trait(?Send)]
+impl<T: Query, U: AsyncQuery<Query = T::Query, Response = SignerPlugin<T>> + Clone> AsyncQuery for SignerClient<T, U> {
+    type Query = T::Query;
+    type Response = T;
+
+    async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
+    where
+        F: FnMut(Self::Response) -> Result<R>
+    {
+        self.parent.query(query, |plugin| check(plugin.inner)).await
     }
 }
 
