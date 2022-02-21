@@ -314,6 +314,11 @@ impl<S: Symbol> Staking<S> {
         let _ = self.consensus_key(val_address)?;
         {
             let mut validator = self.validators.get_mut(val_address)?;
+            if validator.tombstoned {
+                return Err(Error::Coins(
+                    "Cannot delegate to a tombstoned validator".into(),
+                ));
+            }
             let mut delegator = validator.get_mut(delegator_address)?;
             delegator.add_stake(coins)?;
         }
