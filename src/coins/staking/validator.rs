@@ -15,6 +15,7 @@ type Delegators<S> = Pool<Address, Delegator<S>, S>;
 #[derive(State)]
 pub struct Validator<S: Symbol> {
     pub(super) jailed_until: Option<i64>,
+    pub(super) tombstoned: bool,
     pub(super) address: Address,
     pub(super) commission: Commission,
     pub(super) delegators: Delegators<S>,
@@ -177,6 +178,12 @@ impl<S: Symbol> Validator<S> {
         penalty: Decimal,
         liveness_fault: bool,
     ) -> Result<Vec<SlashableRedelegation>> {
+        if self.tombstoned {
+            return Ok(vec![]);
+        }
+        if !liveness_fault {
+            self.tombstoned = true;
+        }
         let slash_multiplier = (Decimal::one() - penalty)?;
         let delegator_keys = self.delegator_keys()?;
         let mut redelegations = vec![];
@@ -237,7 +244,11 @@ impl<S: Symbol> Validator<S> {
 
 impl<S: Symbol> Balance<S, Decimal> for Validator<S> {
     fn balance(&self) -> Result<Decimal> {
-        if self.jailed() || !self.in_active_set || self.below_required_self_delegation()? {
+        if self.jailed()
+            || !self.in_active_set
+            || self.tombstoned
+            || self.below_required_self_delegation()?
+        {
             Ok(0.into())
         } else {
             self.delegators.balance()
