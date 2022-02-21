@@ -98,6 +98,45 @@ impl<S: Symbol> Delegator<S> {
         Ok(redelegations)
     }
 
+    pub(super) fn slash_redelegation(&mut self, amount: Amount) -> Result<()> {
+        let stake_slash = if amount > self.staked.shares.amount()? {
+            self.staked.shares.amount()?
+        } else {
+            amount
+        };
+
+        if stake_slash > 0 {
+            self.staked.take(stake_slash)?.burn();
+        }
+
+        if stake_slash == amount {
+            return Ok(());
+        }
+
+        let mut remaining_slash = (amount - stake_slash)?;
+
+        for i in 0..self.unbonding.len() {
+            let unbond = self.unbonding.get_mut(i)?;
+            if let Some(mut unbond) = unbond {
+                let unbond_slash = if remaining_slash > unbond.coins.shares.amount()? {
+                    unbond.coins.shares.amount()?
+                } else {
+                    remaining_slash
+                };
+                if unbond_slash > 0 {
+                    unbond.coins.take(unbond_slash)?.burn();
+                }
+                remaining_slash = (remaining_slash - unbond_slash)?;
+
+                if remaining_slash == 0 {
+                    break;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     pub(super) fn process_unbonds(&mut self) -> Result<()> {
         let now = self.current_seconds()?;
 

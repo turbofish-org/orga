@@ -475,7 +475,7 @@ impl<S: Symbol> Staking<S> {
             for redelegation in entry.outbound_redelegations.iter() {
                 let mut validator = self.validators.get_mut(redelegation.address)?;
                 let mut delegator = validator.get_mut(del_address)?;
-                delegator.slash(multiplier, false)?;
+                delegator.slash_redelegation((multiplier * redelegation.amount)?.amount()?)?;
             }
         }
         self.update_vp(val_address)
