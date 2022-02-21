@@ -116,13 +116,17 @@ impl<S: Symbol> Validator<S> {
         self.delegators.get(address)
     }
 
-    pub fn staked(&mut self) -> Result<Amount> {
+    pub fn potential_vp(&mut self) -> Result<Amount> {
         let in_active_set_before = self.in_active_set;
         self.in_active_set = true;
         let res = self.balance()?.amount();
         self.in_active_set = in_active_set_before;
 
         res
+    }
+
+    pub fn staked(&self) -> Result<Amount> {
+        self.balance()?.amount()
     }
 
     pub fn jailed(&self) -> bool {

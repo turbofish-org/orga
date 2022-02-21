@@ -711,7 +711,7 @@ impl<S: Symbol> Staking<S> {
 
     fn update_vp(&mut self, val_address: Address) -> Result<()> {
         let mut validator = self.validators.get_mut(val_address)?;
-        let vp = validator.staked()?.into();
+        let vp = validator.potential_vp()?.into();
         drop(validator);
         self.set_potential_voting_power(val_address, vp)
     }
