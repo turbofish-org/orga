@@ -15,7 +15,7 @@ pub struct Unbond<S: Symbol> {
     pub(super) start_seconds: i64,
 }
 
-#[derive(State)]
+#[derive(State, Clone)]
 pub struct Redelegation {
     pub(super) amount: Amount,
     pub(super) address: Address,
@@ -68,17 +68,34 @@ impl<S: Symbol> Delegator<S> {
         })
     }
 
-    pub(super) fn slash(&mut self, multiplier: Decimal) -> Result<()> {
+    pub(super) fn slash(
+        &mut self,
+        multiplier: Decimal,
+        liveness_fault: bool,
+    ) -> Result<Vec<Redelegation>> {
         self.staked.shares = (self.staked.shares * multiplier)?;
+        if liveness_fault {
+            return Ok(vec![]);
+        }
         for i in 0..self.unbonding.len() {
             let mut unbond = self
                 .unbonding
                 .get_mut(i)?
                 .ok_or_else(|| Error::Coins("Failed to iterate over unbonds".into()))?;
+
             unbond.coins.shares = (unbond.coins.shares * multiplier)?;
         }
 
-        Ok(())
+        let mut redelegations = vec![];
+        for i in 0..self.redelegations_out.len() {
+            let redelegation = self
+                .redelegations_out
+                .get(i)?
+                .ok_or_else(|| Error::Coins("Failed to iterate over redelegations".into()))?;
+            redelegations.push(redelegation.clone());
+        }
+
+        Ok(redelegations)
     }
 
     pub(super) fn process_unbonds(&mut self) -> Result<()> {

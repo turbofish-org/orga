@@ -453,7 +453,7 @@ impl<S: Symbol> Staking<S> {
         {
             let mut validator = self.validators.get_mut(val_address)?;
             validator.jail_for_seconds(self.downtime_jail_seconds)?;
-            validator.slash(self.slash_fraction_downtime)?;
+            validator.slash(self.slash_fraction_downtime, true)?;
         }
         self.update_vp(val_address)
     }
@@ -462,7 +462,7 @@ impl<S: Symbol> Staking<S> {
         {
             let mut validator = self.validators.get_mut(val_address)?;
             validator.jail_forever();
-            validator.slash(self.slash_fraction_double_sign)?;
+            let _redelegations = validator.slash(self.slash_fraction_double_sign, false)?;
         }
         self.update_vp(val_address)
     }
@@ -697,16 +697,9 @@ impl<S: Symbol> Staking<S> {
 
     fn update_vp(&mut self, val_address: Address) -> Result<()> {
         let mut validator = self.validators.get_mut(val_address)?;
-
-        if validator.jailed() {
-            drop(validator);
-            self.set_potential_voting_power(val_address, 0)
-        } else {
-            let vp = validator.staked()?.into();
-            drop(validator);
-
-            self.set_potential_voting_power(val_address, vp)
-        }
+        let vp = validator.staked()?.into();
+        drop(validator);
+        self.set_potential_voting_power(val_address, vp)
     }
 
     fn set_potential_voting_power(&mut self, address: Address, power: u64) -> Result<()> {

@@ -8,7 +8,7 @@ use crate::store::Store;
 use crate::{Error, Result};
 use ed::Terminated;
 
-use super::{Commission, Delegator};
+use super::{Commission, Delegator, Redelegation};
 
 type Delegators<S> = Pool<Address, Delegator<S>, S>;
 
@@ -98,6 +98,11 @@ pub enum Status {
     Unbonding { start_seconds: i64 },
 }
 
+pub(super) struct SlashableRedelegation {
+    pub delegator_address: Address,
+    pub outbound_redelegations: Vec<Redelegation>,
+}
+
 impl<S: Symbol> Validator<S> {
     pub(super) fn get_mut(
         &mut self,
@@ -167,14 +172,25 @@ impl<S: Symbol> Validator<S> {
         Ok(())
     }
 
-    pub(super) fn slash(&mut self, penalty: Decimal) -> Result<()> {
+    pub(super) fn slash(
+        &mut self,
+        penalty: Decimal,
+        liveness_fault: bool,
+    ) -> Result<Vec<SlashableRedelegation>> {
         let slash_multiplier = (Decimal::one() - penalty)?;
         let delegator_keys = self.delegator_keys()?;
+        let mut redelegations = vec![];
         delegator_keys.iter().try_for_each(|k| -> Result<()> {
             let mut delegator = self.get_mut(*k)?;
-            delegator.slash(slash_multiplier)?;
+            let slashable_redelegations = delegator.slash(slash_multiplier, liveness_fault)?;
+            redelegations.push(SlashableRedelegation {
+                delegator_address: *k,
+                outbound_redelegations: slashable_redelegations,
+            });
             Ok(())
-        })
+        })?;
+
+        Ok(redelegations)
     }
 
     pub(super) fn delegator_keys(&self) -> Result<Vec<Address>> {
