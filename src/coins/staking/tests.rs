@@ -1,4 +1,3 @@
-
 use super::*;
 #[cfg(feature = "abci")]
 use crate::plugins::Time;
@@ -12,6 +11,29 @@ use serial_test::serial;
 #[derive(State, Debug, Clone)]
 struct Simp(());
 impl Symbol for Simp {}
+
+struct SimpKey {
+    addr: [u8; 33],
+    con_key: [u8; 32],
+}
+
+enum AmtDistribution {
+    Uniform(u64),
+    Normal(u64, u64),
+}
+
+fn setup_state() -> Result<Staking<Simp>> {
+    let store = Store::new(Shared::new(MapStore::new()).into());
+    let mut staking: Staking<Simp> = Staking::create(store, Default::default())?;
+    staking.downtime_jail_seconds = 5;
+    staking.slash_fraction_downtime = (Amount::new(1) / Amount::new(2))?;
+    staking.slash_fraction_double_sign = (Amount::new(1) / Amount::new(2))?;
+
+    Context::add(Validators::default());
+    Context::add(Time::from_seconds(0));
+
+    Ok(staking)
+}
 
 #[cfg(feature = "abci")]
 #[test]
@@ -407,6 +429,854 @@ fn val_size_limit() -> Result<()> {
             .amount()?,
         1000
     );
+
+    Ok(())
+}
+
+#[cfg(feature = "abci")]
+#[test]
+#[serial]
+fn undelegate() -> Result<()> {
+    let mut staking = setup_state()?;
+
+    let val_0 = Address::from_pubkey([0; 33]);
+
+    staking.declare(
+        val_0,
+        Declaration {
+            consensus_key: [0; 32],
+            commission: Commission {
+                rate: dec!(0.0).into(),
+                max: dec!(1.0).into(),
+                max_change: dec!(0.1).into(),
+            },
+            amount: Amount::new(100),
+            min_self_delegation: 0.into(),
+            validator_info: vec![].into(),
+        },
+        Amount::new(100).into(),
+    )?;
+
+    let ctx = Context::resolve::<Validators>().unwrap();
+    let staker = Address::from_pubkey([1; 33]);
+
+    staking.delegate(val_0, staker, 100.into())?;
+
+    staking.end_block_step()?;
+
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 200);
+
+    staking.unbond(Address::from_pubkey([0; 33]), staker, Amount::from(100))?;
+
+    staking.end_block_step()?;
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 100);
+    assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 0);
+
+    Ok(())
+}
+
+#[cfg(feature = "abci")]
+#[test]
+#[serial]
+fn undelegate_slash_before_unbond() -> Result<()> {
+    let mut staking = setup_state()?;
+
+    let val_0 = Address::from_pubkey([0; 33]);
+
+    staking.declare(
+        val_0,
+        Declaration {
+            consensus_key: [0; 32],
+            commission: Commission {
+                rate: dec!(0.0).into(),
+                max: dec!(1.0).into(),
+                max_change: dec!(0.1).into(),
+            },
+            amount: Amount::new(100),
+            min_self_delegation: 0.into(),
+            validator_info: vec![].into(),
+        },
+        Amount::new(100).into(),
+    )?;
+
+    let ctx = Context::resolve::<Validators>().unwrap();
+    let staker = Address::from_pubkey([1; 33]);
+
+    staking.delegate(val_0, staker, 100.into())?;
+
+    staking.end_block_step()?;
+
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 200);
+
+    staking.unbond(Address::from_pubkey([0; 33]), staker, Amount::from(100))?;
+
+    staking.end_block_step()?;
+
+    staking.punish_double_sign(Address::from_pubkey([0; 33]))?;
+    staking.end_block_step()?;
+
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 0);
+    assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 0);
+
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 50);
+
+    Context::add(Time::from_seconds(10));
+    staking.end_block_step()?;
+    assert_eq!(staking.get(val_0)?.get(staker)?.liquid.amount()?, 50);
+
+    Ok(())
+}
+
+#[cfg(feature = "abci")]
+#[test]
+#[serial]
+fn undelegate_slash_after_unbond() -> Result<()> {
+    let mut staking = setup_state()?;
+
+    let val_0 = Address::from_pubkey([0; 33]);
+
+    staking.declare(
+        val_0,
+        Declaration {
+            consensus_key: [0; 32],
+            commission: Commission {
+                rate: dec!(0.0).into(),
+                max: dec!(1.0).into(),
+                max_change: dec!(0.1).into(),
+            },
+            amount: Amount::new(100),
+            min_self_delegation: 0.into(),
+            validator_info: vec![].into(),
+        },
+        Amount::new(100).into(),
+    )?;
+
+    let ctx = Context::resolve::<Validators>().unwrap();
+    let staker = Address::from_pubkey([1; 33]);
+
+    staking.delegate(val_0, staker, 100.into())?;
+
+    staking.end_block_step()?;
+
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 200);
+
+    staking.unbond(Address::from_pubkey([0; 33]), staker, Amount::from(100))?;
+
+    Context::add(Time::from_seconds(10));
+    staking.end_block_step()?;
+
+    staking.punish_double_sign(Address::from_pubkey([0; 33]))?;
+    staking.end_block_step()?;
+
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 0);
+    assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 0);
+
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 50);
+
+    staking.end_block_step()?;
+    assert_eq!(staking.get(val_0)?.get(staker)?.liquid.amount()?, 100);
+
+    Ok(())
+}
+
+#[cfg(feature = "abci")]
+#[test]
+#[serial]
+fn redelegate() -> Result<()> {
+    let mut staking = setup_state()?;
+
+    for i in 0..2 {
+        staking.declare(
+            Address::from_pubkey([i; 33]),
+            Declaration {
+                consensus_key: [i; 32],
+                commission: Commission {
+                    rate: dec!(0.0).into(),
+                    max: dec!(1.0).into(),
+                    max_change: dec!(0.1).into(),
+                },
+                amount: Amount::new(100),
+                min_self_delegation: 0.into(),
+                validator_info: vec![].into(),
+            },
+            Amount::new(100).into(),
+        )?;
+    }
+
+    let ctx = Context::resolve::<Validators>().unwrap();
+    let staker = Address::from_pubkey([2; 33]);
+
+    staking.delegate(Address::from_pubkey([0; 33]), staker, 100.into())?;
+
+    staking.end_block_step()?;
+
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 200);
+
+    staking.redelegate(
+        Address::from_pubkey([0; 33]),
+        Address::from_pubkey([1; 33]),
+        staker,
+        Amount::from(100),
+    )?;
+
+    staking.end_block_step()?;
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 100);
+    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 200);
+
+    Ok(())
+}
+
+#[cfg(feature = "abci")]
+#[test]
+#[serial]
+fn redelegate_slash_before_unbond() -> Result<()> {
+    let mut staking = setup_state()?;
+
+    for i in 0..2 {
+        staking.declare(
+            Address::from_pubkey([i; 33]),
+            Declaration {
+                consensus_key: [i; 32],
+                commission: Commission {
+                    rate: dec!(0.0).into(),
+                    max: dec!(1.0).into(),
+                    max_change: dec!(0.1).into(),
+                },
+                amount: Amount::new(100),
+                min_self_delegation: 0.into(),
+                validator_info: vec![].into(),
+            },
+            Amount::new(100).into(),
+        )?;
+    }
+
+    let ctx = Context::resolve::<Validators>().unwrap();
+    let staker = Address::from_pubkey([2; 33]);
+
+    staking.delegate(Address::from_pubkey([0; 33]), staker, 100.into())?;
+
+    staking.end_block_step()?;
+
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 200);
+
+    staking.redelegate(
+        Address::from_pubkey([0; 33]),
+        Address::from_pubkey([1; 33]),
+        staker,
+        Amount::from(100),
+    )?;
+
+    staking.end_block_step()?;
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 100);
+    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 200);
+
+    staking.punish_double_sign(Address::from_pubkey([0; 33]))?;
+    staking.end_block_step()?;
+
+    let val_0 = Address::from_pubkey([0; 33]);
+    let val_1 = Address::from_pubkey([1; 33]);
+
+    assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 0);
+    assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 50);
+
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 50);
+    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 150);
+
+    Ok(())
+}
+
+#[cfg(feature = "abci")]
+#[test]
+#[serial]
+fn redelegate_slash_after_unbond() -> Result<()> {
+    let mut staking = setup_state()?;
+
+    for i in 0..2 {
+        staking.declare(
+            Address::from_pubkey([i; 33]),
+            Declaration {
+                consensus_key: [i; 32],
+                commission: Commission {
+                    rate: dec!(0.0).into(),
+                    max: dec!(1.0).into(),
+                    max_change: dec!(0.1).into(),
+                },
+                amount: Amount::new(100),
+                min_self_delegation: 0.into(),
+                validator_info: vec![].into(),
+            },
+            Amount::new(100).into(),
+        )?;
+    }
+
+    let ctx = Context::resolve::<Validators>().unwrap();
+    let staker = Address::from_pubkey([2; 33]);
+
+    staking.delegate(Address::from_pubkey([0; 33]), staker, 100.into())?;
+
+    staking.end_block_step()?;
+
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 200);
+
+    staking.redelegate(
+        Address::from_pubkey([0; 33]),
+        Address::from_pubkey([1; 33]),
+        staker,
+        Amount::from(100),
+    )?;
+
+    staking.end_block_step()?;
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 100);
+    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 200);
+
+    Context::add(Time::from_seconds(10));
+    staking.end_block_step()?;
+
+    staking.punish_double_sign(Address::from_pubkey([0; 33]))?;
+    staking.end_block_step()?;
+
+    let val_0 = Address::from_pubkey([0; 33]);
+    let val_1 = Address::from_pubkey([1; 33]);
+
+    assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 0);
+    assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 100);
+
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 50);
+    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 200);
+
+    Ok(())
+}
+
+#[cfg(feature = "abci")]
+#[test]
+#[serial]
+fn redelegation_slash() -> Result<()> {
+    let mut staking = setup_state()?;
+
+    for i in 0..3 {
+        staking.declare(
+            Address::from_pubkey([i; 33]),
+            Declaration {
+                consensus_key: [i; 32],
+                commission: Commission {
+                    rate: dec!(0.0).into(),
+                    max: dec!(1.0).into(),
+                    max_change: dec!(0.1).into(),
+                },
+                amount: Amount::new(0),
+                min_self_delegation: 0.into(),
+                validator_info: vec![].into(),
+            },
+            Amount::new(0).into(),
+        )?;
+    }
+
+    let ctx = Context::resolve::<Validators>().unwrap();
+    let staker = Address::from_pubkey([3; 33]);
+
+    staking.delegate(Address::from_pubkey([0; 33]), staker, 100.into())?;
+    staking.delegate(Address::from_pubkey([1; 33]), staker, 100.into())?;
+    staking.delegate(Address::from_pubkey([2; 33]), staker, 100.into())?;
+
+    staking.end_block_step()?;
+
+    staking.redelegate(
+        Address::from_pubkey([0; 33]),
+        Address::from_pubkey([2; 33]),
+        staker,
+        Amount::from(50),
+    )?;
+    staking.end_block_step()?;
+
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 50);
+    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 100);
+    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 150);
+
+    staking.redelegate(
+        Address::from_pubkey([1; 33]),
+        Address::from_pubkey([0; 33]),
+        staker,
+        Amount::from(30),
+    )?;
+    staking.end_block_step()?;
+
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 80);
+    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 70);
+    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 150);
+
+    staking.redelegate(
+        Address::from_pubkey([1; 33]),
+        Address::from_pubkey([2; 33]),
+        staker,
+        Amount::from(30),
+    )?;
+    staking.end_block_step()?;
+
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 80);
+    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 40);
+    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 180);
+
+    staking.punish_double_sign(Address::from_pubkey([1; 33]))?;
+    staking.end_block_step()?;
+
+    let val_0 = Address::from_pubkey([0; 33]);
+    let val_1 = Address::from_pubkey([1; 33]);
+    let val_2 = Address::from_pubkey([2; 33]);
+
+    assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 65);
+    assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 20);
+    assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 165);
+
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 65);
+    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 20);
+    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 165);
+
+    staking.punish_double_sign(Address::from_pubkey([0; 33]))?;
+    staking.end_block_step()?;
+    assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 32);
+    assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 20);
+    assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 140);
+
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 32);
+    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 20);
+    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 140);
+
+    Ok(())
+}
+
+#[cfg(feature = "abci")]
+#[test]
+#[serial]
+fn redelegation_double_slash() -> Result<()> {
+    let mut staking = setup_state()?;
+
+    for i in 0..2 {
+        staking.declare(
+            Address::from_pubkey([i; 33]),
+            Declaration {
+                consensus_key: [i; 32],
+                commission: Commission {
+                    rate: dec!(0.0).into(),
+                    max: dec!(1.0).into(),
+                    max_change: dec!(0.1).into(),
+                },
+                amount: Amount::new(0),
+                min_self_delegation: 0.into(),
+                validator_info: vec![].into(),
+            },
+            Amount::new(0).into(),
+        )?;
+    }
+
+    let ctx = Context::resolve::<Validators>().unwrap();
+    let staker = Address::from_pubkey([2; 33]);
+    let val_0 = Address::from_pubkey([0; 33]);
+    let val_1 = Address::from_pubkey([1; 33]);
+
+    staking.delegate(Address::from_pubkey([0; 33]), staker, 100.into())?;
+
+    staking.end_block_step()?;
+
+    staking.redelegate(
+        Address::from_pubkey([0; 33]),
+        Address::from_pubkey([1; 33]),
+        staker,
+        Amount::from(100),
+    )?;
+    staking.end_block_step()?;
+
+    staking.punish_double_sign(Address::from_pubkey([0; 33]))?;
+    staking.punish_double_sign(Address::from_pubkey([1; 33]))?;
+
+    staking.end_block_step()?;
+
+    assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 0);
+    assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 25);
+
+    Ok(())
+}
+
+#[cfg(feature = "abci")]
+#[test]
+#[serial]
+fn redelegation_slash_with_unbond() -> Result<()> {
+    let mut staking = setup_state()?;
+
+    for i in 0..3 {
+        staking.declare(
+            Address::from_pubkey([i; 33]),
+            Declaration {
+                consensus_key: [i; 32],
+                commission: Commission {
+                    rate: dec!(0.0).into(),
+                    max: dec!(1.0).into(),
+                    max_change: dec!(0.1).into(),
+                },
+                amount: Amount::new(0),
+                min_self_delegation: 0.into(),
+                validator_info: vec![].into(),
+            },
+            Amount::new(0).into(),
+        )?;
+    }
+
+    let ctx = Context::resolve::<Validators>().unwrap();
+    let staker = Address::from_pubkey([3; 33]);
+
+    staking.delegate(Address::from_pubkey([0; 33]), staker, 100.into())?;
+    staking.delegate(Address::from_pubkey([1; 33]), staker, 100.into())?;
+    staking.delegate(Address::from_pubkey([2; 33]), staker, 100.into())?;
+
+    staking.end_block_step()?;
+
+    staking.redelegate(
+        Address::from_pubkey([0; 33]),
+        Address::from_pubkey([2; 33]),
+        staker,
+        Amount::from(50),
+    )?;
+    staking.end_block_step()?;
+
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 50);
+    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 100);
+    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 150);
+
+    staking.redelegate(
+        Address::from_pubkey([1; 33]),
+        Address::from_pubkey([0; 33]),
+        staker,
+        Amount::from(30),
+    )?;
+    staking.end_block_step()?;
+
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 80);
+    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 70);
+    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 150);
+
+    staking.redelegate(
+        Address::from_pubkey([1; 33]),
+        Address::from_pubkey([2; 33]),
+        staker,
+        Amount::from(30),
+    )?;
+    staking.end_block_step()?;
+
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 80);
+    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 40);
+    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 180);
+
+    staking.punish_double_sign(Address::from_pubkey([1; 33]))?;
+    staking.end_block_step()?;
+
+    let val_0 = Address::from_pubkey([0; 33]);
+    let val_1 = Address::from_pubkey([1; 33]);
+    let val_2 = Address::from_pubkey([2; 33]);
+
+    assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 65);
+    assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 20);
+    assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 165);
+
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 65);
+    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 20);
+    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 165);
+
+    staking.unbond(val_2, staker, Amount::from(100))?;
+    staking.end_block_step()?;
+
+    staking.punish_double_sign(Address::from_pubkey([0; 33]))?;
+    staking.end_block_step()?;
+
+    assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 32);
+    assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 20);
+    assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 40);
+
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 32);
+    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 20);
+    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 40);
+
+    Context::add(Time::from_seconds(10));
+    staking.end_block_step()?;
+
+    assert_eq!(staking.get(val_2)?.get(staker)?.liquid.amount()?, 100);
+
+    Ok(())
+}
+
+#[cfg(feature = "abci")]
+#[test]
+#[serial]
+fn redelegation_slash_with_slash_unbond_overflow() -> Result<()> {
+    let mut staking = setup_state()?;
+
+    for i in 0..3 {
+        staking.declare(
+            Address::from_pubkey([i; 33]),
+            Declaration {
+                consensus_key: [i; 32],
+                commission: Commission {
+                    rate: dec!(0.0).into(),
+                    max: dec!(1.0).into(),
+                    max_change: dec!(0.1).into(),
+                },
+                amount: Amount::new(0),
+                min_self_delegation: 0.into(),
+                validator_info: vec![].into(),
+            },
+            Amount::new(0).into(),
+        )?;
+    }
+
+    let ctx = Context::resolve::<Validators>().unwrap();
+    let staker = Address::from_pubkey([3; 33]);
+
+    staking.delegate(Address::from_pubkey([0; 33]), staker, 100.into())?;
+    staking.delegate(Address::from_pubkey([1; 33]), staker, 100.into())?;
+    staking.delegate(Address::from_pubkey([2; 33]), staker, 100.into())?;
+
+    staking.end_block_step()?;
+
+    staking.redelegate(
+        Address::from_pubkey([0; 33]),
+        Address::from_pubkey([2; 33]),
+        staker,
+        Amount::from(50),
+    )?;
+    staking.end_block_step()?;
+
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 50);
+    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 100);
+    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 150);
+
+    staking.redelegate(
+        Address::from_pubkey([1; 33]),
+        Address::from_pubkey([0; 33]),
+        staker,
+        Amount::from(30),
+    )?;
+    staking.end_block_step()?;
+
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 80);
+    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 70);
+    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 150);
+
+    staking.redelegate(
+        Address::from_pubkey([1; 33]),
+        Address::from_pubkey([2; 33]),
+        staker,
+        Amount::from(30),
+    )?;
+    staking.end_block_step()?;
+
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 80);
+    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 40);
+    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 180);
+
+    staking.punish_double_sign(Address::from_pubkey([1; 33]))?;
+    staking.end_block_step()?;
+
+    let val_0 = Address::from_pubkey([0; 33]);
+    let val_1 = Address::from_pubkey([1; 33]);
+    let val_2 = Address::from_pubkey([2; 33]);
+
+    assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 65);
+    assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 20);
+    assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 165);
+
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 65);
+    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 20);
+    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 165);
+
+    for _ in 0..15 {
+        staking.unbond(val_2, staker, Amount::from(10))?;
+    }
+
+    staking.end_block_step()?;
+
+    assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 15);
+
+    staking.punish_double_sign(Address::from_pubkey([0; 33]))?;
+    staking.end_block_step()?;
+
+    assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 32);
+    assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 20);
+    assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 0);
+
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 32);
+    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 20);
+    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 0);
+
+    Context::add(Time::from_seconds(10));
+    staking.end_block_step()?;
+
+    assert_eq!(staking.get(val_2)?.get(staker)?.liquid.amount()?, 140);
+
+    Ok(())
+}
+
+#[cfg(feature = "abci")]
+#[test]
+#[serial]
+#[should_panic]
+fn delegate_slashed_fail() {
+    let mut staking = setup_state().unwrap();
+
+    staking
+        .declare(
+            Address::from_pubkey([0; 33]),
+            Declaration {
+                consensus_key: [0; 32],
+                commission: Commission {
+                    rate: dec!(0.0).into(),
+                    max: dec!(1.0).into(),
+                    max_change: dec!(0.1).into(),
+                },
+                amount: Amount::new(0),
+                min_self_delegation: 0.into(),
+                validator_info: vec![].into(),
+            },
+            Amount::new(100).into(),
+        )
+        .unwrap();
+
+    let staker = Address::from_pubkey([3; 33]);
+
+    staking.end_block_step().unwrap();
+
+    staking
+        .punish_double_sign(Address::from_pubkey([0; 33]))
+        .unwrap();
+    staking.end_block_step().unwrap();
+
+    staking
+        .delegate(Address::from_pubkey([0; 33]), staker, 100.into())
+        .unwrap();
+}
+
+#[cfg(feature = "abci")]
+#[test]
+#[serial]
+fn min_delegation_fall_below() -> Result<()> {
+    let mut staking = setup_state()?;
+
+    staking.declare(
+        Address::from_pubkey([0; 33]),
+        Declaration {
+            consensus_key: [0; 32],
+            commission: Commission {
+                rate: dec!(0.0).into(),
+                max: dec!(1.0).into(),
+                max_change: dec!(0.1).into(),
+            },
+            amount: Amount::new(0),
+            min_self_delegation: 75.into(),
+            validator_info: vec![].into(),
+        },
+        Amount::new(100).into(),
+    )?;
+
+    let ctx = Context::resolve::<Validators>().unwrap();
+    let val_0 = Address::from_pubkey([0; 33]);
+
+    staking.end_block_step()?;
+
+    staking.punish_downtime(Address::from_pubkey([0; 33]))?;
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 50);
+    Context::add(Time::from_seconds(10));
+
+    staking.end_block_step()?;
+
+    staking.get_mut(val_0)?.try_unjail()?;
+    staking.update_vp(val_0)?;
+
+    staking.end_block_step()?;
+
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 0);
+    staking.delegate(val_0, val_0, 25.into())?;
+
+    staking.end_block_step()?;
+
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 75);
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 75);
+
+    Ok(())
+}
+
+#[cfg(feature = "abci")]
+#[test]
+#[serial]
+fn punish_downtime_jailed() -> Result<()> {
+    let mut staking = setup_state()?;
+
+    staking.declare(
+        Address::from_pubkey([0; 33]),
+        Declaration {
+            consensus_key: [0; 32],
+            commission: Commission {
+                rate: dec!(0.0).into(),
+                max: dec!(1.0).into(),
+                max_change: dec!(0.1).into(),
+            },
+            amount: Amount::new(0),
+            min_self_delegation: 75.into(),
+            validator_info: vec![].into(),
+        },
+        Amount::new(100).into(),
+    )?;
+
+    let val_0 = Address::from_pubkey([0; 33]);
+    staking.end_block_step()?;
+
+    staking.punish_downtime(Address::from_pubkey([0; 33]))?;
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 50);
+    staking.end_block_step()?;
+
+    staking.punish_double_sign(val_0)?;
+    staking.end_block_step()?;
+
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 25);
+
+    Ok(())
+}
+
+#[cfg(feature = "abci")]
+#[test]
+#[serial]
+fn unclaimed_rewards_slash() -> Result<()> {
+    let mut staking = setup_state()?;
+
+    staking.declare(
+        Address::from_pubkey([0; 33]),
+        Declaration {
+            consensus_key: [0; 32],
+            commission: Commission {
+                rate: dec!(0.0).into(),
+                max: dec!(1.0).into(),
+                max_change: dec!(0.1).into(),
+            },
+            amount: Amount::new(100),
+            min_self_delegation: 0.into(),
+            validator_info: vec![].into(),
+        },
+        Amount::new(100).into(),
+    )?;
+
+    let val_0 = Address::from_pubkey([0; 33]);
+    let staker = Address::from_pubkey([1; 33]);
+
+    staking.end_block_step()?;
+
+    staking.delegate(val_0, staker, 100.into())?;
+    staking.give(100.into())?;
+
+    staking.end_block_step()?;
+
+    assert_eq!(staking.get(val_0)?.get(staker)?.liquid.amount()?, 50);
+    staking.end_block_step()?;
+
+    staking.punish_downtime(Address::from_pubkey([0; 33]))?;
+
+    staking.end_block_step()?;
+    assert_eq!(staking.get(val_0)?.get(staker)?.liquid.amount()?, 50);
 
     Ok(())
 }
