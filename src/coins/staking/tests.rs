@@ -1204,6 +1204,69 @@ fn min_delegation_fall_below() -> Result<()> {
 #[cfg(feature = "abci")]
 #[test]
 #[serial]
+fn min_delegation_fall_below_unbond() -> Result<()> {
+    let mut staking = setup_state()?;
+
+    for i in 0..2 {
+        staking.declare(
+            Address::from_pubkey([i; 33]),
+            Declaration {
+                consensus_key: [i; 32],
+                commission: Commission {
+                    rate: dec!(0.0).into(),
+                    max: dec!(1.0).into(),
+                    max_change: dec!(0.1).into(),
+                },
+                amount: Amount::new(0),
+                min_self_delegation: 75.into(),
+                validator_info: vec![].into(),
+            },
+            Amount::new(100).into(),
+        )?;
+    }
+
+    let ctx = Context::resolve::<Validators>().unwrap();
+    let val_0 = Address::from_pubkey([0; 33]);
+    let val_1 = Address::from_pubkey([1; 33]);
+
+    staking.end_block_step()?;
+    staking.unbond(val_0, val_0, Amount::from(50))?;
+    staking.end_block_step()?;
+
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 50);
+
+    staking.end_block_step()?;
+
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 0);
+    staking.delegate(val_0, val_0, 25.into())?;
+
+    staking.end_block_step()?;
+
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 75);
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 75);
+
+    staking.redelegate(val_0, val_1, val_0, Amount::from(25))?;
+
+    staking.end_block_step()?;
+
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 50);
+
+    staking.end_block_step()?;
+
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 0);
+    staking.delegate(val_0, val_0, 25.into())?;
+
+    staking.end_block_step()?;
+
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 75);
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 75);
+
+    Ok(())
+}
+
+#[cfg(feature = "abci")]
+#[test]
+#[serial]
 fn punish_downtime_jailed() -> Result<()> {
     let mut staking = setup_state()?;
 
@@ -1277,6 +1340,55 @@ fn unclaimed_rewards_slash() -> Result<()> {
 
     staking.end_block_step()?;
     assert_eq!(staking.get(val_0)?.get(staker)?.liquid.amount()?, 50);
+
+    Ok(())
+}
+
+#[cfg(feature = "abci")]
+#[test]
+#[serial]
+fn reward_with_unbond() -> Result<()> {
+    let mut staking = setup_state()?;
+
+    for i in 0..2 {
+        staking.declare(
+            Address::from_pubkey([i; 33]),
+            Declaration {
+                consensus_key: [i; 32],
+                commission: Commission {
+                    rate: dec!(0.0).into(),
+                    max: dec!(1.0).into(),
+                    max_change: dec!(0.1).into(),
+                },
+                amount: Amount::new(100),
+                min_self_delegation: 0.into(),
+                validator_info: vec![].into(),
+            },
+            Amount::new(100).into(),
+        )?;
+    }
+
+    let ctx = Context::resolve::<Validators>().unwrap();
+    let val_0 = Address::from_pubkey([0; 33]);
+    let val_1 = Address::from_pubkey([1; 33]);
+    staking.end_block_step()?;
+
+    staking.give(100.into())?;
+    staking.end_block_step()?;
+
+    assert_eq!(staking.get(val_0)?.get(val_0)?.liquid.amount()?, 50);
+    assert_eq!(staking.get(val_1)?.get(val_1)?.liquid.amount()?, 50);
+    staking.end_block_step()?;
+
+    staking.unbond(val_0, val_0, Amount::from(100))?;
+    staking.end_block_step()?;
+
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 0);
+    staking.give(100.into())?;
+    staking.end_block_step()?;
+
+    assert_eq!(staking.get(val_0)?.get(val_0)?.liquid.amount()?, 50);
+    assert_eq!(staking.get(val_1)?.get(val_1)?.liquid.amount()?, 150);
 
     Ok(())
 }
