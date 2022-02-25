@@ -45,15 +45,17 @@ fn create_client_impl(item: &DeriveInput, modname: &Ident) -> TokenStream2 {
             t.default = None;
         }
     });
-    let parent_ty: GenericParam = syn::parse2(quote!(__Parent)).unwrap();
-    generics_sanitized.params.push(parent_ty.clone());
 
-    let generic_params = gen_param_input(generics, false);
-    let generic_params_bracketed = gen_param_input(generics, true);
+    let mut generics_with_parent = generics_sanitized.clone();
+    let parent_ty: GenericParam = syn::parse2(quote!(__Parent)).unwrap();
+    generics_with_parent.params.push(parent_ty.clone());
+
+    let generic_params = gen_param_input(&generics_sanitized, false);
+    let generic_params_bracketed = gen_param_input(&generics_sanitized, true);
     let where_preds = item.generics.where_clause.as_ref().map(|w| &w.predicates);
 
     quote! {
-        impl#generics_sanitized ::orga::client::Client<#parent_ty> for #name#generic_params_bracketed
+        impl#generics_with_parent ::orga::client::Client<#parent_ty> for #name#generic_params_bracketed
         where
             #parent_ty: Clone + Send,
             #where_preds
@@ -84,21 +86,17 @@ fn create_client_struct(
             t.default = None;
         }
     });
-    generics_sanitized.params.push(parent_ty.clone());
 
-    let mut generics_with_parent = generics.clone();
+    let mut generics_with_parent = generics_sanitized.clone();
     generics_with_parent.params.push(parent_ty.clone());
 
-    let mut generics_with_return_and_parent = generics.clone();
+    let mut generics_with_return_and_parent = generics_sanitized.clone();
     generics_with_return_and_parent
         .params
         .push(return_ty.clone());
     generics_with_return_and_parent
         .params
         .push(parent_ty.clone());
-
-    let mut generics_sanitized_with_return = generics_sanitized.clone();
-    generics_sanitized_with_return.params.push(return_ty);
 
     let generic_params = gen_param_input(generics, false);
     let generic_params_bracketed = gen_param_input(generics, true);
@@ -262,7 +260,7 @@ fn create_client_struct(
                         _marker: std::marker::PhantomData<fn() -> (#name#generic_params_bracketed, __Return)>,
                     }
 
-                    impl#generics_sanitized_with_return Clone for #adapter_name<#generic_params __Return, #parent_ty>
+                    impl#generics_with_return_and_parent Clone for #adapter_name<#generic_params __Return, #parent_ty>
                     where
                         #parent_ty: Clone + Send,
                         #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call>,
@@ -280,7 +278,7 @@ fn create_client_struct(
                     }
 
                     #[::orga::async_trait(?Send)]
-                    impl#generics_sanitized_with_return ::orga::client::AsyncCall for #adapter_name<#generic_params __Return, #parent_ty>
+                    impl#generics_with_return_and_parent ::orga::client::AsyncCall for #adapter_name<#generic_params __Return, #parent_ty>
                     where
                         #parent_ty: Clone + Send,
                         #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call>,
@@ -304,7 +302,7 @@ fn create_client_struct(
                         }
                     }
 
-                    impl#generics_sanitized Client<#generic_params #parent_ty>
+                    impl#generics_with_parent Client<#generic_params #parent_ty>
                     where
                         #parent_ty: Clone + Send,
                         #parent_ty: ::orga::client::AsyncCall<Call = <#name#generic_params_bracketed as ::orga::call::Call>::Call>,
@@ -399,7 +397,7 @@ fn create_client_struct(
                     _marker: std::marker::PhantomData<fn() -> (#name#generic_params_bracketed, __Return)>,
                 }
 
-                impl#generics_sanitized_with_return Clone for #adapter_name<#generic_params __Return, #parent_ty>
+                impl#generics_with_return_and_parent Clone for #adapter_name<#generic_params __Return, #parent_ty>
                 where
                     #parent_ty: Clone + Send,
                     #parent_ty: ::orga::client::AsyncQuery<Query = <#name#generic_params_bracketed as ::orga::query::Query>::Query>,
@@ -418,7 +416,7 @@ fn create_client_struct(
                 }
 
                 #[::orga::async_trait(?Send)]
-                impl#generics_sanitized_with_return ::orga::client::AsyncQuery for #adapter_name<#generic_params __Return, #parent_ty>
+                impl#generics_with_return_and_parent ::orga::client::AsyncQuery for #adapter_name<#generic_params __Return, #parent_ty>
                 where
                     #parent_ty: Clone + Send,
                     #parent_ty: ::orga::client::AsyncQuery<Query = <#name#generic_params_bracketed as ::orga::query::Query>::Query>,
@@ -443,11 +441,11 @@ fn create_client_struct(
                             #(#unrolled_args,)*
                             query_bytes
                         );
-                        self.parent.query(parent_query, |s| check(s.#method_name(#(#unrolled_args,)*))).await
+                        ::orga::client::AsyncQuery::query(&self.parent, parent_query, |s| check(s.#method_name(#(#unrolled_args,)*))).await
                     }
                 }
 
-                impl#generics_sanitized Client<#generic_params #parent_ty>
+                impl#generics_with_parent Client<#generic_params #parent_ty>
                 where
                     #parent_ty: Clone + Send,
                     #parent_ty: ::orga::client::AsyncQuery<Query = <#name#generic_params_bracketed as ::orga::query::Query>::Query>,
@@ -481,7 +479,7 @@ fn create_client_struct(
             __Marker: std::marker::PhantomData<fn() -> (#generic_params)>,
         }
 
-        impl#generics_sanitized Clone for Client#generic_params_bracketed_with_parent
+        impl#generics_with_parent Clone for Client#generic_params_bracketed_with_parent
         where
             #parent_ty: Clone + Send,
             #where_preds
@@ -495,7 +493,7 @@ fn create_client_struct(
             }
         }
 
-        impl#generics_sanitized Client#generic_params_bracketed_with_parent
+        impl#generics_with_parent Client#generic_params_bracketed_with_parent
         where
             #parent_ty: Clone + Send,
             #where_preds
@@ -595,7 +593,7 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
         
             let output = quote! {
                 #struct_def
-                impl#generics_sanitized #struct_name#generic_params_bracketed_with_parent
+                impl#generics_with_parent #struct_name#generic_params_bracketed_with_parent
                 where
                     #parent_client_ty: Clone + Send,
                 {
@@ -605,7 +603,7 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
                 }
         
                 #[::orga::async_trait(?Send)]
-                impl#generics_sanitized ::orga::client::AsyncCall for #struct_name#generic_params_bracketed_with_parent
+                impl#generics_with_parent ::orga::client::AsyncCall for #struct_name#generic_params_bracketed_with_parent
                 where
                     #parent_client_ty: Clone + Send,
                     #parent_client_ty: ::orga::client::AsyncCall<Call = <#item_ty as ::orga::call::Call>::Call>,
@@ -622,7 +620,7 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
                 }
 
                 #[::orga::async_trait(?Send)]
-                impl#generics_sanitized ::orga::client::AsyncQuery for #struct_name#generic_params_bracketed_with_parent
+                impl#generics_with_parent ::orga::client::AsyncQuery for #struct_name#generic_params_bracketed_with_parent
                 where
                     #parent_client_ty: Clone + Send,
                     #parent_client_ty: ::orga::client::AsyncQuery<Query = <#item_ty as ::orga::query::Query>::Query>,
@@ -638,7 +636,7 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
                         // assumes that the query has a tuple variant called "Field" +
                         // the camel-cased name as the field
                         let subcall = <#item_ty as ::orga::query::Query>::Query::#variant_name(query);
-                        self.parent.query(subcall, |s| check(s.#field_name)).await
+                        ::orga::client::AsyncQuery::query(&self.parent, subcall, |s| check(s.#field_name)).await
                     }
                 }
             };
