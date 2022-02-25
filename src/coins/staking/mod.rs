@@ -55,6 +55,7 @@ pub struct Staking<S: Symbol> {
     validator_queue: EntryMap<ValidatorQueueEntry>,
     unbonding_delegation_queue: Deque<UnbondingDelegationEntry>,
     redelegation_queue: Deque<RedelegationEntry>,
+    delegation_index: Map<Address, Map<Address, ()>>,
 }
 
 #[derive(Entry, Clone)]
@@ -145,6 +146,7 @@ impl<S: Symbol> State for Staking<S> {
                 data.unbonding_delegation_queue,
             )?,
             redelegation_queue: State::create(store.sub(&[16]), data.redelegation_queue)?,
+            delegation_index: State::create(store.sub(&[17]), ())?,
         })
     }
 
@@ -156,6 +158,7 @@ impl<S: Symbol> State for Staking<S> {
         self.validators_by_power.flush()?;
         self.address_for_tm_hash.flush()?;
         self.validator_queue.flush()?;
+        self.delegation_index.flush()?;
         Ok(Self::Encoding {
             max_validators: self.max_validators,
             min_self_delegation_min: self.min_self_delegation_min,
@@ -322,8 +325,15 @@ impl<S: Symbol> Staking<S> {
             let mut delegator = validator.get_mut(delegator_address)?;
             delegator.add_stake(coins)?;
         }
-
+        self.index_delegation(val_address, delegator_address)?;
         self.update_vp(val_address)
+    }
+
+    fn index_delegation(&mut self, val_address: Address, delegator_address: Address) -> Result<()> {
+        self.delegation_index
+            .entry(delegator_address)?
+            .or_insert_default()?
+            .insert(val_address, ())
     }
 
     fn consensus_key(&self, val_address: Address) -> Result<[u8; 32]> {
@@ -554,6 +564,7 @@ impl<S: Symbol> Staking<S> {
         };
 
         {
+            let _ = self.consensus_key(dst_validator_address)?;
             let mut dst_validator = self.validators.get_mut(dst_validator_address)?;
             if dst_validator.tombstoned {
                 return Err(Error::Coins(
@@ -574,6 +585,7 @@ impl<S: Symbol> Staking<S> {
             .into(),
         )?;
 
+        self.index_delegation(dst_validator_address, delegator_address)?;
         self.update_vp(src_validator_address)?;
         self.update_vp(dst_validator_address)
     }
@@ -594,13 +606,15 @@ impl<S: Symbol> Staking<S> {
         &self,
         delegator_address: Address,
     ) -> Result<Vec<(Address, DelegationInfo)>> {
-        self.validators
+        self.delegation_index
+            .get_or_default(delegator_address)?
             .iter()?
             .map(|entry| {
-                let (val_address, validator) = entry?;
+                let (val_address, _) = entry?;
+                let validator = self.validators.get(*val_address)?;
                 let delegator = validator.get(delegator_address)?;
 
-                Ok((val_address, delegator.info()?))
+                Ok((*val_address, delegator.info()?))
             })
             .collect()
     }
