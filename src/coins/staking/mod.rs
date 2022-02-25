@@ -555,6 +555,11 @@ impl<S: Symbol> Staking<S> {
 
         {
             let mut dst_validator = self.validators.get_mut(dst_validator_address)?;
+            if dst_validator.tombstoned {
+                return Err(Error::Coins(
+                    "Cannot redelegate to a tombstoned validator".into(),
+                ));
+            }
             let mut dst_delegator = dst_validator.get_mut(delegator_address)?;
             dst_delegator.redelegate_in(src_validator_address, coins, start_seconds)?;
         }
