@@ -647,8 +647,8 @@ where
             Err(e) => return Some(Err(e)),
             Ok(None) => {
                 self.done = true;
-                return None
-            },
+                return None;
+            }
             Ok(Some((key, value))) => (key, value),
         };
 
