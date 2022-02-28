@@ -520,7 +520,11 @@ impl<S: Symbol> Staking<S> {
             let amount = amount.into();
             let now = self.current_seconds()?;
             let mut validator = self.validators.get_mut(validator_address)?;
-            let start_seconds = Some(now);
+            let start_seconds = match validator.status() {
+                Status::Bonded => Some(now),
+                Status::Unbonding { start_seconds } => Some(start_seconds),
+                Status::Unbonded => None,
+            };
             let mut delegator = validator.get_mut(delegator_address)?;
 
             delegator.unbond(amount, start_seconds)?;
@@ -555,12 +559,20 @@ impl<S: Symbol> Staking<S> {
             ));
         }
         let amount = amount.into();
-        let start_seconds = self.current_seconds()?;
+        let now = self.current_seconds()?;
 
-        let coins = {
+        let (coins, start_seconds) = {
             let mut src_validator = self.validators.get_mut(src_validator_address)?;
+            let start_seconds = match src_validator.status() {
+                Status::Bonded => Some(now),
+                Status::Unbonding { start_seconds } => Some(start_seconds),
+                Status::Unbonded => None,
+            };
             let mut src_delegator = src_validator.get_mut(delegator_address)?;
-            src_delegator.redelegate_out(dst_validator_address, amount, start_seconds)?
+            (
+                src_delegator.redelegate_out(dst_validator_address, amount, start_seconds)?,
+                start_seconds,
+            )
         };
 
         {
@@ -571,19 +583,30 @@ impl<S: Symbol> Staking<S> {
                     "Cannot redelegate to a tombstoned validator".into(),
                 ));
             }
+            if matches!(
+                dst_validator.status(),
+                Status::Unbonded | Status::Unbonding { .. }
+            ) {
+                return Err(Error::Coins(
+                    "Cannot redelegate to an unbonding or unbonded validator".into(),
+                ));
+            }
+
             let mut dst_delegator = dst_validator.get_mut(delegator_address)?;
             dst_delegator.redelegate_in(src_validator_address, coins, start_seconds)?;
         }
 
-        self.redelegation_queue.push_back(
-            RedelegationEntry {
-                src_validator_address,
-                dst_validator_address,
-                delegator_address,
-                start_seconds,
-            }
-            .into(),
-        )?;
+        if let Some(start_seconds) = start_seconds {
+            self.redelegation_queue.push_back(
+                RedelegationEntry {
+                    src_validator_address,
+                    dst_validator_address,
+                    delegator_address,
+                    start_seconds,
+                }
+                .into(),
+            )?;
+        }
 
         self.index_delegation(dst_validator_address, delegator_address)?;
         self.update_vp(src_validator_address)?;

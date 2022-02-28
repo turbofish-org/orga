@@ -192,7 +192,7 @@ impl<S: Symbol> Delegator<S> {
         &mut self,
         dst_val_address: Address,
         amount: Amount,
-        start_seconds: i64,
+        start_seconds: Option<i64>,
     ) -> Result<Coin<S>> {
         if !self.redelegations_in.is_empty() {
             return Err(Error::Coins(
@@ -201,15 +201,16 @@ impl<S: Symbol> Delegator<S> {
         }
 
         let redelegated_coins = self.staked.take(amount)?;
-
-        self.redelegations_out.push_back(
-            Redelegation {
-                amount,
-                address: dst_val_address,
-                start_seconds,
-            }
-            .into(),
-        )?;
+        if let Some(start_seconds) = start_seconds {
+            self.redelegations_out.push_back(
+                Redelegation {
+                    amount,
+                    address: dst_val_address,
+                    start_seconds,
+                }
+                .into(),
+            )?;
+        }
 
         Ok(redelegated_coins)
     }
@@ -218,16 +219,18 @@ impl<S: Symbol> Delegator<S> {
         &mut self,
         src_val_address: Address,
         coins: Coin<S>,
-        start_seconds: i64,
+        start_seconds: Option<i64>,
     ) -> Result<()> {
-        self.redelegations_in.push_back(
-            Redelegation {
-                address: src_val_address,
-                amount: coins.amount,
-                start_seconds,
-            }
-            .into(),
-        )?;
+        if let Some(start_seconds) = start_seconds {
+            self.redelegations_in.push_back(
+                Redelegation {
+                    address: src_val_address,
+                    amount: coins.amount,
+                    start_seconds,
+                }
+                .into(),
+            )?;
+        }
 
         self.add_stake(coins)
     }

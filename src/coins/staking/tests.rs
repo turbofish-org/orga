@@ -18,6 +18,7 @@ fn setup_state() -> Result<Staking<Simp>> {
     staking.downtime_jail_seconds = 5;
     staking.slash_fraction_downtime = (Amount::new(1) / Amount::new(2))?;
     staking.slash_fraction_double_sign = (Amount::new(1) / Amount::new(2))?;
+    staking.min_self_delegation_min = 1;
 
     Context::add(Validators::default());
     Context::add(Time::from_seconds(0));
