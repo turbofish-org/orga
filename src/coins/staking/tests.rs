@@ -1381,3 +1381,98 @@ fn reward_with_unbond() -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(feature = "abci")]
+#[test]
+#[serial]
+#[should_panic(expected = "Cannot redelegate from validator with inbound redelegations")]
+fn redelegate_from_to_failure() {
+    let mut staking = setup_state().unwrap();
+
+    for i in 0..2 {
+        staking
+            .declare(
+                Address::from_pubkey([i; 33]),
+                Declaration {
+                    consensus_key: [i; 32],
+                    commission: Commission {
+                        rate: dec!(0.0).into(),
+                        max: dec!(1.0).into(),
+                        max_change: dec!(0.1).into(),
+                    },
+                    amount: Amount::new(100),
+                    min_self_delegation: 0.into(),
+                    validator_info: vec![].into(),
+                },
+                Amount::new(100).into(),
+            )
+            .unwrap();
+    }
+
+    let val_0 = Address::from_pubkey([0; 33]);
+    let val_1 = Address::from_pubkey([1; 33]);
+    let staker = Address::from_pubkey([2; 33]);
+
+    staking.delegate(val_0, staker, 100.into()).unwrap();
+    staking.delegate(val_1, staker, 100.into()).unwrap();
+
+    staking.end_block_step().unwrap();
+
+    staking
+        .redelegate(val_0, val_1, staker, Amount::from(100))
+        .unwrap();
+
+    staking.end_block_step().unwrap();
+
+    staking
+        .redelegate(val_1, val_0, staker, Amount::from(100))
+        .unwrap();
+}
+
+#[cfg(feature = "abci")]
+#[test]
+#[serial]
+#[should_panic(expected = "Cannot redelegate from validator with inbound redelegations")]
+fn redelegate_from_to_two_stakers() {
+    let mut staking = setup_state().unwrap();
+
+    for i in 0..2 {
+        staking
+            .declare(
+                Address::from_pubkey([i; 33]),
+                Declaration {
+                    consensus_key: [i; 32],
+                    commission: Commission {
+                        rate: dec!(0.0).into(),
+                        max: dec!(1.0).into(),
+                        max_change: dec!(0.1).into(),
+                    },
+                    amount: Amount::new(100),
+                    min_self_delegation: 0.into(),
+                    validator_info: vec![].into(),
+                },
+                Amount::new(100).into(),
+            )
+            .unwrap();
+    }
+
+    let val_0 = Address::from_pubkey([0; 33]);
+    let val_1 = Address::from_pubkey([1; 33]);
+    let staker_0 = Address::from_pubkey([2; 33]);
+    let staker_1 = Address::from_pubkey([2; 33]);
+
+    staking.delegate(val_0, staker_0, 100.into()).unwrap();
+    staking.delegate(val_1, staker_1, 100.into()).unwrap();
+
+    staking.end_block_step().unwrap();
+
+    staking
+        .redelegate(val_0, val_1, staker_0, Amount::from(100))
+        .unwrap();
+
+    staking.end_block_step().unwrap();
+
+    staking
+        .redelegate(val_1, val_0, staker_1, Amount::from(100))
+        .unwrap();
+}
