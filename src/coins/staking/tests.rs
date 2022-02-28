@@ -12,16 +12,6 @@ use serial_test::serial;
 struct Simp(());
 impl Symbol for Simp {}
 
-struct SimpKey {
-    addr: [u8; 33],
-    con_key: [u8; 32],
-}
-
-enum AmtDistribution {
-    Uniform(u64),
-    Normal(u64, u64),
-}
-
 fn setup_state() -> Result<Staking<Simp>> {
     let store = Store::new(Shared::new(MapStore::new()).into());
     let mut staking: Staking<Simp> = Staking::create(store, Default::default())?;
@@ -868,7 +858,6 @@ fn redelegation_double_slash() -> Result<()> {
         )?;
     }
 
-    let ctx = Context::resolve::<Validators>().unwrap();
     let staker = Address::from_pubkey([2; 33]);
     let val_0 = Address::from_pubkey([0; 33]);
     let val_1 = Address::from_pubkey([1; 33]);
