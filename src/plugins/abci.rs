@@ -16,7 +16,7 @@ mod full {
     use super::Time;
     use crate::abci::{prost::Adapter, App};
     use crate::call::Call;
-    use crate::collections::Map;
+    use crate::collections::{Entry, EntryMap, Map};
     use crate::context::Context;
     use crate::encoding::{Decode, Encode};
     use crate::query::Query;
@@ -25,8 +25,10 @@ mod full {
     use crate::Result;
     #[cfg(test)]
     use mutagen::mutate;
+    use std::cell::{Ref, RefCell};
     use std::collections::HashMap;
     use std::convert::TryInto;
+    use std::rc::Rc;
     use tendermint_proto::abci::{
         Evidence, LastCommitInfo, RequestBeginBlock, RequestEndBlock, RequestInitChain,
         ValidatorUpdate,
@@ -35,12 +37,20 @@ mod full {
     use tendermint_proto::google::protobuf::Timestamp;
     use tendermint_proto::types::Header;
 
+    #[derive(Entry)]
+    pub struct ValidatorEntry {
+        #[key]
+        pub pubkey: [u8; 32],
+        pub power: u64,
+    }
+
     type UpdateMap = Map<[u8; 32], Adapter<ValidatorUpdate>>;
     pub struct ABCIPlugin<T> {
         inner: T,
         pub(crate) validator_updates: Option<HashMap<[u8; 32], ValidatorUpdate>>,
         updates: UpdateMap,
         time: Option<Timestamp>,
+        current_vp: Rc<RefCell<Option<EntryMap<ValidatorEntry>>>>,
     }
 
     pub struct InitChainCtx {
@@ -116,12 +126,20 @@ mod full {
         }
     }
 
-    #[derive(Default, Debug)]
+    #[derive(Default)]
     pub struct Validators {
         pub(crate) updates: HashMap<[u8; 32], Adapter<ValidatorUpdate>>,
+        current_vp: Rc<RefCell<Option<EntryMap<ValidatorEntry>>>>,
     }
 
     impl Validators {
+        fn new(current_vp: Rc<RefCell<Option<EntryMap<ValidatorEntry>>>>) -> Self {
+            Self {
+                updates: HashMap::new(),
+                current_vp,
+            }
+        }
+
         #[cfg_attr(test, mutate)]
         pub fn set_voting_power<A: Into<[u8; 32]>>(&mut self, pub_key: A, power: u64) {
             let pub_key = pub_key.into();
@@ -136,6 +154,10 @@ mod full {
                 }
                 .into(),
             );
+        }
+
+        pub fn current_set(&mut self) -> Ref<Option<EntryMap<ValidatorEntry>>> {
+            self.current_vp.borrow()
         }
     }
 
@@ -171,7 +193,8 @@ mod full {
 
         fn call(&mut self, call: Self::Call) -> Result<()> {
             use ABCICall::*;
-            Context::add(Validators::default());
+            let validators = Validators::new(self.current_vp.clone());
+            Context::add(validators);
             let create_time_ctx = |time: &Option<Timestamp>| {
                 if let Some(timestamp) = time {
                     Context::add(Time {
@@ -226,8 +249,21 @@ mod full {
             }?;
 
             let validators = Context::resolve::<Validators>().unwrap();
+            let mut current_vp_ref = validators.current_vp.borrow_mut();
+            let current_vp = current_vp_ref.as_mut().unwrap();
             for (pubkey, update) in validators.updates.iter() {
                 self.updates.insert(*pubkey, (*update).clone().into())?;
+                if update.power > 0 {
+                    current_vp.insert(ValidatorEntry {
+                        pubkey: *pubkey,
+                        power: update.power as u64,
+                    })?;
+                } else {
+                    current_vp.delete(ValidatorEntry {
+                        pubkey: *pubkey,
+                        power: 0,
+                    })?;
+                }
             }
             Ok(res)
         }
@@ -248,17 +284,18 @@ mod full {
     {
         type Encoding = (T::Encoding,);
         fn create(store: Store, data: Self::Encoding) -> Result<Self> {
-            Context::add(Validators::default());
             Ok(Self {
                 inner: T::create(store.sub(&[0]), data.0)?,
                 validator_updates: None,
                 updates: UpdateMap::create(store.sub(&[1]), ())?,
                 time: None,
+                current_vp: Rc::new(RefCell::new(Some(State::create(store.sub(&[2]), ())?))),
             })
         }
 
         fn flush(self) -> Result<Self::Encoding> {
             self.updates.flush()?;
+            self.current_vp.borrow_mut().take().unwrap().flush()?;
             Ok((self.inner.flush()?,))
         }
     }

@@ -306,12 +306,14 @@ pub mod keplr {
 
         pub async fn pubkey(&mut self) -> [u8; 33] {
             unsafe {
-                let get_accounts: Function = get(&self.handle().signer, &"getAccounts".to_string().into())
-                    .unwrap()
-                    .into();
-                let accounts_promise: Promise = apply(&get_accounts, &self.handle().signer, &Array::new())
-                    .unwrap()
-                    .into();
+                let get_accounts: Function =
+                    get(&self.handle().signer, &"getAccounts".to_string().into())
+                        .unwrap()
+                        .into();
+                let accounts_promise: Promise =
+                    apply(&get_accounts, &self.handle().signer, &Array::new())
+                        .unwrap()
+                        .into();
                 let accounts = JsFuture::from(accounts_promise).await.unwrap();
                 let account = get(&accounts, &0i32.into()).unwrap();
                 let pubkey: Uint8Array =
@@ -325,12 +327,14 @@ pub mod keplr {
 
         pub async fn address(&mut self) -> String {
             unsafe {
-                let get_accounts: Function = get(&self.handle().signer, &"getAccounts".to_string().into())
-                    .unwrap()
-                    .into();
-                let accounts_promise: Promise = apply(&get_accounts, &self.handle().signer, &Array::new())
-                    .unwrap()
-                    .into();
+                let get_accounts: Function =
+                    get(&self.handle().signer, &"getAccounts".to_string().into())
+                        .unwrap()
+                        .into();
+                let accounts_promise: Promise =
+                    apply(&get_accounts, &self.handle().signer, &Array::new())
+                        .unwrap()
+                        .into();
                 let accounts = JsFuture::from(accounts_promise).await.unwrap();
                 let account = get(&accounts, &0i32.into()).unwrap();
                 get(&account, &"address".to_string().into())
@@ -353,11 +357,13 @@ pub mod keplr {
                 Array::push(&args, &self.address().await.into());
                 Array::push(&args, &msg.into());
 
-                let sign_arbitrary: Function = get(&self.handle().keplr, &"signArbitrary".to_string().into())
+                let sign_arbitrary: Function =
+                    get(&self.handle().keplr, &"signArbitrary".to_string().into())
+                        .unwrap()
+                        .into();
+                let sign_promise: Promise = apply(&sign_arbitrary, &self.handle().keplr, &args)
                     .unwrap()
                     .into();
-                let sign_promise: Promise =
-                    apply(&sign_arbitrary, &self.handle().keplr, &args).unwrap().into();
                 let res = JsFuture::from(sign_promise).await.unwrap();
 
                 let signature_b64: String = get(&res, &"signature".to_string().into())

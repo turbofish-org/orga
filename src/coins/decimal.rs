@@ -1,5 +1,8 @@
 use super::Amount;
+use crate::call::Call;
+use crate::client::Client;
 use crate::encoding::{Decode, Encode};
+use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::{Error, Result};
@@ -7,7 +10,7 @@ use rust_decimal::prelude::{Decimal as NumDecimal, *};
 use std::cmp::Ordering;
 use std::convert::TryFrom;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Query, Client, Call)]
 pub struct Decimal(pub(crate) NumDecimal);
 
 impl std::fmt::Display for Decimal {
@@ -70,6 +73,18 @@ impl Decimal {
                 )),
             }
         }
+    }
+
+    pub fn abs(&self) -> Self {
+        Self(self.0.abs())
+    }
+
+    pub fn zero() -> Self {
+        Self(NumDecimal::ZERO)
+    }
+
+    pub fn one() -> Self {
+        Self(NumDecimal::ONE)
     }
 }
 

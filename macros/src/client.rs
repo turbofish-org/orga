@@ -381,6 +381,8 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
     let parent_ty: GenericParam = syn::parse2(quote!(__Parent)).unwrap();
     let return_ty: GenericParam = syn::parse2(quote!(__Return)).unwrap();
 
+    let generic_params_bracketed = gen_param_input(&item_generics, true);
+
     let mut generics_sanitized = item_generics.clone();
     generics_sanitized.params.iter_mut().for_each(|g| {
         if let GenericParam::Type(ref mut t) = g {
@@ -405,7 +407,7 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
 
     let generic_params_bracketed_with_parent = gen_param_input(&generics_with_parent, true);
 
-    let item_ty = quote!(#item_name#item_generics);
+    let item_ty = quote!(#item_name#generic_params_bracketed);
 
     let adapters: Vec<_> = fields
         .iter()
@@ -430,6 +432,7 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
                 },
             );
             let field_ty = &field.ty;
+
             let parent_client_ty: GenericParam = syn::parse2(quote!(__Parent)).unwrap();
         
             let struct_def = quote! {
@@ -439,6 +442,7 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
                     #parent_client_ty: Clone + Send,
                 {
                     pub(super) parent: #parent_client_ty,
+                    marker: ::std::marker::PhantomData<fn() -> #item_ty>,
                 }
             };
         
@@ -449,7 +453,7 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
                     #parent_client_ty: Clone + Send,
                 {
                     pub fn new(parent: #parent_client_ty) -> Self {
-                        Self { parent }
+                        Self { parent, marker: ::std::marker::PhantomData }
                     }
                 }
         

@@ -60,7 +60,8 @@ impl<T, U: Clone, const ID: &'static str> Clone for Client<T, U, ID> {
 unsafe impl<T, U: Clone + Send, const ID: &'static str> Send for Client<T, U, ID> {}
 
 #[async_trait::async_trait(?Send)]
-impl<T: CallTrait, U: AsyncCall<Call = Vec<u8>> + Clone, const ID: &'static str> AsyncCall for Client<T, U, ID>
+impl<T: CallTrait, U: AsyncCall<Call = Vec<u8>> + Clone, const ID: &'static str> AsyncCall
+    for Client<T, U, ID>
 where
     T::Call: Send,
     U: Send,
@@ -78,7 +79,9 @@ where
     }
 }
 
-impl<T: ClientTrait<Client<T, U, ID>>, U: Clone, const ID: &'static str> ClientTrait<U> for ChainCommitmentPlugin<T, ID> {
+impl<T: ClientTrait<Client<T, U, ID>>, U: Clone, const ID: &'static str> ClientTrait<U>
+    for ChainCommitmentPlugin<T, ID>
+{
     type Client = T::Client;
 
     fn create_client(parent: U) -> Self::Client {

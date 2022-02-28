@@ -1,3 +1,4 @@
+use crate::coins::Address;
 use crate::coins::{Amount, Balance, Coin, Decimal, Give, Share, Symbol, Take};
 use crate::collections::Deque;
 use crate::context::GetContext;
@@ -13,31 +14,40 @@ pub struct Unbond<S: Symbol> {
     pub(super) coins: Share<S>,
     pub(super) start_seconds: i64,
 }
+
+#[derive(State, Clone)]
+pub struct Redelegation {
+    pub(super) amount: Amount,
+    pub(super) address: Address,
+    pub(super) start_seconds: i64,
+}
+
 #[derive(State)]
 pub struct Delegator<S: Symbol> {
     pub(super) liquid: Share<S>,
     pub(super) staked: Share<S>,
-    pub(super) jailed: bool,
     pub(super) unbonding: Deque<Unbond<S>>,
+    pub(super) redelegations_out: Deque<Redelegation>,
+    pub(super) redelegations_in: Deque<Redelegation>,
 }
 
 impl<S: Symbol> Delegator<S> {
-    pub(super) fn unbond<A: Into<Amount>>(&mut self, amount: A) -> Result<()> {
+    pub(super) fn unbond<A: Into<Amount>>(
+        &mut self,
+        amount: A,
+        start_seconds: Option<i64>,
+    ) -> Result<()> {
         let amount = amount.into();
         let coins = self.staked.take(amount)?.into();
-
-        let start_seconds = self
-            .context::<Time>()
-            .ok_or_else(|| Error::Coins("No Time context available".into()))?
-            .seconds;
-
-        let unbond = Unbond {
-            coins,
-            start_seconds,
-        };
-        self.unbonding.push_back(unbond.into())?;
-
-        Ok(())
+        if let Some(start_seconds) = start_seconds {
+            let unbond = Unbond {
+                coins,
+                start_seconds,
+            };
+            self.unbonding.push_back(unbond.into())
+        } else {
+            self.liquid.give(amount.into())
+        }
     }
 
     pub(super) fn info(&self) -> Result<DelegationInfo> {
@@ -58,42 +68,80 @@ impl<S: Symbol> Delegator<S> {
         })
     }
 
-    pub(super) fn slashable_balance(&mut self) -> Result<Decimal> {
-        self.process_unbonds()?;
-        let mut sum: Decimal = 0.into();
-        sum = (sum + self.staked.shares)?;
-        for i in 0..self.unbonding.len() {
-            let unbond = self
-                .unbonding
-                .get(i)?
-                .ok_or_else(|| Error::Coins("Failed to iterate over unbonds".into()))?;
-            sum = (sum + unbond.coins.shares)?;
-        }
-
-        Ok(sum)
-    }
-
-    pub(super) fn slash(&mut self, multiplier: Decimal) -> Result<()> {
+    pub(super) fn slash(
+        &mut self,
+        multiplier: Decimal,
+        liveness_fault: bool,
+    ) -> Result<Vec<Redelegation>> {
         self.staked.shares = (self.staked.shares * multiplier)?;
+        if liveness_fault {
+            return Ok(vec![]);
+        }
         for i in 0..self.unbonding.len() {
             let mut unbond = self
                 .unbonding
                 .get_mut(i)?
                 .ok_or_else(|| Error::Coins("Failed to iterate over unbonds".into()))?;
+
             unbond.coins.shares = (unbond.coins.shares * multiplier)?;
         }
-        self.jailed = true;
+
+        let mut redelegations = vec![];
+        for i in 0..self.redelegations_out.len() {
+            let redelegation = self
+                .redelegations_out
+                .get(i)?
+                .ok_or_else(|| Error::Coins("Failed to iterate over redelegations".into()))?;
+            redelegations.push(redelegation.clone());
+        }
+
+        Ok(redelegations)
+    }
+
+    pub(super) fn slash_redelegation(&mut self, amount: Amount) -> Result<()> {
+        let stake_slash = if amount > self.staked.shares.amount()? {
+            self.staked.shares.amount()?
+        } else {
+            amount
+        };
+
+        if stake_slash > 0 {
+            self.staked.take(stake_slash)?.burn();
+        }
+
+        if stake_slash == amount {
+            return Ok(());
+        }
+
+        let mut remaining_slash = (amount - stake_slash)?;
+
+        for i in 0..self.unbonding.len() {
+            let unbond = self.unbonding.get_mut(i)?;
+            if let Some(mut unbond) = unbond {
+                let unbond_slash = if remaining_slash > unbond.coins.shares.amount()? {
+                    unbond.coins.shares.amount()?
+                } else {
+                    remaining_slash
+                };
+                if unbond_slash > 0 {
+                    unbond.coins.take(unbond_slash)?.burn();
+                }
+                remaining_slash = (remaining_slash - unbond_slash)?;
+
+                if remaining_slash == 0 {
+                    break;
+                }
+            }
+        }
+
         Ok(())
     }
 
     pub(super) fn process_unbonds(&mut self) -> Result<()> {
-        let now_seconds = self
-            .context::<Time>()
-            .ok_or_else(|| Error::Coins("No Time context available".into()))?
-            .seconds;
+        let now = self.current_seconds()?;
 
         while let Some(unbond) = self.unbonding.front()? {
-            let unbond_matured = now_seconds - unbond.start_seconds >= UNBONDING_SECONDS as i64;
+            let unbond_matured = now - unbond.start_seconds >= UNBONDING_SECONDS as i64;
             if unbond_matured {
                 let unbond = self
                     .unbonding
@@ -108,6 +156,85 @@ impl<S: Symbol> Delegator<S> {
         Ok(())
     }
 
+    pub(super) fn process_redelegations_in(&mut self) -> Result<()> {
+        let now = self.current_seconds()?;
+        while let Some(redelegation) = self.redelegations_in.front()? {
+            let matured = now - redelegation.start_seconds >= UNBONDING_SECONDS as i64;
+            if matured {
+                self.redelegations_in
+                    .pop_front()?
+                    .ok_or_else(|| Error::Coins("Failed to pop inbound redelegation".into()))?;
+            } else {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub(super) fn process_redelegations_out(&mut self) -> Result<()> {
+        let now = self.current_seconds()?;
+        while let Some(redelegation) = self.redelegations_out.front()? {
+            let matured = now - redelegation.start_seconds >= UNBONDING_SECONDS as i64;
+            if matured {
+                self.redelegations_out
+                    .pop_front()?
+                    .ok_or_else(|| Error::Coins("Failed to pop outbound redelegation".into()))?;
+            } else {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub(super) fn redelegate_out(
+        &mut self,
+        dst_val_address: Address,
+        amount: Amount,
+        start_seconds: Option<i64>,
+    ) -> Result<Coin<S>> {
+        if !self.redelegations_in.is_empty() {
+            return Err(Error::Coins(
+                "Cannot redelegate from validator with inbound redelegations".into(),
+            ));
+        }
+
+        let redelegated_coins = self.staked.take(amount)?;
+        if let Some(start_seconds) = start_seconds {
+            self.redelegations_out.push_back(
+                Redelegation {
+                    amount,
+                    address: dst_val_address,
+                    start_seconds,
+                }
+                .into(),
+            )?;
+        }
+
+        Ok(redelegated_coins)
+    }
+
+    pub(super) fn redelegate_in(
+        &mut self,
+        src_val_address: Address,
+        coins: Coin<S>,
+        start_seconds: Option<i64>,
+    ) -> Result<()> {
+        if let Some(start_seconds) = start_seconds {
+            self.redelegations_in.push_back(
+                Redelegation {
+                    address: src_val_address,
+                    amount: coins.amount,
+                    start_seconds,
+                }
+                .into(),
+            )?;
+        }
+
+        self.add_stake(coins)
+    }
+
     pub(super) fn add_stake(&mut self, coins: Coin<S>) -> Result<()> {
         self.staked.give(coins)
     }
@@ -115,17 +242,20 @@ impl<S: Symbol> Delegator<S> {
     pub(super) fn withdraw_liquid<A: Into<Amount>>(&mut self, amount: A) -> Result<Coin<S>> {
         self.liquid.take(amount.into())
     }
+
+    fn current_seconds(&mut self) -> Result<i64> {
+        Ok(self
+            .context::<Time>()
+            .ok_or_else(|| Error::Coins("No Time context available".into()))?
+            .seconds)
+    }
 }
 
 /// A delegator's balance is its staked coins, since Balance here is used in the
 /// parent collection to calculate the validator's voting power.
 impl<S: Symbol> Balance<S, Decimal> for Delegator<S> {
     fn balance(&self) -> Result<Decimal> {
-        if self.jailed {
-            Ok(0.into())
-        } else {
-            Ok(self.staked.shares)
-        }
+        Ok(self.staked.shares)
     }
 }
 

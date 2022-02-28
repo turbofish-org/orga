@@ -3,6 +3,7 @@
 #![feature(async_closure)]
 
 use orga::prelude::*;
+use rust_decimal_macros::dec;
 
 #[derive(State, Debug, Clone)]
 pub struct MyCoin(());
@@ -31,7 +32,6 @@ impl InitChain for StakingApp {
     fn init_chain(&mut self, _ctx: &InitChainCtx) -> Result<()> {
         self.accounts.deposit(my_address(), 100_000_000.into())?;
         self.accounts.allow_transfers(true);
-        self.staking.set_min_self_delegation(100);
 
         Ok(())
     }
@@ -101,12 +101,17 @@ async fn main() {
     rpc_client()
         .pay_from(async move |mut client| client.accounts.take_as_funding(350.into()).await)
         .staking
-        .declare_self(
-            my_tm_key,
-            rust_decimal_macros::dec!(0.0).into(),
-            350.into(),
-            vec![].into(),
-        )
+        .declare_self(Declaration {
+            commission: Commission {
+                rate: dec!(0.0).into(),
+                max: dec!(1.0).into(),
+                max_change: dec!(0.1).into(),
+            },
+            consensus_key: my_tm_key,
+            amount: 350.into(),
+            validator_info: vec![].into(),
+            min_self_delegation: 0.into(),
+        })
         .await
         .unwrap();
 
