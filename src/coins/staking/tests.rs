@@ -63,7 +63,7 @@ fn staking() -> Result<()> {
                 max_change: dec!(0.1).into(),
             },
             amount: 50.into(),
-            min_self_delegation: 0.into(),
+            min_self_delegation: 1.into(),
             validator_info: vec![].into(),
         },
         50.into(),
@@ -79,7 +79,7 @@ fn staking() -> Result<()> {
                     max_change: dec!(0.1).into(),
                 },
                 amount: 50.into(),
-                min_self_delegation: 0.into(),
+                min_self_delegation: 1.into(),
                 validator_info: vec![].into(),
             },
             50.into(),
@@ -96,7 +96,7 @@ fn staking() -> Result<()> {
                     max_change: dec!(0.1).into(),
                 },
                 amount: 50.into(),
-                min_self_delegation: 0.into(),
+                min_self_delegation: 1.into(),
                 validator_info: vec![].into(),
             },
             50.into(),
@@ -117,7 +117,7 @@ fn staking() -> Result<()> {
                 max_change: dec!(0.1).into(),
             },
             amount: 50.into(),
-            min_self_delegation: 0.into(),
+            min_self_delegation: 1.into(),
             validator_info: vec![].into(),
         },
         50.into(),
@@ -257,7 +257,7 @@ fn staking() -> Result<()> {
                 max_change: dec!(0.1).into(),
             },
             amount: 300.into(),
-            min_self_delegation: 0.into(),
+            min_self_delegation: 1.into(),
             validator_info: vec![].into(),
         },
         300.into(),
@@ -291,7 +291,7 @@ fn staking() -> Result<()> {
                 max_change: dec!(0.1).into(),
             },
             amount: 550.into(),
-            min_self_delegation: 0.into(),
+            min_self_delegation: 1.into(),
             validator_info: vec![].into(),
         },
         550.into(),
@@ -336,7 +336,7 @@ fn val_size_limit() -> Result<()> {
                     max_change: dec!(0.1).into(),
                 },
                 amount: Amount::new(i as u64 * 100),
-                min_self_delegation: 0.into(),
+                min_self_delegation: 1.into(),
                 validator_info: vec![].into(),
             },
             Amount::new(i as u64 * 100).into(),
@@ -383,7 +383,7 @@ fn val_size_limit() -> Result<()> {
                 max_change: dec!(0.1).into(),
             },
             amount: 1000.into(),
-            min_self_delegation: 0.into(),
+            min_self_delegation: 1.into(),
             validator_info: vec![].into(),
         },
         1000.into(),
@@ -442,7 +442,7 @@ fn undelegate() -> Result<()> {
                 max_change: dec!(0.1).into(),
             },
             amount: Amount::new(100),
-            min_self_delegation: 0.into(),
+            min_self_delegation: 1.into(),
             validator_info: vec![].into(),
         },
         Amount::new(100).into(),
@@ -484,7 +484,7 @@ fn undelegate_slash_before_unbond() -> Result<()> {
                 max_change: dec!(0.1).into(),
             },
             amount: Amount::new(100),
-            min_self_delegation: 0.into(),
+            min_self_delegation: 1.into(),
             validator_info: vec![].into(),
         },
         Amount::new(100).into(),
@@ -536,7 +536,7 @@ fn undelegate_slash_after_unbond() -> Result<()> {
                 max_change: dec!(0.1).into(),
             },
             amount: Amount::new(100),
-            min_self_delegation: 0.into(),
+            min_self_delegation: 1.into(),
             validator_info: vec![].into(),
         },
         Amount::new(100).into(),
@@ -587,7 +587,7 @@ fn redelegate() -> Result<()> {
                     max_change: dec!(0.1).into(),
                 },
                 amount: Amount::new(100),
-                min_self_delegation: 0.into(),
+                min_self_delegation: 1.into(),
                 validator_info: vec![].into(),
             },
             Amount::new(100).into(),
@@ -634,7 +634,7 @@ fn redelegate_slash_before_unbond() -> Result<()> {
                     max_change: dec!(0.1).into(),
                 },
                 amount: Amount::new(100),
-                min_self_delegation: 0.into(),
+                min_self_delegation: 1.into(),
                 validator_info: vec![].into(),
             },
             Amount::new(100).into(),
@@ -693,7 +693,7 @@ fn redelegate_slash_after_unbond() -> Result<()> {
                     max_change: dec!(0.1).into(),
                 },
                 amount: Amount::new(100),
-                min_self_delegation: 0.into(),
+                min_self_delegation: 1.into(),
                 validator_info: vec![].into(),
             },
             Amount::new(100).into(),
@@ -754,11 +754,11 @@ fn redelegation_slash() -> Result<()> {
                     max: dec!(1.0).into(),
                     max_change: dec!(0.1).into(),
                 },
-                amount: Amount::new(0),
-                min_self_delegation: 0.into(),
+                amount: Amount::new(1),
+                min_self_delegation: 1.into(),
                 validator_info: vec![].into(),
             },
-            Amount::new(0).into(),
+            Amount::new(1).into(),
         )?;
     }
 
@@ -779,9 +779,9 @@ fn redelegation_slash() -> Result<()> {
     )?;
     staking.end_block_step()?;
 
-    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 50);
-    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 100);
-    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 150);
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 51);
+    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 101);
+    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 151);
 
     staking.redelegate(
         Address::from_pubkey([1; 33]),
@@ -791,9 +791,9 @@ fn redelegation_slash() -> Result<()> {
     )?;
     staking.end_block_step()?;
 
-    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 80);
-    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 70);
-    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 150);
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 81);
+    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 71);
+    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 151);
 
     staking.redelegate(
         Address::from_pubkey([1; 33]),
@@ -803,9 +803,9 @@ fn redelegation_slash() -> Result<()> {
     )?;
     staking.end_block_step()?;
 
-    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 80);
-    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 40);
-    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 180);
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 81);
+    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 41);
+    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 181);
 
     staking.punish_double_sign(Address::from_pubkey([1; 33]))?;
     staking.end_block_step()?;
@@ -818,9 +818,9 @@ fn redelegation_slash() -> Result<()> {
     assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 20);
     assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 165);
 
-    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 65);
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 66);
     assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 20);
-    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 165);
+    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 166);
 
     staking.punish_double_sign(Address::from_pubkey([0; 33]))?;
     staking.end_block_step()?;
@@ -828,9 +828,9 @@ fn redelegation_slash() -> Result<()> {
     assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 20);
     assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 140);
 
-    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 32);
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 33);
     assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 20);
-    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 140);
+    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 141);
 
     Ok(())
 }
@@ -851,11 +851,11 @@ fn redelegation_double_slash() -> Result<()> {
                     max: dec!(1.0).into(),
                     max_change: dec!(0.1).into(),
                 },
-                amount: Amount::new(0),
-                min_self_delegation: 0.into(),
+                amount: Amount::new(100),
+                min_self_delegation: 1.into(),
                 validator_info: vec![].into(),
             },
-            Amount::new(0).into(),
+            Amount::new(100).into(),
         )?;
     }
 
@@ -902,11 +902,11 @@ fn redelegation_slash_with_unbond() -> Result<()> {
                     max: dec!(1.0).into(),
                     max_change: dec!(0.1).into(),
                 },
-                amount: Amount::new(0),
-                min_self_delegation: 0.into(),
+                amount: Amount::new(100),
+                min_self_delegation: 1.into(),
                 validator_info: vec![].into(),
             },
-            Amount::new(0).into(),
+            Amount::new(100).into(),
         )?;
     }
 
@@ -927,9 +927,9 @@ fn redelegation_slash_with_unbond() -> Result<()> {
     )?;
     staking.end_block_step()?;
 
-    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 50);
-    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 100);
-    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 150);
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 150);
+    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 200);
+    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 250);
 
     staking.redelegate(
         Address::from_pubkey([1; 33]),
@@ -939,9 +939,9 @@ fn redelegation_slash_with_unbond() -> Result<()> {
     )?;
     staking.end_block_step()?;
 
-    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 80);
-    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 70);
-    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 150);
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 180);
+    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 170);
+    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 250);
 
     staking.redelegate(
         Address::from_pubkey([1; 33]),
@@ -951,9 +951,9 @@ fn redelegation_slash_with_unbond() -> Result<()> {
     )?;
     staking.end_block_step()?;
 
-    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 80);
-    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 40);
-    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 180);
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 180);
+    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 140);
+    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 280);
 
     staking.punish_double_sign(Address::from_pubkey([1; 33]))?;
     staking.end_block_step()?;
@@ -966,9 +966,9 @@ fn redelegation_slash_with_unbond() -> Result<()> {
     assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 20);
     assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 165);
 
-    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 65);
-    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 20);
-    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 165);
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 165);
+    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 70);
+    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 265);
 
     staking.unbond(val_2, staker, Amount::from(100))?;
     staking.end_block_step()?;
@@ -980,9 +980,9 @@ fn redelegation_slash_with_unbond() -> Result<()> {
     assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 20);
     assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 40);
 
-    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 32);
-    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 20);
-    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 40);
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 82);
+    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 70);
+    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 140);
 
     Context::add(Time::from_seconds(10));
     staking.end_block_step()?;
@@ -1008,11 +1008,11 @@ fn redelegation_slash_with_slash_unbond_overflow() -> Result<()> {
                     max: dec!(1.0).into(),
                     max_change: dec!(0.1).into(),
                 },
-                amount: Amount::new(0),
-                min_self_delegation: 0.into(),
+                amount: Amount::new(100),
+                min_self_delegation: 1.into(),
                 validator_info: vec![].into(),
             },
-            Amount::new(0).into(),
+            Amount::new(100).into(),
         )?;
     }
 
@@ -1033,9 +1033,9 @@ fn redelegation_slash_with_slash_unbond_overflow() -> Result<()> {
     )?;
     staking.end_block_step()?;
 
-    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 50);
-    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 100);
-    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 150);
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 150);
+    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 200);
+    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 250);
 
     staking.redelegate(
         Address::from_pubkey([1; 33]),
@@ -1045,9 +1045,9 @@ fn redelegation_slash_with_slash_unbond_overflow() -> Result<()> {
     )?;
     staking.end_block_step()?;
 
-    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 80);
-    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 70);
-    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 150);
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 180);
+    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 170);
+    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 250);
 
     staking.redelegate(
         Address::from_pubkey([1; 33]),
@@ -1057,9 +1057,9 @@ fn redelegation_slash_with_slash_unbond_overflow() -> Result<()> {
     )?;
     staking.end_block_step()?;
 
-    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 80);
-    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 40);
-    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 180);
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 180);
+    assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 140);
+    assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 280);
 
     staking.punish_double_sign(Address::from_pubkey([1; 33]))?;
     staking.end_block_step()?;
@@ -1072,9 +1072,9 @@ fn redelegation_slash_with_slash_unbond_overflow() -> Result<()> {
     assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 20);
     assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 165);
 
-    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 65);
-    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 20);
-    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 165);
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 165);
+    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 70);
+    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 265);
 
     for _ in 0..15 {
         staking.unbond(val_2, staker, Amount::from(10))?;
@@ -1091,9 +1091,9 @@ fn redelegation_slash_with_slash_unbond_overflow() -> Result<()> {
     assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 20);
     assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 0);
 
-    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 32);
-    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 20);
-    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 0);
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 82);
+    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 70);
+    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 100);
 
     Context::add(Time::from_seconds(10));
     staking.end_block_step()?;
@@ -1121,7 +1121,7 @@ fn delegate_slashed_fail() {
                     max_change: dec!(0.1).into(),
                 },
                 amount: Amount::new(0),
-                min_self_delegation: 0.into(),
+                min_self_delegation: 1.into(),
                 validator_info: vec![].into(),
             },
             Amount::new(100).into(),
@@ -1307,7 +1307,7 @@ fn unclaimed_rewards_slash() -> Result<()> {
                 max_change: dec!(0.1).into(),
             },
             amount: Amount::new(100),
-            min_self_delegation: 0.into(),
+            min_self_delegation: 1.into(),
             validator_info: vec![].into(),
         },
         Amount::new(100).into(),
@@ -1351,7 +1351,7 @@ fn reward_with_unbond() -> Result<()> {
                     max_change: dec!(0.1).into(),
                 },
                 amount: Amount::new(100),
-                min_self_delegation: 0.into(),
+                min_self_delegation: 1.into(),
                 validator_info: vec![].into(),
             },
             Amount::new(100).into(),
@@ -1402,7 +1402,7 @@ fn redelegate_from_to_failure() {
                         max_change: dec!(0.1).into(),
                     },
                     amount: Amount::new(100),
-                    min_self_delegation: 0.into(),
+                    min_self_delegation: 1.into(),
                     validator_info: vec![].into(),
                 },
                 Amount::new(100).into(),
@@ -1449,7 +1449,7 @@ fn redelegate_from_to_two_stakers() {
                         max_change: dec!(0.1).into(),
                     },
                     amount: Amount::new(100),
-                    min_self_delegation: 0.into(),
+                    min_self_delegation: 1.into(),
                     validator_info: vec![].into(),
                 },
                 Amount::new(100).into(),
