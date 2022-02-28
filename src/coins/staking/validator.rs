@@ -15,13 +15,21 @@ pub struct Validator<S: Symbol> {
     pub(super) address: Address,
     pub(super) commission: Decimal,
     pub(super) delegators: Delegators<S>,
-    pub(super) jailed_coins: Amount,
-    pub(super) amount_staked: Amount,
     pub(super) info: ValidatorInfo,
     pub(super) in_active_set: bool,
 }
 
-#[derive(Default)]
+#[derive(Encode, Decode)]
+pub struct ValidatorQueryInfo {
+    pub jailed: bool,
+    pub address: Address,
+    pub commission: Decimal,
+    pub in_active_set: bool,
+    pub info: ValidatorInfo,
+    pub amount_staked: Amount,
+}
+
+#[derive(Default, Clone)]
 pub struct ValidatorInfo {
     pub bytes: Vec<u8>,
 }
@@ -107,7 +115,6 @@ impl<S: Symbol> Validator<S> {
             delegator.slash(slash_multiplier)?;
             Ok(())
         })?;
-        self.amount_staked = 0.into();
 
         Ok(amount.into())
     }
@@ -131,12 +138,23 @@ impl<S: Symbol> Validator<S> {
             .iter()?
             .try_for_each(|entry| -> Result<()> {
                 let (k, _v) = entry?;
-                delegator_keys.push(*k);
+                delegator_keys.push(k);
 
                 Ok(())
             })?;
 
         Ok(delegator_keys)
+    }
+
+    pub(super) fn query_info(&self) -> Result<ValidatorQueryInfo> {
+        Ok(ValidatorQueryInfo {
+            jailed: self.jailed,
+            address: self.address,
+            commission: self.commission,
+            in_active_set: self.in_active_set,
+            info: self.info.clone(),
+            amount_staked: self.delegators.balance()?.amount()?,
+        })
     }
 }
 
@@ -155,11 +173,6 @@ impl<S: Symbol> Give<S> for Validator<S> {
         let one: Decimal = 1.into();
         let delegator_amount = (coins.amount * (one - self.commission))?.amount()?;
         let validator_amount = (coins.amount * self.commission)?.amount()?;
-
-        debug_assert_eq!(
-            (delegator_amount + validator_amount).result().unwrap(),
-            coins.amount
-        );
 
         self.delegators.give(delegator_amount.into())?;
         self.delegators

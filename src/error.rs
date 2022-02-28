@@ -18,6 +18,8 @@ pub enum Error {
     Coins(String),
     #[error(transparent)]
     Dalek(#[from] ed25519_dalek::ed25519::Error),
+    #[error(transparent)]
+    Decimal(#[from] rust_decimal::Error),
     #[error("Divide by Zero Error: Cannot divide by zero")]
     DivideByZero,
     #[error("Downcast Error: {0}")]
@@ -45,6 +47,8 @@ pub enum Error {
     #[cfg(feature = "merk-full")]
     #[error(transparent)]
     RocksDB(#[from] merk::rocksdb::Error),
+    #[error(transparent)]
+    Secp256k1(#[from] secp256k1::Error),
     #[error("Signer Error: {0}")]
     Signer(String),
     #[error("Store Error: {0}")]

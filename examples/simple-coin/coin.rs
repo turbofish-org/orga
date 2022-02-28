@@ -29,7 +29,7 @@ pub struct SimpleCoin {
 
 impl InitChain for SimpleCoin {
     fn init_chain(&mut self, _ctx: &InitChainCtx) -> Result<()> {
-        let my_address = Address::from_pubkey(load_keypair().unwrap().public.to_bytes());
+        let my_address = Address::from_pubkey(load_keypair().unwrap().public.serialize());
         println!("my address: {:?}", my_address);
         self.balances.insert(my_address, Simp::mint(100).into())?;
         Ok(())

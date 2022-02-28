@@ -1,7 +1,7 @@
 use crate::call::Call;
 use crate::client::{AsyncCall, Client};
 use crate::coins::{Amount, Coin, Symbol};
-use crate::context::Context;
+use crate::context::{Context, GetContext};
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
@@ -26,6 +26,7 @@ impl<T: State> Deref for PayablePlugin<T> {
 #[derive(Default)]
 pub struct Paid {
     map: HashMap<TypeId, Amount>,
+    pub running_payer: bool,
 }
 
 impl Paid {
@@ -53,6 +54,15 @@ impl Paid {
         *entry = (*entry - amount)?;
 
         Ok(amount.into())
+    }
+
+    pub fn balance<S: Symbol>(&self) -> Result<Amount> {
+        let entry = match self.map.get(&TypeId::of::<S>()) {
+            Some(amt) => *amt,
+            None => 0.into(),
+        };
+
+        Ok(entry)
     }
 }
 
@@ -116,8 +126,15 @@ where
         match call {
             PayableCall::Unpaid(call) => self.inner.call(call),
             PayableCall::Paid(calls) => {
-                Context::add(Paid::default());
+                let ctx = Paid {
+                    running_payer: true,
+                    ..Default::default()
+                };
+                Context::add(ctx);
                 self.inner.call(calls.payer)?;
+
+                let ctx = self.context::<Paid>().unwrap();
+                ctx.running_payer = false;
                 let res = self.inner.call(calls.paid)?;
                 Ok(res)
             }

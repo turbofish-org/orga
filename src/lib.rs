@@ -8,6 +8,7 @@
 #![feature(generic_associated_types)]
 #![feature(try_trait_v2)]
 #![feature(never_type)]
+#![feature(adt_const_params)]
 
 extern crate self as orga;
 
@@ -48,8 +49,10 @@ pub mod store;
 #[cfg(feature = "abci")]
 pub mod tendermint;
 
+#[cfg(any(target_arch = "wasm32", feature = "abci"))]
 pub mod plugins;
 
+#[cfg(any(target_arch = "wasm32", feature = "abci"))]
 pub mod coins;
 
 pub mod context;
@@ -63,16 +66,20 @@ pub use futures_lite::future::Boxed as BoxFuture;
 pub use orga_macros as macros;
 
 pub mod prelude {
+    pub use secp256k1;
+
     #[cfg(feature = "abci")]
     pub use crate::abci::*;
     pub use crate::call::*;
     pub use crate::client::{AsyncCall, Client};
+    #[cfg(any(target_arch = "wasm32", feature = "abci"))]
     pub use crate::coins::*;
     pub use crate::collections::*;
     pub use crate::context::*;
     pub use crate::encoding::*;
     #[cfg(merk)]
     pub use crate::merk;
+    #[cfg(any(target_arch = "wasm32", feature = "abci"))]
     pub use crate::plugins::*;
     pub use crate::query::*;
     pub use crate::state::*;

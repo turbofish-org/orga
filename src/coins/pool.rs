@@ -255,28 +255,27 @@ where
     }
 }
 
-pub type IterEntry<'a, K, V, S> = Result<(MapRef<'a, K>, Child<'a, V, S>)>;
+pub type IterEntry<'a, K, V, S> = Result<(K, Child<'a, V, S>)>;
 
 impl<K, V, S> Pool<K, V, S>
 where
     S: Symbol,
     K: Encode + Decode + Terminated + Clone + Next,
-    V: State + Balance<S, Decimal>,
+    V: State + Balance<S, Decimal> + Give<S>,
     V::Encoding: Default,
 {
-    #[cfg_attr(test, mutate)]
     pub fn range<B>(&self, bounds: B) -> Result<impl Iterator<Item = IterEntry<K, V, S>>>
     where
         B: RangeBounds<K>,
     {
         Ok(self.map.range(bounds)?.map(move |entry| {
-            let entry = entry?;
-            let child = Child::new(entry.1)?;
-            Ok((entry.0, child))
+            let (key, _child) = entry?;
+
+            let child = self.get(key.clone())?;
+            Ok((key.clone(), child))
         }))
     }
 
-    #[cfg_attr(test, mutate)]
     pub fn iter(&self) -> Result<impl Iterator<Item = IterEntry<K, V, S>>> {
         self.range(..)
     }
@@ -488,8 +487,8 @@ mod tests {
         let enc = Default::default();
         let mut pool = Pool::<Address, Share<Simp>, Simp>::create(store, enc)?;
 
-        let alice = Address::from_pubkey([0; 32]);
-        let bob = Address::from_pubkey([1; 32]);
+        let alice = Address::from_pubkey([0; 33]);
+        let bob = Address::from_pubkey([1; 33]);
 
         pool.get_mut(alice)?.give(50.into())?;
         pool.give(100.into())?;
@@ -510,8 +509,8 @@ mod tests {
         let enc = Default::default();
         let mut pool = Pool::<Address, Share<Simp>, Simp>::create(store, enc)?;
 
-        let alice = Address::from_pubkey([0; 32]);
-        let bob = Address::from_pubkey([1; 32]);
+        let alice = Address::from_pubkey([0; 33]);
+        let bob = Address::from_pubkey([1; 33]);
 
         pool.get_mut(alice)?.give(50.into())?;
         pool.get_mut(bob)?.give(50.into())?;
@@ -557,8 +556,8 @@ mod tests {
         let enc = Default::default();
         let mut pool = Pool::<Address, SimpAccount, Simp>::create(store, enc)?;
 
-        let alice = Address::from_pubkey([0; 32]);
-        let bob = Address::from_pubkey([1; 32]);
+        let alice = Address::from_pubkey([0; 33]);
+        let bob = Address::from_pubkey([1; 33]);
 
         pool.get_mut(alice)?.deposit_locked(50)?;
         assert_eq!(pool.contributions, 50);
@@ -587,7 +586,7 @@ mod tests {
         let enc = Default::default();
         let mut pool = Pool::<Address, Share<Simp>, Simp>::create(store, enc)?;
 
-        let alice = Address::from_pubkey([0; 32]);
+        let alice = Address::from_pubkey([0; 33]);
 
         pool.get_mut(alice)?.give(50.into())?;
         pool.get_mut(alice)?.take(50)?.burn();

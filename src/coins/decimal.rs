@@ -3,13 +3,18 @@ use crate::encoding::{Decode, Encode};
 use crate::state::State;
 use crate::store::Store;
 use crate::{Error, Result};
-use rust_decimal::prelude::*;
-use rust_decimal::Decimal as NumDecimal;
+use rust_decimal::prelude::{Decimal as NumDecimal, *};
 use std::cmp::Ordering;
 use std::convert::TryFrom;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Decimal(pub(crate) NumDecimal);
+
+impl std::fmt::Display for Decimal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
 
 impl Encode for Decimal {
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
@@ -111,5 +116,25 @@ impl From<NumDecimal> for Decimal {
 impl From<Amount> for Decimal {
     fn from(amount: Amount) -> Self {
         Self(amount.0.into())
+    }
+}
+
+impl FromStr for Decimal {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        Ok(Self(NumDecimal::from_str(s)?))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Decimal;
+
+    #[test]
+    fn format() {
+        let formatted: Decimal = rust_decimal_macros::dec!(1.23).into();
+
+        assert_eq!(format!("{}", formatted), "1.23");
     }
 }

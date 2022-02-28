@@ -19,7 +19,6 @@ pub struct Delegator<S: Symbol> {
     pub(super) staked: Share<S>,
     pub(super) jailed: bool,
     pub(super) unbonding: Deque<Unbond<S>>,
-    pub(super) multiplier: Decimal,
 }
 
 impl<S: Symbol> Delegator<S> {
@@ -42,7 +41,18 @@ impl<S: Symbol> Delegator<S> {
     }
 
     pub(super) fn info(&self) -> Result<DelegationInfo> {
+        let mut unbonds = vec![];
+        for i in 0..self.unbonding.len() {
+            if let Some(unbond) = self.unbonding.get(i)? {
+                unbonds.push(UnbondInfo {
+                    start_seconds: unbond.start_seconds,
+                    amount: unbond.coins.amount()?,
+                });
+            }
+        }
+
         Ok(DelegationInfo {
+            unbonding: unbonds,
             liquid: self.liquid.shares.amount()?,
             staked: self.staked.shares.amount()?,
         })
@@ -126,7 +136,14 @@ impl<S: Symbol> Give<S> for Delegator<S> {
 }
 
 #[derive(Encode, Decode)]
+pub struct UnbondInfo {
+    pub start_seconds: i64,
+    pub amount: Amount,
+}
+
+#[derive(Encode, Decode)]
 pub struct DelegationInfo {
+    pub unbonding: Vec<UnbondInfo>,
     pub staked: Amount,
     pub liquid: Amount,
 }

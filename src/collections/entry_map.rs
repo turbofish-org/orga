@@ -125,14 +125,14 @@ where
     S: Read,
 {
     #[cfg_attr(test, mutate)]
-    pub fn iter(&'a mut self) -> Result<Iter<'a, T, S>> {
+    pub fn iter(&'a self) -> Result<Iter<'a, T, S>> {
         Ok(Iter {
             map_iter: self.map.iter()?,
         })
     }
 
     #[cfg_attr(test, mutate)]
-    pub fn range<B: RangeBounds<T::Key>>(&'a mut self, range: B) -> Result<Iter<'a, T, S>> {
+    pub fn range<B: RangeBounds<T::Key>>(&'a self, range: B) -> Result<Iter<'a, T, S>> {
         Ok(Iter {
             map_iter: self.map.range(range)?,
         })
@@ -499,8 +499,8 @@ mod test {
     #[test]
     fn iter_multi_key() {
         let store = Store::new(MapStore::new());
-        let mut entry_map: EntryMap<MultiKeyMapEntry> = EntryMap::create(store, ()).unwrap();
 
+        let mut entry_map: EntryMap<MultiKeyMapEntry> = EntryMap::create(store.sub(&[]), ()).unwrap();
         entry_map
             .insert(MultiKeyMapEntry {
                 key_1: 0,
@@ -525,8 +525,9 @@ mod test {
                 value: 4,
             })
             .unwrap();
+        entry_map.flush().unwrap();
 
-        let actual: Vec<MultiKeyMapEntry> = vec![
+        let expected: Vec<MultiKeyMapEntry> = vec![
             MultiKeyMapEntry {
                 key_1: 0,
                 key_2: 0,
@@ -547,10 +548,11 @@ mod test {
             },
         ];
 
+        let entry_map: EntryMap<MultiKeyMapEntry> = EntryMap::create(store.sub(&[]), ()).unwrap();
         let result: bool = entry_map
             .iter()
             .unwrap()
-            .zip(actual.iter())
+            .zip(expected.iter())
             .map(|(actual, expected)| *actual.unwrap() == *expected)
             .fold(true, |accumulator, item| item & accumulator);
 

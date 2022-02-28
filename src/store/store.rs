@@ -52,6 +52,7 @@ impl<S> Store<S> {
     /// store's own prefix, and pointing to the same backing store.
     #[inline]
     #[cfg_attr(test, mutate)]
+    #[must_use]
     pub fn sub(&self, prefix: &[u8]) -> Self {
         Store {
             prefix: concat(self.prefix.as_slice(), prefix),

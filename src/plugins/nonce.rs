@@ -13,10 +13,16 @@ use std::ops::Deref;
 
 const NONCE_INCREASE_LIMIT: u64 = 1000;
 
-#[derive(State, Encode, Decode)]
+#[derive(State)]
 pub struct NoncePlugin<T: State> {
     map: Map<Address, u64>,
     inner: T,
+}
+
+impl<T: State> NoncePlugin<T> {
+    pub fn nonce(&self, address: Address) -> Result<u64> {
+        Ok(*self.map.get_or_default(address)?)
+    }
 }
 
 impl<T: State> Deref for NoncePlugin<T> {
@@ -24,6 +30,26 @@ impl<T: State> Deref for NoncePlugin<T> {
 
     fn deref(&self) -> &Self::Target {
         &self.inner
+    }
+}
+
+#[derive(Encode, Decode)]
+pub enum NonceQuery<T: Query> {
+    Nonce(Address),
+    Inner(T::Query),
+}
+
+impl<T: State + Query> Query for NoncePlugin<T> {
+    type Query = NonceQuery<T>;
+
+    fn query(&self, query: Self::Query) -> Result<()> {
+        match query {
+            NonceQuery::Nonce(address) => {
+                self.nonce(address)?;
+                Ok(())
+            }
+            NonceQuery::Inner(query) => self.inner.query(query),
+        }
     }
 }
 
@@ -54,7 +80,13 @@ where
             (Some(pub_key), Some(nonce)) => {
                 let mut expected_nonce = self.map.entry(pub_key)?.or_default()?;
                 if nonce <= *expected_nonce {
-                    return Err(Error::Nonce("Nonce is not valid".into()));
+                    return Err(Error::Nonce(
+                        format!(
+                            "Nonce is not valid. Expected {}, got {}",
+                            *expected_nonce, nonce,
+                        )
+                        .into(),
+                    ));
                 }
 
                 if nonce - *expected_nonce > NONCE_INCREASE_LIMIT {
@@ -72,30 +104,22 @@ where
             // Unhappy paths:
             (Some(_), None) => Err(Error::Nonce("Signed calls must include a nonce".into())),
             (None, Some(_)) => Err(Error::Nonce(
-                "Unsinged calls must not include a nonce".into(),
+                "Unsigned calls must not include a nonce".into(),
             )),
         }
     }
 }
 
-impl<T: Query + State> Query for NoncePlugin<T> {
-    type Query = T::Query;
-
-    fn query(&self, query: Self::Query) -> Result<()> {
-        self.inner.query(query)
-    }
-}
-
-pub struct NonceClient<T, U: Clone> {
+pub struct NonceAdapter<T, U: Clone> {
     parent: U,
     marker: std::marker::PhantomData<fn() -> T>,
 }
 
-unsafe impl<T, U: Send + Clone> Send for NonceClient<T, U> {}
+unsafe impl<T, U: Send + Clone> Send for NonceAdapter<T, U> {}
 
-impl<T, U: Clone> Clone for NonceClient<T, U> {
+impl<T, U: Clone> Clone for NonceAdapter<T, U> {
     fn clone(&self) -> Self {
-        NonceClient {
+        NonceAdapter {
             parent: self.parent.clone(),
             marker: std::marker::PhantomData,
         }
@@ -103,7 +127,7 @@ impl<T, U: Clone> Clone for NonceClient<T, U> {
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Call, U: AsyncCall<Call = NonceCall<T::Call>> + Clone> AsyncCall for NonceClient<T, U>
+impl<T: Call, U: AsyncCall<Call = NonceCall<T::Call>> + Clone> AsyncCall for NonceAdapter<T, U>
 where
     T::Call: Send,
     U: Send,
@@ -126,11 +150,11 @@ where
     }
 }
 
-impl<T: Client<NonceClient<T, U>> + State, U: Clone> Client<U> for NoncePlugin<T> {
+impl<T: Client<NonceAdapter<T, U>> + State, U: Clone> Client<U> for NoncePlugin<T> {
     type Client = T::Client;
 
     fn create_client(parent: U) -> Self::Client {
-        T::create_client(NonceClient {
+        T::create_client(NonceAdapter {
             parent,
             marker: std::marker::PhantomData,
         })
@@ -141,7 +165,7 @@ impl<T: Client<NonceClient<T, U>> + State, U: Clone> Client<U> for NoncePlugin<T
 fn nonce_path() -> Result<std::path::PathBuf> {
     let orga_home = home::home_dir()
         .expect("No home directory set")
-        .join(".orga");
+        .join(".orga-wallet");
 
     std::fs::create_dir_all(&orga_home)?;
     Ok(orga_home.join("nonce"))
@@ -170,9 +194,9 @@ fn load_nonce() -> Result<u64> {
         let bytes = std::fs::read(&nonce_path)?;
         Ok(Decode::decode(bytes.as_slice())?)
     } else {
-        let bytes = 0u64.encode()?;
+        let bytes = 1u64.encode()?;
         std::fs::write(&nonce_path, bytes)?;
-        Ok(0)
+        Ok(1)
     }
 }
 
@@ -296,7 +320,7 @@ mod tests {
         assert_eq!(state.inner.count, 1);
         Context::remove::<Signer>();
         Context::add(Signer {
-            signer: Some(Address::from_pubkey([0; 32])),
+            signer: Some(Address::from_pubkey([0; 33])),
         });
 
         // Signed, correct nonce

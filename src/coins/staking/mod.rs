@@ -27,19 +27,21 @@ pub use validator::*;
 const UNBONDING_SECONDS: u64 = 10; // 10 seconds
 #[cfg(not(test))]
 const UNBONDING_SECONDS: u64 = 60 * 60 * 24 * 7 * 2; // 2 weeks
-const MAX_OFFLINE_BLOCKS: u64 = 100;
+const MAX_OFFLINE_BLOCKS: u64 = 50_000; // ~14 hours for 1s blocks
 const MAX_VALIDATORS: u64 = 100;
+const MIN_SELF_DELEGATION: u64 = 1;
 
 #[derive(Call, Query, Client)]
 pub struct Staking<S: Symbol> {
     validators: Pool<Address, Validator<S>, S>,
-    amount_delegated: Amount,
     consensus_keys: Map<Address, [u8; 32]>,
     last_signed_block: Map<[u8; 20], u64>,
     max_validators: u64,
+    min_self_delegation: u64,
     validators_by_power: EntryMap<ValidatorPowerEntry>,
     last_indexed_power: Map<Address, u64>,
     last_validator_powers: Map<Address, u64>,
+    address_for_tm_hash: Map<[u8; 20], Address>,
 }
 
 #[derive(Entry)]
@@ -69,23 +71,28 @@ impl<S: Symbol> State for Staking<S> {
     fn create(store: Store, data: Self::Encoding) -> Result<Self> {
         Ok(Self {
             validators: State::create(store.sub(&[0]), data.validators)?,
-            amount_delegated: State::create(store.sub(&[1]), data.amount_delegated)?,
+            min_self_delegation: State::create(store.sub(&[1]), data.min_self_delegation)?,
             consensus_keys: State::create(store.sub(&[2]), ())?,
             last_signed_block: State::create(store.sub(&[3]), ())?,
             validators_by_power: State::create(store.sub(&[4]), ())?,
             last_validator_powers: State::create(store.sub(&[5]), ())?,
             max_validators: State::create(store.sub(&[6]), data.max_validators)?,
             last_indexed_power: State::create(store.sub(&[7]), ())?,
+            address_for_tm_hash: State::create(store.sub(&[8]), ())?,
         })
     }
 
     fn flush(self) -> Result<Self::Encoding> {
         self.consensus_keys.flush()?;
         self.last_signed_block.flush()?;
+        self.last_validator_powers.flush()?;
+        self.last_indexed_power.flush()?;
+        self.validators_by_power.flush()?;
+        self.address_for_tm_hash.flush()?;
         Ok(Self::Encoding {
             max_validators: self.max_validators,
+            min_self_delegation: self.min_self_delegation,
             validators: self.validators.flush()?,
-            amount_delegated: self.amount_delegated.flush()?,
         })
     }
 }
@@ -94,8 +101,8 @@ impl<S: Symbol> From<Staking<S>> for StakingEncoding<S> {
     fn from(staking: Staking<S>) -> Self {
         Self {
             max_validators: staking.max_validators,
+            min_self_delegation: staking.min_self_delegation,
             validators: staking.validators.into(),
-            amount_delegated: staking.amount_delegated.into(),
         }
     }
 }
@@ -114,36 +121,37 @@ impl<S: Symbol> BeginBlock for Staking<S> {
                 .map(|vote_info| vote_info.validator.as_ref().unwrap())
                 .try_for_each(|validator| {
                     self.last_signed_block.insert(
-                        validator.address[..]
-                            .try_into()
-                            .expect("Invalid pub key hash length"),
+                        validator.address[..].try_into().map_err(|_| {
+                            Error::Coins("Invalid pubkey length from Tendermint".into())
+                        })?,
                         height,
                     )
                 })?;
 
-            let mut offline_validator_hashes: Vec<Vec<u8>> = vec![];
+            let mut offline_validator_hashes: Vec<[u8; 20]> = vec![];
             self.last_signed_block
                 .iter()?
                 .try_for_each(|res| -> Result<()> {
                     let (hash, last_height) = res?;
                     if *last_height + MAX_OFFLINE_BLOCKS < height {
-                        offline_validator_hashes.push(hash.to_vec());
+                        offline_validator_hashes.push(hash.to_vec().try_into().map_err(|_| {
+                            Error::Coins("Invalid pub key hash length from Tendermint".into())
+                        })?);
                     }
 
                     Ok(())
                 })?;
 
             for hash in offline_validator_hashes.iter() {
-                let val_addresses = self.val_address_for_consensus_key_hash(hash.clone())?;
-                for address in val_addresses {
-                    if self.slashable_balance(address)? > 0 {
+                if let Some(address) = self.address_for_tm_hash.get(*hash)? {
+                    let address = *address;
+                    let validator = self.validators.get(address)?;
+                    let in_active_set = validator.in_active_set;
+                    drop(validator);
+                    if in_active_set && self.slashable_balance(address)? > 0 {
                         self.slash(address, 0)?.burn();
                     }
-                    let key: [u8; 20] = hash
-                        .clone()
-                        .try_into()
-                        .map_err(|_e| Error::Coins("Invalid pubkey hash length".into()))?;
-                    self.last_signed_block.remove(key)?;
+                    self.last_signed_block.remove(*hash)?;
                 }
             }
         }
@@ -151,11 +159,20 @@ impl<S: Symbol> BeginBlock for Staking<S> {
         for evidence in &ctx.byzantine_validators {
             match &evidence.validator {
                 Some(validator) => {
-                    let val_addresses =
-                        self.val_address_for_consensus_key_hash(validator.address.clone())?;
-                    for address in val_addresses {
-                        if self.slashable_balance(address)? > 0 {
-                            self.slash(address, 0)?.burn();
+                    let hash: [u8; 20] = validator.address.clone().try_into().map_err(|_| {
+                        Error::Coins("Invalid pubkey length from Tendermint".into())
+                    })?;
+                    match self.address_for_tm_hash.get(hash)? {
+                        Some(address) => {
+                            let address = *address;
+                            if self.slashable_balance(address)? > 0 {
+                                self.slash(address, 0)?.burn();
+                            }
+                        }
+                        None => {
+                            return Err(Error::Coins(
+                                "Invalid pubkey length from Tendermint".into(),
+                            ));
                         }
                     }
                 }
@@ -170,16 +187,16 @@ impl<S: Symbol> BeginBlock for Staking<S> {
 #[derive(Encode, Decode)]
 pub struct StakingEncoding<S: Symbol> {
     max_validators: u64,
+    min_self_delegation: u64,
     validators: <Pool<Address, Validator<S>, S> as State>::Encoding,
-    amount_delegated: <Amount as State>::Encoding,
 }
 
 impl<S: Symbol> Default for StakingEncoding<S> {
     fn default() -> Self {
         Self {
             max_validators: MAX_VALIDATORS,
+            min_self_delegation: MIN_SELF_DELEGATION,
             validators: Default::default(),
-            amount_delegated: Default::default(),
         }
     }
 }
@@ -196,9 +213,7 @@ impl<S: Symbol> Staking<S> {
         if validator.jailed {
             return Err(Error::Coins("Cannot delegate to jailed validator".into()));
         }
-        validator.amount_staked = (validator.amount_staked + coins.amount)?;
         let mut delegator = validator.get_mut(delegator_address)?;
-        self.amount_delegated = (self.amount_delegated + coins.amount)?;
         delegator.add_stake(coins)?;
         drop(delegator);
         let voting_power = validator.staked()?.into();
@@ -230,6 +245,16 @@ impl<S: Symbol> Staking<S> {
         if declared {
             return Err(Error::Coins("Validator is already declared".into()));
         }
+        if coins.amount < self.min_self_delegation {
+            return Err(Error::Coins("Insufficient self-delegation".into()));
+        }
+        let tm_hash = tm_pubkey_hash(consensus_key)?;
+        let tm_hash_exists = self.address_for_tm_hash.contains_key(tm_hash)?;
+        if tm_hash_exists {
+            return Err(Error::Coins(
+                "Tendermint public key is already in use".into(),
+            ));
+        }
         use rust_decimal_macros::dec;
         let max_comm: Decimal = dec!(1.0).into();
         let min_comm: Decimal = dec!(0.0).into();
@@ -238,6 +263,9 @@ impl<S: Symbol> Staking<S> {
         }
         self.consensus_keys
             .insert(val_address, consensus_key.into())?;
+
+        self.address_for_tm_hash
+            .insert(tm_hash, val_address.into())?;
 
         let mut validator = self.validators.get_mut(val_address)?;
         validator.commission = commission;
@@ -254,13 +282,18 @@ impl<S: Symbol> Staking<S> {
         self.validators.balance()?.amount()
     }
 
+    pub fn set_min_self_delegation(&mut self, min_self_delegation: u64) {
+        self.min_self_delegation = min_self_delegation;
+    }
+
+    pub fn set_max_validators(&mut self, max_validators: u64) {
+        self.max_validators = max_validators;
+    }
+
     pub fn slash<A: Into<Amount>>(&mut self, val_address: Address, amount: A) -> Result<Coin<S>> {
         let _consensus_key = self.consensus_key(val_address)?;
         let jailed = self.get_mut(val_address)?.jailed;
-        if !jailed {
-            let reduction = self.slashable_balance(val_address)?;
-            self.amount_delegated = (self.amount_delegated - reduction)?;
-        }
+
         let amount = amount.into();
         let mut validator = self.get_mut(val_address)?;
         let slashed_coins = validator.slash(amount)?;
@@ -315,11 +348,6 @@ impl<S: Symbol> Staking<S> {
             delegator.unbond(amount)?;
         }
 
-        if !jailed {
-            self.amount_delegated = (self.amount_delegated - amount)?;
-            validator.amount_staked = (validator.amount_staked - amount)?;
-        }
-
         let vp = validator.staked()?.into();
         drop(validator);
 
@@ -347,16 +375,29 @@ impl<S: Symbol> Staking<S> {
             .iter()?
             .map(|entry| {
                 let (val_address, validator) = entry?;
-
                 let delegator = validator.get(delegator_address)?;
 
-                Ok((*val_address, delegator.info()?))
+                Ok((val_address, delegator.info()?))
+            })
+            .collect()
+    }
+
+    #[query]
+    pub fn all_validators(&self) -> Result<Vec<ValidatorQueryInfo>> {
+        self.validators
+            .iter()?
+            .map(|entry| {
+                let (_, validator) = entry?;
+                let info = validator.query_info()?;
+
+                Ok(info)
             })
             .collect()
     }
 
     #[call]
     pub fn unbond_self(&mut self, val_address: Address, amount: Amount) -> Result<()> {
+        assert_positive(amount)?;
         let signer = self.signer()?;
         self.unbond(val_address, signer, amount)
     }
@@ -369,6 +410,7 @@ impl<S: Symbol> Staking<S> {
         amount: Amount,
         validator_info: ValidatorInfo,
     ) -> Result<()> {
+        assert_positive(amount)?;
         let signer = self.signer()?;
         let payment = self.paid()?.take(amount)?;
         self.declare(signer, consensus_key, commission, validator_info, payment)
@@ -376,6 +418,7 @@ impl<S: Symbol> Staking<S> {
 
     #[call]
     pub fn delegate_from_self(&mut self, validator_address: Address, amount: Amount) -> Result<()> {
+        assert_positive(amount)?;
         let signer = self.signer()?;
         let payment = self.paid()?.take(amount)?;
         self.delegate(validator_address, signer, payment)
@@ -383,9 +426,27 @@ impl<S: Symbol> Staking<S> {
 
     #[call]
     pub fn take_as_funding(&mut self, validator_address: Address, amount: Amount) -> Result<()> {
+        assert_positive(amount)?;
         let signer = self.signer()?;
         let taken_coins = self.withdraw(validator_address, signer, amount)?;
         self.paid()?.give::<S, _>(taken_coins.amount)
+    }
+
+    #[call]
+    pub fn claim_all(&mut self) -> Result<()> {
+        let signer = self.signer()?;
+        let delegations = self.delegations(signer)?;
+        delegations
+            .iter()
+            .try_for_each(|(val_address, delegation)| {
+                if delegation.liquid > 0 {
+                    self.take_as_funding(*val_address, delegation.liquid)
+                } else {
+                    Ok(())
+                }
+            })?;
+
+        Ok(())
     }
 
     fn signer(&mut self) -> Result<Address> {
@@ -416,38 +477,6 @@ impl<S: Symbol> Staking<S> {
         self.last_indexed_power.insert(address, power)
     }
 
-    fn val_address_for_consensus_key_hash(
-        &self,
-        consensus_key_hash: Vec<u8>,
-    ) -> Result<Vec<Address>> {
-        let mut consensus_keys: Vec<(Address, [u8; 32])> = vec![];
-        self.consensus_keys
-            .iter()?
-            .try_for_each(|entry| -> Result<()> {
-                let (k, v) = entry?;
-                consensus_keys.push((*k, *v));
-
-                Ok(())
-            })?;
-
-        let val_addresses = consensus_keys
-            .into_iter()
-            .filter_map(|(k, v)| {
-                // TODO: are we sure this shouldn't be tmhash? (ripemd160(sha256(x)))
-                let mut hasher = Sha256::new();
-                hasher.update(v);
-                let hash = hasher.finalize().to_vec();
-                if hash[..20] == consensus_key_hash[..20] {
-                    Some(k)
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        Ok(val_addresses)
-    }
-
     #[cfg(feature = "abci")]
     fn end_block_step(&mut self) -> Result<()> {
         use std::collections::HashSet;
@@ -459,6 +488,10 @@ impl<S: Symbol> Staking<S> {
             let entry = entry?;
             let address: Address = entry.address_bytes.into();
             let new_power = entry.power();
+
+            if new_power == 0 {
+                break;
+            }
 
             new_val_entries.push((address, new_power));
 
@@ -486,11 +519,10 @@ impl<S: Symbol> Staking<S> {
             .map(|(address, _)| *address)
             .collect();
 
-        let min_vp = new_power_updates.last().map(|update| update.1).unwrap_or(0);
         // Check for validators bumped from the active validator set
         for entry in self.last_validator_powers.iter()? {
-            let (address, power) = entry?;
-            if !validators_in_active_set.contains(&address) && *power < min_vp {
+            let (address, _power) = entry?;
+            if !validators_in_active_set.contains(&address) {
                 new_power_updates.push((*address, 0));
             }
         }
@@ -533,10 +565,27 @@ impl<S: Symbol> Staking<S> {
     }
 }
 
+fn assert_positive(amount: Amount) -> Result<()> {
+    if amount > 0 {
+        Ok(())
+    } else {
+        Err(Error::Coins("Amount must be positive".into()))
+    }
+}
+
 impl<S: Symbol> Give<S> for Staking<S> {
     fn give(&mut self, coins: Coin<S>) -> Result<()> {
         self.validators.give(coins)
     }
+}
+
+fn tm_pubkey_hash(consensus_key: [u8; 32]) -> Result<[u8; 20]> {
+    let mut hasher = Sha256::new();
+    hasher.update(consensus_key);
+    let hash = hasher.finalize().to_vec()[..20].to_vec();
+
+    hash.try_into()
+        .map_err(|_| Error::Coins("Invalid consensus key".into()))
 }
 
 #[cfg(test)]
@@ -549,6 +598,7 @@ mod tests {
         store::{MapStore, Shared, Store},
     };
     use rust_decimal_macros::dec;
+    use serial_test::serial;
 
     #[derive(State, Debug, Clone)]
     struct Simp(());
@@ -556,16 +606,17 @@ mod tests {
 
     #[cfg(feature = "abci")]
     #[test]
+    #[serial]
     fn staking() -> Result<()> {
         let store = Store::new(Shared::new(MapStore::new()).into());
         let mut staking: Staking<Simp> = Staking::create(store, Default::default())?;
 
-        let alice = Address::from_pubkey([0; 32]);
+        let alice = Address::from_pubkey([0; 33]);
         let alice_con = [4; 32];
-        let bob = Address::from_pubkey([1; 32]);
+        let bob = Address::from_pubkey([1; 33]);
         let bob_con = [5; 32];
-        let carol = Address::from_pubkey([2; 32]);
-        let dave = Address::from_pubkey([3; 32]);
+        let carol = Address::from_pubkey([2; 33]);
+        let dave = Address::from_pubkey([3; 33]);
         let dave_con = [6; 32];
 
         Context::add(Validators::default());
@@ -582,6 +633,9 @@ mod tests {
         staking
             .declare(alice, alice_con, dec!(0.0).into(), vec![].into(), 50.into())
             .expect_err("Should not be able to redeclare validator");
+        staking
+            .declare(carol, alice_con, dec!(0.0).into(), vec![].into(), 50.into())
+            .expect_err("Should not be able to declare using an existing consensus key");
 
         staking.end_block_step()?;
         assert_eq!(staking.staked()?, 50);
@@ -747,7 +801,7 @@ mod tests {
         assert_eq!(ctx.updates.get(&dave_con).unwrap().power, 450);
 
         // Test commissions
-        let edith = Address::from_pubkey([7; 32]);
+        let edith = Address::from_pubkey([7; 33]);
         let edith_con = [201; 32];
 
         staking.declare(
@@ -777,7 +831,7 @@ mod tests {
 
     #[cfg(feature = "abci")]
     #[test]
-    #[ignore]
+    #[serial]
     fn val_size_limit() -> Result<()> {
         let store = Store::new(Shared::new(MapStore::new()).into());
         let mut staking: Staking<Simp> = Staking::create(store, Default::default())?;
@@ -789,8 +843,8 @@ mod tests {
 
         for i in 1..10 {
             staking.declare(
-                Address::from_pubkey([i; 32]),
-                [i; 32].into(),
+                Address::from_pubkey([i; 33]),
+                [i; 32],
                 dec!(0.0).into(),
                 vec![].into(),
                 Amount::new(i as u64 * 100).into(),
@@ -804,31 +858,31 @@ mod tests {
         staking.give(3400.into())?;
         assert_eq!(
             staking
-                .get(Address::from_pubkey([4; 32]))?
-                .get(Address::from_pubkey([4; 32]))?
+                .get(Address::from_pubkey([4; 33]))?
+                .get(Address::from_pubkey([4; 33]))?
                 .liquid
                 .amount()?,
             0
         );
         assert_eq!(
             staking
-                .get(Address::from_pubkey([8; 32]))?
-                .get(Address::from_pubkey([8; 32]))?
+                .get(Address::from_pubkey([8; 33]))?
+                .get(Address::from_pubkey([8; 33]))?
                 .liquid
                 .amount()?,
             1600
         );
         assert_eq!(
             staking
-                .get(Address::from_pubkey([9; 32]))?
-                .get(Address::from_pubkey([9; 32]))?
+                .get(Address::from_pubkey([9; 33]))?
+                .get(Address::from_pubkey([9; 33]))?
                 .liquid
                 .amount()?,
             1800
         );
 
         staking.declare(
-            Address::from_pubkey([10; 32]),
+            Address::from_pubkey([10; 33]),
             [10; 32],
             dec!(0.0).into(),
             vec![].into(),
@@ -844,24 +898,24 @@ mod tests {
 
         assert_eq!(
             staking
-                .get(Address::from_pubkey([8; 32]))?
-                .get(Address::from_pubkey([8; 32]))?
+                .get(Address::from_pubkey([8; 33]))?
+                .get(Address::from_pubkey([8; 33]))?
                 .liquid
                 .amount()?,
             1600
         );
         assert_eq!(
             staking
-                .get(Address::from_pubkey([9; 32]))?
-                .get(Address::from_pubkey([9; 32]))?
+                .get(Address::from_pubkey([9; 33]))?
+                .get(Address::from_pubkey([9; 33]))?
                 .liquid
                 .amount()?,
             2700
         );
         assert_eq!(
             staking
-                .get(Address::from_pubkey([10; 32]))?
-                .get(Address::from_pubkey([10; 32]))?
+                .get(Address::from_pubkey([10; 33]))?
+                .get(Address::from_pubkey([10; 33]))?
                 .liquid
                 .amount()?,
             1000

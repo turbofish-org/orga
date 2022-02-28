@@ -10,4 +10,11 @@ pub use abci::*;
 mod payable;
 pub use payable::*;
 
-pub type DefaultPlugins<T> = SignerPlugin<NoncePlugin<PayablePlugin<T>>>;
+mod fee;
+pub use fee::*;
+
+pub mod chain_commitment;
+pub use chain_commitment::ChainCommitmentPlugin;
+
+pub type DefaultPlugins<S, T, const ID: &'static str> =
+    SignerPlugin<ChainCommitmentPlugin<NoncePlugin<PayablePlugin<FeePlugin<S, T>>>, ID>>;

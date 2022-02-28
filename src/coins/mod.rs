@@ -45,6 +45,9 @@ pub use decimal::Decimal;
 pub mod math;
 pub use math::*;
 
+pub mod faucet;
+pub use faucet::*;
+
 mod ops;
 pub use ops::*;
 
@@ -67,7 +70,7 @@ pub struct Address {
 impl Address {
     const LENGTH: usize = 20;
 
-    pub fn from_pubkey(bytes: [u8; 32]) -> Self {
+    pub fn from_pubkey(bytes: [u8; 33]) -> Self {
         let mut sha = Sha256::new();
         sha.update(&bytes);
         let hash = sha.finalize();
