@@ -214,11 +214,6 @@ where
         };
 
         self.inner.call(call)
-
-        // let payable_call = PayableCall::Paid(PaidCall {
-        //     payer: payer_call,
-        //     paid: paid_call,
-        // });
     }
 }
 
