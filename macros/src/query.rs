@@ -15,8 +15,8 @@ pub fn derive(item: TokenStream) -> TokenStream {
         Span::call_site(),
     );
 
-    let query_enum = create_query_enum(&item, &source);
-    let query_impl = create_query_impl(&item, &source, &query_enum);
+    let (query_enum, query_enum_item) = create_query_enum(&item, &source);
+    let query_impl = create_query_impl(&item, &source, &query_enum_item).0;
 
     let output = quote!(
         use ::orga::macros::*;
@@ -53,7 +53,7 @@ pub fn attr(_args: TokenStream, input: TokenStream) -> TokenStream {
     quote!(#method).into()
 }
 
-fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -> TokenStream2 {
+pub(crate) fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -> (TokenStream2, ItemImpl) {
     let name = &item.ident;
     let generics = &item.generics;
     let mut generics_sanitized = generics.clone();
@@ -232,7 +232,7 @@ fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -
         })
         .collect();
 
-    quote! {
+    let impl_output = quote! {
         impl#generics_sanitized ::orga::query::Query for #name#generic_params
         where #where_preds #encoding_bounds #query_bounds
         {
@@ -246,11 +246,17 @@ fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -
                 }
             }
         }
+    };
+
+    let output = quote! {
+        #impl_output
         #(#maybe_call_defs)*
-    }
+    };
+
+    (output, syn::parse2(impl_output).unwrap())
 }
 
-fn create_query_enum(item: &DeriveInput, source: &File) -> ItemEnum {
+pub(crate) fn create_query_enum(item: &DeriveInput, source: &File) -> (TokenStream2, ItemEnum) {
     let name = &item.ident;
     let generics = &item.generics;
 
@@ -334,7 +340,7 @@ fn create_query_enum(item: &DeriveInput, source: &File) -> ItemEnum {
 
     let query_preds = quote!(#(#query_params: ::orga::query::Query),*);
 
-    let output = quote! {
+    let item_output = quote! {
         #[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
         pub enum Query#generic_params
         where #query_preds
@@ -345,7 +351,23 @@ fn create_query_enum(item: &DeriveInput, source: &File) -> ItemEnum {
         }
     };
 
-    syn::parse2(output).unwrap()
+    let query_enum: ItemEnum = syn::parse2(item_output.clone()).unwrap();
+    let query_generics = &query_enum.generics;
+
+    let output = quote! {
+        #item_output
+
+        impl#generic_params std::default::Default for Query#query_generics
+        where
+            #query_preds
+        {
+            fn default() -> Self {
+                Query::This
+            }
+        }
+    };
+
+    (output, query_enum)
 }
 
 fn parse_parent() -> File {

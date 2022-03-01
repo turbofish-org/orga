@@ -1,7 +1,11 @@
+use super::{
+    sdk_compat::{self, sdk::Tx as SdkTx, ConvertSdkTx},
+    ChainId, GetNonce,
+};
 use crate::call::Call;
-use crate::client::{AsyncCall, Client};
+use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::Address;
-use crate::context::Context;
+use crate::context::{Context, GetContext};
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
@@ -30,14 +34,22 @@ pub struct Signer {
 pub struct SignerCall {
     pub signature: Option<[u8; 64]>,
     pub pubkey: Option<[u8; 33]>,
-    pub sdk_compat: bool,
+    pub sigtype: SigType,
     pub call_bytes: Vec<u8>,
+}
+
+#[derive(Encode, Decode)]
+pub enum SigType {
+    Native,
+    Adr36,
+    #[skip]
+    Sdk(sdk_compat::sdk::Tx),
 }
 
 use serde::Serialize;
 
 #[derive(Serialize)]
-struct SdkCompatMsg {
+struct Adr36Msg {
     pub account_number: String,
     pub chain_id: String,
     pub fee: Fee,
@@ -65,9 +77,9 @@ struct Value {
     pub signer: String,
 }
 
-fn sdk_compat_wrap(call_bytes: &[u8], address: Address) -> Result<Vec<u8>> {
+fn adr36_bytes(call_bytes: &[u8], address: Address) -> Result<Vec<u8>> {
     let data_b64 = base64::encode(call_bytes);
-    let msg = SdkCompatMsg {
+    let msg = Adr36Msg {
         chain_id: "".to_string(),
         account_number: "0".to_string(),
         sequence: "0".to_string(),
@@ -87,19 +99,33 @@ fn sdk_compat_wrap(call_bytes: &[u8], address: Address) -> Result<Vec<u8>> {
     serde_json::to_vec(&msg).map_err(|e| Error::App(format!("{}", e)))
 }
 
-impl SignerCall {
-    fn verify(&self) -> Result<Option<Address>> {
-        match (self.pubkey, self.signature) {
+impl<T: State, U> SignerPlugin<T>
+where
+    T: Deref<Target = U>,
+    U: GetNonce,
+{
+    fn sdk_sign_bytes(&mut self, tx: &SdkTx, address: Address) -> Result<Vec<u8>> {
+        let nonce = self.inner.nonce(address)? + 1;
+        let chain_id = self
+            .context::<ChainId>()
+            .ok_or_else(|| Error::App("Chain ID not found".to_string()))?
+            .deref()
+            .to_string();
+        tx.sign_bytes(chain_id, nonce)
+    }
+
+    fn verify(&mut self, call: &SignerCall) -> Result<Option<Address>> {
+        match (call.pubkey, call.signature) {
             (Some(pubkey_bytes), Some(signature)) => {
                 use secp256k1::hashes::sha256;
                 let secp = Secp256k1::verification_only();
                 let pubkey = PublicKey::from_slice(&pubkey_bytes)?;
                 let address = Address::from_pubkey(pubkey_bytes);
 
-                let bytes = if self.sdk_compat {
-                    sdk_compat_wrap(self.call_bytes.as_slice(), address)?
-                } else {
-                    self.call_bytes.to_vec()
+                let bytes = match &call.sigtype {
+                    SigType::Native => call.call_bytes.to_vec(),
+                    SigType::Adr36 => adr36_bytes(call.call_bytes.as_slice(), address)?,
+                    SigType::Sdk(tx) => self.sdk_sign_bytes(tx, address)?,
                 };
 
                 let msg = Message::from_hashed_data::<sha256::Hash>(bytes.as_slice());
@@ -115,16 +141,21 @@ impl SignerCall {
     }
 }
 
-impl<T: Call> Call for SignerPlugin<T> {
+impl<T: Call + State, U> Call for SignerPlugin<T>
+where
+    T: Deref<Target = U>,
+    U: GetNonce,
+{
     type Call = SignerCall;
+
     fn call(&mut self, call: Self::Call) -> Result<()> {
         Context::remove::<Signer>();
         let signer_ctx = Signer {
-            signer: call.verify()?,
+            signer: self.verify(&call)?,
         };
         Context::add(signer_ctx);
-        let inner_call = Decode::decode(call.call_bytes.as_slice())?;
 
+        let inner_call = Decode::decode(call.call_bytes.as_slice())?;
         self.inner.call(inner_call)
     }
 }
@@ -134,6 +165,26 @@ impl<T: Query> Query for SignerPlugin<T> {
 
     fn query(&self, query: Self::Query) -> Result<()> {
         self.inner.query(query)
+    }
+}
+
+impl<T> ConvertSdkTx for SignerPlugin<T>
+where
+    T: State + ConvertSdkTx<Output = T::Call> + Call,
+{
+    type Output = SignerCall;
+
+    fn convert(&self, sdk_tx: &SdkTx) -> Result<SignerCall> {
+        let signature = sdk_tx.signature()?;
+        let pubkey = sdk_tx.sender_pubkey()?;
+        let inner_call = self.inner.convert(sdk_tx)?.encode()?;
+
+        Ok(SignerCall {
+            signature: Some(signature),
+            pubkey: Some(pubkey),
+            sigtype: SigType::Sdk(sdk_tx.clone()),
+            call_bytes: inner_call,
+        })
     }
 }
 
@@ -184,7 +235,7 @@ where
                 call_bytes,
                 pubkey: Some(pubkey),
                 signature: Some(signature),
-                sdk_compat: false,
+                sigtype: SigType::Native,
             })
             .await
     }
@@ -203,9 +254,22 @@ where
                 call_bytes,
                 pubkey: Some(pubkey),
                 signature: Some(signature),
-                sdk_compat: true,
+                sigtype: SigType::Adr36,
             })
             .await
+    }
+}
+
+#[async_trait::async_trait(?Send)]
+impl<T: Query, U: AsyncQuery<Query = T::Query, Response = SignerPlugin<T>> + Clone> AsyncQuery for SignerClient<T, U> {
+    type Query = T::Query;
+    type Response = T;
+
+    async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
+    where
+        F: FnMut(Self::Response) -> Result<R>
+    {
+        self.parent.query(query, |plugin| check(plugin.inner)).await
     }
 }
 

@@ -2,8 +2,9 @@ use super::{Simp, SimpleCoin};
 use orga::coins::*;
 use orga::prelude::*;
 use orga::{Error, Result};
+use orga::plugins::{ConvertSdkTx, sdk_compat::sdk};
 
-#[derive(State)]
+#[derive(State, Call, Query, Client)]
 pub struct AppWithStaking {
     height: u64,
     pub simp: SimpleCoin,
@@ -23,6 +24,14 @@ impl AppWithStaking {
         let mut validator = self.staking.validators.get_mut(validator_address)?;
         validator.get_mut(signer)?.give(coins)?;
         Ok(())
+    }
+}
+
+impl ConvertSdkTx for AppWithStaking {
+    type Output = orga::plugins::PaidCall<<AppWithStaking as Call>::Call>;
+
+    fn convert(&self, _: &sdk::Tx) -> Result<Self::Output> {
+        Err(orga::Error::Unknown)
     }
 }
 

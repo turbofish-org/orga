@@ -14,7 +14,22 @@ mod fee;
 pub use fee::*;
 
 pub mod chain_commitment;
-pub use chain_commitment::ChainCommitmentPlugin;
+pub use chain_commitment::{ChainCommitmentPlugin, ChainId};
 
-pub type DefaultPlugins<S, T, const ID: &'static str> =
-    SignerPlugin<ChainCommitmentPlugin<NoncePlugin<PayablePlugin<FeePlugin<S, T>>>, ID>>;
+pub mod sdk_compat;
+pub use sdk_compat::{ConvertSdkTx, SdkCompatPlugin};
+
+pub type DefaultPlugins<S, T, const ID: &'static str> = SdkCompatPlugin<
+    S,
+    SignerPlugin<ChainCommitmentPlugin<NoncePlugin<PayablePlugin<FeePlugin<S, T>>>, ID>>,
+>;
+
+// TODO: make a macro that can make this more readable, e.g.:
+// type_chain! {
+//     SDKCompatPlugin<S, _, ID>,
+//     SignerPlugin<_>,
+//     ChainCommitmentPlugin<_, ID>,
+//     NoncePlugin<_>,
+//     PayablePlugin<_>,
+//     FeePlugin<S, T>,
+// }

@@ -1,5 +1,7 @@
+use super::{sdk_compat::sdk::Tx as SdkTx, ConvertSdkTx};
 use crate::call::Call as CallTrait;
-use crate::client::{AsyncCall, Client as ClientTrait};
+use crate::client::{AsyncCall, AsyncQuery, Client as ClientTrait};
+use crate::context::Context;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
@@ -10,6 +12,16 @@ use std::ops::Deref;
 
 pub struct ChainCommitmentPlugin<T, const ID: &'static str> {
     inner: T,
+}
+
+pub struct ChainId(pub &'static str);
+
+impl Deref for ChainId {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
 }
 
 impl<T, const ID: &'static str> Deref for ChainCommitmentPlugin<T, ID> {
@@ -27,7 +39,11 @@ impl<T: CallTrait, const ID: &'static str> CallTrait for ChainCommitmentPlugin<T
         let expected_id: Vec<u8> = ID.bytes().collect();
         let chain_id = &call[..expected_id.len()];
         if chain_id != expected_id {
-            return Err(Error::App("Invalid chain ID".into()));
+            return Err(Error::App(format!(
+                "Invalid chain ID (expected {}, got {})",
+                ID,
+                String::from_utf8(chain_id.to_vec()).unwrap_or_default()
+            )));
         }
 
         let inner_call = Decode::decode(&call[chain_id.len()..])?;
@@ -40,6 +56,24 @@ impl<T: Query, const ID: &'static str> Query for ChainCommitmentPlugin<T, ID> {
 
     fn query(&self, query: Self::Query) -> Result<()> {
         self.inner.query(query)
+    }
+}
+
+impl<T, const ID: &'static str> ConvertSdkTx for ChainCommitmentPlugin<T, ID>
+where
+    T: ConvertSdkTx<Output = T::Call> + CallTrait,
+{
+    type Output = Vec<u8>;
+
+    fn convert(&self, sdk_tx: &SdkTx) -> Result<Vec<u8>> {
+        let id_bytes = ID.as_bytes();
+        let inner_call = self.inner.convert(sdk_tx)?;
+
+        let mut call_bytes = Vec::with_capacity(id_bytes.len() + inner_call.encoding_length()?);
+        call_bytes.extend_from_slice(id_bytes);
+        inner_call.encode_into(&mut call_bytes)?;
+
+        Ok(call_bytes)
     }
 }
 
@@ -79,6 +113,19 @@ where
     }
 }
 
+#[async_trait::async_trait(?Send)]
+impl<T: Query, U: AsyncQuery<Query = T::Query, Response = ChainCommitmentPlugin<T, ID>> + Clone, const ID: &'static str> AsyncQuery for Client<T, U, ID> {
+    type Query = T::Query;
+    type Response = T;
+
+    async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
+    where
+        F: FnMut(Self::Response) -> Result<R>
+    {
+        self.parent.query(query, |plugin| check(plugin.inner)).await
+    }
+}
+
 impl<T: ClientTrait<Client<T, U, ID>>, U: Clone, const ID: &'static str> ClientTrait<U>
     for ChainCommitmentPlugin<T, ID>
 {
@@ -99,6 +146,8 @@ where
     type Encoding = (T::Encoding,);
 
     fn create(store: Store, data: Self::Encoding) -> Result<Self> {
+        Context::add(ChainId(ID));
+
         Ok(Self {
             inner: T::create(store, data.0)?,
         })

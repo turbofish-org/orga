@@ -6,7 +6,7 @@ use tendermint_rpc::Error as TmError;
 use tm::Client as _;
 
 use crate::call::Call;
-use crate::client::{AsyncCall, Client};
+use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::encoding::{Decode, Encode};
 use crate::merk::ABCIPrefixedProofStore;
 use crate::query::Query;
@@ -50,6 +50,7 @@ impl<T: Client<TendermintAdapter<T>>> DerefMut for TendermintClient<T> {
 }
 
 impl<T: Client<TendermintAdapter<T>> + Query + State> TendermintClient<T> {
+    #[deprecated]
     pub async fn query<F, R>(&self, query: T::Query, check: F) -> Result<R>
     where
         F: Fn(&T) -> Result<R>,
@@ -116,6 +117,52 @@ where
         let tx = call.encode()?.into();
         let fut = self.client.broadcast_tx_commit(tx);
         NoReturn(fut).await
+    }
+}
+
+#[async_trait::async_trait(?Send)]
+impl<T: Query + State> AsyncQuery for TendermintAdapter<T> {
+    type Query = T::Query;
+    type Response = T;
+
+    async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
+    where
+        F: FnMut(Self::Response) -> Result<R>
+    {
+        let query_bytes = query.encode()?;
+        let res = self
+            .client
+            .abci_query(None, query_bytes, None, true)
+            .await?;
+
+        if let tendermint::abci::Code::Err(code) = res.code {
+            let msg = format!("code {}: {}", code, res.log);
+            return Err(Error::Query(msg));
+        }
+
+        // TODO: we shouldn't need to include the root hash in the result, it
+        // should come from a trusted source
+        let root_hash = match res.value[0..32].try_into() {
+            Ok(inner) => inner,
+            _ => {
+                return Err(Error::Tendermint(
+                    "Cannot convert result to fixed size array".into(),
+                ));
+            }
+        };
+        let proof_bytes = &res.value[32..];
+
+        let map = merk::proofs::query::verify(proof_bytes, root_hash)?;
+        let root_value = match map.get(&[])? {
+            Some(root_value) => root_value,
+            None => return Err(Error::ABCI("Missing root value".into())),
+        };
+        let encoding = T::Encoding::decode(root_value)?;
+        let store: Shared<ABCIPrefixedProofStore> = Shared::new(ABCIPrefixedProofStore::new(map));
+        let state = T::create(Store::new(store.into()), encoding)?;
+
+        // TODO: retry logic
+        check(state)
     }
 }
 

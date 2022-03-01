@@ -1,5 +1,6 @@
+use super::sdk_compat::{sdk::Tx as SdkTx, ConvertSdkTx};
 use crate::call::Call;
-use crate::client::{AsyncCall, Client};
+use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Amount, Coin, Symbol};
 use crate::context::{Context, GetContext};
 use crate::encoding::{Decode, Encode};
@@ -67,8 +68,8 @@ impl Paid {
 }
 
 pub struct PaidCall<T> {
-    payer: T,
-    paid: T,
+    pub payer: T,
+    pub paid: T,
 }
 
 impl<T: Encode> Encode for PaidCall<T> {
@@ -150,6 +151,18 @@ impl<T: Query + State> Query for PayablePlugin<T> {
     }
 }
 
+impl<T> ConvertSdkTx for PayablePlugin<T>
+where
+    T: State + ConvertSdkTx<Output = PaidCall<T::Call>> + Call,
+{
+    type Output = PayableCall<T::Call>;
+
+    fn convert(&self, sdk_tx: &SdkTx) -> Result<PayableCall<T::Call>> {
+        let paid_call = self.inner.convert(sdk_tx)?;
+        Ok(PayableCall::Paid(paid_call))
+    }
+}
+
 pub struct UnpaidAdapter<T, U: Clone> {
     parent: U,
     marker: std::marker::PhantomData<fn() -> T>,
@@ -178,6 +191,19 @@ where
         let res = self.parent.call(PayableCall::Unpaid(call));
 
         res.await
+    }
+}
+
+#[async_trait::async_trait(?Send)]
+impl<T: Query + State, U: AsyncQuery<Query = T::Query, Response = PayablePlugin<T>> + Clone> AsyncQuery for UnpaidAdapter<T, U> {
+    type Query = T::Query;
+    type Response = T;
+
+    async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
+    where
+        F: FnMut(Self::Response) -> Result<R>
+    {
+        self.parent.query(query, |plugin| check(plugin.inner)).await
     }
 }
 

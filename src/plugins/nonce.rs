@@ -1,11 +1,11 @@
-use super::Signer;
+use super::{sdk_compat::sdk::Tx as SdkTx, ConvertSdkTx, Signer};
 use crate::call::Call;
 use crate::client::Client;
 use crate::coins::Address;
 use crate::collections::Map;
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
-use crate::prelude::AsyncCall;
+use crate::client::{AsyncCall, AsyncQuery};
 use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
@@ -33,6 +33,34 @@ impl<T: State> Deref for NoncePlugin<T> {
     }
 }
 
+pub trait GetNonce {
+    fn nonce(&self, address: Address) -> Result<u64>;
+}
+
+impl<T: State> GetNonce for NoncePlugin<T> {
+    fn nonce(&self, address: Address) -> Result<u64> {
+        self.nonce(address)
+    }
+}
+
+impl<T> ConvertSdkTx for NoncePlugin<T>
+where
+    T: State + ConvertSdkTx<Output = T::Call> + Call,
+{
+    type Output = NonceCall<T::Call>;
+
+    fn convert(&self, sdk_tx: &SdkTx) -> Result<NonceCall<T::Call>> {
+        let address = sdk_tx.sender_address()?;
+        let nonce = self.nonce(address)? + 1;
+        let inner_call = self.inner.convert(sdk_tx)?;
+
+        Ok(NonceCall {
+            inner_call,
+            nonce: Some(nonce),
+        })
+    }
+}
+
 #[derive(Encode, Decode)]
 pub enum NonceQuery<T: Query> {
     Nonce(Address),
@@ -55,8 +83,8 @@ impl<T: State + Query> Query for NoncePlugin<T> {
 
 #[derive(Encode, Decode)]
 pub struct NonceCall<T> {
-    nonce: Option<u64>,
-    inner_call: T,
+    pub nonce: Option<u64>,
+    pub inner_call: T,
 }
 
 impl<T> Call for NoncePlugin<T>
@@ -80,13 +108,12 @@ where
             (Some(pub_key), Some(nonce)) => {
                 let mut expected_nonce = self.map.entry(pub_key)?.or_default()?;
                 if nonce <= *expected_nonce {
-                    return Err(Error::Nonce(
-                        format!(
-                            "Nonce is not valid. Expected {}, got {}",
-                            *expected_nonce, nonce,
-                        )
-                        .into(),
-                    ));
+                    return Err(Error::Nonce(format!(
+                        "Nonce is not valid. Expected {}-{}, got {}",
+                        *expected_nonce + 1,
+                        *expected_nonce + NONCE_INCREASE_LIMIT,
+                        nonce,
+                    )));
                 }
 
                 if nonce - *expected_nonce > NONCE_INCREASE_LIMIT {
@@ -147,6 +174,19 @@ where
         write_nonce(nonce + 1)?;
 
         res.await
+    }
+}
+
+#[async_trait::async_trait(?Send)]
+impl<T: Query + State, U: AsyncQuery<Query = NonceQuery<T>, Response = NoncePlugin<T>> + Clone> AsyncQuery for NonceAdapter<T, U> {
+    type Query = T::Query;
+    type Response = T;
+
+    async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
+    where
+        F: FnMut(Self::Response) -> Result<R>
+    {
+        self.parent.query(NonceQuery::Inner(query), |plugin| check(plugin.inner)).await
     }
 }
 
