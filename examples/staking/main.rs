@@ -3,6 +3,7 @@
 #![feature(async_closure)]
 
 use orga::prelude::*;
+use orga::plugins::sdk_compat::{ConvertSdkTx, sdk};
 use rust_decimal_macros::dec;
 
 #[derive(State, Debug, Clone)]
@@ -34,6 +35,14 @@ impl InitChain for StakingApp {
         self.accounts.allow_transfers(true);
 
         Ok(())
+    }
+}
+
+impl ConvertSdkTx for StakingApp {
+    type Output = orga::plugins::PaidCall<<StakingApp as Call>::Call>;
+
+    fn convert(&self, _: &sdk::Tx) -> Result<Self::Output> {
+        Err(orga::Error::Unknown)
     }
 }
 
