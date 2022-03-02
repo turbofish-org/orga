@@ -26,6 +26,8 @@ pub use delegator::*;
 mod validator;
 pub use validator::*;
 
+mod migrate;
+
 #[cfg(test)]
 const UNBONDING_SECONDS: u64 = 10; // 10 seconds
 #[cfg(not(test))]

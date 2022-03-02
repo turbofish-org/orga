@@ -57,6 +57,8 @@ pub mod coins;
 
 pub mod context;
 
+pub mod migrate;
+
 mod error;
 
 // re-exports
