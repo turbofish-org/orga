@@ -10,6 +10,7 @@
 #![feature(never_type)]
 #![feature(adt_const_params)]
 
+extern crate orgav1;
 extern crate self as orga;
 
 /// Integration with ABCI (gated by `abci` feature).

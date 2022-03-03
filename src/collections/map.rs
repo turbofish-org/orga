@@ -694,11 +694,11 @@ impl<V> Deref for ReadOnly<V> {
     }
 }
 
-impl<V> From<V> for ReadOnly<V> {
-    fn from(value: V) -> Self {
-        ReadOnly { inner: value }
-    }
-}
+// impl<V> From<V> for ReadOnly<V> {
+//     fn from(value: V) -> Self {
+//         ReadOnly { inner: value }
+//     }
+// }
 
 impl<V> ReadOnly<V> {
     pub fn new(inner: V) -> Self {
