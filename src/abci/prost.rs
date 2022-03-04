@@ -5,7 +5,7 @@ use prost::Message;
 use std::io::{Error as IOError, ErrorKind as IOErrorKind, Read, Write};
 
 #[derive(Debug)]
-pub struct Adapter<T: Message + Default>(T);
+pub struct Adapter<T: Message + Default>(pub(crate) T);
 
 impl<T: Message + Default> State for Adapter<T> {
     type Encoding = Self;
@@ -46,12 +46,6 @@ impl<T: Message + Default> Decode for Adapter<T> {
             T::decode(bytes.as_slice()).map_err(|e| IOError::new(IOErrorKind::InvalidData, e))?;
 
         Ok(Adapter(decoded))
-    }
-}
-
-impl<T: Message + Default> From<T> for Adapter<T> {
-    fn from(t: T) -> Self {
-        Adapter(t)
     }
 }
 

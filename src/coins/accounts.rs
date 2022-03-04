@@ -1,9 +1,11 @@
+use super::migrate::Sym;
 use crate::call::Call;
 use crate::client::Client;
 use crate::coins::{Address, Amount, Coin, Give, Symbol, Take};
 use crate::collections::Map;
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
+use crate::migrate::Migrate;
 use crate::plugins::Paid;
 use crate::plugins::Signer;
 use crate::query::Query;
@@ -124,5 +126,20 @@ impl<S: Symbol> Accounts<S> {
     pub fn withdraw(&mut self, address: Address, amount: Amount) -> Result<Coin<S>> {
         let mut account = self.accounts.entry(address)?.or_insert_default()?;
         account.take(amount)
+    }
+}
+
+impl<S: Symbol> Migrate for Accounts<S> {
+    type Legacy = v1::coins::Accounts<Sym>;
+
+    fn migrate(&mut self, legacy: Self::Legacy) -> Result<()> {
+        let accounts = legacy.accounts();
+        for entry in accounts.iter().unwrap() {
+            let (addr, coins) = entry.unwrap();
+            let amt: u64 = coins.amount.into();
+            self.deposit(addr.bytes().into(), amt.into())?;
+        }
+
+        Ok(())
     }
 }

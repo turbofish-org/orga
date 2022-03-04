@@ -148,11 +148,10 @@ mod full {
             let key = PublicKey { sum };
             self.updates.insert(
                 pub_key,
-                tendermint_proto::abci::ValidatorUpdate {
+                Adapter(tendermint_proto::abci::ValidatorUpdate {
                     pub_key: Some(key),
                     power: power as i64,
-                }
-                .into(),
+                }),
             );
         }
 
@@ -172,19 +171,19 @@ mod full {
 
     impl<C> From<RequestInitChain> for ABCICall<C> {
         fn from(req: RequestInitChain) -> Self {
-            ABCICall::InitChain(req.into())
+            ABCICall::InitChain(Adapter(req))
         }
     }
 
     impl<C> From<RequestBeginBlock> for ABCICall<C> {
         fn from(req: RequestBeginBlock) -> Self {
-            ABCICall::BeginBlock(Box::new(req.into()))
+            ABCICall::BeginBlock(Box::new(Adapter(req)))
         }
     }
 
     impl<C> From<RequestEndBlock> for ABCICall<C> {
         fn from(req: RequestEndBlock) -> Self {
-            ABCICall::EndBlock(req.into())
+            ABCICall::EndBlock(Adapter(req))
         }
     }
 
@@ -252,7 +251,7 @@ mod full {
             let mut current_vp_ref = validators.current_vp.borrow_mut();
             let current_vp = current_vp_ref.as_mut().unwrap();
             for (pubkey, update) in validators.updates.iter() {
-                self.updates.insert(*pubkey, (*update).clone().into())?;
+                self.updates.insert(*pubkey, Adapter((*update).clone()))?;
                 if update.power > 0 {
                     current_vp.insert(ValidatorEntry {
                         pubkey: *pubkey,

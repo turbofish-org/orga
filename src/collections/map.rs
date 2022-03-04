@@ -357,7 +357,7 @@ where
         } else {
             Ok(self.get_from_store(&map_key.inner)?.map(|val| {
                 self.children.insert(map_key, None);
-                val.into()
+                ReadOnly::new(val)
             }))
         }
     }

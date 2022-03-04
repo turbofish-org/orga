@@ -1,5 +1,5 @@
-use crate::query::Query;
 use crate::client::Client;
+use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
 use ed::{Decode, Encode};
@@ -25,6 +25,9 @@ impl Eq for Amount {}
 impl Amount {
     pub fn new(value: u64) -> Self {
         Amount(value)
+    }
+    pub fn foo(&self) -> i64 {
+        0
     }
 }
 
