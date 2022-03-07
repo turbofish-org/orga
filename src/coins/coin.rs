@@ -109,9 +109,8 @@ impl<S: Symbol> From<u64> for Coin<S> {
     }
 }
 
-impl<S: Symbol> Migrate for Coin<S> {
-    type Legacy = v1::coins::Coin<super::migrate::Sym>;
-    fn migrate(&mut self, legacy: Self::Legacy) -> Result<()> {
+impl<S: Symbol, T: v1::coins::Symbol> Migrate<v1::coins::Coin<T>> for Coin<S> {
+    fn migrate(&mut self, legacy: v1::coins::Coin<T>) -> Result<()> {
         let amt: u64 = legacy.amount.into();
         self.amount = amt.into();
 

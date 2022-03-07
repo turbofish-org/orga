@@ -51,8 +51,6 @@ pub use faucet::*;
 mod ops;
 pub use ops::*;
 
-mod migrate;
-
 use bech32::{self, encode_to_fmt, FromBase32, ToBase32, Variant};
 
 use crate::collections::Next;

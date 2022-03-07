@@ -1,4 +1,3 @@
-use super::migrate::Sym;
 use crate::call::Call;
 use crate::client::Client;
 use crate::coins::{Address, Amount, Coin, Give, Symbol, Take};
@@ -129,10 +128,8 @@ impl<S: Symbol> Accounts<S> {
     }
 }
 
-impl<S: Symbol> Migrate for Accounts<S> {
-    type Legacy = v1::coins::Accounts<Sym>;
-
-    fn migrate(&mut self, legacy: Self::Legacy) -> Result<()> {
+impl<S: Symbol, T: v1::coins::Symbol> Migrate<v1::coins::Accounts<T>> for Accounts<S> {
+    fn migrate(&mut self, legacy: v1::coins::Accounts<T>) -> Result<()> {
         let accounts = legacy.accounts();
         for entry in accounts.iter().unwrap() {
             let (addr, coins) = entry.unwrap();

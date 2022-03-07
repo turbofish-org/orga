@@ -104,14 +104,11 @@ pub struct FaucetOptions {
     pub start_seconds: i64,
 }
 
-use super::migrate::Sym;
-impl<S: Symbol> Migrate for Faucet<S> {
-    type Legacy = v1::coins::Faucet<Sym>;
-
-    fn migrate(&mut self, legacy: Self::Legacy) -> Result<()> {
+impl<S: Symbol, T: v1::coins::Symbol> Migrate<v1::coins::Faucet<T>> for Faucet<S> {
+    fn migrate(&mut self, legacy: v1::coins::Faucet<T>) -> Result<()> {
         use crate::encoding::Decode;
         use v1::encoding::Encode;
-        let data: <Self::Legacy as v1::state::State>::Encoding = legacy.into();
+        let data: <v1::coins::Faucet<T> as v1::state::State>::Encoding = legacy.into();
 
         self.configured = data.1;
         self.amount_minted = data.2 .0.into();

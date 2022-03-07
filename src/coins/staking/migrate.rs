@@ -1,5 +1,5 @@
 use super::{Commission, Declaration, Staking};
-use crate::coins::{migrate::Sym, Address, Amount, Decimal, Give, Symbol};
+use crate::coins::{Address, Amount, Decimal, Give, Symbol};
 use crate::encoding::Decode;
 use crate::migrate::Migrate;
 use crate::Result;
@@ -77,10 +77,8 @@ impl<S: Symbol> Staking<S> {
     }
 }
 
-impl<S: Symbol> Migrate for super::Staking<S> {
-    type Legacy = v1::coins::Staking<Sym>;
-
-    fn migrate(&mut self, legacy: Self::Legacy) -> Result<()> {
+impl<S: Symbol, T: v1::coins::Symbol> Migrate<v1::coins::Staking<T>> for super::Staking<S> {
+    fn migrate(&mut self, legacy: v1::coins::Staking<T>) -> Result<()> {
         self.migrate_validators(&legacy)
     }
 }
