@@ -367,6 +367,7 @@ impl<S: Symbol> Staking<S> {
         if coins.amount < min_self_delegation {
             return Err(Error::Coins("Insufficient self-delegation".into()));
         }
+        validate_info(&validator_info)?;
 
         let tm_hash = tm_pubkey_hash(consensus_key)?;
         let tm_hash_exists = self.address_for_tm_hash.contains_key(tm_hash)?;
@@ -441,6 +442,9 @@ impl<S: Symbol> Staking<S> {
                 "Commission must be between 0 and max commission".into(),
             ));
         }
+
+        validate_info(&validator_info)?;
+
         let change = (commission - validator.commission.rate)?.abs();
         if change > validator.commission.max_change {
             return Err(Error::Coins(
@@ -1000,6 +1004,14 @@ fn assert_positive(amount: Amount) -> Result<()> {
     } else {
         Err(Error::Coins("Amount must be positive".into()))
     }
+}
+
+fn validate_info(info: &ValidatorInfo) -> Result<()> {
+    if info.bytes.len() > 5000 {
+        return Err(Error::Coins("Validator info too long".into()));
+    }
+
+    Ok(())
 }
 
 impl<S: Symbol> Give<S> for Staking<S> {

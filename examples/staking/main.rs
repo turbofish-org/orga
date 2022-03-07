@@ -2,8 +2,8 @@
 #![feature(min_specialization)]
 #![feature(async_closure)]
 
+use orga::plugins::sdk_compat::{sdk, ConvertSdkTx};
 use orga::prelude::*;
-use orga::plugins::sdk_compat::{ConvertSdkTx, sdk};
 use rust_decimal_macros::dec;
 
 #[derive(State, Debug, Clone)]
@@ -59,16 +59,8 @@ fn my_address() -> Address {
 async fn my_balance() -> Result<Amount> {
     let address = my_address();
     let client = rpc_client();
-    type AppQuery = <StakingApp as Query>::Query;
-    type AcctQuery = <Accounts<MyCoin> as Query>::Query;
 
-    let q = NonceQuery::Inner(AppQuery::FieldAccounts(AcctQuery::MethodBalance(
-        address,
-        vec![],
-    )));
-    let balance = client
-        .query(q, |state| state.accounts.balance(address))
-        .await?;
+    let balance = client.accounts.balance(address).await??;
 
     Ok(balance)
 }

@@ -9,6 +9,7 @@ use crate::state::State;
 use crate::{Error, Result};
 use std::any::TypeId;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::ops::{Deref, DerefMut};
 
 #[derive(State, Encode, Decode)]
@@ -78,9 +79,15 @@ impl<T: Encode> Encode for PaidCall<T> {
     }
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
         let payer_call_bytes = self.payer.encode()?;
-        let payer_call_len = payer_call_bytes.len() as u16;
+        let payer_call_len: u16 = payer_call_bytes
+            .len()
+            .try_into()
+            .map_err(|_| ed::Error::UnexpectedByte(0))?;
         let paid_call_bytes = self.paid.encode()?;
-        let paid_call_len = paid_call_bytes.len() as u16;
+        let paid_call_len: u16 = paid_call_bytes
+            .len()
+            .try_into()
+            .map_err(|_| ed::Error::UnexpectedByte(0))?;
 
         dest.write_all(&payer_call_len.encode()?)?;
         dest.write_all(&payer_call_bytes)?;
@@ -195,13 +202,15 @@ where
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Query + State, U: AsyncQuery<Query = T::Query, Response = PayablePlugin<T>> + Clone> AsyncQuery for UnpaidAdapter<T, U> {
+impl<T: Query + State, U: AsyncQuery<Query = T::Query, Response = PayablePlugin<T>> + Clone>
+    AsyncQuery for UnpaidAdapter<T, U>
+{
     type Query = T::Query;
     type Response = T;
 
     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
     where
-        F: FnMut(Self::Response) -> Result<R>
+        F: FnMut(Self::Response) -> Result<R>,
     {
         self.parent.query(query, |plugin| check(plugin.inner)).await
     }

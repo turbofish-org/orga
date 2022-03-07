@@ -1,5 +1,6 @@
 use super::{Amount, Coin, Decimal, Symbol};
 use crate::context::GetContext;
+use crate::migrate::Migrate;
 use crate::plugins::Time;
 use crate::state::State;
 use crate::{Error, Result};
@@ -101,6 +102,28 @@ pub struct FaucetOptions {
     pub total_coins: Amount,
     pub period_decay: Decimal,
     pub start_seconds: i64,
+}
+
+use super::migrate::Sym;
+impl<S: Symbol> Migrate for Faucet<S> {
+    type Legacy = v1::coins::Faucet<Sym>;
+
+    fn migrate(&mut self, legacy: Self::Legacy) -> Result<()> {
+        use crate::encoding::Decode;
+        use v1::encoding::Encode;
+        let data: <Self::Legacy as v1::state::State>::Encoding = legacy.into();
+
+        self.configured = data.1;
+        self.amount_minted = data.2 .0.into();
+        self.start_seconds = data.3;
+        self.multiplier_total = Decode::decode(data.4.encode().unwrap().as_slice())?;
+        self.total_to_mint = data.5 .0.into();
+        self.period_decay = Decode::decode(data.6.encode().unwrap().as_slice())?;
+        self.seconds_per_period = data.7;
+        self.num_periods = data.8;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]

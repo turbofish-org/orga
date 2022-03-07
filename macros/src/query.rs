@@ -53,7 +53,11 @@ pub fn attr(_args: TokenStream, input: TokenStream) -> TokenStream {
     quote!(#method).into()
 }
 
-pub(crate) fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -> (TokenStream2, ItemImpl) {
+pub(crate) fn create_query_impl(
+    item: &DeriveInput,
+    source: &File,
+    query_enum: &ItemEnum,
+) -> (TokenStream2, ItemImpl) {
     let name = &item.ident;
     let generics = &item.generics;
     let mut generics_sanitized = generics.clone();
