@@ -2,7 +2,7 @@
 use std::clone::Clone;
 use std::env;
 use std::net::ToSocketAddrs;
-use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+use std::sync::mpsc::{self, Receiver, SyncSender, Sender};
 
 use log::info;
 
@@ -42,7 +42,7 @@ impl<A: Application> ABCIStateMachine<A> {
     /// for transactions and blocks), and store (a key/value store to persist
     /// the state data).
     pub fn new(app: A, store: MerkStore) -> Self {
-        let (sender, receiver) = sync_channel(0);
+        let (sender, receiver) = mpsc::sync_channel(0);
         ABCIStateMachine {
             app: Some(app),
             store: Some(Shared::new(store)),
@@ -322,14 +322,22 @@ impl<A: Application> ABCIStateMachine<A> {
     pub fn listen<SA: ToSocketAddrs>(mut self, addr: SA) -> Result<()> {
         let server = abci2::Server::listen(addr)?;
 
+        let (err_sender, err_receiver) = mpsc::channel();
+
         // TODO: keep workers in struct
         // TODO: more intelligently handle connections, e.g. handle tendermint dying/reconnecting?
-        self.create_worker(server.accept()?)?;
-        self.create_worker(server.accept()?)?;
-        self.create_worker(server.accept()?)?;
-        self.create_worker(server.accept()?)?;
+        self.create_worker(server.accept()?, err_sender.clone())?;
+        self.create_worker(server.accept()?, err_sender.clone())?;
+        self.create_worker(server.accept()?, err_sender.clone())?;
+        self.create_worker(server.accept()?, err_sender.clone())?;
 
         loop {
+            match err_receiver.try_recv() {
+                Err(mpsc::TryRecvError::Empty) => {}
+                Err(err) => Err(err).unwrap(),
+                _ => {}
+            }
+
             let (req, cb) = self.receiver.recv().unwrap();
             let res = Response {
                 value: Some(self.run(req)?),
@@ -340,8 +348,8 @@ impl<A: Application> ABCIStateMachine<A> {
 
     /// Creates a new worker to handle the incoming ABCI requests for `conn`
     /// within its own threads.
-    fn create_worker(&self, conn: abci2::Connection) -> Result<Worker> {
-        Ok(Worker::new(self.sender.clone(), conn))
+    fn create_worker(&self, conn: abci2::Connection, err_channel: Sender<Error>) -> Result<Worker> {
+        Ok(Worker::new(self.sender.clone(), conn, err_channel))
     }
 }
 
@@ -354,12 +362,18 @@ impl Worker {
     fn new(
         req_sender: SyncSender<(Request, SyncSender<Response>)>,
         conn: abci2::Connection,
+        err_sender: Sender<Error>,
     ) -> Self {
         let thread = std::thread::spawn(move || {
-            let (res_sender, res_receiver) = sync_channel(0);
+            let (res_sender, res_receiver) = mpsc::sync_channel(0);
             loop {
-                // TODO: pass errors through a channel instead of panicking
-                let req = conn.read().unwrap();
+                let req = match conn.read() {
+                    Ok(req) => req,
+                    Err(e) => {
+                        err_sender.send(e.into()).unwrap_or(());
+                        return;
+                    }
+                };
                 req_sender
                     .send((req, res_sender.clone()))
                     .expect("failed to send request");
