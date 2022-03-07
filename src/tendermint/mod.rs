@@ -94,6 +94,7 @@ impl ProcessHandler {
             }
         };
         child.kill()?;
+        child.wait()?;
         Ok(())
     }
 }
@@ -538,12 +539,12 @@ impl Tendermint {
     ///
     /// Note: This will locally install the Tendermint binary if it is
     /// not already contained in the Tendermint home directory
-    pub fn start(mut self) {
+    pub fn start(mut self) -> Self {
         self.install();
         self.mutate_configuration();
         self.process.set_arg("start");
         self.process.spawn().unwrap();
-        self.process.wait().unwrap();
+        self
     }
 
     /// Calls tendermint init with configured arguments
@@ -559,6 +560,10 @@ impl Tendermint {
         self.mutate_configuration();
 
         self
+    }
+
+    pub fn kill(self) -> Result<()> {
+        self.process.kill()
     }
 
     /// Calls tendermint start with configured arguments
