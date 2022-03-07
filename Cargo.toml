@@ -44,7 +44,7 @@ base64 = "0.13.0"
 secp256k1 = { version = "0.21.2", features = ["bitcoin_hashes"] }
 serde = { version = "1.0.133", features = ["derive"] }
 serde_json = "1.0.74"
-v1 = {git = "https://github.com/nomic-io/orga", rev="c7b22dd03a216736e1cce1a4296e585c8d8c98a0", features = ["merk-full", "abci"], package = "orga"}
+v1 = { git = "https://github.com/nomic-io/orga", branch = "legacy-v1", features = ["merk-full", "abci"], package = "orga" }
 
 [dev-dependencies]
 tempdir = "0.3.7"
