@@ -82,7 +82,7 @@ where
         }
     }
 
-    pub fn run(self) {
+    pub fn run(self) -> Result<()> {
         // Start tendermint process
         let tm_home = self.tm_home.clone();
         let abci_port = self.abci_port;
@@ -90,29 +90,31 @@ where
         let stderr = self.stderr;
         let maybe_genesis_bytes = self.genesis_bytes;
         let maybe_peers = self.p2p_persistent_peers;
-        std::thread::spawn(move || {
-            let mut tm_process = Tendermint::new(&tm_home)
-                .stdout(stdout)
-                .stderr(stderr)
-                .proxy_app(format!("tcp://0.0.0.0:{}", abci_port).as_str());
 
-            if let Some(genesis_bytes) = maybe_genesis_bytes {
-                tm_process = tm_process.with_genesis(genesis_bytes);
-            }
+        let mut tm_process = Tendermint::new(&tm_home)
+            .stdout(stdout)
+            .stderr(stderr)
+            .proxy_app(format!("tcp://0.0.0.0:{}", abci_port).as_str());
 
-            if let Some(peers) = maybe_peers {
-                tm_process = tm_process.p2p_persistent_peers(peers);
-            }
+        if let Some(genesis_bytes) = maybe_genesis_bytes {
+            tm_process = tm_process.with_genesis(genesis_bytes);
+        }
 
-            tm_process.start();
-        });
+        if let Some(peers) = maybe_peers {
+            tm_process = tm_process.p2p_persistent_peers(peers);
+        }
+
+        tm_process = tm_process.start();
+
         let app = InternalApp::<ABCIPlugin<A>>::new();
         let store = MerkStore::new(self.merk_home.clone());
 
-        // Start ABCI server
-        ABCIStateMachine::new(app, store)
-            .listen(format!("127.0.0.1:{}", self.abci_port))
-            .expect("Failed to start ABCI server");
+        let res = ABCIStateMachine::new(app, store)
+            .listen(format!("127.0.0.1:{}", self.abci_port));
+
+        tm_process.kill()?;
+
+        res
     }
 
     #[must_use]
