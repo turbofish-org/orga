@@ -8,7 +8,7 @@ license = "MIT"
 
 [dependencies]
 abci2 = { git = "https://github.com/nomic-io/abci2", rev = "3cacf0b41c4d4ec8c6a897c9ce1024b11863ee33", optional = true }
-merk = { git = "https://github.com/nomic-io/merk", rev = "3c30b41415423af5e165d64cc8646c59da4acfd6", optional = true, default-features = false }
+merk = { git = "https://github.com/nomic-io/merk", rev = "e9038a659e1ad3cf13720b57be88e2845d0d6a01", optional = true, default-features = false }
 tendermint-rpc = { version = "0.23.5", features = ["http-client"], optional = true }
 tendermint = { version = "0.23.5", optional = true }
 tendermint-proto = { version = "0.23.5", optional = true }
