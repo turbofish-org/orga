@@ -23,8 +23,6 @@ mod full {
     use crate::state::State;
     use crate::store::Store;
     use crate::Result;
-    #[cfg(test)]
-    use mutagen::mutate;
     use std::cell::{Ref, RefCell};
     use std::collections::HashMap;
     use std::convert::TryInto;
@@ -140,7 +138,6 @@ mod full {
             }
         }
 
-        #[cfg_attr(test, mutate)]
         pub fn set_voting_power<A: Into<[u8; 32]>>(&mut self, pub_key: A, power: u64) {
             let pub_key = pub_key.into();
 
@@ -211,8 +208,6 @@ mod full {
                     create_time_ctx(&self.time);
                     self.inner.init_chain(&ctx)?;
 
-                    self.build_updates()?;
-
                     Ok(())
                 }
                 BeginBlock(req) => {
@@ -226,8 +221,6 @@ mod full {
                 EndBlock(req) => {
                     let ctx = req.into_inner().into();
                     self.inner.end_block(&ctx)?;
-
-                    self.build_updates()?;
 
                     Ok(())
                 }
@@ -252,6 +245,8 @@ mod full {
                     })?;
                 }
             }
+
+            self.build_updates()?;
             Ok(res)
         }
     }
