@@ -26,16 +26,23 @@ pub struct Node<A> {
     stderr: Stdio,
 }
 
+impl<A> Node<A> {
+    pub fn home(name: &str) -> PathBuf {
+        home_dir()
+            .expect("Could not resolve user home directory")
+            .join(format!(".{}", name).as_str())
+    }
+}
+
 impl<A: App> Node<A>
 where
     <A as State>::Encoding: Default,
 {
-    pub fn new(home: &str) -> Self {
-        let home: PathBuf = home_dir()
-            .expect("Could not resolve user home directory")
-            .join(format!(".{}", home).as_str());
+    pub fn new(name: &str) -> Self {
+        let home = Self::home(name);
         let merk_home = home.join("merk");
         let tm_home = home.join("tendermint");
+
         if !home.exists() {
             std::fs::create_dir(&home).expect("Failed to initialize application home directory");
         }
