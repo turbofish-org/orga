@@ -219,7 +219,7 @@ impl<S: Symbol> BeginBlock for Staking<S> {
                 .iter()?
                 .try_for_each(|res| -> Result<()> {
                     let (hash, last_height) = res?;
-                    if *last_height + MAX_OFFLINE_BLOCKS < height {
+                    if *last_height + self.max_offline_blocks < height {
                         offline_validator_hashes.push(hash.to_vec().try_into().map_err(|_| {
                             Error::Coins("Invalid pub key hash length from Tendermint".into())
                         })?);
