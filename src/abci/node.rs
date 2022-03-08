@@ -26,7 +26,7 @@ pub struct Node<A> {
     stderr: Stdio,
 }
 
-impl<A> Node<A> {
+impl Node<()> {
     pub fn home(name: &str) -> PathBuf {
         home_dir()
             .expect("Could not resolve user home directory")
@@ -39,7 +39,7 @@ where
     <A as State>::Encoding: Default,
 {
     pub fn new(name: &str) -> Self {
-        let home = Self::home(name);
+        let home = Node::home(name);
         let merk_home = home.join("merk");
         let tm_home = home.join("tendermint");
 
