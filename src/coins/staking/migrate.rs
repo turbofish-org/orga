@@ -79,6 +79,7 @@ impl<S: Symbol> Staking<S> {
 
 impl<S: Symbol, T: v1::coins::Symbol> Migrate<v1::coins::Staking<T>> for super::Staking<S> {
     fn migrate(&mut self, legacy: v1::coins::Staking<T>) -> Result<()> {
-        self.migrate_validators(&legacy)
+        self.migrate_validators(&legacy)?;
+        self.end_block_step()
     }
 }
