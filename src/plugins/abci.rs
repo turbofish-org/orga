@@ -203,12 +203,15 @@ mod full {
                 }
             };
             create_time_ctx(&self.time);
+
             let res = match call {
                 InitChain(req) => {
                     let ctx: InitChainCtx = req.into_inner().into();
                     self.time = ctx.time.clone();
                     create_time_ctx(&self.time);
                     self.inner.init_chain(&ctx)?;
+
+                    self.build_updates()?;
 
                     Ok(())
                 }
@@ -224,22 +227,7 @@ mod full {
                     let ctx = req.into_inner().into();
                     self.inner.end_block(&ctx)?;
 
-                    let mut update_keys = vec![];
-                    let mut update_map = HashMap::new();
-
-                    for entry in self.updates.iter()? {
-                        let (pubkey, update) = entry?;
-                        update_map.insert(*pubkey, update.clone());
-                        update_keys.push(*pubkey);
-                    }
-
-                    // Clear the update map
-                    for key in update_keys {
-                        self.updates.remove(key)?;
-                    }
-
-                    // Expose validator updates for use in node
-                    self.validator_updates.replace(update_map);
+                    self.build_updates()?;
 
                     Ok(())
                 }
@@ -265,6 +253,28 @@ mod full {
                 }
             }
             Ok(res)
+        }
+    }
+
+    impl<T: App> ABCIPlugin<T> {
+        fn build_updates(&mut self) -> Result<()> {
+            let mut update_keys = vec![];
+            let mut update_map = HashMap::new();
+
+            for entry in self.updates.iter()? {
+                let (pubkey, update) = entry?;
+                update_map.insert(*pubkey, update.clone());
+                update_keys.push(*pubkey);
+            }
+
+            // Clear the update map
+            for key in update_keys {
+                self.updates.remove(key)?;
+            }
+
+            // Expose validator updates for use in node
+            self.validator_updates.replace(update_map);
+            Ok(())
         }
     }
 

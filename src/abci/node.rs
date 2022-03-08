@@ -190,9 +190,19 @@ where
     <A as State>::Encoding: Default,
 {
     fn init_chain(&self, store: WrappedMerk, req: RequestInitChain) -> Result<ResponseInitChain> {
-        self.run(store, move |state| state.call(req.into()))??;
+        let mut updates = self.run(store, move |state| -> Result<_> {
+            state.call(req.into())?;
+            Ok(state
+                .validator_updates
+                .take()
+                .expect("ABCI plugin did not create initial validator updates"))
+        })??;
+        let mut res: ResponseInitChain = Default::default();
+        updates.drain().for_each(|(_key, update)| {
+            res.validators.push(update);
+        });
 
-        Ok(Default::default())
+        Ok(res)
     }
 
     fn begin_block(
@@ -211,7 +221,7 @@ where
             Ok(state
                 .validator_updates
                 .take()
-                .expect("ABCI Provider did not create validator update map"))
+                .expect("ABCI plugin did not create validator update map"))
         })??;
 
         // Write back validator updates
