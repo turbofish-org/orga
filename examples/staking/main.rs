@@ -72,7 +72,7 @@ async fn main() {
 
     let handle = spawn(|| {
         println!("Running node");
-        Node::<MyApp>::new("staking_app").reset().run()
+        Node::<MyApp>::new("staking_app").run()
     });
 
     sleep(Duration::from_secs(30));
@@ -141,5 +141,5 @@ async fn main() {
     let bal = my_balance().await.unwrap();
     println!("My balance: {:?}", bal);
 
-    handle.join().unwrap();
+    handle.join().unwrap().unwrap();
 }
