@@ -32,6 +32,17 @@ impl Node<()> {
             .expect("Could not resolve user home directory")
             .join(format!(".{}", name).as_str())
     }
+
+    pub fn height(name: &str) -> Result<u64> {
+        let home = Node::home(name);
+
+        if !home.exists() {
+            return Ok(0);
+        }
+
+        let store = MerkStore::new(home.join("merk"));
+        store.height()
+    }
 }
 
 impl<A: App> Node<A>
@@ -117,6 +128,7 @@ where
         res
     }
 
+    #[cfg(debug)]
     #[must_use]
     pub fn reset(self) -> Self {
         if self.merk_home.exists() {
