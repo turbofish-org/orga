@@ -45,11 +45,17 @@ impl Node<()> {
     }
 }
 
+#[derive(Default)]
+pub struct DefaultConfig {
+    pub seeds: Option<String>,
+    pub timeout_commit: Option<String>,
+}
+
 impl<A: App> Node<A>
 where
     <A as State>::Encoding: Default,
 {
-    pub fn new(name: &str) -> Self {
+    pub fn new(name: &str, cfg_defaults: DefaultConfig) -> Self {
         let home = Node::home(name);
         let merk_home = home.join("merk");
         let tm_home = home.join("tendermint");
@@ -61,13 +67,34 @@ where
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .init();
+
         let cfg_path = tm_home.join("config/config.toml");
-        let abci_port: u16 = if cfg_path.exists() {
+        let read_toml = || {
             let config =
-                std::fs::read_to_string(cfg_path).expect("Failed to read tendermint config");
-            let toml = config
+                std::fs::read_to_string(&cfg_path).expect("Failed to read Tendermint config");
+            config
                 .parse::<toml_edit::Document>()
-                .expect("Failed to parse config");
+                .expect("Failed to parse toml")
+        };
+
+        let write_toml = |toml: toml_edit::Document| {
+            std::fs::write(&cfg_path, toml.to_string()).expect("Failed to write Tendermint config");
+        };
+
+        if let Some(seeds) = cfg_defaults.seeds {
+            let mut toml = read_toml();
+            toml["p2p"]["seeds"] = toml_edit::value(seeds);
+            write_toml(toml);
+        }
+
+        if let Some(timeout_commit) = cfg_defaults.timeout_commit {
+            let mut toml = read_toml();
+            toml["consensus"]["timeout_commit"] = toml_edit::value(timeout_commit);
+            write_toml(toml);
+        }
+
+        let abci_port: u16 = if cfg_path.exists() {
+            let toml = read_toml();
             let abci_laddr = toml["proxy_app"]
                 .as_str()
                 .expect("config.toml is missing proxy_app");
@@ -120,8 +147,7 @@ where
         let app = InternalApp::<ABCIPlugin<A>>::new();
         let store = MerkStore::new(self.merk_home.clone());
 
-        let res = ABCIStateMachine::new(app, store)
-            .listen(format!("127.0.0.1:{}", self.abci_port));
+        let res = ABCIStateMachine::new(app, store).listen(format!("127.0.0.1:{}", self.abci_port));
 
         tm_process.kill()?;
 
