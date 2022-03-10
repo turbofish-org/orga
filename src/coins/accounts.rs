@@ -134,7 +134,9 @@ impl<S: Symbol, T: v1::coins::Symbol> Migrate<v1::coins::Accounts<T>> for Accoun
         for entry in accounts.iter().unwrap() {
             let (addr, coins) = entry.unwrap();
             let amt: u64 = coins.amount.into();
-            self.deposit(addr.bytes().into(), amt.into())?;
+            if amt > 0 {
+                self.deposit(addr.bytes().into(), amt.into())?;
+            }
         }
 
         Ok(())
