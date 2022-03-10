@@ -63,13 +63,13 @@ where
         if !home.exists() {
             std::fs::create_dir(&home).expect("Failed to initialize application home directory");
         }
-        let tm_previously_initialized = tm_home.exists();
+        let cfg_path = tm_home.join("config/config.toml");
+        let tm_previously_configured = cfg_path.exists();
         let _ = Tendermint::new(tm_home.clone())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .init();
 
-        let cfg_path = tm_home.join("config/config.toml");
         let read_toml = || {
             let config =
                 std::fs::read_to_string(&cfg_path).expect("Failed to read Tendermint config");
@@ -82,7 +82,7 @@ where
             std::fs::write(&cfg_path, toml.to_string()).expect("Failed to write Tendermint config");
         };
 
-        if !tm_previously_initialized {
+        if !tm_previously_configured {
             if let Some(seeds) = cfg_defaults.seeds {
                 let mut toml = read_toml();
                 toml["p2p"]["seeds"] = toml_edit::value(seeds);
