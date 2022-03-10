@@ -128,7 +128,7 @@ where
         res
     }
 
-    #[cfg(debug)]
+    #[cfg(debug_assertions)]
     #[must_use]
     pub fn reset(self) -> Self {
         if self.merk_home.exists() {
