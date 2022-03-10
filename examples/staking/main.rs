@@ -72,7 +72,7 @@ async fn main() {
 
     let handle = spawn(|| {
         println!("Running node");
-        Node::<MyApp>::new("staking_app").run()
+        Node::<MyApp>::new("staking_app", Default::default()).run()
     });
 
     sleep(Duration::from_secs(30));
