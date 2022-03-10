@@ -63,6 +63,7 @@ where
         if !home.exists() {
             std::fs::create_dir(&home).expect("Failed to initialize application home directory");
         }
+        let tm_previously_initialized = tm_home.exists();
         let _ = Tendermint::new(tm_home.clone())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
@@ -81,16 +82,18 @@ where
             std::fs::write(&cfg_path, toml.to_string()).expect("Failed to write Tendermint config");
         };
 
-        if let Some(seeds) = cfg_defaults.seeds {
-            let mut toml = read_toml();
-            toml["p2p"]["seeds"] = toml_edit::value(seeds);
-            write_toml(toml);
-        }
+        if !tm_previously_initialized {
+            if let Some(seeds) = cfg_defaults.seeds {
+                let mut toml = read_toml();
+                toml["p2p"]["seeds"] = toml_edit::value(seeds);
+                write_toml(toml);
+            }
 
-        if let Some(timeout_commit) = cfg_defaults.timeout_commit {
-            let mut toml = read_toml();
-            toml["consensus"]["timeout_commit"] = toml_edit::value(timeout_commit);
-            write_toml(toml);
+            if let Some(timeout_commit) = cfg_defaults.timeout_commit {
+                let mut toml = read_toml();
+                toml["consensus"]["timeout_commit"] = toml_edit::value(timeout_commit);
+                write_toml(toml);
+            }
         }
 
         let abci_port: u16 = if cfg_path.exists() {
