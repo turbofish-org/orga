@@ -59,14 +59,21 @@ impl<T: Encode> Encode for Call<T> {
     fn encoding_length(&self) -> ed::Result<usize> {
         match self {
             Call::Native(native) => native.encoding_length(),
-            Call::Sdk(_) => unimplemented!(),
+            Call::Sdk(tx) => {
+                let bytes = serde_json::to_vec(tx).map_err(|_| ed::Error::UnexpectedByte(0))?;
+                Ok(bytes.len())
+            }
         }
     }
 
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
         match self {
             Call::Native(native) => native.encode_into(dest),
-            Call::Sdk(_) => unimplemented!(),
+            Call::Sdk(tx) => {
+                let bytes = serde_json::to_vec(tx).map_err(|_| ed::Error::UnexpectedByte(0))?;
+                dest.write_all(&bytes)?;
+                Ok(())
+            }
         }
     }
 }
