@@ -272,14 +272,56 @@ impl<T: Query, U: AsyncQuery<Query = T::Query, Response = SdkCompatPlugin<S, T>>
     }
 }
 
-impl<S, T: Client<SdkCompatAdapter<T, U, S>>, U: Clone> Client<U> for SdkCompatPlugin<S, T> {
-    type Client = T::Client;
+pub struct SdkCompatClient<T: Client<SdkCompatAdapter<T, U, S>>, U: Clone, S> {
+    inner: T::Client,
+    parent: U,
+}
 
-    fn create_client(parent: U) -> T::Client {
-        T::create_client(SdkCompatAdapter {
-            inner: std::marker::PhantomData,
+impl<T: Client<SdkCompatAdapter<T, U, S>>, U: Clone, S> Deref for SdkCompatClient<T, U, S> {
+    type Target = T::Client;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl<T: Client<SdkCompatAdapter<T, U, S>>, U: Clone, S> DerefMut for SdkCompatClient<T, U, S> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+impl<
+        T: Client<SdkCompatAdapter<T, U, S>> + CallTrait,
+        U: Clone + AsyncCall<Call = Call<T::Call>>,
+        S,
+    > SdkCompatClient<T, U, S>
+{
+    pub async fn send_sdk_tx(&mut self, sign_doc: sdk::SignDoc) -> Result<()> {
+        let mut signer = crate::plugins::signer::keplr::Signer::new();
+        let sig = signer.sign_sdk(sign_doc.clone()).await;
+
+        let tx = sdk::Tx {
+            msg: sign_doc.msgs,
+            signatures: vec![sig],
+            fee: sign_doc.fee,
+            memo: sign_doc.memo,
+        };
+        self.parent.call(Call::Sdk(tx)).await
+    }
+}
+
+impl<S, T: Client<SdkCompatAdapter<T, U, S>>, U: Clone> Client<U> for SdkCompatPlugin<S, T> {
+    type Client = SdkCompatClient<T, U, S>;
+
+    fn create_client(parent: U) -> Self::Client {
+        SdkCompatClient {
+            inner: T::create_client(SdkCompatAdapter {
+                inner: std::marker::PhantomData,
+                parent: parent.clone(),
+            }),
             parent,
-        })
+        }
     }
 }
 
