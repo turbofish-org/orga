@@ -261,13 +261,15 @@ where
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Query, U: AsyncQuery<Query = T::Query, Response = SignerPlugin<T>> + Clone> AsyncQuery for SignerClient<T, U> {
+impl<T: Query, U: AsyncQuery<Query = T::Query, Response = SignerPlugin<T>> + Clone> AsyncQuery
+    for SignerClient<T, U>
+{
     type Query = T::Query;
     type Response = T;
 
     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
     where
-        F: FnMut(Self::Response) -> Result<R>
+        F: FnMut(Self::Response) -> Result<R>,
     {
         self.parent.query(query, |plugin| check(plugin.inner)).await
     }
@@ -315,6 +317,7 @@ where
 
 #[cfg(target_arch = "wasm32")]
 pub mod keplr {
+    use crate::plugins::sdk_compat::sdk;
     use js_sys::{
         Array, Function, Object, Promise,
         Reflect::{apply, get},
@@ -324,7 +327,7 @@ pub mod keplr {
     use wasm_bindgen_futures::JsFuture;
 
     // TODO: this should be specified by consumer, not hardcoded here
-    const CHAIN_ID: &str = "nomic-stakenet";
+    const CHAIN_ID: &str = "nomic-stakenet-test-2";
 
     pub struct Signer {
         handle: Option<KeplrHandle>,
@@ -438,6 +441,31 @@ pub mod keplr {
                 let mut signature_arr = [0u8; 64];
                 signature_arr.copy_from_slice(&signature_vec);
                 signature_arr
+            }
+        }
+
+        pub async fn sign_sdk(&mut self, sign_doc: sdk::SignDoc) -> sdk::Signature {
+            unsafe {
+                let doc_json = serde_json::to_string(&sign_doc).unwrap();
+                let doc_obj = js_sys::JSON::parse(&doc_json).unwrap();
+
+                let args = Array::new();
+                Array::push(&args, &sign_doc.chain_id.clone().into());
+                Array::push(&args, &self.address().await.into());
+                Array::push(&args, &doc_obj);
+
+                let sign_amino: Function =
+                    get(&self.handle().keplr, &"signAmino".to_string().into())
+                        .unwrap()
+                        .into();
+                let sign_promise: Promise = apply(&sign_amino, &self.handle().keplr, &args)
+                    .unwrap()
+                    .into();
+                let res = JsFuture::from(sign_promise).await.unwrap();
+
+                let signature = get(&res, &"signature".to_string().into()).unwrap();
+                let signature_json: String = js_sys::JSON::stringify(&signature).unwrap().into();
+                serde_json::from_str(&signature_json).unwrap()
             }
         }
     }
