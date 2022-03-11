@@ -1,5 +1,6 @@
 use super::{Amount, Coin, Decimal, Symbol};
 use crate::context::GetContext;
+#[cfg(feature = "abci")]
 use crate::migrate::Migrate;
 use crate::plugins::Time;
 use crate::state::State;
@@ -104,6 +105,7 @@ pub struct FaucetOptions {
     pub start_seconds: i64,
 }
 
+#[cfg(feature = "abci")]
 impl<S: Symbol, T: v1::coins::Symbol> Migrate<v1::coins::Faucet<T>> for Faucet<S> {
     fn migrate(&mut self, legacy: v1::coins::Faucet<T>) -> Result<()> {
         use crate::encoding::Decode;

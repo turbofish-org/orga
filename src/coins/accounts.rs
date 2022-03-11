@@ -4,6 +4,7 @@ use crate::coins::{Address, Amount, Coin, Give, Symbol, Take};
 use crate::collections::Map;
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
+#[cfg(feature = "abci")]
 use crate::migrate::Migrate;
 use crate::plugins::Paid;
 use crate::plugins::Signer;
@@ -128,6 +129,7 @@ impl<S: Symbol> Accounts<S> {
     }
 }
 
+#[cfg(feature = "abci")]
 impl<S: Symbol, T: v1::coins::Symbol> Migrate<v1::coins::Accounts<T>> for Accounts<S> {
     fn migrate(&mut self, legacy: v1::coins::Accounts<T>) -> Result<()> {
         let accounts = legacy.accounts();

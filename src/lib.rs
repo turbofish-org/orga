@@ -11,7 +11,6 @@
 #![feature(adt_const_params)]
 
 extern crate self as orga;
-extern crate v1;
 
 /// Integration with ABCI (gated by `abci` feature).
 #[cfg(feature = "abci")]
@@ -58,6 +57,7 @@ pub mod coins;
 
 pub mod context;
 
+#[cfg(feature = "abci")]
 pub mod migrate;
 
 mod error;

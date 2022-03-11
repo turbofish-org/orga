@@ -1,6 +1,7 @@
 use super::{Adjust, Amount, Balance, Decimal, Give, Symbol, Take};
 use crate::call::Call;
 use crate::context::GetContext;
+#[cfg(feature = "abci")]
 use crate::migrate::Migrate;
 use crate::plugins::Paid;
 use crate::state::State;
@@ -109,6 +110,7 @@ impl<S: Symbol> From<u64> for Coin<S> {
     }
 }
 
+#[cfg(feature = "abci")]
 impl<S: Symbol, T: v1::coins::Symbol> Migrate<v1::coins::Coin<T>> for Coin<S> {
     fn migrate(&mut self, legacy: v1::coins::Coin<T>) -> Result<()> {
         let amt: u64 = legacy.amount.into();

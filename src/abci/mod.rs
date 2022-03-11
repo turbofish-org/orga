@@ -361,7 +361,7 @@ struct Worker {
 impl Worker {
     fn new(
         req_sender: SyncSender<(Request, SyncSender<Response>)>,
-        conn: abci2::Connection,
+        mut conn: abci2::Connection,
         err_sender: Sender<Error>,
     ) -> Self {
         let thread = std::thread::spawn(move || {

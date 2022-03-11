@@ -9,8 +9,8 @@ use crate::collections::{Deque, Entry, EntryMap, Map};
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
 #[cfg(feature = "abci")]
-use crate::plugins::{BeginBlockCtx, EndBlockCtx, Time, Validators};
-use crate::plugins::{Paid, Signer};
+use crate::plugins::{BeginBlockCtx, EndBlockCtx, Validators};
+use crate::plugins::{Paid, Signer, Time};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
@@ -18,6 +18,7 @@ use crate::{Error, Result};
 use rust_decimal_macros::dec;
 use sha2::{Digest, Sha256};
 use std::convert::TryInto;
+#[cfg(feature = "abci")]
 use tendermint_proto::abci::EvidenceType;
 
 mod delegator;
@@ -26,6 +27,7 @@ pub use delegator::*;
 mod validator;
 pub use validator::*;
 
+#[cfg(feature = "abci")]
 mod migrate;
 
 #[cfg(test)]
