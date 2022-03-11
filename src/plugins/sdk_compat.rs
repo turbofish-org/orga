@@ -297,6 +297,7 @@ impl<
         S,
     > SdkCompatClient<T, U, S>
 {
+    #[cfg(target_arch = "wasm32")]
     pub async fn send_sdk_tx(&mut self, sign_doc: sdk::SignDoc) -> Result<()> {
         let mut signer = crate::plugins::signer::keplr::Signer::new();
         let sig = signer.sign_sdk(sign_doc.clone()).await;
