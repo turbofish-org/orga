@@ -117,8 +117,8 @@ impl ValidatorPowerEntry {
 
 #[cfg(feature = "abci")]
 impl<S: Symbol> EndBlock for Staking<S> {
-    fn end_block(&mut self, _ctx: &EndBlockCtx) -> Result<()> {
-        self.end_block_step()
+    fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
+        self.end_block_step(ctx)
     }
 }
 
@@ -864,7 +864,7 @@ impl<S: Symbol> Staking<S> {
     }
 
     #[cfg(feature = "abci")]
-    fn end_block_step(&mut self) -> Result<()> {
+    fn end_block_step(&mut self, ctx: &EndBlockCtx) -> Result<()> {
         self.process_all_queues()?;
         use std::collections::HashSet;
         let max_vals = self.max_validators;
@@ -925,10 +925,14 @@ impl<S: Symbol> Staking<S> {
 
             match (in_active_set_before, in_active_set_now) {
                 (true, false) => {
+                    let tm_hash = tm_pubkey_hash(self.consensus_key(*address)?)?;
                     self.transition_to_unbonding(*address)?;
+                    self.last_signed_block.remove(tm_hash)?;
                 } // removed from active set
                 (false, true) => {
+                    let tm_hash = tm_pubkey_hash(self.consensus_key(*address)?)?;
                     self.transition_to_bonded(*address)?;
+                    self.last_signed_block.insert(tm_hash, ctx.height)?;
                 } // added to active set
                 _ => {}
             }

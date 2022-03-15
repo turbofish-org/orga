@@ -2,6 +2,7 @@ use super::{Commission, Declaration, Staking};
 use crate::coins::{Address, Amount, Decimal, Give, Symbol};
 use crate::encoding::Decode;
 use crate::migrate::Migrate;
+use crate::plugins::EndBlockCtx;
 use crate::Result;
 use rust_decimal_macros::dec;
 use v1::encoding::Encode as EncodeV1;
@@ -80,6 +81,6 @@ impl<S: Symbol> Staking<S> {
 impl<S: Symbol, T: v1::coins::Symbol> Migrate<v1::coins::Staking<T>> for super::Staking<S> {
     fn migrate(&mut self, legacy: v1::coins::Staking<T>) -> Result<()> {
         self.migrate_validators(&legacy)?;
-        self.end_block_step()
+        self.end_block_step(&EndBlockCtx { height: 0 })
     }
 }

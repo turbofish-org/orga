@@ -103,7 +103,7 @@ fn staking() -> Result<()> {
         )
         .expect_err("Should not be able to declare using an existing consensus key");
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
     assert_eq!(staking.staked()?, 50);
     staking.delegate(alice, alice, Coin::mint(50))?;
     assert_eq!(staking.staked()?, 100);
@@ -122,7 +122,7 @@ fn staking() -> Result<()> {
         },
         50.into(),
     )?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
     assert_eq!(staking.staked()?, 150);
 
     staking.delegate(bob, bob, Coin::mint(250))?;
@@ -132,7 +132,7 @@ fn staking() -> Result<()> {
     assert_eq!(staking.staked()?, 1100);
 
     let ctx = Context::resolve::<Validators>().unwrap();
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
     let alice_vp = ctx.updates.get(&alice_con).unwrap().power;
     assert_eq!(alice_vp, 100);
 
@@ -176,7 +176,7 @@ fn staking() -> Result<()> {
     // Bob gets slashed 50%
     staking.punish_downtime(bob)?;
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
     // Bob has been jailed and should no longer have any voting power
     let bob_vp = ctx.updates.get(&bob_con).unwrap().power;
     assert_eq!(bob_vp, 0);
@@ -262,19 +262,19 @@ fn staking() -> Result<()> {
         },
         300.into(),
     )?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
     assert_eq!(staking.staked()?, 400);
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
     assert_eq!(ctx.updates.get(&alice_con).unwrap().power, 100);
     assert_eq!(ctx.updates.get(&dave_con).unwrap().power, 300);
     staking.delegate(dave, carol, 300.into())?;
     assert_eq!(staking.staked()?, 700);
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
     assert_eq!(ctx.updates.get(&dave_con).unwrap().power, 600);
     staking.unbond(dave, dave, 150)?;
     assert_eq!(staking.staked()?, 550);
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
     assert_eq!(ctx.updates.get(&dave_con).unwrap().power, 450);
 
     // Test commissions
@@ -307,7 +307,7 @@ fn staking() -> Result<()> {
     assert_eq!(carol_liquid, 125);
 
     staking.punish_double_sign(dave)?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
     assert_eq!(ctx.updates.get(&dave_con).unwrap().power, 0);
 
     Ok(())
@@ -342,7 +342,7 @@ fn val_size_limit() -> Result<()> {
             Amount::new(i as u64 * 100).into(),
         )?;
     }
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
     assert_eq!(staking.staked()?, 1700);
     assert!(ctx.updates.get(&[7; 32]).is_none());
     assert_eq!(ctx.updates.get(&[8; 32]).unwrap().power, 800);
@@ -389,7 +389,7 @@ fn val_size_limit() -> Result<()> {
         1000.into(),
     )?;
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(ctx.updates.get(&[8; 32]).unwrap().power, 0);
     assert_eq!(ctx.updates.get(&[9; 32]).unwrap().power, 900);
@@ -453,13 +453,13 @@ fn undelegate() -> Result<()> {
 
     staking.delegate(val_0, staker, 100.into())?;
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 200);
 
     staking.unbond(Address::from_pubkey([0; 33]), staker, Amount::from(100))?;
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 100);
     assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 0);
 
@@ -495,16 +495,16 @@ fn undelegate_slash_before_unbond() -> Result<()> {
 
     staking.delegate(val_0, staker, 100.into())?;
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 200);
 
     staking.unbond(Address::from_pubkey([0; 33]), staker, Amount::from(100))?;
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     staking.punish_double_sign(Address::from_pubkey([0; 33]))?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 0);
     assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 0);
@@ -512,7 +512,7 @@ fn undelegate_slash_before_unbond() -> Result<()> {
     assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 50);
 
     Context::add(Time::from_seconds(10));
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
     assert_eq!(staking.get(val_0)?.get(staker)?.liquid.amount()?, 50);
 
     Ok(())
@@ -547,24 +547,24 @@ fn undelegate_slash_after_unbond() -> Result<()> {
 
     staking.delegate(val_0, staker, 100.into())?;
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 200);
 
     staking.unbond(Address::from_pubkey([0; 33]), staker, Amount::from(100))?;
 
     Context::add(Time::from_seconds(10));
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     staking.punish_double_sign(Address::from_pubkey([0; 33]))?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 0);
     assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 0);
 
     assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 50);
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
     assert_eq!(staking.get(val_0)?.get(staker)?.liquid.amount()?, 100);
 
     Ok(())
@@ -599,7 +599,7 @@ fn redelegate() -> Result<()> {
 
     staking.delegate(Address::from_pubkey([0; 33]), staker, 100.into())?;
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 200);
 
@@ -610,7 +610,7 @@ fn redelegate() -> Result<()> {
         Amount::from(100),
     )?;
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 100);
     assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 200);
 
@@ -646,7 +646,7 @@ fn redelegate_slash_before_unbond() -> Result<()> {
 
     staking.delegate(Address::from_pubkey([0; 33]), staker, 100.into())?;
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 200);
 
@@ -657,12 +657,12 @@ fn redelegate_slash_before_unbond() -> Result<()> {
         Amount::from(100),
     )?;
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 100);
     assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 200);
 
     staking.punish_double_sign(Address::from_pubkey([0; 33]))?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     let val_0 = Address::from_pubkey([0; 33]);
     let val_1 = Address::from_pubkey([1; 33]);
@@ -705,7 +705,7 @@ fn redelegate_slash_after_unbond() -> Result<()> {
 
     staking.delegate(Address::from_pubkey([0; 33]), staker, 100.into())?;
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 200);
 
@@ -716,15 +716,15 @@ fn redelegate_slash_after_unbond() -> Result<()> {
         Amount::from(100),
     )?;
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 100);
     assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 200);
 
     Context::add(Time::from_seconds(10));
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     staking.punish_double_sign(Address::from_pubkey([0; 33]))?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     let val_0 = Address::from_pubkey([0; 33]);
     let val_1 = Address::from_pubkey([1; 33]);
@@ -769,7 +769,7 @@ fn redelegation_slash() -> Result<()> {
     staking.delegate(Address::from_pubkey([1; 33]), staker, 100.into())?;
     staking.delegate(Address::from_pubkey([2; 33]), staker, 100.into())?;
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     staking.redelegate(
         Address::from_pubkey([0; 33]),
@@ -777,7 +777,7 @@ fn redelegation_slash() -> Result<()> {
         staker,
         Amount::from(50),
     )?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 150);
     assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 200);
@@ -789,7 +789,7 @@ fn redelegation_slash() -> Result<()> {
         staker,
         Amount::from(30),
     )?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 180);
     assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 170);
@@ -801,14 +801,14 @@ fn redelegation_slash() -> Result<()> {
         staker,
         Amount::from(30),
     )?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 180);
     assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 140);
     assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 280);
 
     staking.punish_double_sign(Address::from_pubkey([1; 33]))?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     let val_0 = Address::from_pubkey([0; 33]);
     let val_1 = Address::from_pubkey([1; 33]);
@@ -823,7 +823,7 @@ fn redelegation_slash() -> Result<()> {
     assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 265);
 
     staking.punish_double_sign(Address::from_pubkey([0; 33]))?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
     assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 32);
     assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 20);
     assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 140);
@@ -865,7 +865,7 @@ fn redelegation_double_slash() -> Result<()> {
 
     staking.delegate(Address::from_pubkey([0; 33]), staker, 100.into())?;
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     staking.redelegate(
         Address::from_pubkey([0; 33]),
@@ -873,12 +873,12 @@ fn redelegation_double_slash() -> Result<()> {
         staker,
         Amount::from(100),
     )?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     staking.punish_double_sign(Address::from_pubkey([0; 33]))?;
     staking.punish_double_sign(Address::from_pubkey([1; 33]))?;
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 0);
     assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 25);
@@ -917,7 +917,7 @@ fn redelegation_slash_with_unbond() -> Result<()> {
     staking.delegate(Address::from_pubkey([1; 33]), staker, 100.into())?;
     staking.delegate(Address::from_pubkey([2; 33]), staker, 100.into())?;
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     staking.redelegate(
         Address::from_pubkey([0; 33]),
@@ -925,7 +925,7 @@ fn redelegation_slash_with_unbond() -> Result<()> {
         staker,
         Amount::from(50),
     )?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 150);
     assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 200);
@@ -937,7 +937,7 @@ fn redelegation_slash_with_unbond() -> Result<()> {
         staker,
         Amount::from(30),
     )?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 180);
     assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 170);
@@ -949,14 +949,14 @@ fn redelegation_slash_with_unbond() -> Result<()> {
         staker,
         Amount::from(30),
     )?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 180);
     assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 140);
     assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 280);
 
     staking.punish_double_sign(Address::from_pubkey([1; 33]))?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     let val_0 = Address::from_pubkey([0; 33]);
     let val_1 = Address::from_pubkey([1; 33]);
@@ -971,10 +971,10 @@ fn redelegation_slash_with_unbond() -> Result<()> {
     assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 265);
 
     staking.unbond(val_2, staker, Amount::from(100))?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     staking.punish_double_sign(Address::from_pubkey([0; 33]))?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 32);
     assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 20);
@@ -985,7 +985,7 @@ fn redelegation_slash_with_unbond() -> Result<()> {
     assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 140);
 
     Context::add(Time::from_seconds(10));
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(staking.get(val_2)?.get(staker)?.liquid.amount()?, 100);
 
@@ -1023,7 +1023,7 @@ fn redelegation_slash_with_slash_unbond_overflow() -> Result<()> {
     staking.delegate(Address::from_pubkey([1; 33]), staker, 100.into())?;
     staking.delegate(Address::from_pubkey([2; 33]), staker, 100.into())?;
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     staking.redelegate(
         Address::from_pubkey([0; 33]),
@@ -1031,7 +1031,7 @@ fn redelegation_slash_with_slash_unbond_overflow() -> Result<()> {
         staker,
         Amount::from(50),
     )?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 150);
     assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 200);
@@ -1043,7 +1043,7 @@ fn redelegation_slash_with_slash_unbond_overflow() -> Result<()> {
         staker,
         Amount::from(30),
     )?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 180);
     assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 170);
@@ -1055,14 +1055,14 @@ fn redelegation_slash_with_slash_unbond_overflow() -> Result<()> {
         staker,
         Amount::from(30),
     )?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 180);
     assert_eq!(ctx.updates.get(&[1; 32]).unwrap().power, 140);
     assert_eq!(ctx.updates.get(&[2; 32]).unwrap().power, 280);
 
     staking.punish_double_sign(Address::from_pubkey([1; 33]))?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     let val_0 = Address::from_pubkey([0; 33]);
     let val_1 = Address::from_pubkey([1; 33]);
@@ -1080,12 +1080,12 @@ fn redelegation_slash_with_slash_unbond_overflow() -> Result<()> {
         staking.unbond(val_2, staker, Amount::from(10))?;
     }
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 15);
 
     staking.punish_double_sign(Address::from_pubkey([0; 33]))?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 32);
     assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 20);
@@ -1096,7 +1096,7 @@ fn redelegation_slash_with_slash_unbond_overflow() -> Result<()> {
     assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 100);
 
     Context::add(Time::from_seconds(10));
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(staking.get(val_2)?.get(staker)?.liquid.amount()?, 140);
 
@@ -1130,12 +1130,12 @@ fn delegate_slashed_fail() {
 
     let staker = Address::from_pubkey([3; 33]);
 
-    staking.end_block_step().unwrap();
+    staking.end_block_step(&Default::default()).unwrap();
 
     staking
         .punish_double_sign(Address::from_pubkey([0; 33]))
         .unwrap();
-    staking.end_block_step().unwrap();
+    staking.end_block_step(&Default::default()).unwrap();
 
     staking
         .delegate(Address::from_pubkey([0; 33]), staker, 100.into())
@@ -1167,23 +1167,23 @@ fn min_delegation_fall_below() -> Result<()> {
     let ctx = Context::resolve::<Validators>().unwrap();
     let val_0 = Address::from_pubkey([0; 33]);
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     staking.punish_downtime(Address::from_pubkey([0; 33]))?;
     assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 50);
     Context::add(Time::from_seconds(10));
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     staking.get_mut(val_0)?.try_unjail()?;
     staking.update_vp(val_0)?;
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 0);
     staking.delegate(val_0, val_0, 25.into())?;
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 75);
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 75);
@@ -1219,34 +1219,34 @@ fn min_delegation_fall_below_unbond() -> Result<()> {
     let val_0 = Address::from_pubkey([0; 33]);
     let val_1 = Address::from_pubkey([1; 33]);
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
     staking.unbond(val_0, val_0, Amount::from(50))?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 50);
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 0);
     staking.delegate(val_0, val_0, 25.into())?;
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 75);
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 75);
 
     staking.redelegate(val_0, val_1, val_0, Amount::from(25))?;
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 50);
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 0);
     staking.delegate(val_0, val_0, 25.into())?;
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 75);
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 75);
@@ -1277,14 +1277,14 @@ fn punish_downtime_jailed() -> Result<()> {
     )?;
 
     let val_0 = Address::from_pubkey([0; 33]);
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     staking.punish_downtime(Address::from_pubkey([0; 33]))?;
     assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 50);
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     staking.punish_double_sign(val_0)?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 25);
 
@@ -1316,19 +1316,19 @@ fn unclaimed_rewards_slash() -> Result<()> {
     let val_0 = Address::from_pubkey([0; 33]);
     let staker = Address::from_pubkey([1; 33]);
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     staking.delegate(val_0, staker, 100.into())?;
     staking.give(100.into())?;
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(staking.get(val_0)?.get(staker)?.liquid.amount()?, 50);
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     staking.punish_downtime(Address::from_pubkey([0; 33]))?;
 
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
     assert_eq!(staking.get(val_0)?.get(staker)?.liquid.amount()?, 50);
 
     Ok(())
@@ -1361,21 +1361,21 @@ fn reward_with_unbond() -> Result<()> {
     let ctx = Context::resolve::<Validators>().unwrap();
     let val_0 = Address::from_pubkey([0; 33]);
     let val_1 = Address::from_pubkey([1; 33]);
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     staking.give(100.into())?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(staking.get(val_0)?.get(val_0)?.liquid.amount()?, 50);
     assert_eq!(staking.get(val_1)?.get(val_1)?.liquid.amount()?, 50);
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     staking.unbond(val_0, val_0, Amount::from(100))?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 0);
     staking.give(100.into())?;
-    staking.end_block_step()?;
+    staking.end_block_step(&Default::default())?;
 
     assert_eq!(staking.get(val_0)?.get(val_0)?.liquid.amount()?, 50);
     assert_eq!(staking.get(val_1)?.get(val_1)?.liquid.amount()?, 150);
@@ -1417,13 +1417,13 @@ fn redelegate_from_to_failure() {
     staking.delegate(val_0, staker, 100.into()).unwrap();
     staking.delegate(val_1, staker, 100.into()).unwrap();
 
-    staking.end_block_step().unwrap();
+    staking.end_block_step(&Default::default()).unwrap();
 
     staking
         .redelegate(val_0, val_1, staker, Amount::from(100))
         .unwrap();
 
-    staking.end_block_step().unwrap();
+    staking.end_block_step(&Default::default()).unwrap();
 
     staking
         .redelegate(val_1, val_0, staker, Amount::from(100))
@@ -1465,13 +1465,13 @@ fn redelegate_from_to_two_stakers() {
     staking.delegate(val_0, staker_0, 100.into()).unwrap();
     staking.delegate(val_1, staker_1, 100.into()).unwrap();
 
-    staking.end_block_step().unwrap();
+    staking.end_block_step(&Default::default()).unwrap();
 
     staking
         .redelegate(val_0, val_1, staker_0, Amount::from(100))
         .unwrap();
 
-    staking.end_block_step().unwrap();
+    staking.end_block_step(&Default::default()).unwrap();
 
     staking
         .redelegate(val_1, val_0, staker_1, Amount::from(100))
