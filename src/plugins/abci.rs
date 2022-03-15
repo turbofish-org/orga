@@ -115,12 +115,16 @@ mod full {
         }
     }
 
-    #[derive(Default)]
-    pub struct EndBlockCtx {}
+    #[cfg_attr(test, derive(Default))]
+    pub struct EndBlockCtx {
+        pub height: u64,
+    }
 
     impl From<RequestEndBlock> for EndBlockCtx {
-        fn from(_req: RequestEndBlock) -> Self {
-            Default::default()
+        fn from(req: RequestEndBlock) -> Self {
+            EndBlockCtx {
+                height: req.height as u64,
+            }
         }
     }
 
