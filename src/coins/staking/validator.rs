@@ -1,3 +1,5 @@
+use std::convert::TryInto;
+
 use crate::coins::pool::{Child as PoolChild, ChildMut as PoolChildMut};
 use crate::coins::{Address, Amount, Balance, Coin, Decimal, Give, Pool, Symbol};
 use crate::context::GetContext;
@@ -29,11 +31,17 @@ pub struct Validator<S: Symbol> {
 
 #[derive(Encode, Decode)]
 pub struct ValidatorQueryInfo {
-    pub jailed: bool,
+    pub jailed_until: Option<i64>,
+    pub tombstoned: bool,
     pub address: Address,
-    pub commission: Decimal,
-    pub in_active_set: bool,
+    pub commission: Commission,
     pub info: ValidatorInfo,
+    pub in_active_set: bool,
+    pub unbonding: bool,
+    pub unbonding_start_seconds: i64,
+    pub min_self_delegation: Amount,
+
+    pub jailed: bool,
     pub amount_staked: Amount,
 }
 
@@ -54,7 +62,11 @@ impl Encode for ValidatorInfo {
     }
 
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
-        let info_byte_len = self.bytes.len() as u16;
+        let info_byte_len: u16 = self
+            .bytes
+            .len()
+            .try_into()
+            .map_err(|_| ed::Error::UnexpectedByte(0))?;
 
         dest.write_all(&info_byte_len.encode()?)?;
         dest.write_all(&self.bytes)?;
@@ -220,11 +232,17 @@ impl<S: Symbol> Validator<S> {
 
     pub(super) fn query_info(&self) -> Result<ValidatorQueryInfo> {
         Ok(ValidatorQueryInfo {
-            jailed: self.jailed(),
+            jailed_until: self.jailed_until,
             address: self.address,
-            commission: self.commission.rate,
+            commission: self.commission,
             in_active_set: self.in_active_set,
             info: self.info.clone(),
+            min_self_delegation: self.min_self_delegation,
+            tombstoned: self.tombstoned,
+            unbonding: self.unbonding,
+            unbonding_start_seconds: self.unbonding_start_seconds,
+
+            jailed: self.jailed(),
             amount_staked: self.delegators.balance()?.amount()?,
         })
     }
