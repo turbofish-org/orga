@@ -317,6 +317,7 @@ where
 
 #[cfg(target_arch = "wasm32")]
 pub mod keplr {
+    use super::Error;
     use crate::plugins::sdk_compat::sdk;
     use js_sys::{
         Array, Function, Object, Promise,
@@ -326,9 +327,6 @@ pub mod keplr {
     use wasm_bindgen::JsValue;
     use wasm_bindgen_futures::JsFuture;
 
-    // TODO: this should be specified by consumer, not hardcoded here
-    const CHAIN_ID: &str = "nomic-stakenet-test-2";
-
     pub struct Signer {
         handle: Option<KeplrHandle>,
     }
@@ -336,6 +334,7 @@ pub mod keplr {
     pub struct KeplrHandle {
         keplr: Object,
         signer: JsValue,
+        chain_id: String,
     }
 
     impl KeplrHandle {
@@ -343,17 +342,29 @@ pub mod keplr {
             unsafe {
                 let window = web_sys::window().expect("no global `window` exists");
                 let keplr = window.get("keplr").expect("no `keplr` in global `window`");
+                
+                let storage = window
+                    .local_storage()
+                    .expect("no `localStorage` in global `window`")
+                    .expect("no `localStorage` in global `window`");
+                let res = storage
+                    .get("orga/chainid")
+                    .expect("Could not load from local storage");
+                let chain_id = match res {
+                    Some(chain_id) => chain_id,
+                    None => panic!("localStorage['orga/chainid'] is not set"),
+                };
 
                 let args = Array::new();
-                // TODO: get chainid from somewhere
-                Array::push(&args, &CHAIN_ID.to_string().into());
+
+                Array::push(&args, &chain_id.clone().into());
                 let get_offline_signer: Function =
                     get(&keplr, &"getOfflineSigner".to_string().into())
                         .unwrap()
                         .into();
                 let signer = apply(&get_offline_signer, &keplr, &args).unwrap();
 
-                Self { keplr, signer }
+                Self { keplr, signer, chain_id }
             }
         }
     }
@@ -419,8 +430,7 @@ pub mod keplr {
                 }
 
                 let args = Array::new();
-                // TOOD: get chainid from somewhere
-                Array::push(&args, &CHAIN_ID.to_string().into());
+                Array::push(&args, &self.handle().chain_id.clone().into());
                 Array::push(&args, &self.address().await.into());
                 Array::push(&args, &msg.into());
 
