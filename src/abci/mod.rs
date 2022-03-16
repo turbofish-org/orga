@@ -2,7 +2,7 @@
 use std::clone::Clone;
 use std::env;
 use std::net::ToSocketAddrs;
-use std::sync::mpsc::{self, Receiver, SyncSender, Sender};
+use std::sync::mpsc::{self, Receiver, Sender, SyncSender};
 
 use log::info;
 
@@ -125,8 +125,7 @@ impl<A: Application> ABCIStateMachine<A> {
                 };
 
                 store.unwrap().into_inner().flush()?;
-                let mut self_store = self_store_shared.into_inner();
-                self_store.commit(self.height)?;
+                let self_store = self_store_shared.into_inner();
 
                 self.app.replace(app);
                 self.consensus_state.replace(Default::default());
@@ -329,7 +328,7 @@ impl<A: Application> ABCIStateMachine<A> {
         self.create_worker(server.accept()?, err_sender.clone())?;
         self.create_worker(server.accept()?, err_sender.clone())?;
         self.create_worker(server.accept()?, err_sender.clone())?;
-        self.create_worker(server.accept()?, err_sender.clone())?;
+        self.create_worker(server.accept()?, err_sender)?;
 
         loop {
             match err_receiver.try_recv() {
@@ -361,7 +360,7 @@ struct Worker {
 impl Worker {
     fn new(
         req_sender: SyncSender<(Request, SyncSender<Response>)>,
-        mut conn: abci2::Connection,
+        conn: abci2::Connection,
         err_sender: Sender<Error>,
     ) -> Self {
         let thread = std::thread::spawn(move || {
