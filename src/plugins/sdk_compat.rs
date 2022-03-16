@@ -274,7 +274,7 @@ impl<T: Query, U: AsyncQuery<Query = T::Query, Response = SdkCompatPlugin<S, T>>
 
 pub struct SdkCompatClient<T: Client<SdkCompatAdapter<T, U, S>>, U: Clone, S> {
     inner: T::Client,
-    parent: U,
+    _parent: U,
 }
 
 impl<T: Client<SdkCompatAdapter<T, U, S>>, U: Clone, S> Deref for SdkCompatClient<T, U, S> {
@@ -321,7 +321,7 @@ impl<S, T: Client<SdkCompatAdapter<T, U, S>>, U: Clone> Client<U> for SdkCompatP
                 inner: std::marker::PhantomData,
                 parent: parent.clone(),
             }),
-            parent,
+            _parent: parent,
         }
     }
 }

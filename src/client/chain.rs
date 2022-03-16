@@ -141,7 +141,7 @@ where
 
             if this.fut.is_none() {
                 // make call, populate future to maybe be polled later
-                let fut = this.parent.query(Default::default(), |x| Ok(x));
+                let fut = this.parent.query(Default::default(), Ok);
                 let fut2: future::Boxed<Result<U::Response>> = std::mem::transmute(fut);
                 this.fut = Some(fut2);
             }
@@ -175,4 +175,3 @@ where
         &mut self.wrapped
     }
 }
-
