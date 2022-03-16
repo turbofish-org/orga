@@ -170,7 +170,7 @@ pub mod sdk {
     pub struct Msg {
         #[serde(rename = "type")]
         pub type_: String,
-        pub value: serde_json::Map<String, serde_json::Value>,
+        pub value: serde_json::Value,
     }
 
     #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -196,6 +196,35 @@ pub mod sdk {
         #[serde(rename = "type")]
         pub type_: String,
         pub value: String,
+    }
+
+    #[derive(Deserialize, Debug, Clone)]
+    pub struct MsgSend {
+        pub from_address: String,
+        pub to_address: String,
+        pub amount: Vec<Coin>,
+    }
+
+    #[derive(Deserialize, Debug, Clone)]
+    pub struct MsgDelegate {
+        pub delegator_address: String,
+        pub validator_address: String,
+        pub amount: Option<Coin>,
+    }
+
+    #[derive(Deserialize, Debug, Clone)]
+    pub struct MsgBeginRedelegate {
+        pub delegator_address: String,
+        pub validator_src_address: String,
+        pub validator_dst_address: String,
+        pub amount: Option<Coin>,
+    }
+
+    #[derive(Deserialize, Debug, Clone)]
+    pub struct MsgUndelegate {
+        pub delegator_address: String,
+        pub validator_address: String,
+        pub amount: Option<Coin>,
     }
 }
 
