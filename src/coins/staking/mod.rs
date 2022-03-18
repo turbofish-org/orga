@@ -33,7 +33,7 @@ mod migrate;
 #[cfg(test)]
 const UNBONDING_SECONDS: u64 = 10; // 10 seconds
 #[cfg(not(test))]
-const UNBONDING_SECONDS: u64 = 60 * 60 * 24 * 7 * 2; // 2 weeks
+const UNBONDING_SECONDS: u64 = 60 * 60 * 8; // 8 hours
 const MAX_OFFLINE_BLOCKS: u64 = 50_000; // ~14 hours for 1s blocks
 const MAX_VALIDATORS: u64 = 100;
 const MIN_SELF_DELEGATION_MIN: u64 = 0;
