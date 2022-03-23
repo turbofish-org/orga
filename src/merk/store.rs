@@ -14,8 +14,8 @@ use std::{
 use tendermint_proto::abci::{self, *};
 type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
-const SNAPSHOT_INTERVAL: u64 = 1000;
-const SNAPSHOT_LIMIT: u64 = 4;
+pub const SNAPSHOT_INTERVAL: u64 = 1;
+pub const SNAPSHOT_LIMIT: u64 = 100;
 
 struct MerkSnapshot {
     checkpoint: Merk,

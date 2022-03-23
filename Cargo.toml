@@ -75,3 +75,8 @@ required-features = ["merk/full", "abci"]
 [[example]]
 name = "staking"
 required-features = ["merk/full", "abci"]
+
+[[test]]
+name = "snapshot"
+required-features = ["merk/full", "abci"]
+
