@@ -64,6 +64,10 @@ impl<S: Symbol> Staking<S> {
         let self_del = validator.delegators.get(val_addr.bytes().into()).unwrap();
         let amt: u64 = self_del.staked.amount().unwrap().into();
         self.declare(val_addr, declaration, amt.into())?;
+        if validator.jailed {
+            let mut new_validator = self.validators.get_mut(val_addr)?;
+            new_validator.jail_for_seconds(10)?;
+        }
 
         validator.delegators.iter().unwrap().try_for_each(|entry| {
             let (del_addr, legacy_delegator) = entry.unwrap();
