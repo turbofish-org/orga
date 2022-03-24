@@ -45,6 +45,13 @@ impl MerkSnapshot {
     }
 }
 
+impl Drop for MerkSnapshot {
+    fn drop(&mut self) {
+        // drop the self-referential ChunkProducer before the Merk instance
+        self.chunks.borrow_mut().take();
+    }
+}
+
 /// A [`store::Store`] implementation backed by a [`merk`](https://docs.rs/merk)
 /// Merkle key/value store.
 pub struct MerkStore {

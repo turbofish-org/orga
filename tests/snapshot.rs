@@ -5,7 +5,7 @@ use tendermint_proto::abci::RequestLoadSnapshotChunk;
 use tempdir::TempDir;
 
 #[test]
-fn add_snapshot_while_in_use() {
+fn drop_used_snapshot() {
     let dir = TempDir::new("test").unwrap().into_path();
     println!("snapshot test dir: {}", dir.display());
 
@@ -26,8 +26,4 @@ fn add_snapshot_while_in_use() {
     };
 
     store.load_snapshot_chunk(request_chunk(SNAPSHOT_INTERVAL, 0)).unwrap();
-
-    store.commit(SNAPSHOT_INTERVAL * 2).unwrap();
-
-    store.load_snapshot_chunk(request_chunk(SNAPSHOT_INTERVAL, 1)).unwrap();
 }
