@@ -216,21 +216,34 @@ impl<T: Query + State, U: AsyncQuery<Query = T::Query, Response = PayablePlugin<
     }
 }
 
-pub struct PaidAdapter<T: Call, U: Clone> {
+pub struct PaidAdapter<T, U: Clone> {
     payer_call: Vec<u8>,
     parent: U,
     marker: std::marker::PhantomData<fn() -> T>,
 }
 
-unsafe impl<T: Call, U: Send + Clone> Send for PaidAdapter<T, U> {}
+unsafe impl<T, U: Send + Clone> Send for PaidAdapter<T, U> {}
 
-impl<T: Call, U: Clone> Clone for PaidAdapter<T, U> {
+impl<T, U: Clone> Clone for PaidAdapter<T, U> {
     fn clone(&self) -> Self {
         PaidAdapter {
             payer_call: self.payer_call.clone(),
             parent: self.parent.clone(),
             marker: std::marker::PhantomData,
         }
+    }
+}
+
+#[async_trait::async_trait(?Send)]
+impl<T: Query + State, U: AsyncQuery<Query = T::Query, Response = PayablePlugin<T>> + Clone> AsyncQuery for PaidAdapter<T, U> {
+    type Query = T::Query;
+    type Response = T;
+
+    async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
+    where
+        F: FnMut(Self::Response) -> Result<R>,
+    {
+        self.parent.query(query, |plugin| check(plugin.inner)).await
     }
 }
 
