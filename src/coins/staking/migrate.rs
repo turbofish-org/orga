@@ -24,7 +24,7 @@ fn liquid_balance<S: v1::coins::Symbol>(
     for i in 0..delegator.unbonding.len() {
         let unbond = delegator.unbonding.get(i).unwrap().unwrap();
         let unbond_amt: u64 = unbond.coins.amount().unwrap().into();
-        if delegator.jailed && unbond.start_seconds + UNBONDING_SECONDS as i64 < now_seconds {
+        if delegator.jailed && unbond.start_seconds + (UNBONDING_SECONDS as i64) < now_seconds {
             continue;
         }
         unbonding_sum += unbond_amt;
