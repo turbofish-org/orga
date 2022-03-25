@@ -1,4 +1,4 @@
-use super::{Commission, Declaration, Staking};
+use super::{Commission, Declaration, Staking, UNBONDING_SECONDS};
 use crate::coins::{Address, Amount, Decimal, Give, Symbol};
 use crate::encoding::Decode;
 use crate::migrate::Migrate;
@@ -13,7 +13,10 @@ impl From<v1::coins::Decimal> for Decimal {
     }
 }
 
-fn liquid_balance<S: v1::coins::Symbol>(delegator: &v1::coins::Delegator<S>) -> Amount {
+fn liquid_balance<S: v1::coins::Symbol>(
+    delegator: &v1::coins::Delegator<S>,
+    now_seconds: i64,
+) -> Amount {
     let liquid: u64 = delegator.liquid.amount().unwrap().into();
 
     if liquid < 10_000 && delegator.jailed {
@@ -25,6 +28,9 @@ fn liquid_balance<S: v1::coins::Symbol>(delegator: &v1::coins::Delegator<S>) -> 
     for i in 0..delegator.unbonding.len() {
         let unbond = delegator.unbonding.get(i).unwrap().unwrap();
         let unbond_amt: u64 = unbond.coins.amount().unwrap().into();
+        if delegator.jailed && unbond.start_seconds + UNBONDING_SECONDS as i64 > now_seconds {
+            continue;
+        }
         unbonding_sum += unbond_amt;
     }
 
@@ -60,6 +66,7 @@ impl<S: Symbol> Staking<S> {
             amount: 0.into(),
             validator_info: validator.info.bytes.clone().into(),
         };
+        let now_seconds = self.current_seconds()?;
 
         let self_del = validator.delegators.get(val_addr.bytes().into()).unwrap();
         let amt: u64 = self_del.staked.amount().unwrap().into();
@@ -77,8 +84,10 @@ impl<S: Symbol> Staking<S> {
             }
             let mut validator = self.validators.get_mut(val_addr)?;
             let mut delegator = validator.get_mut(del_addr.bytes().into())?;
-            delegator.give(liquid_balance(&legacy_delegator).into())
-        })
+            delegator.give(liquid_balance(&legacy_delegator, now_seconds).into())
+        })?;
+
+        self.update_vp(val_addr)
     }
 }
 
