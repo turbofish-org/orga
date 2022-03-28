@@ -8,6 +8,8 @@ use crate::{Error, Result};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
+pub const MAX_CALL_SIZE: usize = 65_535;
+
 pub struct SdkCompatPlugin<S, T> {
     inner: T,
     symbol: PhantomData<S>,
@@ -71,6 +73,11 @@ impl<T: Encode> Encode for Call<T> {
             Call::Native(native) => native.encode_into(dest),
             Call::Sdk(tx) => {
                 let bytes = serde_json::to_vec(tx).map_err(|_| ed::Error::UnexpectedByte(0))?;
+
+                if bytes.len() > MAX_CALL_SIZE {
+                    return Err(ed::Error::UnexpectedByte(0));
+                }
+
                 dest.write_all(&bytes)?;
                 Ok(())
             }
@@ -82,6 +89,10 @@ impl<T: Decode> Decode for Call<T> {
     fn decode<R: std::io::Read>(mut reader: R) -> ed::Result<Self> {
         let mut bytes = vec![];
         reader.read_to_end(&mut bytes)?;
+
+        if bytes.len() > MAX_CALL_SIZE {
+            return Err(ed::Error::UnexpectedByte(0));
+        }
 
         if let Some('{') = bytes.first().map(|b| *b as char) {
             let tx = serde_json::from_slice(bytes.as_slice())
