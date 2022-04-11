@@ -156,6 +156,20 @@ where
             inner: result_array,
         })
     }
+
+impl<T> State for Vec<T>
+where
+    T: Encode + Decode + Terminated,
+{
+    type Encoding = Vec<T>;
+
+    fn create(_: Store, data: Self::Encoding) -> Result<Self> {
+        Ok(data)
+    }
+
+    fn flush(self) -> Result<Self::Encoding> {
+        Ok(self)
+    }
 }
 
 #[derive(Encode, Decode, Default)]
