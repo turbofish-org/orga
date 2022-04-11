@@ -742,6 +742,14 @@ impl<'a, V: Default> Default for Ref<'a, V> {
     }
 }
 
+impl<'a,T: ClientTrait<U>, U: Clone> ClientTrait<U> for Ref<'a, T> {
+    type Client = T::Client;
+
+    fn create_client(parent: U) -> Self::Client {
+        T::create_client(parent)
+    }
+}
+
 /// A mutable reference to an existing value in a collection.
 ///
 /// If the value is mutated, it will be retained in memory until the parent

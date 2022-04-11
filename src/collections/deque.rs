@@ -145,6 +145,13 @@ impl<T: State<S>, S: Write> Deque<T, S> {
     }
 }
 
+// TODO: use derive(Client)
+impl<T, U: Clone + Send, S> Client<U> for Deque<T, S> {
+    type Client = ();
+
+    fn create_client(_: U) {}
+}
+
 #[allow(unused_imports)]
 mod test {
     use super::{Deque as OrgaDeque, Map as OrgaMap, *};
