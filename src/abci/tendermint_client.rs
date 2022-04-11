@@ -115,20 +115,37 @@ where
 
     async fn call(&mut self, call: Self::Call) -> Result<()> {
         let tx = call.encode()?.into();
-        let fut = self.client.broadcast_tx_commit(tx);
-        NoReturn(fut).await
+        let tx_res = self.client.broadcast_tx_commit(tx).await?;
+
+        if tx_res.check_tx.code.is_err() {
+            Err(Error::ABCI(format!(
+                "CheckTx failed: {}",
+                tx_res.check_tx.log
+            )))
+        } else if tx_res.deliver_tx.code.is_err() {
+            Err(Error::ABCI(format!(
+                "DeliverTx failed: {}",
+                tx_res.deliver_tx.log
+            )))
+        } else {
+            Ok(())
+        }
     }
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Query + State> AsyncQuery for TendermintAdapter<T> {
+impl<T: Query + State + 'static> AsyncQuery for TendermintAdapter<T> {
     type Query = T::Query;
-    type Response = T;
+    type Response<'a> = &'a T;
 
     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
     where
-        F: FnMut(Self::Response) -> Result<R>
+        F: FnMut(Self::Response<'_>) -> Result<R>
     {
+        // TODO: attempt query against locally persisted store data for this
+        // height, only issue query if we are missing data (belongs in a
+        // different type)
+
         let query_bytes = query.encode()?;
         let res = self
             .client
@@ -153,54 +170,21 @@ impl<T: Query + State> AsyncQuery for TendermintAdapter<T> {
         let proof_bytes = &res.value[32..];
 
         let map = merk::proofs::query::verify(proof_bytes, root_hash)?;
+        // TODO: merge data into locally persisted store data for given height
+
         let root_value = match map.get(&[])? {
             Some(root_value) => root_value,
             None => return Err(Error::ABCI("Missing root value".into())),
         };
         let encoding = T::Encoding::decode(root_value)?;
+        
+        // TODO: remove need for ABCI prefix layer since that should come from
+        // ABCIPlugin Client impl and should be part of app type
         let store: Shared<ABCIPrefixedProofStore> = Shared::new(ABCIPrefixedProofStore::new(map));
+
         let state = T::create(Store::new(store.into()), encoding)?;
 
         // TODO: retry logic
-        check(state)
-    }
-}
-
-pub struct NoReturn<'a>(
-    std::pin::Pin<
-        Box<dyn std::future::Future<Output = std::result::Result<TxResponse, TmError>> + Send + 'a>,
-    >,
-);
-
-impl<'a> std::future::Future for NoReturn<'a> {
-    type Output = Result<()>;
-
-    fn poll(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context,
-    ) -> std::task::Poll<Self::Output> {
-        unsafe {
-            let mut_ref = self.get_unchecked_mut();
-            let res = mut_ref.0.as_mut().poll(cx);
-            match res {
-                std::task::Poll::Ready(Ok(tx_res)) => {
-                    if tx_res.check_tx.code.is_err() {
-                        std::task::Poll::Ready(Err(Error::ABCI(format!(
-                            "CheckTx failed: {}",
-                            tx_res.check_tx.log
-                        ))))
-                    } else if tx_res.deliver_tx.code.is_err() {
-                        std::task::Poll::Ready(Err(Error::ABCI(format!(
-                            "DeliverTx failed: {}",
-                            tx_res.deliver_tx.log
-                        ))))
-                    } else {
-                        std::task::Poll::Ready(Ok(()))
-                    }
-                }
-                std::task::Poll::Ready(Err(e)) => std::task::Poll::Ready(Err(e.into())),
-                std::task::Poll::Pending => std::task::Poll::Pending,
-            }
-        }
+        check(&state)
     }
 }

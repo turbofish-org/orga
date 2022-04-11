@@ -261,17 +261,17 @@ where
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Query, U: AsyncQuery<Query = T::Query, Response = SignerPlugin<T>> + Clone> AsyncQuery
+impl<T: Query + 'static, U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = &'a SignerPlugin<T>> + Clone> AsyncQuery
     for SignerClient<T, U>
 {
     type Query = T::Query;
-    type Response = T;
+    type Response<'a> = &'a T;
 
     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
     where
-        F: FnMut(Self::Response) -> Result<R>,
+        F: FnMut(Self::Response<'_>) -> Result<R>,
     {
-        self.parent.query(query, |plugin| check(plugin.inner)).await
+        self.parent.query(query, |plugin| check(&plugin.inner)).await
     }
 }
 

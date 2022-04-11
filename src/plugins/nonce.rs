@@ -178,18 +178,18 @@ where
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Query + State, U: AsyncQuery<Query = NonceQuery<T>, Response = NoncePlugin<T>> + Clone>
+impl<T: Query + State + 'static, U: for<'a> AsyncQuery<Query = NonceQuery<T>, Response<'a> = &'a NoncePlugin<T>> + Clone>
     AsyncQuery for NonceAdapter<T, U>
 {
     type Query = T::Query;
-    type Response = T;
+    type Response<'a> = &'a T;
 
     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
     where
-        F: FnMut(Self::Response) -> Result<R>,
+        F: FnMut(Self::Response<'_>) -> Result<R>,
     {
         self.parent
-            .query(NonceQuery::Inner(query), |plugin| check(plugin.inner))
+            .query(NonceQuery::Inner(query), |plugin| check(&plugin.inner))
             .await
     }
 }
@@ -215,7 +215,7 @@ impl<T: Client<NonceAdapter<T, U>> + State, U: Clone> DerefMut for NonceClient<T
 
 impl<
         T: Client<NonceAdapter<T, U>> + State + Query,
-        U: Clone + AsyncQuery<Query = NonceQuery<T>, Response = NoncePlugin<T>>,
+        U: Clone + for<'a> AsyncQuery<Query = NonceQuery<T>, Response<'a> = &'a NoncePlugin<T>>,
     > NonceClient<T, U>
 {
     pub async fn nonce(&self, address: Address) -> Result<u64> {

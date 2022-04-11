@@ -108,15 +108,15 @@ where
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Query + State, U: AsyncQuery<Query = T::Query, Response = FeePlugin<S, T>> + Clone, S> AsyncQuery for FeeAdapter<T, U, S> {
+impl<T: Query + State + 'static, U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = &'a FeePlugin<S, T>> + Clone, S> AsyncQuery for FeeAdapter<T, U, S> {
     type Query = T::Query;
-    type Response = T;
+    type Response<'a> = &'a T;
 
     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
     where
-        F: FnMut(Self::Response) -> Result<R>
+        F: FnMut(Self::Response<'_>) -> Result<R>
     {
-        self.parent.query(query, |plugin| check(plugin.inner)).await
+        self.parent.query(query, |plugin| check(&plugin.inner)).await
     }
 }
 

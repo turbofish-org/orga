@@ -298,23 +298,23 @@ where
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Query, U: AsyncQuery<Query = T::Query, Response = SdkCompatPlugin<S, T>> + Clone, S>
+impl<T: Query + 'static, U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = &'a SdkCompatPlugin<S, T>> + Clone, S>
     AsyncQuery for SdkCompatAdapter<T, U, S>
 {
     type Query = T::Query;
-    type Response = T;
+    type Response<'a> = &'a T;
 
     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
     where
-        F: FnMut(Self::Response) -> Result<R>,
+        F: FnMut(Self::Response<'_>) -> Result<R>,
     {
-        self.parent.query(query, |plugin| check(plugin.inner)).await
+        self.parent.query(query, |plugin| check(&plugin.inner)).await
     }
 }
 
 pub struct SdkCompatClient<T: Client<SdkCompatAdapter<T, U, S>>, U: Clone, S> {
     inner: T::Client,
-    parent: U,
+    _parent: U,
 }
 
 impl<T: Client<SdkCompatAdapter<T, U, S>>, U: Clone, S> Deref for SdkCompatClient<T, U, S> {
@@ -348,7 +348,7 @@ impl<
             fee: sign_doc.fee,
             memo: sign_doc.memo,
         };
-        self.parent.call(Call::Sdk(tx)).await
+        self._parent.call(Call::Sdk(tx)).await
     }
 }
 
@@ -361,7 +361,7 @@ impl<S, T: Client<SdkCompatAdapter<T, U, S>>, U: Clone> Client<U> for SdkCompatP
                 inner: std::marker::PhantomData,
                 parent: parent.clone(),
             }),
-            parent,
+            _parent: parent,
         }
     }
 }
