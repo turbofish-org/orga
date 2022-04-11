@@ -2,7 +2,7 @@
 name = "orga"
 version = "0.2.0"
 authors = ["Matt Bell <mappum@gmail.com>"]
-edition = "2018"
+edition = "2021"
 description = "State machine engine"
 license = "MIT"
 
