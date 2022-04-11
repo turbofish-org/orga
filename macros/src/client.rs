@@ -185,7 +185,7 @@ fn create_client_struct(
 
             let adapter_name = &adapter.ident;
 
-            quote!(#field_name: #field_ty::create_client(#adapter_name::new(parent.clone())))
+            quote!(#field_name: <#field_ty>::create_client(#adapter_name::new(parent.clone())))
         });
 
     let call_method_impls_and_adapters =
