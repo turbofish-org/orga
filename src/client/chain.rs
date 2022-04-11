@@ -97,7 +97,7 @@ where
 {
     wrapped: T,
     parent: U,
-    fut: Option<future::Boxed<Result<U::Response>>>,
+    fut: Option<future::Boxed<Result<Box<U::Response<'static>>>>>,
 }
 
 impl<T: Clone, U: Clone + AsyncQuery> QueryChain<T, U>
@@ -130,7 +130,7 @@ impl<T: Clone, U: Clone + AsyncQuery> Future for QueryChain<T, U>
 where
     U::Query: Default,
 {
-    type Output = Result<U::Response>;
+    type Output = Result<U::Response<'static>>;
 
     fn poll(
         self: Pin<&mut Self>,
@@ -141,8 +141,10 @@ where
 
             if this.fut.is_none() {
                 // make call, populate future to maybe be polled later
-                let fut = this.parent.query(Default::default(), Ok);
-                let fut2: future::Boxed<Result<U::Response>> = std::mem::transmute(fut);
+                let fut = this.parent.query(Default::default(), |x| -> Result<Box<U::Response<'static>>> {
+                    Ok(std::mem::transmute(Box::new(x)))
+                });
+                let fut2: future::Boxed<Result<Box<U::Response<'static>>>> = std::mem::transmute(fut);
                 this.fut = Some(fut2);
             }
 
@@ -151,7 +153,7 @@ where
             if res.is_ready() {
                 this.fut = None;
             }
-            res
+            res.map(|x| x.map(|y| *y))
         }
     }
 }

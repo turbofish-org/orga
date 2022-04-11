@@ -98,11 +98,11 @@ pub trait AsyncCall {
 #[async_trait::async_trait(?Send)]
 pub trait AsyncQuery {
     type Query;
-    type Response;
+    type Response<'a>;
 
     async fn query<F, R>(&self, query: Self::Query, check: F) -> Result<R>
     where
-        F: FnMut(Self::Response) -> Result<R>;
+        F: FnMut(Self::Response<'_>) -> Result<R>;
 }
 
 // TODO: support deriving for types inside module in macros, then move this into
