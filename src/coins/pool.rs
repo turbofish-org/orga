@@ -213,19 +213,13 @@ where
                 / shares_issued)?;
             use std::cmp::Ordering::*;
             match delta.cmp(&0.into()) {
-                Less => {
-                    debug_assert!(false, "Taking from pools is currently not supported");
-                    return Err(Error::Coins(
-                        "Taking from pools is currently not supported".to_string(),
-                    ));
-                }
                 Greater => {
                     let coins_to_give = delta.amount()?;
                     if coins_to_give >= 1 {
                         entry.give(coins_to_give.into())?;
                     }
                 }
-                Equal => {}
+                Less | Equal => {}
             };
         }
 
