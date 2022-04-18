@@ -227,7 +227,7 @@ fn create_client_struct(
                 let output_ty = match method.sig.output.clone() {
                     ReturnType::Default => quote!(()),
                     ReturnType::Type(_, mut ty) => {
-                        add_static_lifetimes(&mut ty);
+                        replace_lifetimes(&mut ty, "'static");
                         quote!(#ty)
                     },
                 };
@@ -362,8 +362,12 @@ fn create_client_struct(
 
             let output_ty = match method.sig.output.clone() {
                 ReturnType::Default => quote!(()),
+                ReturnType::Type(_, ty) => quote!(#ty),
+            };
+            let output_ty_with_explicit_lifetime = match method.sig.output.clone() {
+                ReturnType::Default => quote!(()),
                 ReturnType::Type(_, mut ty) => {
-                    add_static_lifetimes(&mut ty);
+                    replace_lifetimes(&mut ty, "'orga_asyncquery_response");
                     quote!(#ty)
                 },
             };
@@ -394,7 +398,7 @@ fn create_client_struct(
                 {
                     pub(super) parent: #parent_ty,
                     args: (#(#arg_types,)*),
-                    _marker: std::marker::PhantomData<fn() -> (#name#generic_params_bracketed, __Return)>,
+                    _marker: std::marker::PhantomData<fn(#name#generic_params_bracketed, __Return)>,
                 }
 
                 impl#generics_with_return_and_parent Clone for #adapter_name<#generic_params __Return, #parent_ty>
@@ -425,7 +429,7 @@ fn create_client_struct(
                     #query_preds
                 {
                     type Query = <__Return as ::orga::query::Query>::Query;
-                    type Response<'a> = #output_ty;
+                    type Response<'orga_asyncquery_response> = #output_ty_with_explicit_lifetime;
 
                     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> ::orga::Result<R>
                     where
@@ -479,7 +483,7 @@ fn create_client_struct(
         {
             pub(super) parent: #parent_ty,
             #(#field_fields,)*
-            __Marker: std::marker::PhantomData<fn() -> (#generic_params)>,
+            __Marker: std::marker::PhantomData<fn(#generic_params)>,
         }
 
         impl#generics_with_parent Clone for Client#generic_params_bracketed_with_parent
@@ -698,22 +702,28 @@ fn struct_fields(item: &DeriveInput) -> impl Iterator<Item = &Field> {
     }
 }
 
-fn add_static_lifetimes(ty: &mut Type) {
+fn replace_lifetimes(ty: &mut Type, name: &str) {
     match ty {
         Type::Path(path) => {
             if let Some(last_segment) = path.path.segments.last_mut() {
                 if let PathArguments::AngleBracketed(args) = &mut last_segment.arguments {
                     args.args.iter_mut().for_each(|arg| {
-                        if let GenericArgument::Type(ty) = arg {
-                            add_static_lifetimes(ty);
+                        match arg {
+                            GenericArgument::Lifetime(ref mut ty) => {
+                                *ty = Lifetime::new(name, Span::call_site());
+                            }
+                            GenericArgument::Type(ty) => {
+                                replace_lifetimes(ty, name);
+                            }
+                            _ => {}
                         }
                     });
                 }
             }
         }
         Type::Reference(ref mut ref_) => {
-            ref_.lifetime = Some(Lifetime::new("'static", Span::call_site()));
-            add_static_lifetimes(&mut ref_.elem);
+            ref_.lifetime = Some(Lifetime::new(name, Span::call_site()));
+            replace_lifetimes(&mut ref_.elem, name);
         }
         _ => {}
     }
