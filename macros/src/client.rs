@@ -447,7 +447,12 @@ fn create_client_struct(
                         ::orga::client::AsyncQuery::query(
                             &self.parent,
                             parent_query,
-                            |s| check(s.#method_name(#(#unrolled_args,)*)),
+                            |s| {
+                                let cloned_args: (
+                                    #(#arg_types,)*
+                                ) = ::orga::encoding::Decode::decode(encoded_args.as_slice()).unwrap();
+                                check(s.#method_name(#(#unrolled_args,)*))
+                            },
                         ).await
                     }
                 }
