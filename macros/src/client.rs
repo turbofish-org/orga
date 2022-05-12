@@ -738,6 +738,9 @@ fn replace_lifetimes(ty: &mut Type, name: &str) {
             ref_.lifetime = Some(Lifetime::new(name, Span::call_site()));
             replace_lifetimes(&mut ref_.elem, name);
         }
+        Type::Tuple(ref mut tuple) => {
+            tuple.elems.iter_mut().for_each(|t| replace_lifetimes(t, name))
+        }
         _ => {}
     }
 }
