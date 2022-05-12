@@ -406,6 +406,12 @@ impl<S: Symbol> Staking<S> {
         self.address_for_tm_hash
             .insert(tm_hash, val_address.into())?;
 
+        let val_ctx = self
+            .context::<Validators>()
+            .ok_or_else(|| Error::Coins("No Validators context available".into()))?;
+
+        val_ctx.set_operator(consensus_key, val_address)?;
+
         let mut validator = self.validators.get_mut(val_address)?;
         validator.commission = commission;
         validator.min_self_delegation = min_self_delegation;

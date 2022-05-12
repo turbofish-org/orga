@@ -49,6 +49,7 @@ mod full {
         updates: UpdateMap,
         time: Option<Timestamp>,
         current_vp: Rc<RefCell<Option<EntryMap<ValidatorEntry>>>>,
+        cons_key_by_op_addr: Rc<RefCell<Option<OperatorMap>>>,
     }
 
     pub struct InitChainCtx {
@@ -128,17 +129,40 @@ mod full {
         }
     }
 
-    #[derive(Default)]
+    type OperatorMap = Map<[u8; 20], [u8; 32]>;
+
     pub struct Validators {
         pub(crate) updates: HashMap<[u8; 32], Adapter<ValidatorUpdate>>,
         current_vp: Rc<RefCell<Option<EntryMap<ValidatorEntry>>>>,
+        cons_key_by_op_addr: Rc<RefCell<Option<OperatorMap>>>,
+    }
+
+    #[cfg(test)]
+    impl Default for Validators {
+        fn default() -> Self {
+            use crate::store::{MapStore, Shared};
+            let store = Store::new(Shared::new(MapStore::new()).into());
+            Self {
+                updates: HashMap::new(),
+                current_vp: Rc::new(RefCell::new(Some(
+                    State::create(store.sub(&[0]), ()).unwrap(),
+                ))),
+                cons_key_by_op_addr: Rc::new(RefCell::new(Some(
+                    State::create(store.sub(&[1]), ()).unwrap(),
+                ))),
+            }
+        }
     }
 
     impl Validators {
-        fn new(current_vp: Rc<RefCell<Option<EntryMap<ValidatorEntry>>>>) -> Self {
+        fn new(
+            current_vp: Rc<RefCell<Option<EntryMap<ValidatorEntry>>>>,
+            cons_key_by_op_addr: Rc<RefCell<Option<OperatorMap>>>,
+        ) -> Self {
             Self {
                 updates: HashMap::new(),
                 current_vp,
+                cons_key_by_op_addr,
             }
         }
 
@@ -154,6 +178,31 @@ mod full {
                     power: power as i64,
                 }),
             );
+        }
+
+        pub fn set_operator<A: Into<[u8; 32]>, B: Into<[u8; 20]>>(
+            &mut self,
+            consensus_key: A,
+            operator_address: B,
+        ) -> Result<()> {
+            let pub_key = consensus_key.into();
+            let op_addr = operator_address.into();
+            self.cons_key_by_op_addr
+                .borrow_mut()
+                .as_mut()
+                .unwrap()
+                .insert(op_addr, pub_key.into())
+        }
+
+        pub fn consensus_key<A: Into<[u8; 20]>>(&self, op_key: A) -> Result<Option<[u8; 32]>> {
+            let op_addr = op_key.into();
+            Ok(self
+                .cons_key_by_op_addr
+                .borrow()
+                .as_ref()
+                .unwrap()
+                .get(op_addr)?
+                .map(|v| *v))
         }
 
         pub fn current_set(&mut self) -> Ref<Option<EntryMap<ValidatorEntry>>> {
@@ -193,7 +242,8 @@ mod full {
 
         fn call(&mut self, call: Self::Call) -> Result<()> {
             use ABCICall::*;
-            let validators = Validators::new(self.current_vp.clone());
+            let validators =
+                Validators::new(self.current_vp.clone(), self.cons_key_by_op_addr.clone());
             Context::add(validators);
             let create_time_ctx = |time: &Option<Timestamp>| {
                 if let Some(timestamp) = time {
@@ -298,12 +348,21 @@ mod full {
                 updates: UpdateMap::create(store.sub(&[1]), ())?,
                 time: None,
                 current_vp: Rc::new(RefCell::new(Some(State::create(store.sub(&[2]), ())?))),
+                cons_key_by_op_addr: Rc::new(RefCell::new(Some(State::create(
+                    store.sub(&[3]),
+                    (),
+                )?))),
             })
         }
 
         fn flush(self) -> Result<Self::Encoding> {
             self.updates.flush()?;
             self.current_vp.borrow_mut().take().unwrap().flush()?;
+            self.cons_key_by_op_addr
+                .borrow_mut()
+                .take()
+                .unwrap()
+                .flush()?;
             Ok((self.inner.flush()?,))
         }
     }

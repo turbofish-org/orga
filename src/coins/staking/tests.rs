@@ -133,6 +133,8 @@ fn staking() -> Result<()> {
 
     let ctx = Context::resolve::<Validators>().unwrap();
     staking.end_block_step(&Default::default())?;
+    assert_eq!(ctx.consensus_key(alice)?.unwrap(), alice_con);
+
     let alice_vp = ctx.updates.get(&alice_con).unwrap().power;
     assert_eq!(alice_vp, 100);
 
