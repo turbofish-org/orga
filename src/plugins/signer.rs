@@ -205,7 +205,7 @@ impl<T, U: Clone> Clone for SignerClient<T, U> {
             #[cfg(not(target_arch = "wasm32"))]
             privkey: SecretKey::from_slice(&self.privkey.serialize_secret()).unwrap(),
             #[cfg(target_arch = "wasm32")]
-            signer: keplr::Signer::new(),
+            signer: keplr::Signer,
         }
     }
 }
@@ -221,7 +221,7 @@ where
     type Call = T::Call;
 
     #[cfg(not(target_arch = "wasm32"))]
-    async fn call(&mut self, call: Self::Call) -> Result<()> {
+    async fn call(&self, call: Self::Call) -> Result<()> {
         use secp256k1::hashes::sha256;
         let secp = Secp256k1::signing_only();
         let call_bytes = Encode::encode(&call)?;
@@ -241,7 +241,7 @@ where
     }
 
     #[cfg(target_arch = "wasm32")]
-    async fn call(&mut self, call: Self::Call) -> Result<()> {
+    async fn call(&self, call: Self::Call) -> Result<()> {
         let call_bytes = Encode::encode(&call)?;
         let call_hex = hex::encode(call_bytes.as_slice());
         web_sys::console::log_1(&format!("call: {}", call_hex).into());
@@ -285,7 +285,7 @@ impl<T: Client<SignerClient<T, U>>, U: Clone> Client<U> for SignerPlugin<T> {
             #[cfg(not(target_arch = "wasm32"))]
             privkey: load_privkey().expect("Failed to load private key"),
             #[cfg(target_arch = "wasm32")]
-            signer: keplr::Signer::new(),
+            signer: keplr::Signer,
         })
     }
 }
@@ -327,9 +327,7 @@ pub mod keplr {
     use wasm_bindgen::JsValue;
     use wasm_bindgen_futures::JsFuture;
 
-    pub struct Signer {
-        handle: Option<KeplrHandle>,
-    }
+    pub struct Signer;
 
     pub struct KeplrHandle {
         keplr: Object,
@@ -370,26 +368,19 @@ pub mod keplr {
     }
 
     impl Signer {
-        pub fn new() -> Self {
-            Self { handle: None }
+        fn handle(&self) -> KeplrHandle {
+            KeplrHandle::new()
         }
 
-        fn handle(&mut self) -> &KeplrHandle {
-            if self.handle.is_none() {
-                self.handle = Some(KeplrHandle::new());
-            }
-
-            self.handle.as_ref().unwrap()
-        }
-
-        pub async fn pubkey(&mut self) -> [u8; 33] {
+        pub async fn pubkey(&self) -> [u8; 33] {
             unsafe {
+                let signer = self.handle().signer;
                 let get_accounts: Function =
-                    get(&self.handle().signer, &"getAccounts".to_string().into())
+                    get(&signer, &"getAccounts".to_string().into())
                         .unwrap()
                         .into();
                 let accounts_promise: Promise =
-                    apply(&get_accounts, &self.handle().signer, &Array::new())
+                    apply(&get_accounts, &signer, &Array::new())
                         .unwrap()
                         .into();
                 let accounts = JsFuture::from(accounts_promise).await.unwrap();
@@ -403,14 +394,15 @@ pub mod keplr {
             }
         }
 
-        pub async fn address(&mut self) -> String {
+        pub async fn address(&self) -> String {
             unsafe {
+                let signer = self.handle().signer;
                 let get_accounts: Function =
-                    get(&self.handle().signer, &"getAccounts".to_string().into())
+                    get(&signer, &"getAccounts".to_string().into())
                         .unwrap()
                         .into();
                 let accounts_promise: Promise =
-                    apply(&get_accounts, &self.handle().signer, &Array::new())
+                    apply(&get_accounts, &signer, &Array::new())
                         .unwrap()
                         .into();
                 let accounts = JsFuture::from(accounts_promise).await.unwrap();
@@ -422,23 +414,25 @@ pub mod keplr {
             }
         }
 
-        pub async fn sign(&mut self, call_bytes: &[u8]) -> [u8; 64] {
+        pub async fn sign(&self, call_bytes: &[u8]) -> [u8; 64] {
             unsafe {
                 let msg = Array::new();
                 for byte in call_bytes {
                     Array::push(&msg, &(*byte as i32).into());
                 }
 
+                let handle = self.handle();
+
                 let args = Array::new();
-                Array::push(&args, &self.handle().chain_id.clone().into());
+                Array::push(&args, &handle.chain_id.clone().into());
                 Array::push(&args, &self.address().await.into());
                 Array::push(&args, &msg.into());
 
                 let sign_arbitrary: Function =
-                    get(&self.handle().keplr, &"signArbitrary".to_string().into())
+                    get(&handle.keplr, &"signArbitrary".to_string().into())
                         .unwrap()
                         .into();
-                let sign_promise: Promise = apply(&sign_arbitrary, &self.handle().keplr, &args)
+                let sign_promise: Promise = apply(&sign_arbitrary, &handle.keplr, &args)
                     .unwrap()
                     .into();
                 let res = JsFuture::from(sign_promise).await.unwrap();
@@ -454,7 +448,7 @@ pub mod keplr {
             }
         }
 
-        pub async fn sign_sdk(&mut self, sign_doc: sdk::SignDoc) -> sdk::Signature {
+        pub async fn sign_sdk(&self, sign_doc: sdk::SignDoc) -> sdk::Signature {
             unsafe {
                 let doc_json = serde_json::to_string(&sign_doc).unwrap();
                 let doc_obj = js_sys::JSON::parse(&doc_json).unwrap();
@@ -464,11 +458,13 @@ pub mod keplr {
                 Array::push(&args, &self.address().await.into());
                 Array::push(&args, &doc_obj);
 
+                let handle = self.handle();
+
                 let sign_amino: Function =
-                    get(&self.handle().keplr, &"signAmino".to_string().into())
+                    get(&handle.keplr, &"signAmino".to_string().into())
                         .unwrap()
                         .into();
-                let sign_promise: Promise = apply(&sign_amino, &self.handle().keplr, &args)
+                let sign_promise: Promise = apply(&sign_amino, &handle.keplr, &args)
                     .unwrap()
                     .into();
                 let res = JsFuture::from(sign_promise).await.unwrap();

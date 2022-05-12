@@ -3,6 +3,7 @@ use mutagen::mutate;
 
 use super::map::{ChildMut, Map, ReadOnly, Ref};
 use crate::call::Call;
+use crate::client::Client;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;

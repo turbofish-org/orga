@@ -102,7 +102,7 @@ where
 {
     type Call = T::Call;
 
-    async fn call(&mut self, call: Self::Call) -> Result<()> {
+    async fn call(&self, call: Self::Call) -> Result<()> {
         self.parent.call(call).await
     }
 }

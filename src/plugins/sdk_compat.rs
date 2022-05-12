@@ -292,7 +292,7 @@ where
 {
     type Call = T::Call;
 
-    async fn call(&mut self, call: Self::Call) -> Result<()> {
+    async fn call(&self, call: Self::Call) -> Result<()> {
         self.parent.call(Call::Native(call)).await
     }
 }
@@ -339,7 +339,7 @@ impl<
 {
     #[cfg(target_arch = "wasm32")]
     pub async fn send_sdk_tx(&mut self, sign_doc: sdk::SignDoc) -> Result<()> {
-        let mut signer = crate::plugins::signer::keplr::Signer::new();
+        let signer = crate::plugins::signer::keplr::Signer;
         let sig = signer.sign_sdk(sign_doc.clone()).await;
 
         let tx = sdk::Tx {

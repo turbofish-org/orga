@@ -92,7 +92,7 @@ impl<T: Client<U>, U: Clone, E> Client<U> for std::result::Result<T, E> {
 pub trait AsyncCall {
     type Call: Send;
 
-    async fn call(&mut self, call: Self::Call) -> Result<()>;
+    async fn call(&self, call: Self::Call) -> Result<()>;
 }
 
 #[async_trait::async_trait(?Send)]

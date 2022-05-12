@@ -113,7 +113,7 @@ where
 {
     type Call = T::Call;
 
-    async fn call(&mut self, call: Self::Call) -> Result<()> {
+    async fn call(&self, call: Self::Call) -> Result<()> {
         let tx = call.encode()?.into();
         let tx_res = self.client.broadcast_tx_commit(tx).await?;
 

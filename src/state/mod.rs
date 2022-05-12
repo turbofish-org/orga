@@ -1,4 +1,4 @@
-use crate::encoding::{Decode, Encode};
+use crate::encoding::{Decode, Encode, Terminated};
 use crate::store::*;
 use crate::{Error, Result};
 pub use orga_macros::State;
@@ -156,6 +156,7 @@ where
             inner: result_array,
         })
     }
+}
 
 impl<T> State for Vec<T>
 where
@@ -318,7 +319,6 @@ macro_rules! state_tuple_impl {
                     inner: ($(self.$indices.into(),)* self.$length.into(),),
                 })
             }
-
         }
     }
 }

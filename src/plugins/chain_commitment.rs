@@ -102,7 +102,7 @@ where
 {
     type Call = T::Call;
 
-    async fn call(&mut self, call: Self::Call) -> Result<()> {
+    async fn call(&self, call: Self::Call) -> Result<()> {
         let id_bytes = ID.as_bytes();
 
         let mut call_bytes = Vec::with_capacity(id_bytes.len() + call.encoding_length()?);

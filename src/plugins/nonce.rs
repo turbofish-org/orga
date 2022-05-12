@@ -161,7 +161,7 @@ where
 {
     type Call = T::Call;
 
-    async fn call(&mut self, call: Self::Call) -> Result<()> {
+    async fn call(&self, call: Self::Call) -> Result<()> {
         // Load nonce from file
         let nonce = load_nonce()?;
 

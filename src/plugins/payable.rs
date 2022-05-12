@@ -194,7 +194,7 @@ where
 {
     type Call = T::Call;
 
-    async fn call(&mut self, call: Self::Call) -> Result<()> {
+    async fn call(&self, call: Self::Call) -> Result<()> {
         let res = self.parent.call(PayableCall::Unpaid(call));
 
         res.await
@@ -255,7 +255,7 @@ where
 {
     type Call = T::Call;
 
-    async fn call(&mut self, call: Self::Call) -> Result<()> {
+    async fn call(&self, call: Self::Call) -> Result<()> {
         let res = self.parent.call(PayableCall::Paid(PaidCall {
             payer: Decode::decode(self.payer_call.clone().as_slice())?,
             paid: call,
@@ -293,7 +293,7 @@ where
 {
     type Call = T::Call;
 
-    async fn call(&mut self, call: Self::Call) -> Result<()> {
+    async fn call(&self, call: Self::Call) -> Result<()> {
         self.intercepted_call
             .lock()
             .unwrap()

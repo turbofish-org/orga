@@ -185,7 +185,7 @@ where
 {
     type Call = V::Call;
 
-    async fn call(&mut self, subcall: Self::Call) -> Result<()> {
+    async fn call(&self, subcall: Self::Call) -> Result<()> {
         let key = self.key.as_ref().unwrap().clone();
 
         let subcall_bytes = subcall.encode()?;
