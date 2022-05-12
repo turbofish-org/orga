@@ -194,7 +194,15 @@ fn create_client_struct(
             .map(|(method, impl_item)| {
                 let method_name = &method.sig.ident;
 
-                let method_inputs = &method.sig.inputs;
+                let mut method_inputs = method.sig.inputs.clone();
+                method_inputs
+                    .iter_mut()
+                    .for_each(|arg| {
+                        if let FnArg::Receiver(ref mut arg) = arg {
+                            arg.mutability = None;
+                        }
+                    });
+
                 let arg_types: Vec<_> = method_inputs
                     .iter()
                     .filter_map(|arg| match arg {
@@ -288,7 +296,7 @@ fn create_client_struct(
                     {
                         type Call = <__Return as ::orga::call::Call>::Call;
 
-                        async fn call(&mut self, call: Self::Call) -> ::orga::Result<()> {
+                        async fn call(&self, call: Self::Call) -> ::orga::Result<()> {
                             let encoded_args = ::orga::encoding::Encode::encode(&self.args).unwrap();
                             let cloned_args: (
                                 #(#arg_types,)*
@@ -622,7 +630,7 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
                 {
                     type Call = <#field_ty as ::orga::call::Call>::Call;
         
-                    async fn call(&mut self, call: Self::Call) -> ::orga::Result<()> {
+                    async fn call(&self, call: Self::Call) -> ::orga::Result<()> {
                         // assumes that the call has a tuple variant called "Field" +
                         // the camel-cased name as the field
                         let subcall_bytes = ::orga::encoding::Encode::encode(&call)?; // TODO: error handling
