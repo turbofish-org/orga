@@ -4,7 +4,7 @@
 #![feature(fn_traits)]
 #![feature(type_name_of_val)]
 
-use orga::ibc::{GetIbcClient, Ibc};
+use orga::ibc::{start_grpc, Ibc};
 use orga::prelude::*;
 
 #[derive(State, Query, Client, Call)]
@@ -12,6 +12,10 @@ pub struct Counter {
     count: u64,
     pub ibc: Ibc,
 }
+
+#[derive(State, Debug, Clone)]
+pub struct Simp(());
+impl Symbol for Simp {}
 
 impl BeginBlock for Counter {
     fn begin_block(&mut self, _ctx: &BeginBlockCtx) -> Result<()> {
@@ -22,89 +26,42 @@ impl BeginBlock for Counter {
     }
 }
 
-type MyApp = DefaultPlugins<Counter>;
+impl EndBlock for Counter {
+    fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
+        Ok(())
+    }
+}
+
+impl InitChain for Counter {
+    fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
+        Ok(())
+    }
+}
+
+impl ConvertSdkTx for Counter {
+    type Output = PaidCall<<Counter as Call>::Call>;
+    fn convert(&self, msg: &sdk_compat::sdk::Tx) -> Result<Self::Output> {
+        todo!()
+    }
+}
+
+type MyApp = DefaultPlugins<Simp, Counter, "ibc-example">;
 
 fn app_client() -> TendermintClient<MyApp> {
     TendermintClient::new("http://localhost:26657").unwrap()
 }
 
-use orga::ibc::run_relayer;
-
-fn relay() {
-    println!("calling into relayer..");
-    std::thread::sleep(std::time::Duration::from_secs(2));
-
-    run_relayer::<Relayer>();
-}
-
-type IbcClientType = orga::ibc::ibc_client::Client<
-    self::counter_client::FieldIbcAdapter<
-        orga::plugins::payable::UnpaidAdapter<
-            self::Counter,
-            orga::plugins::nonce::NonceClient<
-                orga::plugins::payable::PayablePlugin<self::Counter>,
-                orga::plugins::signer::SignerClient<
-                    orga::plugins::nonce::NoncePlugin<
-                        orga::plugins::payable::PayablePlugin<self::Counter>,
-                    >,
-                    orga::abci::tendermint_client::TendermintAdapter<
-                        orga::plugins::signer::SignerPlugin<
-                            orga::plugins::nonce::NoncePlugin<
-                                orga::plugins::payable::PayablePlugin<self::Counter>,
-                            >,
-                        >,
-                    >,
-                >,
-            >,
-        >,
-    >,
->;
-
-type IbcClientParent = self::counter_client::FieldIbcAdapter<
-    orga::plugins::payable::UnpaidAdapter<
-        self::Counter,
-        orga::plugins::nonce::NonceClient<
-            orga::plugins::payable::PayablePlugin<self::Counter>,
-            orga::plugins::signer::SignerClient<
-                orga::plugins::nonce::NoncePlugin<
-                    orga::plugins::payable::PayablePlugin<self::Counter>,
-                >,
-                orga::abci::tendermint_client::TendermintAdapter<
-                    orga::plugins::signer::SignerPlugin<
-                        orga::plugins::nonce::NoncePlugin<
-                            orga::plugins::payable::PayablePlugin<self::Counter>,
-                        >,
-                    >,
-                >,
-            >,
-        >,
-    >,
->;
-struct Relayer;
-
-impl GetIbcClient for Relayer {
-    type Parent = IbcClientParent;
-    fn get_ibc_client() -> IbcClientType {
-        app_client().ibc.clone()
-    }
-}
-
-fn main() {
+#[tokio::main]
+async fn main() {
     println!("Running IBC example");
     std::thread::spawn(|| {
-        Node::<MyApp>::new(".mycounter").reset().run();
-    });
-
-    std::thread::spawn(|| {
-        Node::<MyApp>::new(".mycounter-2")
+        Node::<MyApp>::new("ibc-example", Default::default())
             .reset()
-            .p2p_port(26666)
-            .rpc_port(26667)
-            .abci_port(26668)
-            .run();
+            .run()
+            .unwrap();
     });
-
-    relay();
-
-    std::thread::sleep(std::time::Duration::from_secs(100));
+    std::thread::sleep(std::time::Duration::from_secs(4));
+    let ibc_client = app_client().ibc.clone();
+    start_grpc(ibc_client).await;
+    std::thread::sleep(std::time::Duration::from_secs(1000));
 }

@@ -111,6 +111,24 @@ impl ClientKeeper for Ibc {
         Ok(())
     }
 
+    fn store_update_time(
+        &mut self,
+        client_id: ClientId,
+        height: Height,
+        timestamp: ibc::timestamp::Timestamp,
+    ) -> Result<(), Error> {
+        todo!()
+    }
+
+    fn store_update_height(
+        &mut self,
+        client_id: ClientId,
+        height: Height,
+        host_height: Height,
+    ) -> Result<(), Error> {
+        todo!()
+    }
+
     fn increase_client_counter(&mut self) {
         self.client.client_counter += 1;
     }
@@ -170,5 +188,17 @@ impl ClientReader for Ibc {
 
     fn client_counter(&self) -> Result<u64, Error> {
         Ok(self.client.client_counter)
+    }
+
+    fn host_height(&self) -> Height {
+        todo!()
+    }
+
+    fn host_consensus_state(&self, height: Height) -> Result<AnyConsensusState, Error> {
+        todo!()
+    }
+
+    fn pending_host_consensus_state(&self) -> Result<AnyConsensusState, Error> {
+        todo!()
     }
 }

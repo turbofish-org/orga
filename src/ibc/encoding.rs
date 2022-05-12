@@ -1,7 +1,8 @@
 use crate::encoding::{Decode, Encode, Terminated};
 use crate::state::State;
 use crate::store::Store;
-use prost_types::Any;
+// use prost_types::Any;
+use ibc_proto::google::protobuf::Any;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
 
@@ -45,7 +46,10 @@ where
 
 impl<T> Terminated for Adapter<T> {}
 
-impl<T> From<T> for Adapter<T> {
+impl<T> From<T> for Adapter<T>
+where
+    T: IbcProto,
+{
     fn from(inner: T) -> Self {
         Self { inner }
     }
@@ -135,7 +139,17 @@ where
 
 impl<T> Terminated for ProtobufAdapter<T> {}
 
-impl<T> From<T> for ProtobufAdapter<T> {
+trait IbcProto {}
+
+impl IbcProto for ibc::core::ics02_client::client_consensus::AnyConsensusState {}
+impl IbcProto for ibc::core::ics24_host::identifier::ClientId {}
+impl IbcProto for ibc::core::ics02_client::client_type::ClientType {}
+impl IbcProto for ibc::core::ics02_client::client_state::AnyClientState {}
+
+impl<T> From<T> for ProtobufAdapter<T>
+where
+    T: IbcProto,
+{
     fn from(inner: T) -> Self {
         Self { inner }
     }

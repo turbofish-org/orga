@@ -10,11 +10,11 @@ use crate::query::Query;
 use client::ClientStore;
 use encoding::*;
 mod connection;
-mod map;
 mod port;
-mod relayer;
+mod routing;
 use crate::Result;
-pub use relayer::{run_relayer, GetIbcClient};
+mod grpc;
+pub use grpc::start_grpc;
 
 #[derive(State, Call, Query, Client)]
 pub struct Ibc {
@@ -36,4 +36,3 @@ impl Clone for Ibc {
 }
 
 impl Ics20Context for Ibc {}
-impl Ics26Context for Ibc {}

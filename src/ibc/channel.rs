@@ -7,6 +7,7 @@ use ibc::core::ics04_channel::context::{ChannelKeeper, ChannelReader};
 use ibc::core::ics04_channel::error::Error;
 use ibc::core::ics04_channel::packet::{Receipt, Sequence};
 use ibc::core::ics05_port::capabilities::Capability;
+use ibc::core::ics05_port::capabilities::ChannelCapability;
 use ibc::core::ics24_host::identifier::{ChannelId, ClientId, ConnectionId, PortId};
 use ibc::timestamp::Timestamp;
 use ibc::Height;
@@ -36,7 +37,7 @@ impl ChannelReader for Ibc {
         todo!()
     }
 
-    fn authenticated_capability(&self, port_id: &PortId) -> Result<Capability, Error> {
+    fn authenticated_capability(&self, port_id: &PortId) -> Result<ChannelCapability, Error> {
         todo!()
     }
 
@@ -84,11 +85,41 @@ impl ChannelReader for Ibc {
         todo!()
     }
 
-    fn host_timestamp(&self) -> Timestamp {
+    fn channel_counter(&self) -> Result<u64, Error> {
         todo!()
     }
 
-    fn channel_counter(&self) -> Result<u64, Error> {
+    fn host_consensus_state(&self, height: Height) -> Result<AnyConsensusState, Error> {
+        todo!()
+    }
+
+    fn client_update_height(&self, client_id: &ClientId, height: Height) -> Result<Height, Error> {
+        todo!()
+    }
+
+    fn client_update_time(&self, client_id: &ClientId, height: Height) -> Result<Timestamp, Error> {
+        todo!()
+    }
+
+    fn lookup_module_by_channel(
+        &self,
+        channel_id: &ChannelId,
+        port_id: &PortId,
+    ) -> Result<
+        (
+            ibc::core::ics26_routing::context::ModuleId,
+            ChannelCapability,
+        ),
+        Error,
+    > {
+        todo!()
+    }
+
+    fn max_expected_time_per_block(&self) -> std::time::Duration {
+        todo!()
+    }
+
+    fn pending_host_consensus_state(&self) -> Result<AnyConsensusState, Error> {
         todo!()
     }
 }

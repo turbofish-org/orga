@@ -27,6 +27,7 @@ mod full {
     use std::collections::HashMap;
     use std::convert::TryInto;
     use std::rc::Rc;
+    use tendermint_proto::abci::Event;
     use tendermint_proto::abci::{
         Evidence, LastCommitInfo, RequestBeginBlock, RequestEndBlock, RequestInitChain,
         ValidatorUpdate,
@@ -48,6 +49,7 @@ mod full {
         pub(crate) validator_updates: Option<HashMap<[u8; 32], ValidatorUpdate>>,
         updates: UpdateMap,
         time: Option<Timestamp>,
+        pub(crate) events: Option<Vec<Event>>,
         current_vp: Rc<RefCell<Option<EntryMap<ValidatorEntry>>>>,
     }
 
@@ -161,6 +163,17 @@ mod full {
         }
     }
 
+    #[derive(Default)]
+    pub struct Events {
+        pub(crate) events: Vec<Event>,
+    }
+
+    impl Events {
+        pub fn add(&mut self, event: Event) {
+            self.events.push(event);
+        }
+    }
+
     #[derive(Encode, Decode)]
     pub enum ABCICall<C> {
         InitChain(Adapter<RequestInitChain>),
@@ -228,7 +241,18 @@ mod full {
 
                     Ok(())
                 }
-                DeliverTx(inner_call) => self.inner.call(inner_call),
+                DeliverTx(inner_call) => {
+                    Context::add(Events::default());
+                    self.events.replace(vec![]);
+                    let res = self.inner.call(inner_call);
+                    if res.is_ok() {
+                        self.events
+                            .replace(Context::resolve::<Events>().unwrap().events.clone());
+                    }
+                    Context::remove::<Events>();
+
+                    res
+                }
                 CheckTx(inner_call) => self.inner.call(inner_call),
             }?;
 
@@ -297,6 +321,7 @@ mod full {
                 validator_updates: None,
                 updates: UpdateMap::create(store.sub(&[1]), ())?,
                 time: None,
+                events: None,
                 current_vp: Rc::new(RefCell::new(Some(State::create(store.sub(&[2]), ())?))),
             })
         }

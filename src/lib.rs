@@ -60,6 +60,8 @@ pub mod context;
 #[cfg(feature = "abci")]
 pub mod migrate;
 
+pub mod ibc;
+
 mod error;
 
 // re-exports
