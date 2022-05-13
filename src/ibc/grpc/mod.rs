@@ -1,5 +1,7 @@
 use super::Ibc;
 use crate::client::{AsyncCall, AsyncQuery, Call, Client};
+use crate::plugins::ibc::{IbcAdapter, IbcPlugin};
+use crate::state::State;
 use cosmos_sdk_proto::cosmos::auth::v1beta1::query_server::QueryServer as AuthQueryServer;
 use cosmos_sdk_proto::cosmos::base::tendermint::v1beta1::service_server::ServiceServer as HealthServer;
 use cosmos_sdk_proto::cosmos::tx::v1beta1::service_server::ServiceServer as TxServer;

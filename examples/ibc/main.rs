@@ -10,7 +10,6 @@ use orga::prelude::*;
 #[derive(State, Query, Client, Call)]
 pub struct Counter {
     count: u64,
-    pub ibc: Ibc,
 }
 
 #[derive(State, Debug, Clone)]
@@ -61,7 +60,7 @@ async fn main() {
             .unwrap();
     });
     std::thread::sleep(std::time::Duration::from_secs(4));
-    let ibc_client = app_client().ibc.clone();
+    let ibc_client = app_client().ibc();
     start_grpc(ibc_client).await;
     std::thread::sleep(std::time::Duration::from_secs(1000));
 }
