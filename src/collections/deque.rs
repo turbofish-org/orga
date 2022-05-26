@@ -17,7 +17,15 @@ pub struct Deque<T, S = DefaultBackingStore> {
     map: Map<u64, T, S>,
 }
 
-#[derive(Encode, Decode, Clone)]
+impl<T, S> std::fmt::Debug for Deque<T, S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Deque")
+            .field("meta", &self.meta)
+            .finish()
+    }
+}
+
+#[derive(Encode, Decode, Clone, Debug)]
 pub struct Meta {
     head: u64,
     tail: u64,
