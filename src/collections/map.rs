@@ -742,7 +742,27 @@ impl<'a, V: Default> Default for Ref<'a, V> {
     }
 }
 
-impl<'a,T: ClientTrait<U>, U: Clone> ClientTrait<U> for Ref<'a, T> {
+impl<'a, V: PartialEq> PartialEq for Ref<'a, V> {
+    fn eq(&self, other: &Self) -> bool {
+        self.deref().eq(&*other)
+    }
+}
+
+impl<'a, V: Eq> Eq for Ref<'a, V> {}
+
+impl<'a, V: PartialOrd> PartialOrd for Ref<'a, V> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.deref().partial_cmp(&*other)
+    }
+}
+
+impl<'a, V: Ord> Ord for Ref<'a, V> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.deref().cmp(&*other)
+    }
+}
+
+impl<'a, T: ClientTrait<U>, U: Clone> ClientTrait<U> for Ref<'a, T> {
     type Client = T::Client;
 
     fn create_client(parent: U) -> Self::Client {
