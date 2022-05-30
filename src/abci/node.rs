@@ -1,4 +1,4 @@
-use super::{ABCIStateMachine, ABCIStore, App, Application, WrappedMerk};
+use super::{ABCIStateMachine, ABCIStore, AbciQuery, App, Application, WrappedMerk};
 use crate::call::Call;
 use crate::encoding::{Decode, Encode};
 use crate::merk::{BackingStore, MerkStore};
@@ -322,7 +322,6 @@ where
     }
 
     fn query(&self, merk_store: Shared<MerkStore>, req: RequestQuery) -> Result<ResponseQuery> {
-        let query_bytes = req.data;
         let backing_store: BackingStore = merk_store.clone().into();
         let store_height = merk_store.borrow().height()?;
         let store = Store::new(backing_store.clone());
@@ -330,7 +329,12 @@ where
         let data: <ABCIPlugin<A> as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
         let state = <ABCIPlugin<A> as State>::create(store, data)?;
 
+        if !req.path.is_empty() {
+            return state.abci_query(&req);
+        }
+
         // Check which keys are accessed by the query and build a proof
+        let query_bytes = req.data;
         let query_decode_res = Decode::decode(query_bytes.as_slice());
         let query = match query_decode_res {
             Ok(query) => query,
@@ -367,7 +371,6 @@ where
             value,
             ..Default::default()
         };
-
         Ok(res)
     }
 }

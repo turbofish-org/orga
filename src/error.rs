@@ -26,6 +26,8 @@ pub enum Error {
     Downcast(String),
     #[error(transparent)]
     Ed(#[from] ed::Error),
+    #[error("Ibc Error: {0}")]
+    Ibc(String),
     #[error("Invalid ID")]
     InvalidID,
     #[error(transparent)]

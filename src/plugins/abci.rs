@@ -14,7 +14,7 @@ impl Time {
 #[cfg(feature = "abci")]
 mod full {
     use super::Time;
-    use crate::abci::{prost::Adapter, App};
+    use crate::abci::{prost::Adapter, AbciQuery, App};
     use crate::call::Call;
     use crate::collections::{Entry, EntryMap, Map};
     use crate::context::Context;
@@ -27,7 +27,7 @@ mod full {
     use std::collections::HashMap;
     use std::convert::TryInto;
     use std::rc::Rc;
-    use tendermint_proto::abci::Event;
+    use tendermint_proto::abci::{Event, RequestQuery, ResponseQuery};
     use tendermint_proto::abci::{
         Evidence, LastCommitInfo, RequestBeginBlock, RequestEndBlock, RequestInitChain,
         ValidatorUpdate,
@@ -340,6 +340,15 @@ mod full {
     {
         fn from(provider: ABCIPlugin<T>) -> Self {
             (provider.inner.into(),)
+        }
+    }
+
+    impl<T> AbciQuery for ABCIPlugin<T>
+    where
+        T: State + AbciQuery,
+    {
+        fn abci_query(&self, req: &RequestQuery) -> Result<ResponseQuery> {
+            self.inner.abci_query(req)
         }
     }
 }

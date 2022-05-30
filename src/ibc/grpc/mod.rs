@@ -1,6 +1,7 @@
 use super::Ibc;
 use crate::client::{AsyncCall, AsyncQuery, Call, Client};
 use crate::plugins::ibc::{IbcAdapter, IbcPlugin};
+use crate::query::Query;
 use crate::state::State;
 use cosmos_sdk_proto::cosmos::auth::v1beta1::query_server::QueryServer as AuthQueryServer;
 use cosmos_sdk_proto::cosmos::base::tendermint::v1beta1::service_server::ServiceServer as HealthServer;
@@ -35,9 +36,10 @@ where
 pub async fn start_grpc<T>(ibc: AppClient<T>)
 where
     T: Clone + Send + Sync + 'static,
-    T: AsyncCall<Call = <Ibc as Call>::Call>,
+    // T: AsyncCall<Call = <Ibc as Call>::Call>,
     T: AsyncQuery,
     T: AsyncQuery<Response = Ibc>,
+    T: AsyncQuery<Query = <Ibc as Query>::Query>,
 {
     println!("started grpc server");
     let server = GrpcServer::new(ibc);

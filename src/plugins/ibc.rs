@@ -1,17 +1,17 @@
+use crate::abci::AbciQuery;
 use crate::call::Call as CallTrait;
 use crate::client::{AsyncCall, AsyncQuery, Client};
-use crate::coins::{Address, Symbol};
 use crate::encoding::{Decode, Encode};
-use crate::ibc::Ibc;
+use crate::ibc::path::{Identifier, Path};
+use crate::ibc::{Ibc, Ics26Message};
 use crate::query::Query as QueryTrait;
 use crate::state::State;
 use crate::Result;
-use ibc::core::ics26_routing::msgs::Ics26Envelope;
-use ibc_proto::google::protobuf::Any;
 use prost::Message;
 use std::convert::TryFrom;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
+use tendermint_proto::abci::{RequestQuery, ResponseQuery};
 
 pub struct IbcPlugin<T> {
     ibc: Ibc,
@@ -55,7 +55,7 @@ impl<T: State> From<IbcPlugin<T>> for (<Ibc as State>::Encoding, T::Encoding) {
 
 pub enum Call<T> {
     Inner(T),
-    Ics26(Any),
+    Ics26(Ics26Message),
 }
 
 unsafe impl<T> Send for Call<T> {}
@@ -64,19 +64,14 @@ impl<T: Encode> Encode for Call<T> {
     fn encoding_length(&self) -> ed::Result<usize> {
         match self {
             Call::Inner(inner) => inner.encoding_length(),
-            Call::Ics26(envelope) => Ok(envelope.encoded_len()),
+            Call::Ics26(message) => message.encoding_length(),
         }
     }
 
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
         match self {
             Call::Inner(inner) => inner.encode_into(dest),
-            Call::Ics26(envelope) => {
-                let bytes = envelope.encode_to_vec();
-                dest.write_all(bytes.as_slice())?;
-
-                Ok(())
-            }
+            Call::Ics26(message) => message.encode_into(dest),
         }
     }
 }
@@ -86,14 +81,8 @@ impl<T: Decode> Decode for Call<T> {
         let mut bytes = vec![];
         reader.read_to_end(&mut bytes)?;
 
-        let maybe_any = Any::decode(bytes.clone().as_slice());
-        if let Ok(any) = maybe_any {
-            if Ics26Envelope::try_from(any.clone()).is_ok() {
-                Ok(Call::Ics26(any))
-            } else {
-                let native = T::decode(bytes.as_slice())?;
-                Ok(Call::Inner(native))
-            }
+        if let Ok(message) = Ics26Message::decode(bytes.clone().as_slice()) {
+            Ok(Call::Ics26(message))
         } else {
             let native = T::decode(bytes.as_slice())?;
             Ok(Call::Inner(native))
@@ -111,17 +100,51 @@ where
     fn call(&mut self, call: Self::Call) -> Result<()> {
         match call {
             Call::Inner(native) => self.inner.call(native),
-            Call::Ics26(envelope) => {
-                todo!()
-            }
+            Call::Ics26(message) => self
+                .ibc
+                .call(<Ibc as CallTrait>::Call::MethodDeliverMessage(
+                    message,
+                    vec![],
+                )),
         }
     }
 }
 
-#[derive(Encode, Decode)]
+#[derive(Encode)]
 pub enum Query<T: QueryTrait> {
     Inner(T::Query),
     Ibc(<Ibc as QueryTrait>::Query),
+}
+
+// impl<T: QueryTrait> Encode for Query<T> {
+//     fn encoding_length(&self) -> ed::Result<usize> {
+//         match self {
+//             Query::Inner(inner) => inner.encoding_length(),
+//             Query::Ibc(query) => query.encoding_length(),
+//         }
+//     }
+
+//     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+//         match self {
+//             Query::Inner(inner) => inner.encode_into(dest),
+//             Query::Ibc(query) => query.encode_into(dest),
+//         }
+//     }
+// }
+
+impl<T: QueryTrait> Decode for Query<T> {
+    fn decode<R: std::io::Read>(mut reader: R) -> ed::Result<Self> {
+        println!("decoding query");
+        let mut bytes = vec![];
+        reader.read_to_end(&mut bytes)?;
+
+        if let Ok(query) = <Ibc as QueryTrait>::Query::decode(bytes.clone().as_slice()) {
+            Ok(Query::Ibc(query))
+        } else {
+            let native = T::Query::decode(bytes.as_slice())?;
+            Ok(Query::Inner(native))
+        }
+    }
 }
 
 impl<T: QueryTrait> QueryTrait for IbcPlugin<T> {
@@ -130,7 +153,7 @@ impl<T: QueryTrait> QueryTrait for IbcPlugin<T> {
     fn query(&self, query: Self::Query) -> Result<()> {
         match query {
             Query::Inner(inner_query) => self.inner.query(inner_query),
-            Query::Ibc(ibc_query) => todo!(),
+            Query::Ibc(ibc_query) => self.ibc.query(ibc_query),
         }
     }
 }
@@ -203,11 +226,12 @@ where
     T::Call: Send,
     U: Send,
 {
-    type Call = <Ibc as CallTrait>::Call;
+    // type Call = <Ibc as CallTrait>::Call;
+    type Call = Ics26Message;
 
     async fn call(&mut self, call: Self::Call) -> Result<()> {
-        todo!()
-        // self.parent.call(Call::Ics26())
+        self.parent.call(Call::Ics26(call)).await
+        // self.parent.call(Call::Ics26()).await
     }
 }
 
@@ -281,6 +305,7 @@ mod abci {
         T: BeginBlock + State,
     {
         fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
+            self.ibc.begin_block(ctx)?;
             self.inner.begin_block(ctx)
         }
     }
@@ -300,6 +325,17 @@ mod abci {
     {
         fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
             self.inner.init_chain(ctx)
+        }
+    }
+
+    impl<T> AbciQuery for IbcPlugin<T>
+    where
+        T: AbciQuery + State,
+    {
+        fn abci_query(&self, req: &RequestQuery) -> Result<ResponseQuery> {
+            // TODO: ABCI queries should also be forwarded to the inner app if
+            // the path isn't an IBC-related query.
+            self.ibc.abci_query(req)
         }
     }
 }

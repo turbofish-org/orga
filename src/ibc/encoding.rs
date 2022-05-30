@@ -1,9 +1,9 @@
 use crate::encoding::{Decode, Encode, Terminated};
 use crate::state::State;
 use crate::store::Store;
-// use prost_types::Any;
-use ibc_proto::google::protobuf::Any;
+use prost::Message;
 use serde::{Deserialize, Serialize};
+use std::marker::PhantomData;
 use tendermint_proto::Protobuf;
 
 #[derive(Clone)]
@@ -16,7 +16,10 @@ where
     T: Serialize,
 {
     fn encoding_length(&self) -> ed::Result<usize> {
-        Ok(self.encode()?.len())
+        let mut bytes: Vec<u8> = vec![];
+        self.encode_into(&mut bytes)?;
+
+        Ok(bytes.len())
     }
 
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
@@ -37,8 +40,8 @@ where
         let len = u16::decode(&mut reader)?;
         let mut bytes = vec![0u8; len as usize];
         reader.read_exact(&mut bytes)?;
-        let inner: T =
-            bincode::deserialize_from(reader).map_err(|_e| ed::Error::UnexpectedByte(0))?;
+        let inner: T = bincode::deserialize_from(bytes.as_slice())
+            .map_err(|_e| ed::Error::UnexpectedByte(0))?;
 
         Ok(Self { inner })
     }
@@ -90,20 +93,19 @@ where
     }
 }
 
-// Protobuf adapter
-
-pub struct ProtobufAdapter<T> {
+pub struct ProtobufAdapter<T, P> {
     inner: T,
+    _pb: PhantomData<P>,
 }
 
-impl<T> Encode for ProtobufAdapter<T>
+impl<T, P> Encode for ProtobufAdapter<T, P>
 where
-    T: Protobuf<Any>,
-    Any: From<T>,
-    <T as std::convert::TryFrom<Any>>::Error: std::fmt::Display,
+    T: Protobuf<P>,
+    P: From<T> + Default + Message,
+    <T as std::convert::TryFrom<P>>::Error: std::fmt::Display,
 {
     fn encoding_length(&self) -> ed::Result<usize> {
-        Ok(self.encode()?.len())
+        Ok(self.inner.encoded_len())
     }
 
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
@@ -120,11 +122,11 @@ where
     }
 }
 
-impl<T> Decode for ProtobufAdapter<T>
+impl<T, P> Decode for ProtobufAdapter<T, P>
 where
-    T: Protobuf<Any>,
-    Any: From<T>,
-    <T as std::convert::TryFrom<Any>>::Error: std::fmt::Display,
+    T: Protobuf<P>,
+    P: From<T> + Default + Message,
+    <T as std::convert::TryFrom<P>>::Error: std::fmt::Display,
 {
     fn decode<R: std::io::Read>(mut reader: R) -> ed::Result<Self> {
         let len = u16::decode(&mut reader)?;
@@ -133,11 +135,14 @@ where
 
         let inner: T = T::decode(bytes.as_slice()).map_err(|_e| ed::Error::UnexpectedByte(0))?;
 
-        Ok(Self { inner })
+        Ok(Self {
+            inner,
+            _pb: PhantomData,
+        })
     }
 }
 
-impl<T> Terminated for ProtobufAdapter<T> {}
+impl<T, P> Terminated for ProtobufAdapter<T, P> {}
 
 trait IbcProto {}
 
@@ -145,23 +150,35 @@ impl IbcProto for ibc::core::ics02_client::client_consensus::AnyConsensusState {
 impl IbcProto for ibc::core::ics24_host::identifier::ClientId {}
 impl IbcProto for ibc::core::ics02_client::client_type::ClientType {}
 impl IbcProto for ibc::core::ics02_client::client_state::AnyClientState {}
+impl IbcProto for ibc::clients::ics07_tendermint::consensus_state::ConsensusState {}
+impl IbcProto for ibc::timestamp::Timestamp {}
+impl IbcProto for ibc::Height {}
+impl<A, B> IbcProto for (A, B)
+where
+    A: IbcProto,
+    B: IbcProto,
+{
+}
 
-impl<T> From<T> for ProtobufAdapter<T>
+impl<T, P> From<T> for ProtobufAdapter<T, P>
 where
     T: IbcProto,
 {
     fn from(inner: T) -> Self {
-        Self { inner }
+        Self {
+            inner,
+            _pb: PhantomData,
+        }
     }
 }
 
-impl<T> ProtobufAdapter<T> {
+impl<T, P> ProtobufAdapter<T, P> {
     pub fn into_inner(self) -> T {
         self.inner
     }
 }
 
-impl<T> std::ops::Deref for ProtobufAdapter<T> {
+impl<T, P> std::ops::Deref for ProtobufAdapter<T, P> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -169,17 +186,17 @@ impl<T> std::ops::Deref for ProtobufAdapter<T> {
     }
 }
 
-impl<T> std::ops::DerefMut for ProtobufAdapter<T> {
+impl<T, P> std::ops::DerefMut for ProtobufAdapter<T, P> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }
 }
 
-impl<T> State for ProtobufAdapter<T>
+impl<T, P> State for ProtobufAdapter<T, P>
 where
-    T: Protobuf<Any>,
-    Any: From<T>,
-    <T as std::convert::TryFrom<Any>>::Error: std::fmt::Display,
+    T: Protobuf<P>,
+    P: From<T> + Default + Message,
+    <T as std::convert::TryFrom<P>>::Error: std::fmt::Display,
 {
     type Encoding = Self;
 

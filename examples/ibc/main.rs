@@ -47,7 +47,7 @@ impl ConvertSdkTx for Counter {
 type MyApp = DefaultPlugins<Simp, Counter, "ibc-example">;
 
 fn app_client() -> TendermintClient<MyApp> {
-    TendermintClient::new("http://localhost:26657").unwrap()
+    TendermintClient::new("http://localhost:26357").unwrap()
 }
 
 #[tokio::main]

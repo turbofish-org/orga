@@ -542,8 +542,23 @@ impl<S: State> InitChain for S {
     }
 }
 
-pub trait App: BeginBlock + EndBlock + InitChain + State + Call + Query {}
-impl<T: BeginBlock + EndBlock + InitChain + State + Call + Query> App for T where
+pub trait AbciQuery {
+    fn abci_query(&self, request: &RequestQuery) -> Result<ResponseQuery>;
+}
+
+impl<S: State> AbciQuery for S {
+    default fn abci_query(&self, request: &RequestQuery) -> Result<ResponseQuery> {
+        Ok(ResponseQuery {
+            code: 1,
+            height: request.height as i64,
+            log: format!("Query path not handled: {}", request.path),
+            ..Default::default()
+        })
+    }
+}
+
+pub trait App: BeginBlock + EndBlock + InitChain + AbciQuery + State + Call + Query {}
+impl<T: BeginBlock + EndBlock + InitChain + AbciQuery + State + Call + Query> App for T where
     <T as State>::Encoding: Default
 {
 }

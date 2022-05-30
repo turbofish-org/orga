@@ -1,3 +1,4 @@
+use cosmos_sdk_proto::ibc::core::client::v1::IdentifiedClientState;
 use cosmos_sdk_proto::ibc::core::client::v1::{
     query_server::Query as ClientQuery, ConsensusStateWithHeight, Height as RawHeight,
     QueryClientParamsRequest, QueryClientParamsResponse, QueryClientStateRequest,
@@ -10,15 +11,17 @@ use cosmos_sdk_proto::ibc::core::client::v1::{
 
 use super::Ibc;
 use crate::client::{AsyncCall, AsyncQuery, Call};
+use crate::query::Query;
 use tonic::{Request, Response, Status};
 
 #[tonic::async_trait]
 impl<T> ClientQuery for super::GrpcServer<T>
 where
     T: Clone + Send + Sync + 'static,
-    T: AsyncCall<Call = <Ibc as Call>::Call>,
+    // T: AsyncCall<Call = <Ibc as Call>::Call>,
     T: AsyncQuery,
     T: AsyncQuery<Response = Ibc>,
+    T: AsyncQuery<Query = <Ibc as Query>::Query>,
 {
     async fn client_state(
         &self,
@@ -34,7 +37,12 @@ where
     ) -> Result<Response<QueryClientStatesResponse>, Status> {
         println!("query client states");
         dbg!(&_request);
-        let res = QueryClientStatesResponse::default();
+        let mut res = QueryClientStatesResponse::default();
+
+        res.client_states.push(IdentifiedClientState {
+            client_id: "client_id".to_string(),
+            client_state: None,
+        });
         Ok(Response::new(res))
     }
 

@@ -15,7 +15,7 @@ use tonic::{Request, Response, Status};
 impl<T> HealthService for super::GrpcServer<T>
 where
     T: Clone + Send + Sync + 'static,
-    T: AsyncCall<Call = <Ibc as Call>::Call>,
+    // T: AsyncCall<Call = <Ibc as Call>::Call>,
     T: AsyncQuery,
     T: AsyncQuery<Response = Ibc>,
 {

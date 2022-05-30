@@ -19,7 +19,7 @@ use tonic::{Request, Response, Status};
 impl<T> TxService for super::GrpcServer<T>
 where
     T: Clone + Send + Sync + 'static,
-    T: AsyncCall<Call = <Ibc as Call>::Call>,
+    // T: AsyncCall<Call = <Ibc as Call>::Call>,
     T: AsyncQuery,
     T: AsyncQuery<Response = Ibc>,
 {
@@ -29,15 +29,14 @@ where
     ) -> Result<Response<SimulateResponse>, Status> {
         let tx_bytes = request.get_ref().tx_bytes.as_slice();
         let tx = Tx::from_bytes(tx_bytes).unwrap();
-        // dbg!(tx.body.messages);
+
         let msg = tx.body.messages[0].clone();
         let msg = ibc_proto::google::protobuf::Any {
             type_url: msg.type_url,
             value: msg.value,
         };
         // try making ics26 envelope
-        let envelope = Ics26Envelope::try_from(msg).unwrap();
-        dbg!(envelope);
+        let _envelope = Ics26Envelope::try_from(msg).unwrap();
 
         Ok(Response::new(SimulateResponse {
             gas_info: None,
