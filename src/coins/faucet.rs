@@ -8,7 +8,7 @@ use crate::{Error, Result};
 use std::marker::PhantomData;
 use std::time::Duration;
 
-#[derive(State)]
+#[derive(State, Clone)]
 pub struct Faucet<S: Symbol> {
     _symbol: PhantomData<S>,
     configured: bool,

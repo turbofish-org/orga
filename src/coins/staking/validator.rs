@@ -16,17 +16,17 @@ type Delegators<S> = Pool<Address, Delegator<S>, S>;
 
 #[derive(State)]
 pub struct Validator<S: Symbol> {
-    pub(super) jailed_until: Option<i64>,
-    pub(super) tombstoned: bool,
-    pub(super) address: Address,
-    pub(super) commission: Commission,
-    pub(super) delegators: Delegators<S>,
-    pub(super) info: ValidatorInfo,
-    pub(super) in_active_set: bool,
-    pub(super) unbonding: bool,
-    pub(super) unbonding_start_seconds: i64,
-    pub(super) last_edited_seconds: i64,
-    pub(super) min_self_delegation: Amount,
+    pub jailed_until: Option<i64>,
+    pub tombstoned: bool,
+    pub address: Address,
+    pub commission: Commission,
+    pub delegators: Delegators<S>,
+    pub info: ValidatorInfo,
+    pub in_active_set: bool,
+    pub unbonding: bool,
+    pub unbonding_start_seconds: i64,
+    pub last_edited_seconds: i64,
+    pub min_self_delegation: Amount,
 }
 
 #[derive(Encode, Decode)]

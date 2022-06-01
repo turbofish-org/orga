@@ -1002,6 +1002,14 @@ impl<S: Symbol> Staking<S> {
 
         Ok(time.seconds)
     }
+
+    pub fn validators(&self) -> &Pool<Address, Validator<S>, S> {
+        &self.validators
+    }
+
+    pub fn consensus_keys(&self) -> &Map<Address, [u8; 32]> {
+        &self.consensus_keys
+    }
 }
 
 fn assert_positive(amount: Amount) -> Result<()> {

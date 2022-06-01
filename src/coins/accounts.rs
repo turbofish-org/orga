@@ -127,6 +127,10 @@ impl<S: Symbol> Accounts<S> {
         let mut account = self.accounts.entry(address)?.or_insert_default()?;
         account.take(amount)
     }
+
+    pub fn accounts(&self) -> &Map<Address, Coin<S>> {
+        &self.accounts
+    }
 }
 
 #[cfg(feature = "abci")]

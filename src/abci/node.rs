@@ -24,6 +24,7 @@ pub struct Node<A> {
     p2p_persistent_peers: Option<Vec<String>>,
     stdout: Stdio,
     stderr: Stdio,
+    stop_seconds: Option<i64>,
 }
 
 impl Node<()> {
@@ -120,6 +121,7 @@ where
             p2p_persistent_peers: None,
             stdout: Stdio::null(),
             stderr: Stdio::null(),
+            stop_seconds: None,
         }
     }
 
@@ -150,7 +152,11 @@ where
         let app = InternalApp::<ABCIPlugin<A>>::new();
         let store = MerkStore::new(self.merk_home.clone());
 
-        let res = ABCIStateMachine::new(app, store).listen(format!("127.0.0.1:{}", self.abci_port));
+        let mut abci = ABCIStateMachine::new(app, store);
+        if let Some(stop_seconds) = self.stop_seconds {
+            abci = abci.stop_seconds(stop_seconds);
+        }
+        let res = abci.listen(format!("127.0.0.1:{}", self.abci_port));
 
         tm_process.kill()?;
 
@@ -196,6 +202,13 @@ where
     #[must_use]
     pub fn stderr<T: Into<Stdio>>(mut self, stderr: T) -> Self {
         self.stderr = stderr.into();
+
+        self
+    }
+
+    #[must_use]
+    pub fn stop_seconds(mut self, stop_seconds: i64) -> Self {
+        self.stop_seconds.replace(stop_seconds);
 
         self
     }
