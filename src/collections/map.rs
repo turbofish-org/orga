@@ -704,6 +704,10 @@ impl<V> ReadOnly<V> {
     pub fn new(inner: V) -> Self {
         ReadOnly { inner }
     }
+
+    pub fn into_inner(self) -> V {
+        self.inner
+    }
 }
 
 /// An immutable reference to an existing key or value in a collection.
