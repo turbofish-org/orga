@@ -1,10 +1,9 @@
-use super::{Commission, Declaration, Staking, UNBONDING_SECONDS};
+use super::{Commission, Declaration, Staking};
 use crate::coins::{Address, Amount, Decimal, Give, Symbol};
 use crate::encoding::Decode;
 use crate::migrate::Migrate;
 use crate::plugins::EndBlockCtx;
 use crate::Result;
-use rust_decimal_macros::dec;
 use v1::encoding::Encode as EncodeV1;
 
 impl From<v1::coins::Decimal> for Decimal {
@@ -15,7 +14,7 @@ impl From<v1::coins::Decimal> for Decimal {
 
 fn liquid_balance<S: v1::coins::Symbol>(
     delegator: &v1::coins::Delegator<S>,
-    now_seconds: i64,
+    _now_seconds: i64,
 ) -> Amount {
     let liquid: u64 = delegator.liquid.amount().unwrap().into();
 
@@ -24,9 +23,6 @@ fn liquid_balance<S: v1::coins::Symbol>(
     for i in 0..delegator.unbonding.len() {
         let unbond = delegator.unbonding.get(i).unwrap().unwrap();
         let unbond_amt: u64 = unbond.coins.amount().unwrap().into();
-        if delegator.jailed && unbond.start_seconds + (UNBONDING_SECONDS as i64) < now_seconds {
-            continue;
-        }
         unbonding_sum += unbond_amt;
     }
 
@@ -54,9 +50,9 @@ impl<S: Symbol> Staking<S> {
         let declaration = Declaration {
             consensus_key,
             commission: Commission {
-                rate: validator.commission.into(),
-                max: dec!(1.0).into(),
-                max_change: dec!(0.01).into(),
+                max: validator.commission.max.into(),
+                max_change: validator.commission.max_change.into(),
+                rate: validator.commission.rate.into(),
             },
             min_self_delegation: self.min_self_delegation_min.into(),
             amount: 0.into(),
@@ -67,7 +63,7 @@ impl<S: Symbol> Staking<S> {
         let self_del = validator.delegators.get(val_addr.bytes().into()).unwrap();
         let amt: u64 = self_del.staked.amount().unwrap().into();
         self.declare(val_addr, declaration, amt.into())?;
-        if validator.jailed {
+        if validator.jailed() {
             let mut new_validator = self.validators.get_mut(val_addr)?;
             new_validator.jail_for_seconds(10)?;
         }

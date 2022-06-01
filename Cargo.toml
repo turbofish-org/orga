@@ -1,13 +1,13 @@
 [package]
 name = "orga"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Matt Bell <mappum@gmail.com>"]
 edition = "2021"
 description = "State machine engine"
 license = "MIT"
 
 [dependencies]
-abci2 = { git = "https://github.com/nomic-io/abci2", rev = "096e7cf17802de216ce13e3a1db09c517fa60007", optional = true }
+abci2 = { git = "https://github.com/nomic-io/abci2", rev = "f8e218c4d7170b2cec85e21b923644871a44d1b0", optional = true }
 merk = { git = "https://github.com/nomic-io/merk", rev = "a2e46ed40c7b7eeaaed7a94654c18413728f7b8d", optional = true, default-features = false }
 tendermint-rpc = { version = "0.23.5", features = ["http-client"], optional = true }
 tendermint = { version = "0.23.5", optional = true }
@@ -44,7 +44,7 @@ base64 = "0.13.0"
 secp256k1 = { version = "0.21.2", features = ["bitcoin_hashes"] }
 serde = { version = "1.0.133", features = ["derive"] }
 serde_json = "1.0.74"
-v1 = { git = "https://github.com/nomic-io/orga", branch = "legacy-v1", features = ["merk-full", "abci"], package = "orga", optional = true }
+v2 = { git = "https://github.com/nomic-io/nomic", branch = "v2-legacy-testnet", features = ["merk-full", "abci"], package = "orga", optional = true }
 
 [dev-dependencies]
 tempdir = "0.3.7"
@@ -63,20 +63,4 @@ state-sync = []
 
 [profile.release]
 lto = true
-
-[[example]]
-name = "counter"
-required-features = ["merk/full", "abci"]
-
-[[example]]
-name = "simple-coin"
-required-features = ["merk/full", "abci"]
-
-[[example]]
-name = "staking"
-required-features = ["merk/full", "abci"]
-
-[[test]]
-name = "snapshot"
-required-features = ["merk/full", "abci"]
 
