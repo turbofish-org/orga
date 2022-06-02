@@ -111,8 +111,8 @@ impl<S: Symbol> From<u64> for Coin<S> {
 }
 
 #[cfg(feature = "abci")]
-impl<S: Symbol, T: v1::coins::Symbol> Migrate<v1::coins::Coin<T>> for Coin<S> {
-    fn migrate(&mut self, legacy: v1::coins::Coin<T>) -> Result<()> {
+impl<S: Symbol, T: v2::coins::Symbol> Migrate<v2::coins::Coin<T>> for Coin<S> {
+    fn migrate(&mut self, legacy: v2::coins::Coin<T>) -> Result<()> {
         let amt: u64 = legacy.amount.into();
         self.amount = amt.into();
 

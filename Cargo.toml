@@ -44,7 +44,7 @@ base64 = "0.13.0"
 secp256k1 = { version = "0.21.2", features = ["bitcoin_hashes"] }
 serde = { version = "1.0.133", features = ["derive"] }
 serde_json = "1.0.74"
-v2 = { git = "https://github.com/nomic-io/nomic", branch = "v2-legacy-testnet", features = ["merk-full", "abci"], package = "orga", optional = true }
+v2 = { git = "https://github.com/nomic-io/orga", branch = "v2-legacy-testnet", features = ["merk-full", "abci"], package = "orga", optional = true }
 
 [dev-dependencies]
 tempdir = "0.3.7"
@@ -56,7 +56,7 @@ serial_test = "0.5.1"
 features = ["abci", "merk/full"]
 
 [features]
-abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto", "prost", "is_executable", "home", "secp256k1/rand-std", "v1"]
+abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto", "prost", "is_executable", "home", "secp256k1/rand-std", "v2"]
 merk-verify = ["merk/verify"]
 merk-full = ["merk/full"]
 state-sync = []

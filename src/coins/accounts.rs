@@ -130,8 +130,8 @@ impl<S: Symbol> Accounts<S> {
 }
 
 #[cfg(feature = "abci")]
-impl<S: Symbol, T: v1::coins::Symbol> Migrate<v1::coins::Accounts<T>> for Accounts<S> {
-    fn migrate(&mut self, legacy: v1::coins::Accounts<T>) -> Result<()> {
+impl<S: Symbol, T: v2::coins::Symbol> Migrate<v2::coins::Accounts<T>> for Accounts<S> {
+    fn migrate(&mut self, legacy: v2::coins::Accounts<T>) -> Result<()> {
         let accounts = legacy.accounts();
         for entry in accounts.iter().unwrap() {
             let (addr, coins) = entry.unwrap();

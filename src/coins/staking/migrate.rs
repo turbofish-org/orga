@@ -4,16 +4,16 @@ use crate::encoding::Decode;
 use crate::migrate::Migrate;
 use crate::plugins::EndBlockCtx;
 use crate::Result;
-use v1::encoding::Encode as EncodeV1;
+use v2::encoding::Encode as EncodeV2;
 
-impl From<v1::coins::Decimal> for Decimal {
-    fn from(decimal: v1::coins::Decimal) -> Self {
+impl From<v2::coins::Decimal> for Decimal {
+    fn from(decimal: v2::coins::Decimal) -> Self {
         Decode::decode(decimal.encode().unwrap().as_slice()).unwrap()
     }
 }
 
-fn liquid_balance<S: v1::coins::Symbol>(
-    delegator: &v1::coins::Delegator<S>,
+fn liquid_balance<S: v2::coins::Symbol>(
+    delegator: &v2::coins::Delegator<S>,
     _now_seconds: i64,
 ) -> Amount {
     let liquid: u64 = delegator.liquid.amount().unwrap().into();
@@ -30,9 +30,9 @@ fn liquid_balance<S: v1::coins::Symbol>(
 }
 
 impl<S: Symbol> Staking<S> {
-    fn migrate_validators<T: v1::coins::Symbol>(
+    fn migrate_validators<T: v2::coins::Symbol>(
         &mut self,
-        legacy: &v1::coins::Staking<T>,
+        legacy: &v2::coins::Staking<T>,
     ) -> Result<()> {
         legacy.validators().iter().unwrap().try_for_each(|entry| {
             let (address, validator) = entry.unwrap();
@@ -41,10 +41,10 @@ impl<S: Symbol> Staking<S> {
         })
     }
 
-    fn migrate_validator<T: v1::coins::Symbol>(
+    fn migrate_validator<T: v2::coins::Symbol>(
         &mut self,
         val_addr: Address,
-        validator: &v1::coins::pool::Child<v1::coins::staking::Validator<T>, T>,
+        validator: &v2::coins::pool::Child<v2::coins::staking::Validator<T>, T>,
         consensus_key: [u8; 32],
     ) -> Result<()> {
         let declaration = Declaration {
@@ -83,8 +83,8 @@ impl<S: Symbol> Staking<S> {
     }
 }
 
-impl<S: Symbol, T: v1::coins::Symbol> Migrate<v1::coins::Staking<T>> for super::Staking<S> {
-    fn migrate(&mut self, legacy: v1::coins::Staking<T>) -> Result<()> {
+impl<S: Symbol, T: v2::coins::Symbol> Migrate<v2::coins::Staking<T>> for super::Staking<S> {
+    fn migrate(&mut self, legacy: v2::coins::Staking<T>) -> Result<()> {
         self.migrate_validators(&legacy)?;
         self.end_block_step(&EndBlockCtx { height: 0 })
     }
