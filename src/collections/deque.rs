@@ -152,6 +152,16 @@ impl<T: State<S>, S: Write> Deque<T, S> {
         self.meta.tail -= 1;
         self.map.remove(self.meta.tail)
     }
+
+    #[cfg_attr(test, mutate)]
+    pub fn front_mut(&mut self) -> Result<Option<ChildMut<u64, T, S>>> {
+        self.get_mut(0)
+    }
+
+    #[cfg_attr(test, mutate)]
+    pub fn back_mut(&mut self) -> Result<Option<ChildMut<u64, T, S>>> {
+        self.get_mut(self.len() - 1)
+    }
 }
 
 // TODO: use derive(Client)
