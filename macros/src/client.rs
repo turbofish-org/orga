@@ -402,7 +402,7 @@ fn create_client_struct(
                 where
                     #parent_ty: Clone + Send,
                     #parent_ty: ::orga::client::AsyncQuery<Query = <#name#generic_params_bracketed as ::orga::query::Query>::Query>,
-                    #parent_ty: for<'a> ::orga::client::AsyncQuery<Response<'a> = &'a #name#generic_params_bracketed>,
+                    #parent_ty: for<'a> ::orga::client::AsyncQuery<Response<'a> = ::std::rc::Rc<#name#generic_params_bracketed>>,
                 {
                     pub(super) parent: #parent_ty,
                     args: (#(#arg_types,)*),
@@ -413,7 +413,7 @@ fn create_client_struct(
                 where
                     #parent_ty: Clone + Send,
                     #parent_ty: ::orga::client::AsyncQuery<Query = <#name#generic_params_bracketed as ::orga::query::Query>::Query>,
-                    #parent_ty: for<'a> ::orga::client::AsyncQuery<Response<'a> = &'a #name#generic_params_bracketed>,
+                    #parent_ty: for<'a> ::orga::client::AsyncQuery<Response<'a> = ::std::rc::Rc<#name#generic_params_bracketed>>,
                     #query_preds
                 {
                     fn clone(&self) -> Self {
@@ -432,12 +432,12 @@ fn create_client_struct(
                 where
                     #parent_ty: Clone + Send,
                     #parent_ty: ::orga::client::AsyncQuery<Query = <#name#generic_params_bracketed as ::orga::query::Query>::Query>,
-                    #parent_ty: for<'a> ::orga::client::AsyncQuery<Response<'a> = &'a #name#generic_params_bracketed>,
+                    #parent_ty: for<'a> ::orga::client::AsyncQuery<Response<'a> = ::std::rc::Rc<#name#generic_params_bracketed>>,
                     __Return: ::orga::query::Query,
                     #query_preds
                 {
                     type Query = <__Return as ::orga::query::Query>::Query;
-                    type Response<'orga_asyncquery_response> = #output_ty_with_explicit_lifetime;
+                    type Response<'orga_asyncquery_response> = ::std::rc::Rc<#output_ty_with_explicit_lifetime>;
 
                     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> ::orga::Result<R>
                     where
@@ -459,7 +459,7 @@ fn create_client_struct(
                                 let cloned_args: (
                                     #(#arg_types,)*
                                 ) = ::orga::encoding::Decode::decode(encoded_args.as_slice()).unwrap();
-                                check(s.#method_name(#(#unrolled_args,)*))
+                                check(::std::rc::Rc::new(s.#method_name(#(#unrolled_args,)*)))
                             },
                         ).await
                     }
@@ -469,7 +469,7 @@ fn create_client_struct(
                 where
                     #parent_ty: Clone + Send,
                     #parent_ty: ::orga::client::AsyncQuery<Query = <#name#generic_params_bracketed as ::orga::query::Query>::Query>,
-                    #parent_ty: for<'a> ::orga::client::AsyncQuery<Response<'a> = &'a #name#generic_params_bracketed>,
+                    #parent_ty: for<'a> ::orga::client::AsyncQuery<Response<'a> = ::std::rc::Rc<#name#generic_params_bracketed>>,
                     #where_preds
                     #impl_preds
                     #query_preds
@@ -644,10 +644,10 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
                 where
                     #parent_client_ty: Clone + Send,
                     #parent_client_ty: ::orga::client::AsyncQuery<Query = <#item_ty as ::orga::query::Query>::Query>,
-                    #parent_client_ty: for<'a> ::orga::client::AsyncQuery<Response<'a> = &'a #item_ty>,
+                    #parent_client_ty: for<'a> ::orga::client::AsyncQuery<Response<'a> = ::std::rc::Rc<#item_ty>>,
                 {
                     type Query = <#field_ty as ::orga::query::Query>::Query;
-                    type Response<'a> = &'a #field_ty;
+                    type Response<'a> = ::std::rc::Rc<#field_ty>;
         
                     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> ::orga::Result<R>
                     where
@@ -656,7 +656,7 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
                         // assumes that the query has a tuple variant called "Field" +
                         // the camel-cased name as the field
                         let subcall = <#item_ty as ::orga::query::Query>::Query::#variant_name(query);
-                        ::orga::client::AsyncQuery::query(&self.parent, subcall, |s| check(&s.#field_name)).await
+                        ::orga::client::AsyncQuery::query(&self.parent, subcall, |s| check(std::rc::Rc::new(std::rc::Rc::try_unwrap(s).map_err(|_| ()).unwrap().#field_name))).await
                     }
                 }
             };

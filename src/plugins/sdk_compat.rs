@@ -298,17 +298,17 @@ where
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Query + 'static, U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = &'a SdkCompatPlugin<S, T>> + Clone, S>
+impl<T: Query, U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = std::rc::Rc<SdkCompatPlugin<S, T>>> + Clone, S>
     AsyncQuery for SdkCompatAdapter<T, U, S>
 {
     type Query = T::Query;
-    type Response<'a> = &'a T;
+    type Response<'a> = std::rc::Rc<T>;
 
     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
     where
         F: FnMut(Self::Response<'_>) -> Result<R>,
     {
-        self.parent.query(query, |plugin| check(&plugin.inner)).await
+        self.parent.query(query, |plugin| check(std::rc::Rc::new(std::rc::Rc::try_unwrap(plugin).map_err(|_| ()).unwrap().inner))).await
     }
 }
 

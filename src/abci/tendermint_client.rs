@@ -134,9 +134,9 @@ where
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Query + State + 'static> AsyncQuery for TendermintAdapter<T> {
+impl<T: Query + State> AsyncQuery for TendermintAdapter<T> {
     type Query = T::Query;
-    type Response<'a> = &'a T;
+    type Response<'a> = std::rc::Rc<T>;
 
     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
     where
@@ -185,6 +185,6 @@ impl<T: Query + State + 'static> AsyncQuery for TendermintAdapter<T> {
         let state = T::create(Store::new(store.into()), encoding)?;
 
         // TODO: retry logic
-        check(&state)
+        check(std::rc::Rc::new(state))
     }
 }
