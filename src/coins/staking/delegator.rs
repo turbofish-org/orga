@@ -1,4 +1,4 @@
-use crate::coins::Address;
+use crate::coins::{Address, MultiShare};
 use crate::coins::{Amount, Balance, Coin, Decimal, Give, Share, Symbol, Take};
 use crate::collections::Deque;
 use crate::context::GetContext;
@@ -24,7 +24,7 @@ pub struct Redelegation {
 
 #[derive(State)]
 pub struct Delegator<S: Symbol> {
-    pub(super) liquid: Share<S>,
+    pub(super) liquid: MultiShare,
     pub(super) staked: Share<S>,
     pub(super) unbonding: Deque<Unbond<S>>,
     pub(super) redelegations_out: Deque<Redelegation>,
@@ -46,7 +46,7 @@ impl<S: Symbol> Delegator<S> {
             };
             self.unbonding.push_back(unbond.into())
         } else {
-            self.liquid.give(amount.into())
+            self.liquid.give(S::mint(amount))
         }
     }
 
@@ -63,7 +63,7 @@ impl<S: Symbol> Delegator<S> {
 
         Ok(DelegationInfo {
             unbonding: unbonds,
-            liquid: self.liquid.shares.amount()?,
+            liquid: self.liquid.amounts()?,
             staked: self.staked.shares.amount()?,
         })
     }
@@ -147,7 +147,7 @@ impl<S: Symbol> Delegator<S> {
                     .unbonding
                     .pop_front()?
                     .ok_or_else(|| Error::Coins("Failed to pop unbond".into()))?;
-                self.liquid.add(unbond.coins.shares.amount()?)?;
+                self.liquid.give(S::mint(unbond.coins.shares.amount()?))?;
             } else {
                 break;
             }
@@ -239,8 +239,8 @@ impl<S: Symbol> Delegator<S> {
         self.staked.give(coins)
     }
 
-    pub(super) fn withdraw_liquid<A: Into<Amount>>(&mut self, amount: A) -> Result<Coin<S>> {
-        self.liquid.take(amount.into())
+    pub(super) fn deduct<A: Into<Amount>>(&mut self, amount: A, denom: u8) -> Result<()> {
+        self.liquid.deduct(amount.into(), denom)
     }
 
     fn current_seconds(&mut self) -> Result<i64> {
@@ -259,8 +259,8 @@ impl<S: Symbol> Balance<S, Decimal> for Delegator<S> {
     }
 }
 
-impl<S: Symbol> Give<S> for Delegator<S> {
-    fn give(&mut self, coins: Coin<S>) -> Result<()> {
+impl<S: Symbol> Give<(u8, Amount)> for Delegator<S> {
+    fn give(&mut self, coins: (u8, Amount)) -> Result<()> {
         self.liquid.give(coins)
     }
 }
@@ -275,5 +275,5 @@ pub struct UnbondInfo {
 pub struct DelegationInfo {
     pub unbonding: Vec<UnbondInfo>,
     pub staked: Amount,
-    pub liquid: Amount,
+    pub liquid: Vec<(u8, Amount)>,
 }

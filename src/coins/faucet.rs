@@ -135,7 +135,9 @@ mod tests {
 
     #[derive(Encode, Decode, Debug, Clone)]
     struct Simp;
-    impl Symbol for Simp {}
+    impl Symbol for Simp {
+        const INDEX: u8 = 0;
+    }
 
     impl State for Simp {
         type Encoding = Self;

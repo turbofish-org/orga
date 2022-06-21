@@ -7,7 +7,6 @@ use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
-use std::any::TypeId;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::ops::{Deref, DerefMut};
@@ -27,16 +26,17 @@ impl<T: State> Deref for PayablePlugin<T> {
 
 #[derive(Default)]
 pub struct Paid {
-    map: HashMap<TypeId, Amount>,
+    map: HashMap<u8, Amount>,
     pub running_payer: bool,
 }
 
 impl Paid {
     pub fn give<S: Symbol, A: Into<Amount>>(&mut self, amount: A) -> Result<()> {
-        let entry = self
-            .map
-            .entry(TypeId::of::<S>())
-            .or_insert_with(|| 0.into());
+        self.give_denom(amount, S::INDEX)
+    }
+
+    pub fn give_denom<A: Into<Amount>>(&mut self, amount: A, denom: u8) -> Result<()> {
+        let entry = self.map.entry(denom).or_insert_with(|| 0.into());
         let amount = amount.into();
         *entry = (*entry + amount)?;
 
@@ -44,10 +44,14 @@ impl Paid {
     }
 
     pub fn take<S: Symbol, A: Into<Amount>>(&mut self, amount: A) -> Result<Coin<S>> {
-        let entry = self
-            .map
-            .entry(TypeId::of::<S>())
-            .or_insert_with(|| 0.into());
+        let amount = amount.into();
+        self.take_denom(amount, S::INDEX)?;
+
+        Ok(S::mint(amount))
+    }
+
+    pub fn take_denom<A: Into<Amount>>(&mut self, amount: A, denom: u8) -> Result<()> {
+        let entry = self.map.entry(denom).or_insert_with(|| 0.into());
         let amount = amount.into();
         if *entry < amount {
             return Err(Error::Coins("Insufficient funding for paid call".into()));
@@ -55,11 +59,11 @@ impl Paid {
 
         *entry = (*entry - amount)?;
 
-        Ok(amount.into())
+        Ok(())
     }
 
     pub fn balance<S: Symbol>(&self) -> Result<Amount> {
-        let entry = match self.map.get(&TypeId::of::<S>()) {
+        let entry = match self.map.get(&S::INDEX) {
             Some(amt) => *amt,
             None => 0.into(),
         };
@@ -202,8 +206,10 @@ where
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Query + State, U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = std::rc::Rc<PayablePlugin<T>>> + Clone>
-    AsyncQuery for UnpaidAdapter<T, U>
+impl<
+        T: Query + State,
+        U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = std::rc::Rc<PayablePlugin<T>>> + Clone,
+    > AsyncQuery for UnpaidAdapter<T, U>
 {
     type Query = T::Query;
     type Response<'a> = std::rc::Rc<T>;
@@ -212,7 +218,16 @@ impl<T: Query + State, U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = st
     where
         F: FnMut(Self::Response<'_>) -> Result<R>,
     {
-        self.parent.query(query, |plugin| check(std::rc::Rc::new(std::rc::Rc::try_unwrap(plugin).map_err(|_| ()).unwrap().inner))).await
+        self.parent
+            .query(query, |plugin| {
+                check(std::rc::Rc::new(
+                    std::rc::Rc::try_unwrap(plugin)
+                        .map_err(|_| ())
+                        .unwrap()
+                        .inner,
+                ))
+            })
+            .await
     }
 }
 
@@ -235,7 +250,11 @@ impl<T, U: Clone> Clone for PaidAdapter<T, U> {
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Query + State, U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = std::rc::Rc<PayablePlugin<T>>> + Clone> AsyncQuery for PaidAdapter<T, U> {
+impl<
+        T: Query + State,
+        U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = std::rc::Rc<PayablePlugin<T>>> + Clone,
+    > AsyncQuery for PaidAdapter<T, U>
+{
     type Query = T::Query;
     type Response<'a> = std::rc::Rc<T>;
 
@@ -243,7 +262,16 @@ impl<T: Query + State, U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = st
     where
         F: FnMut(Self::Response<'_>) -> Result<R>,
     {
-        self.parent.query(query, |plugin| check(std::rc::Rc::new(std::rc::Rc::try_unwrap(plugin).map_err(|_| ()).unwrap().inner))).await
+        self.parent
+            .query(query, |plugin| {
+                check(std::rc::Rc::new(
+                    std::rc::Rc::try_unwrap(plugin)
+                        .map_err(|_| ())
+                        .unwrap()
+                        .inner,
+                ))
+            })
+            .await
     }
 }
 

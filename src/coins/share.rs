@@ -64,7 +64,7 @@ impl<S: Symbol> Take<S, Amount> for Share<S> {
     }
 }
 
-impl<S: Symbol> Give<S> for Share<S> {
+impl<S: Symbol> Give<Coin<S>> for Share<S> {
     fn give(&mut self, coin: Coin<S>) -> Result<()> {
         self.shares = (self.shares + coin.amount)?;
 
@@ -87,5 +87,17 @@ impl<S: Symbol> From<Coin<S>> for Share<S> {
             shares: coins.amount.into(),
             ..Default::default()
         }
+    }
+}
+
+#[cfg(test)]
+impl<S: Symbol> Give<(u8, Amount)> for Share<S> {
+    fn give(&mut self, (id, amount): (u8, Amount)) -> Result<()> {
+        if id != S::INDEX {
+            return Err(Error::Coins("Invalid symbol index".into()));
+        }
+        self.shares = (self.shares + amount)?;
+
+        Ok(())
     }
 }

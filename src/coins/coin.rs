@@ -42,8 +42,8 @@ impl<S: Symbol> Coin<S> {
         }
     }
 
-    pub fn transfer<G: Give<S>>(self, dest: &mut G) -> Result<()> {
-        dest.add(self.amount)
+    pub fn transfer<G: Give<Coin<S>>>(self, dest: &mut G) -> Result<()> {
+        dest.give(self)
     }
 
     pub fn burn(self) {}
@@ -90,7 +90,7 @@ impl<S: Symbol> Take<S> for Coin<S> {
     }
 }
 
-impl<S: Symbol> Give<S> for Coin<S> {
+impl<S: Symbol> Give<Self> for Coin<S> {
     fn give(&mut self, value: Coin<S>) -> Result<()> {
         self.amount = (self.amount + value.amount)?;
 

@@ -76,7 +76,7 @@ impl<S: Symbol> Staking<S> {
             }
             let mut validator = self.validators.get_mut(val_addr)?;
             let mut delegator = validator.get_mut(del_addr.bytes().into())?;
-            delegator.give(liquid_balance(&legacy_delegator, now_seconds).into())
+            delegator.give((S::INDEX, liquid_balance(&legacy_delegator, now_seconds)))
         })?;
 
         self.update_vp(val_addr)

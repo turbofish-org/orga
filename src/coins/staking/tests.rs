@@ -1,6 +1,8 @@
 use super::*;
+use crate::coins::MultiShare;
 #[cfg(feature = "abci")]
 use crate::plugins::Time;
+use crate::Result;
 use crate::{
     context::Context,
     store::{MapStore, Shared, Store},
@@ -10,7 +12,17 @@ use serial_test::serial;
 
 #[derive(State, Debug, Clone)]
 struct Simp(());
-impl Symbol for Simp {}
+impl Symbol for Simp {
+    const INDEX: u8 = 0;
+}
+
+fn simp_balance(multishare: &MultiShare) -> Amount {
+    Balance::<Simp, Amount>::balance(multishare).unwrap()
+}
+
+fn alt_balance(multishare: &MultiShare) -> Amount {
+    Balance::<Alt, Amount>::balance(multishare).unwrap()
+}
 
 fn setup_state() -> Result<Staking<Simp>> {
     let store = Store::new(Shared::new(MapStore::new()).into());
@@ -47,11 +59,11 @@ fn staking() -> Result<()> {
     Context::add(Time::from_seconds(0));
 
     staking
-        .give(100.into())
+        .give(Simp::mint(100))
         .expect_err("Cannot give to empty validator set");
     assert_eq!(staking.staked()?, 0);
     staking
-        .delegate(alice, alice, Coin::mint(100))
+        .delegate(alice, alice, Simp::mint(100))
         .expect_err("Should not be able to delegate to an undeclared validator");
     staking.declare(
         alice,
@@ -105,7 +117,7 @@ fn staking() -> Result<()> {
 
     staking.end_block_step(&Default::default())?;
     assert_eq!(staking.staked()?, 50);
-    staking.delegate(alice, alice, Coin::mint(50))?;
+    staking.delegate(alice, alice, Simp::mint(50))?;
     assert_eq!(staking.staked()?, 100);
     staking.declare(
         bob,
@@ -125,10 +137,10 @@ fn staking() -> Result<()> {
     staking.end_block_step(&Default::default())?;
     assert_eq!(staking.staked()?, 150);
 
-    staking.delegate(bob, bob, Coin::mint(250))?;
-    staking.delegate(bob, carol, Coin::mint(100))?;
-    staking.delegate(bob, carol, Coin::mint(200))?;
-    staking.delegate(bob, dave, Coin::mint(400))?;
+    staking.delegate(bob, bob, Simp::mint(250))?;
+    staking.delegate(bob, carol, Simp::mint(100))?;
+    staking.delegate(bob, carol, Simp::mint(200))?;
+    staking.delegate(bob, dave, Simp::mint(400))?;
     assert_eq!(staking.staked()?, 1100);
 
     let ctx = Context::resolve::<Validators>().unwrap();
@@ -157,16 +169,16 @@ fn staking() -> Result<()> {
     assert_eq!(bob_val_balance, 1000);
 
     // Big block rewards, doubling all balances
-    staking.give(Coin::mint(600))?;
-    staking.give(Coin::mint(500))?;
+    staking.give(Simp::mint(600))?;
+    staking.give(Simp::mint(500))?;
     assert_eq!(staking.staked()?, 1100);
 
-    let alice_liquid = staking.get(alice)?.get(alice)?.liquid.amount()?;
+    let alice_liquid = simp_balance(&staking.get(alice)?.get(alice)?.liquid);
     assert_eq!(alice_liquid, 100);
 
     let carol_to_bob_delegation = staking.get(bob)?.get(carol)?.staked.amount()?;
     assert_eq!(carol_to_bob_delegation, 300);
-    let carol_to_bob_liquid = staking.get(bob)?.get(carol)?.liquid.amount()?;
+    let carol_to_bob_liquid = simp_balance(&staking.get(bob)?.get(carol)?.liquid);
     assert_eq!(carol_to_bob_liquid, 300);
 
     let bob_val_balance = staking.get_mut(bob)?.staked()?;
@@ -184,7 +196,7 @@ fn staking() -> Result<()> {
     assert_eq!(bob_vp, 0);
 
     staking
-        .withdraw(bob, dave, 401)
+        .deduct(bob, dave, 401, Simp::INDEX)
         .expect_err("Dave has not unbonded coins yet");
     // Bob's staked coins should no longer be present in the global staking
     // balance
@@ -195,21 +207,18 @@ fn staking() -> Result<()> {
         staking.unbond(bob, carol, 150)?;
         assert_eq!(staking.staked()?, 100);
         staking
-            .withdraw(bob, carol, 450)
+            .deduct(bob, carol, 450, Simp::INDEX)
             .expect_err("Should not be able to take coins before unbonding period has elapsed");
         assert_eq!(staking.staked()?, 100);
         Context::add(Time::from_seconds(10));
-        let carol_recovered_coins = staking.withdraw(bob, carol, 450)?;
-
-        assert_eq!(carol_recovered_coins.amount, 450);
+        staking.deduct(bob, carol, 450, Simp::INDEX)?;
     }
 
     {
         // Bob withdraws a third of his self-delegation
         staking.unbond(bob, bob, 100)?;
         Context::add(Time::from_seconds(20));
-        let bob_recovered_coins = staking.withdraw(bob, bob, 100)?;
-        assert_eq!(bob_recovered_coins.amount, 100);
+        staking.deduct(bob, bob, 100, Simp::INDEX)?;
         staking
             .unbond(bob, bob, 201)
             .expect_err("Should not be able to unbond more than we have staked");
@@ -217,24 +226,24 @@ fn staking() -> Result<()> {
         staking.unbond(bob, bob, 50)?;
         Context::add(Time::from_seconds(30));
         staking
-            .withdraw(bob, bob, 501)
+            .deduct(bob, bob, 501, Simp::INDEX)
             .expect_err("Should not be able to take more than we have unbonded");
-        staking.withdraw(bob, bob, 350)?.burn();
+        staking.deduct(bob, bob, 350, Simp::INDEX)?;
     }
 
     assert_eq!(staking.staked()?, 100);
-    let alice_liquid = staking.get(alice)?.get(alice)?.liquid.amount()?;
+    let alice_liquid = simp_balance(&staking.get(alice)?.get(alice)?.liquid);
     assert_eq!(alice_liquid, 100);
     let alice_staked = staking.get(alice)?.get(alice)?.staked.amount()?;
     assert_eq!(alice_staked, 100);
 
     // More block reward, but bob's delegators are jailed and should not
     // earn from it
-    staking.give(Coin::mint(200))?;
+    staking.give(Simp::mint(200))?;
     assert_eq!(staking.staked()?, 100);
     let alice_val_balance = staking.get_mut(alice)?.staked()?;
     assert_eq!(alice_val_balance, 100);
-    let alice_liquid = staking.get(alice)?.get(alice)?.liquid.amount()?;
+    let alice_liquid = simp_balance(&staking.get(alice)?.get(alice)?.liquid);
     assert_eq!(alice_liquid, 300);
 
     staking
@@ -246,7 +255,7 @@ fn staking() -> Result<()> {
     staking.punish_downtime(bob)?;
 
     Context::add(Time::from_seconds(40));
-    staking.withdraw(bob, dave, 500)?.burn();
+    staking.deduct(bob, dave, 500, Simp::INDEX)?;
 
     assert_eq!(staking.staked()?, 100);
     staking.declare(
@@ -301,11 +310,11 @@ fn staking() -> Result<()> {
 
     staking.delegate(edith, carol, 550.into())?;
 
-    staking.get_mut(edith)?.give(500.into())?;
+    staking.get_mut(edith)?.give(Simp::mint(500))?;
 
-    let edith_liquid = staking.get(edith)?.get(edith)?.liquid.amount()?;
+    let edith_liquid = simp_balance(&staking.get(edith)?.get(edith)?.liquid);
     assert_eq!(edith_liquid, 375);
-    let carol_liquid = staking.get(edith)?.get(carol)?.liquid.amount()?;
+    let carol_liquid = simp_balance(&staking.get(edith)?.get(carol)?.liquid);
     assert_eq!(carol_liquid, 125);
 
     staking.punish_double_sign(dave)?;
@@ -349,29 +358,32 @@ fn val_size_limit() -> Result<()> {
     assert!(ctx.updates.get(&[7; 32]).is_none());
     assert_eq!(ctx.updates.get(&[8; 32]).unwrap().power, 800);
     assert_eq!(ctx.updates.get(&[9; 32]).unwrap().power, 900);
-    staking.give(3400.into())?;
+    staking.give(Simp::mint(3400))?;
     assert_eq!(
-        staking
-            .get(Address::from_pubkey([4; 33]))?
-            .get(Address::from_pubkey([4; 33]))?
-            .liquid
-            .amount()?,
+        simp_balance(
+            &staking
+                .get(Address::from_pubkey([4; 33]))?
+                .get(Address::from_pubkey([4; 33]))?
+                .liquid
+        ),
         0
     );
     assert_eq!(
-        staking
-            .get(Address::from_pubkey([8; 33]))?
-            .get(Address::from_pubkey([8; 33]))?
-            .liquid
-            .amount()?,
+        simp_balance(
+            &staking
+                .get(Address::from_pubkey([8; 33]))?
+                .get(Address::from_pubkey([8; 33]))?
+                .liquid
+        ),
         1600
     );
     assert_eq!(
-        staking
-            .get(Address::from_pubkey([9; 33]))?
-            .get(Address::from_pubkey([9; 33]))?
-            .liquid
-            .amount()?,
+        simp_balance(
+            &staking
+                .get(Address::from_pubkey([9; 33]))?
+                .get(Address::from_pubkey([9; 33]))?
+                .liquid
+        ),
         1800
     );
 
@@ -396,32 +408,31 @@ fn val_size_limit() -> Result<()> {
     assert_eq!(ctx.updates.get(&[8; 32]).unwrap().power, 0);
     assert_eq!(ctx.updates.get(&[9; 32]).unwrap().power, 900);
     assert_eq!(ctx.updates.get(&[10; 32]).unwrap().power, 1000);
-    staking.give(1900.into())?;
+    staking.give(Simp::mint(1900))?;
 
-    assert_eq!(
-        staking
+    let balance: Amount = simp_balance(
+        &staking
             .get(Address::from_pubkey([8; 33]))?
             .get(Address::from_pubkey([8; 33]))?
-            .liquid
-            .amount()?,
-        1600
+            .liquid,
     );
-    assert_eq!(
-        staking
+    assert_eq!(balance, 1600);
+
+    let balance: Amount = simp_balance(
+        &staking
             .get(Address::from_pubkey([9; 33]))?
             .get(Address::from_pubkey([9; 33]))?
-            .liquid
-            .amount()?,
-        2700
+            .liquid,
     );
-    assert_eq!(
-        staking
+    assert_eq!(balance, 2700);
+
+    let balance: Amount = simp_balance(
+        &staking
             .get(Address::from_pubkey([10; 33]))?
             .get(Address::from_pubkey([10; 33]))?
-            .liquid
-            .amount()?,
-        1000
+            .liquid,
     );
+    assert_eq!(balance, 1000);
 
     Ok(())
 }
@@ -515,7 +526,8 @@ fn undelegate_slash_before_unbond() -> Result<()> {
 
     Context::add(Time::from_seconds(10));
     staking.end_block_step(&Default::default())?;
-    assert_eq!(staking.get(val_0)?.get(staker)?.liquid.amount()?, 50);
+    let balance: Amount = simp_balance(&staking.get(val_0)?.get(staker)?.liquid);
+    assert_eq!(balance, 50);
 
     Ok(())
 }
@@ -567,7 +579,8 @@ fn undelegate_slash_after_unbond() -> Result<()> {
     assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 50);
 
     staking.end_block_step(&Default::default())?;
-    assert_eq!(staking.get(val_0)?.get(staker)?.liquid.amount()?, 100);
+    let balance: Amount = simp_balance(&staking.get(val_0)?.get(staker)?.liquid);
+    assert_eq!(balance, 100);
 
     Ok(())
 }
@@ -989,7 +1002,7 @@ fn redelegation_slash_with_unbond() -> Result<()> {
     Context::add(Time::from_seconds(10));
     staking.end_block_step(&Default::default())?;
 
-    assert_eq!(staking.get(val_2)?.get(staker)?.liquid.amount()?, 100);
+    assert_eq!(simp_balance(&staking.get(val_2)?.get(staker)?.liquid), 100);
 
     Ok(())
 }
@@ -1100,7 +1113,7 @@ fn redelegation_slash_with_slash_unbond_overflow() -> Result<()> {
     Context::add(Time::from_seconds(10));
     staking.end_block_step(&Default::default())?;
 
-    assert_eq!(staking.get(val_2)?.get(staker)?.liquid.amount()?, 140);
+    assert_eq!(simp_balance(&staking.get(val_2)?.get(staker)?.liquid), 140);
 
     Ok(())
 }
@@ -1321,17 +1334,17 @@ fn unclaimed_rewards_slash() -> Result<()> {
     staking.end_block_step(&Default::default())?;
 
     staking.delegate(val_0, staker, 100.into())?;
-    staking.give(100.into())?;
+    staking.give(Simp::mint(100))?;
 
     staking.end_block_step(&Default::default())?;
 
-    assert_eq!(staking.get(val_0)?.get(staker)?.liquid.amount()?, 50);
+    assert_eq!(simp_balance(&staking.get(val_0)?.get(staker)?.liquid), 50);
     staking.end_block_step(&Default::default())?;
 
     staking.punish_downtime(Address::from_pubkey([0; 33]))?;
 
     staking.end_block_step(&Default::default())?;
-    assert_eq!(staking.get(val_0)?.get(staker)?.liquid.amount()?, 50);
+    assert_eq!(simp_balance(&staking.get(val_0)?.get(staker)?.liquid), 50);
 
     Ok(())
 }
@@ -1365,22 +1378,22 @@ fn reward_with_unbond() -> Result<()> {
     let val_1 = Address::from_pubkey([1; 33]);
     staking.end_block_step(&Default::default())?;
 
-    staking.give(100.into())?;
+    staking.give(Simp::mint(100))?;
     staking.end_block_step(&Default::default())?;
 
-    assert_eq!(staking.get(val_0)?.get(val_0)?.liquid.amount()?, 50);
-    assert_eq!(staking.get(val_1)?.get(val_1)?.liquid.amount()?, 50);
+    assert_eq!(simp_balance(&staking.get(val_0)?.get(val_0)?.liquid), 50);
+    assert_eq!(simp_balance(&staking.get(val_1)?.get(val_1)?.liquid), 50);
     staking.end_block_step(&Default::default())?;
 
     staking.unbond(val_0, val_0, Amount::from(100))?;
     staking.end_block_step(&Default::default())?;
 
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 0);
-    staking.give(100.into())?;
+    staking.give(Simp::mint(100))?;
     staking.end_block_step(&Default::default())?;
 
-    assert_eq!(staking.get(val_0)?.get(val_0)?.liquid.amount()?, 50);
-    assert_eq!(staking.get(val_1)?.get(val_1)?.liquid.amount()?, 150);
+    assert_eq!(simp_balance(&staking.get(val_0)?.get(val_0)?.liquid), 50);
+    assert_eq!(simp_balance(&staking.get(val_1)?.get(val_1)?.liquid), 150);
 
     Ok(())
 }
@@ -1478,4 +1491,64 @@ fn redelegate_from_to_two_stakers() {
     staking
         .redelegate(val_1, val_0, staker_1, Amount::from(100))
         .unwrap();
+}
+
+#[derive(State, Debug, Clone)]
+struct Alt(());
+impl Symbol for Alt {
+    const INDEX: u8 = 1;
+}
+
+#[cfg(feature = "abci")]
+#[test]
+#[serial]
+fn alt_coin_rewards() -> Result<()> {
+    let mut staking = setup_state().unwrap();
+
+    for i in 0..2 {
+        staking
+            .declare(
+                Address::from_pubkey([i; 33]),
+                Declaration {
+                    consensus_key: [i; 32],
+                    commission: Commission {
+                        rate: dec!(0.0).into(),
+                        max: dec!(1.0).into(),
+                        max_change: dec!(0.1).into(),
+                    },
+                    amount: Amount::new(100),
+                    min_self_delegation: 1.into(),
+                    validator_info: vec![].into(),
+                },
+                Amount::new(100).into(),
+            )
+            .unwrap();
+    }
+
+    let val_0 = Address::from_pubkey([0; 33]);
+    let val_1 = Address::from_pubkey([1; 33]);
+    let staker_0 = Address::from_pubkey([2; 33]);
+
+    staking.delegate(val_0, staker_0, 100.into()).unwrap();
+    staking.delegate(val_1, staker_0, 100.into()).unwrap();
+
+    staking.end_block_step(&Default::default()).unwrap();
+
+    staking.give(Alt::mint(100)).unwrap();
+    staking.end_block_step(&Default::default()).unwrap();
+    let balance = alt_balance(&staking.get(val_0)?.get(val_0)?.liquid);
+    assert_eq!(balance, 25);
+
+    let balance = alt_balance(&staking.get(val_0)?.get(staker_0)?.liquid);
+    assert_eq!(balance, 25);
+
+    let balance = alt_balance(&staking.get(val_1)?.get(val_1)?.liquid);
+    assert_eq!(balance, 25);
+
+    let balance = alt_balance(&staking.get(val_1)?.get(staker_0)?.liquid);
+    assert_eq!(balance, 25);
+
+    staking.end_block_step(&Default::default()).unwrap();
+
+    Ok(())
 }

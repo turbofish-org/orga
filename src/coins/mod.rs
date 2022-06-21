@@ -12,6 +12,9 @@ pub use coin::*;
 pub mod share;
 pub use share::*;
 
+pub mod multishare;
+pub use multishare::*;
+
 pub mod give;
 pub use give::*;
 
@@ -85,7 +88,9 @@ pub struct Address {
 
 impl Address {
     pub const LENGTH: usize = 20;
-    pub const NULL: Self = Address { bytes: [0; Self::LENGTH] };
+    pub const NULL: Self = Address {
+        bytes: [0; Self::LENGTH],
+    };
 
     pub fn from_pubkey(bytes: [u8; 33]) -> Self {
         let mut sha = Sha256::new();

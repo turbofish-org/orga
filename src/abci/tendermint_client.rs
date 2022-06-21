@@ -2,7 +2,6 @@ use std::convert::TryInto;
 use std::ops::{Deref, DerefMut};
 
 use tendermint_rpc as tm;
-use tendermint_rpc::Error as TmError;
 use tm::Client as _;
 
 use crate::call::Call;
@@ -140,7 +139,7 @@ impl<T: Query + State> AsyncQuery for TendermintAdapter<T> {
 
     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
     where
-        F: FnMut(Self::Response<'_>) -> Result<R>
+        F: FnMut(Self::Response<'_>) -> Result<R>,
     {
         // TODO: attempt query against locally persisted store data for this
         // height, only issue query if we are missing data (belongs in a
@@ -177,7 +176,7 @@ impl<T: Query + State> AsyncQuery for TendermintAdapter<T> {
             None => return Err(Error::ABCI("Missing root value".into())),
         };
         let encoding = T::Encoding::decode(root_value)?;
-        
+
         // TODO: remove need for ABCI prefix layer since that should come from
         // ABCIPlugin Client impl and should be part of app type
         let store: Shared<ABCIPrefixedProofStore> = Shared::new(ABCIPrefixedProofStore::new(map));
