@@ -203,7 +203,7 @@ impl<T, U: Clone> Clone for SignerClient<T, U> {
             parent: self.parent.clone(),
             marker: std::marker::PhantomData,
             #[cfg(not(target_arch = "wasm32"))]
-            privkey: SecretKey::from_slice(&self.privkey.serialize_secret()).unwrap(),
+            privkey: SecretKey::from_slice(&self.privkey.secret_bytes()).unwrap(),
             #[cfg(target_arch = "wasm32")]
             signer: keplr::Signer,
         }
@@ -494,7 +494,7 @@ pub fn load_privkey() -> Result<SecretKey> {
         // Create and save a new key
         let mut rng = secp256k1::rand::thread_rng();
         let privkey = SecretKey::new(&mut rng);
-        std::fs::write(&keypair_path, privkey.serialize_secret())?;
+        std::fs::write(&keypair_path, privkey.secret_bytes())?;
         Ok(privkey)
     }
 }
