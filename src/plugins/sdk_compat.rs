@@ -331,6 +331,9 @@ impl<T: Client<SdkCompatAdapter<T, U, S>>, U: Clone, S> DerefMut for SdkCompatCl
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::JsValue;
+
 impl<
         T: Client<SdkCompatAdapter<T, U, S>> + CallTrait,
         U: Clone + AsyncCall<Call = Call<T::Call>>,
@@ -338,9 +341,9 @@ impl<
     > SdkCompatClient<T, U, S>
 {
     #[cfg(target_arch = "wasm32")]
-    pub async fn send_sdk_tx(&mut self, sign_doc: sdk::SignDoc) -> Result<()> {
+    pub async fn send_sdk_tx(&mut self, sign_doc: sdk::SignDoc) -> std::result::Result<(), JsValue> {
         let signer = crate::plugins::signer::keplr::Signer;
-        let sig = signer.sign_sdk(sign_doc.clone()).await;
+        let sig = signer.sign_sdk(sign_doc.clone()).await?;
 
         let tx = sdk::Tx {
             msg: sign_doc.msgs,
@@ -348,7 +351,7 @@ impl<
             fee: sign_doc.fee,
             memo: sign_doc.memo,
         };
-        self._parent.call(Call::Sdk(tx)).await
+        self._parent.call(Call::Sdk(tx)).await.map_err(|e| e.to_string().into())
     }
 }
 

@@ -261,8 +261,10 @@ where
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Query, U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = std::rc::Rc<SignerPlugin<T>>> + Clone> AsyncQuery
-    for SignerClient<T, U>
+impl<
+        T: Query,
+        U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = std::rc::Rc<SignerPlugin<T>>> + Clone,
+    > AsyncQuery for SignerClient<T, U>
 {
     type Query = T::Query;
     type Response<'a> = std::rc::Rc<T>;
@@ -271,7 +273,16 @@ impl<T: Query, U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = std::rc::R
     where
         F: FnMut(Self::Response<'_>) -> Result<R>,
     {
-        self.parent.query(query, |plugin| check(std::rc::Rc::new(std::rc::Rc::try_unwrap(plugin).map_err(|_| ()).unwrap().inner))).await
+        self.parent
+            .query(query, |plugin| {
+                check(std::rc::Rc::new(
+                    std::rc::Rc::try_unwrap(plugin)
+                        .map_err(|_| ())
+                        .unwrap()
+                        .inner,
+                ))
+            })
+            .await
     }
 }
 
@@ -362,7 +373,11 @@ pub mod keplr {
                         .into();
                 let signer = apply(&get_offline_signer, &keplr, &args).unwrap();
 
-                Self { keplr, signer, chain_id }
+                Self {
+                    keplr,
+                    signer,
+                    chain_id,
+                }
             }
         }
     }
@@ -375,14 +390,11 @@ pub mod keplr {
         pub async fn pubkey(&self) -> [u8; 33] {
             unsafe {
                 let signer = self.handle().signer;
-                let get_accounts: Function =
-                    get(&signer, &"getAccounts".to_string().into())
-                        .unwrap()
-                        .into();
+                let get_accounts: Function = get(&signer, &"getAccounts".to_string().into())
+                    .unwrap()
+                    .into();
                 let accounts_promise: Promise =
-                    apply(&get_accounts, &signer, &Array::new())
-                        .unwrap()
-                        .into();
+                    apply(&get_accounts, &signer, &Array::new()).unwrap().into();
                 let accounts = JsFuture::from(accounts_promise).await.unwrap();
                 let account = get(&accounts, &0i32.into()).unwrap();
                 let pubkey: Uint8Array =
@@ -397,14 +409,11 @@ pub mod keplr {
         pub async fn address(&self) -> String {
             unsafe {
                 let signer = self.handle().signer;
-                let get_accounts: Function =
-                    get(&signer, &"getAccounts".to_string().into())
-                        .unwrap()
-                        .into();
+                let get_accounts: Function = get(&signer, &"getAccounts".to_string().into())
+                    .unwrap()
+                    .into();
                 let accounts_promise: Promise =
-                    apply(&get_accounts, &signer, &Array::new())
-                        .unwrap()
-                        .into();
+                    apply(&get_accounts, &signer, &Array::new()).unwrap().into();
                 let accounts = JsFuture::from(accounts_promise).await.unwrap();
                 let account = get(&accounts, &0i32.into()).unwrap();
                 get(&account, &"address".to_string().into())
@@ -432,9 +441,8 @@ pub mod keplr {
                     get(&handle.keplr, &"signArbitrary".to_string().into())
                         .unwrap()
                         .into();
-                let sign_promise: Promise = apply(&sign_arbitrary, &handle.keplr, &args)
-                    .unwrap()
-                    .into();
+                let sign_promise: Promise =
+                    apply(&sign_arbitrary, &handle.keplr, &args).unwrap().into();
                 let res = JsFuture::from(sign_promise).await.unwrap();
 
                 let signature_b64: String = get(&res, &"signature".to_string().into())
@@ -448,7 +456,7 @@ pub mod keplr {
             }
         }
 
-        pub async fn sign_sdk(&self, sign_doc: sdk::SignDoc) -> sdk::Signature {
+        pub async fn sign_sdk(&self, sign_doc: sdk::SignDoc) -> Result<sdk::Signature, JsValue> {
             unsafe {
                 let doc_json = serde_json::to_string(&sign_doc).unwrap();
                 let doc_obj = js_sys::JSON::parse(&doc_json).unwrap();
@@ -460,18 +468,14 @@ pub mod keplr {
 
                 let handle = self.handle();
 
-                let sign_amino: Function =
-                    get(&handle.keplr, &"signAmino".to_string().into())
-                        .unwrap()
-                        .into();
-                let sign_promise: Promise = apply(&sign_amino, &handle.keplr, &args)
-                    .unwrap()
-                    .into();
+                let sign_amino: Function = get(&handle.keplr, &"signAmino".to_string().into())?.into();
+                let sign_promise: Promise =
+                    apply(&sign_amino, &handle.keplr, &args).unwrap().into();
                 let res = JsFuture::from(sign_promise).await.unwrap();
 
                 let signature = get(&res, &"signature".to_string().into()).unwrap();
                 let signature_json: String = js_sys::JSON::stringify(&signature).unwrap().into();
-                serde_json::from_str(&signature_json).unwrap()
+                Ok(serde_json::from_str(&signature_json).unwrap())
             }
         }
     }
