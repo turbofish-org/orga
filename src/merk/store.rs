@@ -322,10 +322,7 @@ impl ABCIStore for MerkStore {
         if let Some(snapshot) = req.snapshot {
             let is_canonical_height = snapshot.height % SNAPSHOT_INTERVAL == 0
                 || snapshot.height == FIRST_SNAPSHOT_HEIGHT;
-            if self.height()? + SNAPSHOT_INTERVAL <= snapshot.height
-                && is_canonical_height
-                && snapshot.hash == req.app_hash
-            {
+            if is_canonical_height && snapshot.hash == req.app_hash {
                 self.target_snapshot = Some(snapshot);
                 res.set_result(abci::response_offer_snapshot::Result::Accept);
             }
