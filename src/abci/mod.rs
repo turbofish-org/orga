@@ -98,10 +98,23 @@ impl<A: Application> ABCIStateMachine<A> {
                 let store = self.store.take().unwrap();
                 let app = self.app.take().unwrap();
 
-                let res = app.query(store.clone(), req)?;
+                let res = app
+                    .query(store.clone(), req)
+                    .unwrap_or_else(|err| ResponseQuery {
+                        code: 1,
+                        log: err.to_string(),
+                        info: err.to_string(),
+                        codespace: "".to_string(),
+                        height: self.height as i64,
+                        index: 0,
+                        key: vec![],
+                        proof_ops: None,
+                        value: vec![],
+                    });
 
                 self.store.replace(store);
                 self.app.replace(app);
+
                 Ok(Res::Query(res))
             }
             Req::InitChain(req) => {
