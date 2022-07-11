@@ -182,21 +182,23 @@ where
 {
     type Call = T::Call;
 
-    async fn call(&mut self, call: Self::Call) -> Result<()> {
+    async fn call(&self, call: Self::Call) -> Result<()> {
         self.parent.call(Call::Inner(call)).await
     }
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: QueryTrait + State, U: AsyncQuery<Query = Query<T>, Response = IbcPlugin<T>> + Clone>
-    AsyncQuery for InnerAdapter<T, U>
+impl<
+        T: QueryTrait + State,
+        U: for<'a> AsyncQuery<Query = Query<T>, Response<'a> = IbcPlugin<T>> + Clone,
+    > AsyncQuery for InnerAdapter<T, U>
 {
     type Query = T::Query;
-    type Response = T;
+    type Response<'a> = T;
 
     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
     where
-        F: FnMut(Self::Response) -> Result<R>,
+        F: FnMut(Self::Response<'_>) -> Result<R>,
     {
         self.parent
             .query(Query::Inner(query), |plugin| check(plugin.inner))
@@ -229,22 +231,24 @@ where
     // type Call = <Ibc as CallTrait>::Call;
     type Call = Ics26Message;
 
-    async fn call(&mut self, call: Self::Call) -> Result<()> {
+    async fn call(&self, call: Self::Call) -> Result<()> {
         self.parent.call(Call::Ics26(call)).await
         // self.parent.call(Call::Ics26()).await
     }
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: QueryTrait + State, U: AsyncQuery<Query = Query<T>, Response = IbcPlugin<T>> + Clone>
-    AsyncQuery for IbcAdapter<T, U>
+impl<
+        T: QueryTrait + State,
+        U: for<'a> AsyncQuery<Query = Query<T>, Response<'a> = IbcPlugin<T>> + Clone,
+    > AsyncQuery for IbcAdapter<T, U>
 {
     type Query = <Ibc as QueryTrait>::Query;
-    type Response = Ibc;
+    type Response<'a> = Ibc;
 
     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
     where
-        F: FnMut(Self::Response) -> Result<R>,
+        F: FnMut(Self::Response<'_>) -> Result<R>,
     {
         self.parent
             .query(Query::Ibc(query), |plugin| check(plugin.ibc))

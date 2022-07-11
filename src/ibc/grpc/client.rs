@@ -20,7 +20,7 @@ where
     T: Clone + Send + Sync + 'static,
     // T: AsyncCall<Call = <Ibc as Call>::Call>,
     T: AsyncQuery,
-    T: AsyncQuery<Response = Ibc>,
+    T: for<'a> AsyncQuery<Response<'a> = Ibc>,
     T: AsyncQuery<Query = <Ibc as Query>::Query>,
 {
     async fn client_state(
