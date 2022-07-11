@@ -185,7 +185,7 @@ where
 {
     type Call = V::Call;
 
-    async fn call(&mut self, subcall: Self::Call) -> Result<()> {
+    async fn call(&self, subcall: Self::Call) -> Result<()> {
         let key = self.key.as_ref().unwrap().clone();
 
         let subcall_bytes = subcall.encode()?;
@@ -704,6 +704,10 @@ impl<V> ReadOnly<V> {
     pub fn new(inner: V) -> Self {
         ReadOnly { inner }
     }
+
+    pub fn into_inner(self) -> V {
+        self.inner
+    }
 }
 
 /// An immutable reference to an existing key or value in a collection.
@@ -739,6 +743,34 @@ impl<'a, V> Deref for Ref<'a, V> {
 impl<'a, V: Default> Default for Ref<'a, V> {
     fn default() -> Self {
         Ref::Owned(V::default())
+    }
+}
+
+impl<'a, V: PartialEq> PartialEq for Ref<'a, V> {
+    fn eq(&self, other: &Self) -> bool {
+        self.deref().eq(&*other)
+    }
+}
+
+impl<'a, V: Eq> Eq for Ref<'a, V> {}
+
+impl<'a, V: PartialOrd> PartialOrd for Ref<'a, V> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.deref().partial_cmp(&*other)
+    }
+}
+
+impl<'a, V: Ord> Ord for Ref<'a, V> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.deref().cmp(&*other)
+    }
+}
+
+impl<'a, T: ClientTrait<U>, U: Clone> ClientTrait<U> for Ref<'a, T> {
+    type Client = T::Client;
+
+    fn create_client(parent: U) -> Self::Client {
+        T::create_client(parent)
     }
 }
 

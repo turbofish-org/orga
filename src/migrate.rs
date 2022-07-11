@@ -1,9 +1,9 @@
 use crate::Result;
 use std::path::Path;
-use v1::encoding::Decode;
-use v1::merk::MerkStore;
-use v1::state::State;
-use v1::store::{Read, Shared, Store};
+use v2::encoding::Decode;
+use v2::merk::MerkStore;
+use v2::state::State;
+use v2::store::{Read, Shared, Store};
 
 pub trait Migrate<T: State> {
     fn migrate(&mut self, legacy: T) -> Result<()>;

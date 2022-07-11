@@ -3,6 +3,7 @@ use mutagen::mutate;
 
 use super::map::{ChildMut, Map, ReadOnly, Ref};
 use crate::call::Call;
+use crate::client::Client;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
@@ -16,7 +17,15 @@ pub struct Deque<T, S = DefaultBackingStore> {
     map: Map<u64, T, S>,
 }
 
-#[derive(Encode, Decode, Clone)]
+impl<T, S> std::fmt::Debug for Deque<T, S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Deque")
+            .field("meta", &self.meta)
+            .finish()
+    }
+}
+
+#[derive(Encode, Decode, Clone, Debug)]
 pub struct Meta {
     head: u64,
     tail: u64,
@@ -143,6 +152,23 @@ impl<T: State<S>, S: Write> Deque<T, S> {
         self.meta.tail -= 1;
         self.map.remove(self.meta.tail)
     }
+
+    #[cfg_attr(test, mutate)]
+    pub fn front_mut(&mut self) -> Result<Option<ChildMut<u64, T, S>>> {
+        self.get_mut(0)
+    }
+
+    #[cfg_attr(test, mutate)]
+    pub fn back_mut(&mut self) -> Result<Option<ChildMut<u64, T, S>>> {
+        self.get_mut(self.len() - 1)
+    }
+}
+
+// TODO: use derive(Client)
+impl<T, U: Clone + Send, S> Client<U> for Deque<T, S> {
+    type Client = ();
+
+    fn create_client(_: U) {}
 }
 
 #[allow(unused_imports)]

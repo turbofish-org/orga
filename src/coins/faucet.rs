@@ -106,11 +106,11 @@ pub struct FaucetOptions {
 }
 
 #[cfg(feature = "abci")]
-impl<S: Symbol, T: v1::coins::Symbol> Migrate<v1::coins::Faucet<T>> for Faucet<S> {
-    fn migrate(&mut self, legacy: v1::coins::Faucet<T>) -> Result<()> {
+impl<S: Symbol, T: v2::coins::Symbol> Migrate<v2::coins::Faucet<T>> for Faucet<S> {
+    fn migrate(&mut self, legacy: v2::coins::Faucet<T>) -> Result<()> {
         use crate::encoding::Decode;
-        use v1::encoding::Encode;
-        let data: <v1::coins::Faucet<T> as v1::state::State>::Encoding = legacy.into();
+        use v2::encoding::Encode;
+        let data: <v2::coins::Faucet<T> as v2::state::State>::Encoding = legacy.into();
 
         self.configured = data.1;
         self.amount_minted = data.2 .0.into();
@@ -135,7 +135,9 @@ mod tests {
 
     #[derive(Encode, Decode, Debug, Clone)]
     struct Simp;
-    impl Symbol for Simp {}
+    impl Symbol for Simp {
+        const INDEX: u8 = 0;
+    }
 
     impl State for Simp {
         type Encoding = Self;

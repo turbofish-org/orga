@@ -325,7 +325,9 @@ where
         let backing_store: BackingStore = merk_store.clone().into();
         let store_height = merk_store.borrow().height()?;
         let store = Store::new(backing_store.clone());
-        let state_bytes = store.get(&[])?.unwrap();
+        let state_bytes = store
+            .get(&[])?
+            .ok_or_else(|| crate::Error::Query("Store is empty".to_string()))?;
         let data: <ABCIPlugin<A> as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
         let state = <ABCIPlugin<A> as State>::create(store, data)?;
 
@@ -336,26 +338,10 @@ where
         // Check which keys are accessed by the query and build a proof
         let query_bytes = req.data;
         let query_decode_res = Decode::decode(query_bytes.as_slice());
-        let query = match query_decode_res {
-            Ok(query) => query,
-            Err(err) => {
-                return Ok(ResponseQuery {
-                    code: 1,
-                    height: store_height as i64,
-                    log: err.to_string(),
-                    ..Default::default()
-                });
-            }
-        };
+        let query = query_decode_res?;
 
-        if let Err(err) = state.query(query) {
-            return Ok(ResponseQuery {
-                code: 1,
-                height: store_height as i64,
-                log: err.to_string(),
-                ..Default::default()
-            });
-        }
+        state.query(query)?;
+
         let proof_builder = backing_store.into_proof_builder()?;
         let root_hash = merk_store.borrow().root_hash()?;
         let proof_bytes = proof_builder.build()?;

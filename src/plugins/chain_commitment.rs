@@ -37,6 +37,9 @@ impl<T: CallTrait, const ID: &'static str> CallTrait for ChainCommitmentPlugin<T
 
     fn call(&mut self, call: Self::Call) -> Result<()> {
         let expected_id: Vec<u8> = ID.bytes().collect();
+        if call.len() < expected_id.len() {
+            return Err(Error::App("Invalid chain ID length".into()));
+        }
         let chain_id = &call[..expected_id.len()];
         if chain_id != expected_id {
             return Err(Error::App(format!(
@@ -102,7 +105,7 @@ where
 {
     type Call = T::Call;
 
-    async fn call(&mut self, call: Self::Call) -> Result<()> {
+    async fn call(&self, call: Self::Call) -> Result<()> {
         let id_bytes = ID.as_bytes();
 
         let mut call_bytes = Vec::with_capacity(id_bytes.len() + call.encoding_length()?);
@@ -114,15 +117,32 @@ where
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Query, U: AsyncQuery<Query = T::Query, Response = ChainCommitmentPlugin<T, ID>> + Clone, const ID: &'static str> AsyncQuery for Client<T, U, ID> {
+impl<
+        T: Query + 'static,
+        U: for<'a> AsyncQuery<
+                Query = T::Query,
+                Response<'a> = std::rc::Rc<ChainCommitmentPlugin<T, ID>>,
+            > + Clone,
+        const ID: &'static str,
+    > AsyncQuery for Client<T, U, ID>
+{
     type Query = T::Query;
-    type Response = T;
+    type Response<'a> = std::rc::Rc<T>;
 
     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
     where
-        F: FnMut(Self::Response) -> Result<R>
+        F: FnMut(Self::Response<'_>) -> Result<R>,
     {
-        self.parent.query(query, |plugin| check(plugin.inner)).await
+        self.parent
+            .query(query, |plugin| {
+                check(std::rc::Rc::new(
+                    std::rc::Rc::try_unwrap(plugin)
+                        .map_err(|_| ())
+                        .unwrap()
+                        .inner,
+                ))
+            })
+            .await
     }
 }
 

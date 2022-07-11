@@ -62,6 +62,17 @@ impl<T: Call> Call for Option<T> {
     }
 }
 
+impl<T: Call> Call for Vec<T> {
+    type Call = (u32, T::Call);
+
+    fn call(&mut self, call: Self::Call) -> Result<()> {
+        let (index, subcall) = call;
+        self.get_mut(index as usize)
+            .ok_or_else(|| Error::App("Index out of bounds".to_string()))?
+            .call(subcall)
+    }
+}
+
 macro_rules! noop_impl {
     ($type:ty) => {
         impl Call for $type {

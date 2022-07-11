@@ -4,7 +4,9 @@ use mutagen::mutate;
 use crate::abci::ABCIStore;
 use crate::error::{Error, Result};
 use crate::store::*;
-use merk::{chunks::ChunkProducer, restore::Restorer, rocksdb, tree::Tree, BatchEntry, Merk, Op, Hash};
+use merk::{
+    chunks::ChunkProducer, restore::Restorer, rocksdb, tree::Tree, BatchEntry, Hash, Merk, Op,
+};
 use std::cell::RefCell;
 use std::{collections::BTreeMap, convert::TryInto};
 use std::{
@@ -16,6 +18,7 @@ type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
 pub const SNAPSHOT_INTERVAL: u64 = 1000;
 pub const SNAPSHOT_LIMIT: u64 = 4;
+pub const FIRST_SNAPSHOT_HEIGHT: u64 = 2;
 
 struct MerkSnapshot {
     _checkpoint: Merk,
@@ -317,10 +320,9 @@ impl ABCIStore for MerkStore {
         res.set_result(abci::response_offer_snapshot::Result::Reject);
 
         if let Some(snapshot) = req.snapshot {
-            if self.height()? + SNAPSHOT_INTERVAL <= snapshot.height
-                && snapshot.height % SNAPSHOT_INTERVAL == 0
-                && snapshot.hash == req.app_hash
-            {
+            let is_canonical_height = snapshot.height % SNAPSHOT_INTERVAL == 0
+                || snapshot.height == FIRST_SNAPSHOT_HEIGHT;
+            if is_canonical_height && snapshot.hash == req.app_hash {
                 self.target_snapshot = Some(snapshot);
                 res.set_result(abci::response_offer_snapshot::Result::Accept);
             }
@@ -333,7 +335,7 @@ impl ABCIStore for MerkStore {
 impl MerkStore {
     fn maybe_create_snapshot(&mut self) -> Result<()> {
         let height = self.height()?;
-        if height == 0 || height % SNAPSHOT_INTERVAL != 0 {
+        if height == 0 || (height % SNAPSHOT_INTERVAL != 0 && height != FIRST_SNAPSHOT_HEIGHT) {
             return Ok(());
         }
         if self.snapshots.contains_key(&height) {

@@ -102,23 +102,21 @@ where
 {
     type Call = T::Call;
 
-    async fn call(&mut self, call: Self::Call) -> Result<()> {
+    async fn call(&self, call: Self::Call) -> Result<()> {
         self.parent.call(call).await
     }
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Query + State, U: AsyncQuery<Query = T::Query, Response = FeePlugin<S, T>> + Clone, S>
-    AsyncQuery for FeeAdapter<T, U, S>
-{
+impl<T: Query + State, U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = std::rc::Rc<FeePlugin<S, T>>> + Clone, S> AsyncQuery for FeeAdapter<T, U, S> {
     type Query = T::Query;
-    type Response = T;
+    type Response<'a> = std::rc::Rc<T>;
 
     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
     where
-        F: FnMut(Self::Response) -> Result<R>,
+        F: FnMut(Self::Response<'_>) -> Result<R>
     {
-        self.parent.query(query, |plugin| check(plugin.inner)).await
+        self.parent.query(query, |plugin| check(std::rc::Rc::new(std::rc::Rc::try_unwrap(plugin).map_err(|_| ()).unwrap().inner))).await
     }
 }
 

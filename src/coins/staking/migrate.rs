@@ -1,21 +1,20 @@
-use super::{Commission, Declaration, Staking, UNBONDING_SECONDS};
+use super::{Commission, Declaration, Staking};
 use crate::coins::{Address, Amount, Decimal, Give, Symbol};
 use crate::encoding::Decode;
 use crate::migrate::Migrate;
 use crate::plugins::EndBlockCtx;
 use crate::Result;
-use rust_decimal_macros::dec;
-use v1::encoding::Encode as EncodeV1;
+use v2::encoding::Encode as EncodeV2;
 
-impl From<v1::coins::Decimal> for Decimal {
-    fn from(decimal: v1::coins::Decimal) -> Self {
+impl From<v2::coins::Decimal> for Decimal {
+    fn from(decimal: v2::coins::Decimal) -> Self {
         Decode::decode(decimal.encode().unwrap().as_slice()).unwrap()
     }
 }
 
-fn liquid_balance<S: v1::coins::Symbol>(
-    delegator: &v1::coins::Delegator<S>,
-    now_seconds: i64,
+fn liquid_balance<S: v2::coins::Symbol>(
+    delegator: &v2::coins::Delegator<S>,
+    _now_seconds: i64,
 ) -> Amount {
     let liquid: u64 = delegator.liquid.amount().unwrap().into();
 
@@ -24,9 +23,6 @@ fn liquid_balance<S: v1::coins::Symbol>(
     for i in 0..delegator.unbonding.len() {
         let unbond = delegator.unbonding.get(i).unwrap().unwrap();
         let unbond_amt: u64 = unbond.coins.amount().unwrap().into();
-        if delegator.jailed && unbond.start_seconds + (UNBONDING_SECONDS as i64) < now_seconds {
-            continue;
-        }
         unbonding_sum += unbond_amt;
     }
 
@@ -34,9 +30,9 @@ fn liquid_balance<S: v1::coins::Symbol>(
 }
 
 impl<S: Symbol> Staking<S> {
-    fn migrate_validators<T: v1::coins::Symbol>(
+    fn migrate_validators<T: v2::coins::Symbol>(
         &mut self,
-        legacy: &v1::coins::Staking<T>,
+        legacy: &v2::coins::Staking<T>,
     ) -> Result<()> {
         legacy.validators().iter().unwrap().try_for_each(|entry| {
             let (address, validator) = entry.unwrap();
@@ -45,18 +41,18 @@ impl<S: Symbol> Staking<S> {
         })
     }
 
-    fn migrate_validator<T: v1::coins::Symbol>(
+    fn migrate_validator<T: v2::coins::Symbol>(
         &mut self,
         val_addr: Address,
-        validator: &v1::coins::pool::Child<v1::coins::staking::Validator<T>, T>,
+        validator: &v2::coins::pool::Child<v2::coins::staking::Validator<T>, T>,
         consensus_key: [u8; 32],
     ) -> Result<()> {
         let declaration = Declaration {
             consensus_key,
             commission: Commission {
-                rate: validator.commission.into(),
-                max: dec!(1.0).into(),
-                max_change: dec!(0.01).into(),
+                max: validator.commission.max.into(),
+                max_change: validator.commission.max_change.into(),
+                rate: validator.commission.rate.into(),
             },
             min_self_delegation: self.min_self_delegation_min.into(),
             amount: 0.into(),
@@ -67,7 +63,7 @@ impl<S: Symbol> Staking<S> {
         let self_del = validator.delegators.get(val_addr.bytes().into()).unwrap();
         let amt: u64 = self_del.staked.amount().unwrap().into();
         self.declare(val_addr, declaration, amt.into())?;
-        if validator.jailed {
+        if validator.jailed() {
             let mut new_validator = self.validators.get_mut(val_addr)?;
             new_validator.jail_for_seconds(10)?;
         }
@@ -80,15 +76,15 @@ impl<S: Symbol> Staking<S> {
             }
             let mut validator = self.validators.get_mut(val_addr)?;
             let mut delegator = validator.get_mut(del_addr.bytes().into())?;
-            delegator.give(liquid_balance(&legacy_delegator, now_seconds).into())
+            delegator.give((S::INDEX, liquid_balance(&legacy_delegator, now_seconds)))
         })?;
 
         self.update_vp(val_addr)
     }
 }
 
-impl<S: Symbol, T: v1::coins::Symbol> Migrate<v1::coins::Staking<T>> for super::Staking<S> {
-    fn migrate(&mut self, legacy: v1::coins::Staking<T>) -> Result<()> {
+impl<S: Symbol, T: v2::coins::Symbol> Migrate<v2::coins::Staking<T>> for super::Staking<S> {
+    fn migrate(&mut self, legacy: v2::coins::Staking<T>) -> Result<()> {
         self.migrate_validators(&legacy)?;
         self.end_block_step(&EndBlockCtx { height: 0 })
     }

@@ -1,4 +1,4 @@
-use crate::encoding::{Decode, Encode};
+use crate::encoding::{Decode, Encode, Terminated};
 use crate::store::*;
 use crate::{Error, Result};
 pub use orga_macros::State;
@@ -158,6 +158,21 @@ where
     }
 }
 
+impl<T> State for Vec<T>
+where
+    T: Encode + Decode + Terminated,
+{
+    type Encoding = Vec<T>;
+
+    fn create(_: Store, data: Self::Encoding) -> Result<Self> {
+        Ok(data)
+    }
+
+    fn flush(self) -> Result<Self::Encoding> {
+        Ok(self)
+    }
+}
+
 #[derive(Encode, Decode, Default)]
 pub struct EncodingWrapper<T: Encode + Decode>(T);
 
@@ -304,7 +319,6 @@ macro_rules! state_tuple_impl {
                     inner: ($(self.$indices.into(),)* self.$length.into(),),
                 })
             }
-
         }
     }
 }

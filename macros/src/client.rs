@@ -185,7 +185,7 @@ fn create_client_struct(
 
             let adapter_name = &adapter.ident;
 
-            quote!(#field_name: #field_ty::create_client(#adapter_name::new(parent.clone())))
+            quote!(#field_name: <#field_ty>::create_client(#adapter_name::new(parent.clone())))
         });
 
     let call_method_impls_and_adapters =
@@ -194,7 +194,15 @@ fn create_client_struct(
             .map(|(method, impl_item)| {
                 let method_name = &method.sig.ident;
 
-                let method_inputs = &method.sig.inputs;
+                let mut method_inputs = method.sig.inputs.clone();
+                method_inputs
+                    .iter_mut()
+                    .for_each(|arg| {
+                        if let FnArg::Receiver(ref mut arg) = arg {
+                            arg.mutability = None;
+                        }
+                    });
+
                 let arg_types: Vec<_> = method_inputs
                     .iter()
                     .filter_map(|arg| match arg {
@@ -227,7 +235,7 @@ fn create_client_struct(
                 let output_ty = match method.sig.output.clone() {
                     ReturnType::Default => quote!(()),
                     ReturnType::Type(_, mut ty) => {
-                        add_static_lifetimes(&mut ty);
+                        replace_lifetimes(&mut ty, "'static");
                         quote!(#ty)
                     },
                 };
@@ -288,7 +296,7 @@ fn create_client_struct(
                     {
                         type Call = <__Return as ::orga::call::Call>::Call;
 
-                        async fn call(&mut self, call: Self::Call) -> ::orga::Result<()> {
+                        async fn call(&self, call: Self::Call) -> ::orga::Result<()> {
                             let encoded_args = ::orga::encoding::Encode::encode(&self.args).unwrap();
                             let cloned_args: (
                                 #(#arg_types,)*
@@ -362,8 +370,12 @@ fn create_client_struct(
 
             let output_ty = match method.sig.output.clone() {
                 ReturnType::Default => quote!(()),
+                ReturnType::Type(_, ty) => quote!(#ty),
+            };
+            let output_ty_with_explicit_lifetime = match method.sig.output.clone() {
+                ReturnType::Default => quote!(()),
                 ReturnType::Type(_, mut ty) => {
-                    add_static_lifetimes(&mut ty);
+                    replace_lifetimes(&mut ty, "'orga_asyncquery_response");
                     quote!(#ty)
                 },
             };
@@ -390,18 +402,18 @@ fn create_client_struct(
                 where
                     #parent_ty: Clone + Send,
                     #parent_ty: ::orga::client::AsyncQuery<Query = <#name#generic_params_bracketed as ::orga::query::Query>::Query>,
-                    #parent_ty: ::orga::client::AsyncQuery<Response = #name#generic_params_bracketed>,
+                    #parent_ty: for<'a> ::orga::client::AsyncQuery<Response<'a> = ::std::rc::Rc<#name#generic_params_bracketed>>,
                 {
                     pub(super) parent: #parent_ty,
                     args: (#(#arg_types,)*),
-                    _marker: std::marker::PhantomData<fn() -> (#name#generic_params_bracketed, __Return)>,
+                    _marker: std::marker::PhantomData<fn(#name#generic_params_bracketed, __Return)>,
                 }
 
                 impl#generics_with_return_and_parent Clone for #adapter_name<#generic_params __Return, #parent_ty>
                 where
                     #parent_ty: Clone + Send,
                     #parent_ty: ::orga::client::AsyncQuery<Query = <#name#generic_params_bracketed as ::orga::query::Query>::Query>,
-                    #parent_ty: ::orga::client::AsyncQuery<Response = #name#generic_params_bracketed>,
+                    #parent_ty: for<'a> ::orga::client::AsyncQuery<Response<'a> = ::std::rc::Rc<#name#generic_params_bracketed>>,
                     #query_preds
                 {
                     fn clone(&self) -> Self {
@@ -420,17 +432,16 @@ fn create_client_struct(
                 where
                     #parent_ty: Clone + Send,
                     #parent_ty: ::orga::client::AsyncQuery<Query = <#name#generic_params_bracketed as ::orga::query::Query>::Query>,
-                    #parent_ty: ::orga::client::AsyncQuery<Response = #name#generic_params_bracketed>,
+                    #parent_ty: for<'a> ::orga::client::AsyncQuery<Response<'a> = ::std::rc::Rc<#name#generic_params_bracketed>>,
                     __Return: ::orga::query::Query,
-                    __Return: Send + Sync,
                     #query_preds
                 {
                     type Query = <__Return as ::orga::query::Query>::Query;
-                    type Response = #output_ty;
+                    type Response<'orga_asyncquery_response> = ::std::rc::Rc<#output_ty_with_explicit_lifetime>;
 
                     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> ::orga::Result<R>
                     where
-                        F: FnMut(Self::Response) -> ::orga::Result<R>
+                        F: FnMut(Self::Response<'_>) -> ::orga::Result<R>
                     {
                         let encoded_args = ::orga::encoding::Encode::encode(&self.args).unwrap();
                         let cloned_args: (
@@ -441,7 +452,16 @@ fn create_client_struct(
                             #(#unrolled_args,)*
                             query_bytes
                         );
-                        ::orga::client::AsyncQuery::query(&self.parent, parent_query, |s| check(s.#method_name(#(#unrolled_args,)*))).await
+                        ::orga::client::AsyncQuery::query(
+                            &self.parent,
+                            parent_query,
+                            |s| {
+                                let cloned_args: (
+                                    #(#arg_types,)*
+                                ) = ::orga::encoding::Decode::decode(encoded_args.as_slice()).unwrap();
+                                check(::std::rc::Rc::new(s.#method_name(#(#unrolled_args,)*)))
+                            },
+                        ).await
                     }
                 }
 
@@ -449,7 +469,7 @@ fn create_client_struct(
                 where
                     #parent_ty: Clone + Send,
                     #parent_ty: ::orga::client::AsyncQuery<Query = <#name#generic_params_bracketed as ::orga::query::Query>::Query>,
-                    #parent_ty: ::orga::client::AsyncQuery<Response = #name#generic_params_bracketed>,
+                    #parent_ty: for<'a> ::orga::client::AsyncQuery<Response<'a> = ::std::rc::Rc<#name#generic_params_bracketed>>,
                     #where_preds
                     #impl_preds
                     #query_preds
@@ -476,7 +496,7 @@ fn create_client_struct(
         {
             pub(super) parent: #parent_ty,
             #(#field_fields,)*
-            __Marker: std::marker::PhantomData<fn() -> (#generic_params)>,
+            __Marker: std::marker::PhantomData<fn(#generic_params)>,
         }
 
         impl#generics_with_parent Clone for Client#generic_params_bracketed_with_parent
@@ -610,7 +630,7 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
                 {
                     type Call = <#field_ty as ::orga::call::Call>::Call;
         
-                    async fn call(&mut self, call: Self::Call) -> ::orga::Result<()> {
+                    async fn call(&self, call: Self::Call) -> ::orga::Result<()> {
                         // assumes that the call has a tuple variant called "Field" +
                         // the camel-cased name as the field
                         let subcall_bytes = ::orga::encoding::Encode::encode(&call)?; // TODO: error handling
@@ -624,19 +644,19 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
                 where
                     #parent_client_ty: Clone + Send,
                     #parent_client_ty: ::orga::client::AsyncQuery<Query = <#item_ty as ::orga::query::Query>::Query>,
-                    #parent_client_ty: ::orga::client::AsyncQuery<Response = #item_ty>,
+                    #parent_client_ty: for<'a> ::orga::client::AsyncQuery<Response<'a> = ::std::rc::Rc<#item_ty>>,
                 {
                     type Query = <#field_ty as ::orga::query::Query>::Query;
-                    type Response = #field_ty;
+                    type Response<'a> = ::std::rc::Rc<#field_ty>;
         
                     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> ::orga::Result<R>
                     where
-                        F: FnMut(Self::Response) -> ::orga::Result<R>
+                        F: FnMut(Self::Response<'_>) -> ::orga::Result<R>
                     {
                         // assumes that the query has a tuple variant called "Field" +
                         // the camel-cased name as the field
                         let subcall = <#item_ty as ::orga::query::Query>::Query::#variant_name(query);
-                        ::orga::client::AsyncQuery::query(&self.parent, subcall, |s| check(s.#field_name)).await
+                        ::orga::client::AsyncQuery::query(&self.parent, subcall, |s| check(std::rc::Rc::new(std::rc::Rc::try_unwrap(s).map_err(|_| ()).unwrap().#field_name))).await
                     }
                 }
             };
@@ -695,22 +715,31 @@ fn struct_fields(item: &DeriveInput) -> impl Iterator<Item = &Field> {
     }
 }
 
-fn add_static_lifetimes(ty: &mut Type) {
+fn replace_lifetimes(ty: &mut Type, name: &str) {
     match ty {
         Type::Path(path) => {
             if let Some(last_segment) = path.path.segments.last_mut() {
                 if let PathArguments::AngleBracketed(args) = &mut last_segment.arguments {
                     args.args.iter_mut().for_each(|arg| {
-                        if let GenericArgument::Type(ty) = arg {
-                            add_static_lifetimes(ty);
+                        match arg {
+                            GenericArgument::Lifetime(ref mut ty) => {
+                                *ty = Lifetime::new(name, Span::call_site());
+                            }
+                            GenericArgument::Type(ty) => {
+                                replace_lifetimes(ty, name);
+                            }
+                            _ => {}
                         }
                     });
                 }
             }
         }
         Type::Reference(ref mut ref_) => {
-            ref_.lifetime = Some(Lifetime::new("'static", Span::call_site()));
-            add_static_lifetimes(&mut ref_.elem);
+            ref_.lifetime = Some(Lifetime::new(name, Span::call_site()));
+            replace_lifetimes(&mut ref_.elem, name);
+        }
+        Type::Tuple(ref mut tuple) => {
+            tuple.elems.iter_mut().for_each(|t| replace_lifetimes(t, name))
         }
         _ => {}
     }

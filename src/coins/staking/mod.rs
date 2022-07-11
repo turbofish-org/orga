@@ -406,6 +406,14 @@ impl<S: Symbol> Staking<S> {
         self.address_for_tm_hash
             .insert(tm_hash, val_address.into())?;
 
+        #[cfg(feature = "abci")]
+        let val_ctx = self
+            .context::<Validators>()
+            .ok_or_else(|| Error::Coins("No Validators context available".into()))?;
+
+        #[cfg(feature = "abci")]
+        val_ctx.set_operator(consensus_key, val_address)?;
+
         let mut validator = self.validators.get_mut(val_address)?;
         validator.commission = commission;
         validator.min_self_delegation = min_self_delegation;
@@ -504,18 +512,21 @@ impl<S: Symbol> Staking<S> {
         self.punish_double_sign(val_address)
     }
 
-    pub fn withdraw<A: Into<Amount>>(
+    pub fn deduct<A: Into<Amount>>(
         &mut self,
         val_address: Address,
         delegator_address: Address,
         amount: A,
-    ) -> Result<Coin<S>> {
+        denom: u8,
+    ) -> Result<()> {
         let amount = amount.into();
         let mut validator = self.validators.get_mut(val_address)?;
         let mut delegator = validator.get_mut(delegator_address)?;
         delegator.process_unbonds()?;
 
-        delegator.withdraw_liquid(amount)
+        delegator.deduct(amount, denom)?;
+
+        Ok(())
     }
 
     pub fn unbond<A: Into<Amount>>(
@@ -699,11 +710,16 @@ impl<S: Symbol> Staking<S> {
     }
 
     #[call]
-    pub fn take_as_funding(&mut self, validator_address: Address, amount: Amount) -> Result<()> {
+    pub fn take_as_funding(
+        &mut self,
+        validator_address: Address,
+        amount: Amount,
+        denom: u8,
+    ) -> Result<()> {
         assert_positive(amount)?;
         let signer = self.signer()?;
-        let taken_coins = self.withdraw(validator_address, signer, amount)?;
-        self.paid()?.give::<S, _>(taken_coins.amount)
+        self.deduct(validator_address, signer, amount, denom)?;
+        self.paid()?.give_denom(amount, denom)
     }
 
     #[call]
@@ -713,11 +729,12 @@ impl<S: Symbol> Staking<S> {
         delegations
             .iter()
             .try_for_each(|(val_address, delegation)| {
-                if delegation.liquid > 0 {
-                    self.take_as_funding(*val_address, delegation.liquid)
-                } else {
-                    Ok(())
+                for (denom, amount) in delegation.liquid.iter() {
+                    if *amount > 0 {
+                        self.take_as_funding(*val_address, *amount, *denom)?;
+                    }
                 }
+                Ok::<_, Error>(())
             })?;
 
         Ok(())
@@ -1020,8 +1037,8 @@ fn validate_info(info: &ValidatorInfo) -> Result<()> {
     Ok(())
 }
 
-impl<S: Symbol> Give<S> for Staking<S> {
-    fn give(&mut self, coins: Coin<S>) -> Result<()> {
+impl<S: Symbol, T: Symbol> Give<Coin<T>> for Staking<S> {
+    fn give(&mut self, coins: Coin<T>) -> Result<()> {
         self.validators.give(coins)
     }
 }

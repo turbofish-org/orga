@@ -42,8 +42,8 @@ impl<S: Symbol> Coin<S> {
         }
     }
 
-    pub fn transfer<G: Give<S>>(self, dest: &mut G) -> Result<()> {
-        dest.add(self.amount)
+    pub fn transfer<G: Give<Coin<S>>>(self, dest: &mut G) -> Result<()> {
+        dest.give(self)
     }
 
     pub fn burn(self) {}
@@ -90,7 +90,7 @@ impl<S: Symbol> Take<S> for Coin<S> {
     }
 }
 
-impl<S: Symbol> Give<S> for Coin<S> {
+impl<S: Symbol> Give<Self> for Coin<S> {
     fn give(&mut self, value: Coin<S>) -> Result<()> {
         self.amount = (self.amount + value.amount)?;
 
@@ -111,8 +111,8 @@ impl<S: Symbol> From<u64> for Coin<S> {
 }
 
 #[cfg(feature = "abci")]
-impl<S: Symbol, T: v1::coins::Symbol> Migrate<v1::coins::Coin<T>> for Coin<S> {
-    fn migrate(&mut self, legacy: v1::coins::Coin<T>) -> Result<()> {
+impl<S: Symbol, T: v2::coins::Symbol> Migrate<v2::coins::Coin<T>> for Coin<S> {
+    fn migrate(&mut self, legacy: v2::coins::Coin<T>) -> Result<()> {
         let amt: u64 = legacy.amount.into();
         self.amount = amt.into();
 

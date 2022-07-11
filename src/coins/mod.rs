@@ -12,6 +12,9 @@ pub use coin::*;
 pub mod share;
 pub use share::*;
 
+pub mod multishare;
+pub use multishare::*;
+
 pub mod give;
 pub use give::*;
 
@@ -53,6 +56,8 @@ pub use ops::*;
 
 use bech32::{self, encode_to_fmt, FromBase32, ToBase32, Variant};
 
+use crate::call::Call;
+use crate::client::Client;
 use crate::collections::Next;
 use crate::macros::State;
 use crate::query::Query;
@@ -61,14 +66,31 @@ use ripemd::{Digest as _, Ripemd160};
 use sha2::{Digest as _, Sha256};
 
 #[derive(
-    Encode, Decode, State, Next, Query, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Copy,
+    Encode,
+    Decode,
+    State,
+    Next,
+    Query,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Debug,
+    Copy,
+    Client,
+    Call,
 )]
 pub struct Address {
     bytes: [u8; Address::LENGTH],
 }
 
 impl Address {
-    const LENGTH: usize = 20;
+    pub const LENGTH: usize = 20;
+    pub const NULL: Self = Address {
+        bytes: [0; Self::LENGTH],
+    };
 
     pub fn from_pubkey(bytes: [u8; 33]) -> Self {
         let mut sha = Sha256::new();
@@ -87,6 +109,10 @@ impl Address {
 
     pub fn bytes(&self) -> [u8; Address::LENGTH] {
         self.bytes
+    }
+
+    pub fn is_null(&self) -> bool {
+        *self == Self::NULL
     }
 }
 

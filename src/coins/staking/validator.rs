@@ -274,16 +274,31 @@ impl<S: Symbol> Balance<S, Decimal> for Validator<S> {
     }
 }
 
-impl<S: Symbol> Give<S> for Validator<S> {
-    fn give(&mut self, coins: Coin<S>) -> Result<()> {
+impl<S: Symbol, T: Symbol> Give<Coin<T>> for Validator<S> {
+    fn give(&mut self, coins: Coin<T>) -> Result<()> {
         let one: Decimal = 1.into();
         let delegator_amount = (coins.amount * (one - self.commission.rate))?.amount()?;
         let validator_amount = (coins.amount * self.commission.rate)?.amount()?;
 
-        self.delegators.give(delegator_amount.into())?;
+        self.delegators.give(T::mint(delegator_amount))?;
         self.delegators
             .get_mut(self.address)?
-            .give(validator_amount.into())?;
+            .give((T::INDEX, validator_amount))?;
+
+        Ok(())
+    }
+}
+
+impl<S: Symbol> Give<(u8, Amount)> for Validator<S> {
+    fn give(&mut self, coins: (u8, Amount)) -> Result<()> {
+        let one: Decimal = 1.into();
+        let delegator_amount = (coins.1 * (one - self.commission.rate))?.amount()?;
+        let validator_amount = (coins.1 * self.commission.rate)?.amount()?;
+
+        self.delegators.give((coins.0, delegator_amount))?;
+        self.delegators
+            .get_mut(self.address)?
+            .give((coins.0, validator_amount))?;
 
         Ok(())
     }

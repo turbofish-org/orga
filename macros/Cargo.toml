@@ -1,6 +1,6 @@
 [package]
 name = "orga-macros"
-version = "0.2.2"
+version = "0.2.4"
 authors = ["Matt Bell <mappum@gmail.com>"]
 edition = "2018"
 description = "Macros for the orga crate"

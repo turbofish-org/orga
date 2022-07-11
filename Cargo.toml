@@ -1,20 +1,18 @@
 [package]
 name = "orga"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Matt Bell <mappum@gmail.com>"]
-edition = "2018"
+edition = "2021"
 description = "State machine engine"
 license = "MIT"
 
 [dependencies]
-# abci2 = { git = "https://github.com/nomic-io/abci2", rev =
-# "096e7cf17802de216ce13e3a1db09c517fa60007", optional = true }
-abci2 = { path = "../abci2", optional = true }
-merk = { git = "https://github.com/nomic-io/merk", rev = "e9038a659e1ad3cf13720b57be88e2845d0d6a01", optional = true, default-features = false }
-tendermint-rpc = { version = "=0.23.6", features = ["http-client"], optional = true }
-tendermint = { version = "=0.23.6", optional = true }
-tendermint-proto = { version = "=0.23.6", optional = true }
-orga-macros = { path = "macros", version = "0.2.2" }
+abci2 = { git = "https://github.com/nomic-io/abci2", rev = "f8e218c4d7170b2cec85e21b923644871a44d1b0", optional = true }
+merk = { git = "https://github.com/nomic-io/merk", rev = "a2e46ed40c7b7eeaaed7a94654c18413728f7b8d", optional = true, default-features = false }
+tendermint-rpc = { version = "0.23.5", features = ["http-client"], optional = true }
+tendermint = { version = "0.23.5", optional = true }
+tendermint-proto = { version = "0.23.5", optional = true }
+orga-macros = { path = "macros", version = "0.2.4" }
 seq-macro = "0.1.4"
 log = "0.4.8"
 hex-literal = "0.3.3"
@@ -43,10 +41,10 @@ wasm-bindgen-futures = "0.4.28"
 wasm-bindgen = "0.2.78"
 hex = "0.4.3"
 base64 = "0.13.0"
-secp256k1 = { version = "0.21.2", features = ["bitcoin_hashes"] }
+secp256k1 = { version = "0.22.1", features = ["bitcoin_hashes"] }
 serde = { version = "1.0.133", features = ["derive"] }
 serde_json = "1.0.74"
-v1 = { git = "https://github.com/nomic-io/orga", branch = "legacy-v1", features = ["merk-full", "abci"], package = "orga", optional = true }
+v2 = { git = "https://github.com/nomic-io/orga", branch = "v2-legacy-main", features = ["merk-full", "abci"], package = "orga", optional = true }
 
 bincode = {version = "1.3.3", optional = true }
 ibc = {version = "0.14.1", optional = true }
@@ -66,8 +64,7 @@ serial_test = "0.5.1"
 features = ["abci", "merk/full"]
 
 [features]
-abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto", "prost", "is_executable", "home", "secp256k1/rand-std", "v1"]
-ibc2 = ["ibc", "ibc-proto", "prost-types", "bincode"]
+abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto", "prost", "is_executable", "home", "secp256k1/rand-std", "v2"]
 merk-verify = ["merk/verify"]
 merk-full = ["merk/full"]
 state-sync = []

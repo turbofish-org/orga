@@ -292,29 +292,29 @@ where
 {
     type Call = T::Call;
 
-    async fn call(&mut self, call: Self::Call) -> Result<()> {
+    async fn call(&self, call: Self::Call) -> Result<()> {
         self.parent.call(Call::Native(call)).await
     }
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Query, U: AsyncQuery<Query = T::Query, Response = SdkCompatPlugin<S, T>> + Clone, S>
+impl<T: Query, U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = std::rc::Rc<SdkCompatPlugin<S, T>>> + Clone, S>
     AsyncQuery for SdkCompatAdapter<T, U, S>
 {
     type Query = T::Query;
-    type Response = T;
+    type Response<'a> = std::rc::Rc<T>;
 
     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
     where
-        F: FnMut(Self::Response) -> Result<R>,
+        F: FnMut(Self::Response<'_>) -> Result<R>,
     {
-        self.parent.query(query, |plugin| check(plugin.inner)).await
+        self.parent.query(query, |plugin| check(std::rc::Rc::new(std::rc::Rc::try_unwrap(plugin).map_err(|_| ()).unwrap().inner))).await
     }
 }
 
 pub struct SdkCompatClient<T: Client<SdkCompatAdapter<T, U, S>>, U: Clone, S> {
     inner: T::Client,
-    parent: U,
+    _parent: U,
 }
 
 impl<T: Client<SdkCompatAdapter<T, U, S>>, U: Clone, S> Deref for SdkCompatClient<T, U, S> {
@@ -331,6 +331,9 @@ impl<T: Client<SdkCompatAdapter<T, U, S>>, U: Clone, S> DerefMut for SdkCompatCl
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::JsValue;
+
 impl<
         T: Client<SdkCompatAdapter<T, U, S>> + CallTrait,
         U: Clone + AsyncCall<Call = Call<T::Call>>,
@@ -338,9 +341,9 @@ impl<
     > SdkCompatClient<T, U, S>
 {
     #[cfg(target_arch = "wasm32")]
-    pub async fn send_sdk_tx(&mut self, sign_doc: sdk::SignDoc) -> Result<()> {
-        let mut signer = crate::plugins::signer::keplr::Signer::new();
-        let sig = signer.sign_sdk(sign_doc.clone()).await;
+    pub async fn send_sdk_tx(&mut self, sign_doc: sdk::SignDoc) -> std::result::Result<(), JsValue> {
+        let signer = crate::plugins::signer::keplr::Signer;
+        let sig = signer.sign_sdk(sign_doc.clone()).await?;
 
         let tx = sdk::Tx {
             msg: sign_doc.msgs,
@@ -348,7 +351,7 @@ impl<
             fee: sign_doc.fee,
             memo: sign_doc.memo,
         };
-        self.parent.call(Call::Sdk(tx)).await
+        self._parent.call(Call::Sdk(tx)).await.map_err(|e| e.to_string().into())
     }
 }
 
@@ -361,7 +364,7 @@ impl<S, T: Client<SdkCompatAdapter<T, U, S>>, U: Clone> Client<U> for SdkCompatP
                 inner: std::marker::PhantomData,
                 parent: parent.clone(),
             }),
-            parent,
+            _parent: parent,
         }
     }
 }
