@@ -7,49 +7,49 @@ description = "State machine engine"
 license = "MIT"
 
 [dependencies]
-abci2 = { git = "https://github.com/nomic-io/abci2", rev = "f8e218c4d7170b2cec85e21b923644871a44d1b0", optional = true }
+abci2 = { version = "0.1.3", optional = true }
 merk = { git = "https://github.com/nomic-io/merk", rev = "e9038a659e1ad3cf13720b57be88e2845d0d6a01", optional = true, default-features = false }
-tendermint-rpc = { version = "0.23.5", features = ["http-client"], optional = true }
-tendermint = { version = "0.23.5", optional = true }
-tendermint-proto = { version = "0.23.5", optional = true }
+tendermint-rpc = { version = "0.23.7", features = ["http-client"], optional = true }
+tendermint = { version = "0.23.7", optional = true }
+tendermint-proto = { version = "0.23.7", optional = true }
 orga-macros = { path = "macros", version = "0.2.2" }
-seq-macro = "0.1.4"
-log = "0.4.8"
-hex-literal = "0.3.3"
-sha2 = "0.9.5"
+seq-macro = "0.3.0"
+log = "0.4.17"
+hex-literal = "0.3.4"
+sha2 = "0.10.2"
 is_executable = { version = "1.0.1", optional = true }
-reqwest = {version = "0.11.4", features = ["blocking"]}
-flate2 = "1.0.20"
-tar = "0.4.33"
-ed = "0.3.0" 
-toml_edit = "0.2.0"
-prost = {version = "0.9", optional = true}
+reqwest = { version = "0.11.11", features = ["blocking"] }
+flate2 = "1.0.24"
+tar = "0.4.38"
+ed = "0.3.0"
+toml_edit = "0.14.4"
+prost = { version = "0.10.4", optional = true }
 home = { version = "0.5.3", optional = true }
-ed25519-dalek = "1"
-thiserror = "1.0.29"
-bech32 = "0.8.1"
-async-trait = "0.1.51"
+ed25519-dalek = "1.0.1"
+thiserror = "1.0.31"
+bech32 = "0.9.0"
+async-trait = "0.1.56"
 futures-lite = "1.12.0"
-num-rational = "0.4.0"
-num-traits = "0.2.14"
-rust_decimal = "1.18"
-ripemd = "0.1.0"
-web-sys = { version = "0.3.55", features = ["Window", "Storage"] }
-rust_decimal_macros = "1.18"
-js-sys = "0.3.55"
-wasm-bindgen-futures = "0.4.28"
-wasm-bindgen = "0.2.78"
+num-rational = "0.4.1"
+num-traits = "0.2.15"
+rust_decimal = "1.25.0"
+ripemd = "0.1.1"
+web-sys = { version = "0.3.58", features = ["Window", "Storage"] }
+rust_decimal_macros = "1.25.0"
+js-sys = "0.3.58"
+wasm-bindgen-futures = "0.4.31"
+wasm-bindgen = "0.2.81"
 hex = "0.4.3"
 base64 = "0.13.0"
-secp256k1 = { version = "0.21.2", features = ["bitcoin_hashes"] }
-serde = { version = "1.0.133", features = ["derive"] }
-serde_json = "1.0.74"
+secp256k1 = { version = "0.23.3", features = ["bitcoin_hashes"] }
+serde = { version = "1.0.139", features = ["derive"] }
+serde_json = "1.0.82"
 
 [dev-dependencies]
 tempdir = "0.3.7"
-tokio = { version = "1.11.0", features = ["rt", "macros"] }
+tokio = { version = "1.20.0", features = ["rt", "macros"] }
 mutagen = {git = "https://github.com/llogiq/mutagen"}
-serial_test = "0.5.1"
+serial_test = "0.8.0"
 
 [package.metadata.docs.rs]
 features = ["abci", "merk/full"]
