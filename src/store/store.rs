@@ -75,6 +75,23 @@ impl<S> Store<S> {
             store: self.store.clone(),
         }
     }
+
+    pub fn prefix(&self) -> &[u8] {
+        self.prefix.as_slice()
+    }
+
+    /// # Safety
+    /// Overrides the store's prefix, potentially causing key collisions.
+    pub unsafe fn with_prefix(&self, prefix: Vec<u8>) -> Self {
+        let mut store = self.clone();
+        store.prefix = prefix;
+
+        store
+    }
+
+    pub fn backing_store(&self) -> Shared<S> {
+        self.store.clone()
+    }
 }
 
 impl<S: Read> Read for Store<S> {

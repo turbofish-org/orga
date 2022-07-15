@@ -76,7 +76,8 @@ impl ConnectionReader for Ibc {
     }
 
     fn commitment_prefix(&self) -> CommitmentPrefix {
-        todo!()
+        panic!("Commitment prefix");
+        self.lunchbox.0.prefix().to_vec().try_into().unwrap()
     }
 
     fn client_consensus_state(
@@ -104,7 +105,10 @@ impl ConnectionKeeper for Ibc {
     ) -> Result<()> {
         self.connections
             .ends
-            .insert(connection_id.into(), connection_end.clone().into())?;
+            .insert(connection_id.clone().into(), connection_end.clone().into())?;
+
+        self.lunchbox
+            .insert_connection(connection_id, connection_end.clone())?;
 
         Ok(())
     }

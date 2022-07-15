@@ -322,18 +322,24 @@ where
     }
 
     fn query(&self, merk_store: Shared<MerkStore>, req: RequestQuery) -> Result<ResponseQuery> {
-        let backing_store: BackingStore = merk_store.clone().into();
-        let store_height = merk_store.borrow().height()?;
-        let store = Store::new(backing_store.clone());
-        let state_bytes = store
-            .get(&[])?
-            .ok_or_else(|| crate::Error::Query("Store is empty".to_string()))?;
-        let data: <ABCIPlugin<A> as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
-        let state = <ABCIPlugin<A> as State>::create(store, data)?;
+        let create_state = |store| {
+            let store = Store::new(store);
+            let state_bytes = store
+                .get(&[])?
+                .ok_or_else(|| crate::Error::Query("Store is empty".to_string()))?;
+            let data: <ABCIPlugin<A> as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
+            <ABCIPlugin<A> as State>::create(store, data)
+        };
 
         if !req.path.is_empty() {
+            let store = BackingStore::Merk(merk_store);
+            let state = create_state(store)?;
             return state.abci_query(&req);
         }
+
+        let backing_store: BackingStore = merk_store.clone().into();
+        let store_height = merk_store.borrow().height()?;
+        let state = create_state(backing_store.clone())?;
 
         // Check which keys are accessed by the query and build a proof
         let query_bytes = req.data;
@@ -343,7 +349,7 @@ where
         state.query(query)?;
 
         let proof_builder = backing_store.into_proof_builder()?;
-        let root_hash = merk_store.borrow().root_hash()?;
+        let root_hash = merk_store.borrow().merk().root_hash();
         let proof_bytes = proof_builder.build()?;
 
         // TODO: we shouldn't need to include the root hash in the response

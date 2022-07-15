@@ -20,6 +20,7 @@ use ibc::core::ics02_client::context::{ClientKeeper, ClientReader};
 use ibc::core::ics02_client::error::Error;
 use ibc::core::ics23_commitment::commitment::CommitmentRoot;
 use ibc::core::ics24_host::identifier::ClientId;
+use ibc::core::ics24_host::path::ClientStatePath;
 use ibc::core::ics24_host::path::{ClientConsensusStatePath, ClientTypePath};
 use ibc::core::ics24_host::Path;
 use ibc::timestamp::Timestamp;
@@ -56,6 +57,16 @@ impl Lunchbox {
         })
         .into_bytes();
         self.0.put(key, client_consensus_state.into().encode()?)
+    }
+
+    fn insert_client_state<T: Into<ProtobufAdapter<AnyClientState>>>(
+        &mut self,
+        client_id: ClientId,
+        state: T,
+    ) -> crate::Result<()> {
+        let key = Path::ClientState(ClientStatePath(client_id)).into_bytes();
+
+        self.0.put(key, state.into().encode()?)
     }
 }
 
@@ -159,7 +170,9 @@ impl ClientKeeper for Ibc {
 
         self.client
             .client_state
-            .insert(client_id.into(), client_state.into())?;
+            .insert(client_id.clone().into(), client_state.clone().into())?;
+
+        self.lunchbox.insert_client_state(client_id, client_state)?;
 
         Ok(())
     }

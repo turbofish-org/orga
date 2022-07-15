@@ -47,7 +47,7 @@ fn create_proof<'a>(
     mut left_neighbor: Option<ExistenceProof>,
     mut right_neighbor: Option<ExistenceProof>,
 ) -> Result<Proof> {
-    let existence_proof = |path, tree: &Tree| ExistenceProof {
+    let existence_proof = |path: Vec<InnerOp>, tree: &Tree| ExistenceProof {
         key: tree.key().to_vec(),
         value: tree.value().to_vec(),
         leaf: Some(leaf_op()),
@@ -56,6 +56,7 @@ fn create_proof<'a>(
 
     if key == node.tree().key() {
         path.push(inner_op(&node, Branch::KV));
+        path.reverse();
         let proof = existence_proof(path, node.tree());
         return Ok(Proof::Exist(proof));
     }

@@ -10,12 +10,14 @@ use crate::plugins::BeginBlockCtx;
 use crate::plugins::Events;
 use crate::query::Query;
 use crate::state::State;
-use crate::Result;
+use crate::{Error, Result};
 use client::ClientStore;
 use encoding::*;
 use ibc::applications::transfer::context::Ics20Context;
 use ibc::core::ics02_client::height::Height;
 use ibc::core::ics26_routing::handler::dispatch;
+use ics23::LeafOp;
+use sha2::Sha512_256;
 use tendermint_proto::abci::{EventAttribute, RequestQuery, ResponseQuery};
 use tendermint_proto::Protobuf;
 
@@ -33,7 +35,7 @@ use crate::store::Store;
 pub use grpc::start_grpc;
 pub use routing::Ics26Message;
 use tendermint_proto::abci::Event;
-use tendermint_proto::crypto::ProofOps;
+use tendermint_proto::crypto::{ProofOp, ProofOps};
 
 use self::connection::ConnectionStore;
 
@@ -42,11 +44,25 @@ pub struct Ibc {
     pub client: ClientStore,
     pub connections: ConnectionStore,
     height: u64,
-    lunchbox: Lunchbox,
+    pub(super) lunchbox: Lunchbox,
 }
 
-#[derive(State)]
-pub struct Lunchbox(Store);
+pub struct Lunchbox(pub(super) Store);
+
+impl State for Lunchbox {
+    type Encoding = ();
+    fn create(store: Store, data: Self::Encoding) -> Result<Self> {
+        Ok(unsafe { Self(store.with_prefix(vec![])) })
+    }
+
+    fn flush(self) -> Result<Self::Encoding> {
+        Ok(())
+    }
+}
+
+impl From<Lunchbox> for () {
+    fn from(_: Lunchbox) -> Self {}
+}
 
 impl Ibc {
     #[call]
@@ -135,23 +151,90 @@ impl AbciQuery for Ibc {
             .map_err(|_| crate::Error::Ibc(format!("Invalid path: {}", path)))?;
 
         println!(
-            "formatted path: {}, is provable: {}",
+            "formatted path: {}, is provable: {}, wants proof: {}",
             path,
-            path.is_provable()
+            path.is_provable(),
+            req.prove,
         );
-        if path.is_provable() && !matches!(path, Path::ClientState(_)) {
+        if path.is_provable() {
             let value_bytes = self
                 .lunchbox
                 .0
-                .get(path.into_bytes().as_slice())?
+                .get(path.clone().into_bytes().as_slice())?
                 .unwrap_or_default();
+
+            dbg!(&req.data);
+            let key = path.clone().into_bytes();
+
+            use prost::Message;
+
+            let mut outer_proof_bytes = vec![];
+            let inner_root_hash = self
+                .lunchbox
+                .0
+                .backing_store()
+                .borrow()
+                .use_merkstore(|store| store.merk().root_hash());
+
+            ics23::CommitmentProof {
+                proof: Some(ics23::commitment_proof::Proof::Exist(
+                    ics23::ExistenceProof {
+                        key: b"ibc".to_vec(),
+                        value: inner_root_hash.to_vec(),
+                        leaf: Some(LeafOp {
+                            hash: 6,
+                            length: 0,
+                            prehash_key: 0,
+                            prehash_value: 0,
+                            prefix: vec![],
+                        }),
+                        path: vec![],
+                    },
+                )),
+            }
+            .encode(&mut outer_proof_bytes)
+            .map_err(|_| Error::Ibc("Failed to create outer proof".into()))?;
+
+            let mut proof_bytes = vec![];
+            self.lunchbox
+                .0
+                .backing_store()
+                .borrow()
+                .use_merkstore(|store| dbg!(store.create_ics23_proof(key.as_slice())))?
+                .encode(&mut proof_bytes)
+                .map_err(|_| Error::Ibc("Failed to create proof".into()))?;
+
+            use crate::abci::ABCIStore;
+            let outer_app_hash = self
+                .lunchbox
+                .0
+                .backing_store()
+                .borrow()
+                .use_merkstore(|store| store.root_hash())?;
+
+            dbg!(&value_bytes.len());
+            dbg!(&proof_bytes.len());
+
             return Ok(ResponseQuery {
                 code: 0,
                 key: req.data.clone(),
                 codespace: "".to_string(),
                 log: "".to_string(),
                 value: value_bytes,
-                proof_ops: Some(ProofOps::default()),
+                proof_ops: Some(ProofOps {
+                    ops: vec![
+                        ProofOp {
+                            r#type: "".to_string(),
+                            key: path.into_bytes(),
+                            data: proof_bytes,
+                        },
+                        ProofOp {
+                            r#type: "".to_string(),
+                            key: b"ibc".to_vec(),
+                            data: outer_proof_bytes,
+                        },
+                    ],
+                }),
                 ..Default::default()
             });
         }
