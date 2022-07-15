@@ -31,8 +31,8 @@ impl MerkStore {
                 child_size: 32,
                 empty_child: vec![0; 32],
                 hash: HashOp::Sha512256.into(),
-                max_prefix_length: 64,
-                min_prefix_length: 0,
+                max_prefix_length: 65,
+                min_prefix_length: 1,
             }),
             max_depth: 0,
             min_depth: 0,
@@ -47,16 +47,18 @@ fn create_proof<'a>(
     mut left_neighbor: Option<ExistenceProof>,
     mut right_neighbor: Option<ExistenceProof>,
 ) -> Result<Proof> {
-    let existence_proof = |path: Vec<InnerOp>, tree: &Tree| ExistenceProof {
-        key: tree.key().to_vec(),
-        value: tree.value().to_vec(),
-        leaf: Some(leaf_op()),
-        path,
+    let existence_proof = |mut path: Vec<InnerOp>, tree: &Tree| {
+        path.reverse();
+        ExistenceProof {
+            key: tree.key().to_vec(),
+            value: tree.value().to_vec(),
+            leaf: Some(leaf_op()),
+            path,
+        }
     };
 
     if key == node.tree().key() {
         path.push(inner_op(&node, Branch::KV));
-        path.reverse();
         let proof = existence_proof(path, node.tree());
         return Ok(Proof::Exist(proof));
     }
@@ -78,16 +80,9 @@ fn create_proof<'a>(
     let right_op = inner_op(&node, Branch::Right);
     let maybe_child = node.walk(left)?;
 
-    if maybe_child.is_some() {
+    if let Some(child) = maybe_child {
         path.push(if left { left_op } else { right_op });
-
-        return create_proof(
-            maybe_child.unwrap(),
-            key,
-            path,
-            left_neighbor,
-            right_neighbor,
-        );
+        return create_proof(child, key, path, left_neighbor, right_neighbor);
     }
 
     let proof = NonExistenceProof {
@@ -120,7 +115,7 @@ fn inner_op<'a>(node: &RefWalker<MerkSource<'a>>, branch: Branch) -> InnerOp {
 
     InnerOp {
         hash: HashOp::Sha512256.into(),
-        prefix,
+        prefix: concat(vec![1], prefix),
         suffix,
     }
 }
@@ -129,8 +124,39 @@ fn leaf_op() -> LeafOp {
     LeafOp {
         hash: HashOp::Sha512256.into(),
         length: LengthOp::Fixed32Little.into(),
-        prefix: vec![],
+        prefix: vec![0],
         prehash_key: HashOp::NoHash.into(),
         prehash_value: HashOp::NoHash.into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::merk::MerkStore;
+    use crate::store::Write;
+
+    #[test]
+    fn proof() {
+        let path = "/tmp/ics23-proof-test";
+        let mut store = MerkStore::new(path.clone().into());
+
+        store.put(b"foo".to_vec(), b"1".to_vec()).unwrap();
+        store.put(b"bar".to_vec(), b"2".to_vec()).unwrap();
+        store.put(b"baz".to_vec(), b"3".to_vec()).unwrap();
+        store.write(vec![]).unwrap();
+
+        let proof = store.create_ics23_proof(b"foo").unwrap();
+        let root_hash = store.merk().root_hash().to_vec();
+
+        drop(store);
+        merk::Merk::destroy(merk::Merk::open(path).unwrap()).unwrap();
+
+        assert!(ics23::verify_membership(
+            &proof,
+            &MerkStore::ics23_spec(),
+            &root_hash,
+            b"foo",
+            b"1"
+        ));
     }
 }

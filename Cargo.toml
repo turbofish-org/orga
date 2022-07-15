@@ -7,8 +7,8 @@ description = "State machine engine"
 license = "MIT"
 
 [dependencies]
-abci2 = {  path = "../abci2", optional = true }
-merk = { git = "https://github.com/nomic-io/merk", rev = "86ffbd76b80e6bb9e72a60fbd25c606874cacfd2", optional = true, default-features = false }
+abci2 = { path = "../abci2", optional = true }
+merk = { git = "https://github.com/nomic-io/merk", rev = "b555dff70994f0d556843bdcd9483accf73968d4", optional = true, default-features = false }
 tendermint-rpc = { version = "=0.23.7", features = ["http-client"], optional = true }
 tendermint = { version = "=0.23.7", optional = true }
 tendermint-proto = { version = "=0.23.7", optional = true }
@@ -44,7 +44,6 @@ base64 = "0.13.0"
 secp256k1 = { version = "0.22.1", features = ["bitcoin_hashes"] }
 serde = { version = "1.0.133", features = ["derive"] }
 serde_json = "1.0.82"
-
 bincode = {version = "1.3.3", optional = true }
 ibc = {version = "=0.16.0", optional = true }
 ibc-proto = { version = "=0.19.0", default-features = false, features = ["server"], optional = true }
