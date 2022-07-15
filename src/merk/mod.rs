@@ -4,6 +4,8 @@ mod client;
 pub mod store;
 #[cfg(feature = "merk-full")]
 mod proofbuilder;
+#[cfg(feature = "merk-full")]
+mod ics23;
 
 pub use backingstore::{ABCIPrefixedProofStore, BackingStore};
 pub use client::Client;
