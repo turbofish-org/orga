@@ -1,14 +1,14 @@
-use cosmos_sdk_proto::cosmos::base::tendermint::v1beta1::service_server::Service as HealthService;
-use cosmos_sdk_proto::cosmos::base::tendermint::v1beta1::{
-    GetBlockByHeightRequest, GetBlockByHeightResponse, GetLatestBlockRequest,
-    GetLatestBlockResponse, GetLatestValidatorSetRequest, GetLatestValidatorSetResponse,
-    GetNodeInfoRequest, GetNodeInfoResponse, GetSyncingRequest, GetSyncingResponse,
-    GetValidatorSetByHeightRequest, GetValidatorSetByHeightResponse, Module as VersionInfoModule,
-    VersionInfo,
+use ibc_proto::cosmos::base::tendermint::v1beta1::{
+    service_server::Service as HealthService, GetBlockByHeightRequest, GetBlockByHeightResponse,
+    GetLatestBlockRequest, GetLatestBlockResponse, GetLatestValidatorSetRequest,
+    GetLatestValidatorSetResponse, GetNodeInfoRequest, GetNodeInfoResponse, GetSyncingRequest,
+    GetSyncingResponse, GetValidatorSetByHeightRequest, GetValidatorSetByHeightResponse,
+    Module as VersionInfoModule, VersionInfo,
 };
 
 use super::Ibc;
 use crate::client::{AsyncCall, AsyncQuery, Call};
+use std::rc::Rc;
 use tonic::{Request, Response, Status};
 
 #[tonic::async_trait]
@@ -17,7 +17,7 @@ where
     T: Clone + Send + Sync + 'static,
     // T: AsyncCall<Call = <Ibc as Call>::Call>,
     T: AsyncQuery,
-    T: for<'a> AsyncQuery<Response<'a> = Ibc>,
+    T: for<'a> AsyncQuery<Response<'a> = Rc<Ibc>>,
 {
     async fn get_node_info(
         &self,
@@ -56,6 +56,7 @@ where
         &self,
         _request: Request<GetLatestValidatorSetRequest>,
     ) -> Result<Response<GetLatestValidatorSetResponse>, Status> {
+        println!("grpc get latest validator set");
         unimplemented!()
     }
 
@@ -63,6 +64,7 @@ where
         &self,
         _request: Request<GetValidatorSetByHeightRequest>,
     ) -> Result<Response<GetValidatorSetByHeightResponse>, Status> {
+        println!("grpc get validator set by height");
         unimplemented!()
     }
 }

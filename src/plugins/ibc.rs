@@ -11,6 +11,7 @@ use prost::Message;
 use std::convert::TryFrom;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
+use std::rc::Rc;
 use tendermint_proto::abci::{RequestQuery, ResponseQuery};
 
 pub struct IbcPlugin<T> {
@@ -57,8 +58,6 @@ pub enum Call<T> {
     Inner(T),
     Ics26(Ics26Message),
 }
-
-unsafe impl<T> Send for Call<T> {}
 
 impl<T: Encode> Encode for Call<T> {
     fn encoding_length(&self) -> ed::Result<usize> {
@@ -110,7 +109,7 @@ where
     }
 }
 
-#[derive(Encode)]
+#[derive(Encode, Decode)]
 pub enum Query<T: QueryTrait> {
     Inner(T::Query),
     Ibc(<Ibc as QueryTrait>::Query),
@@ -132,25 +131,26 @@ pub enum Query<T: QueryTrait> {
 //     }
 // }
 
-impl<T: QueryTrait> Decode for Query<T> {
-    fn decode<R: std::io::Read>(mut reader: R) -> ed::Result<Self> {
-        println!("decoding query");
-        let mut bytes = vec![];
-        reader.read_to_end(&mut bytes)?;
+// impl<T: QueryTrait> Decode for Query<T> {
+//     fn decode<R: std::io::Read>(mut reader: R) -> ed::Result<Self> {
+//         println!("decoding query");
+//         let mut bytes = vec![];
+//         reader.read_to_end(&mut bytes)?;
 
-        if let Ok(query) = <Ibc as QueryTrait>::Query::decode(bytes.clone().as_slice()) {
-            Ok(Query::Ibc(query))
-        } else {
-            let native = T::Query::decode(bytes.as_slice())?;
-            Ok(Query::Inner(native))
-        }
-    }
-}
+//         if let Ok(query) = <Ibc as QueryTrait>::Query::decode(bytes.clone().as_slice()) {
+//             Ok(Query::Ibc(query))
+//         } else {
+//             let native = T::Query::decode(bytes.as_slice())?;
+//             Ok(Query::Inner(native))
+//         }
+//     }
+// }
 
 impl<T: QueryTrait> QueryTrait for IbcPlugin<T> {
     type Query = Query<T>;
 
     fn query(&self, query: Self::Query) -> Result<()> {
+        println!("reached ibc plugin query");
         match query {
             Query::Inner(inner_query) => self.inner.query(inner_query),
             Query::Ibc(ibc_query) => self.ibc.query(ibc_query),
@@ -172,8 +172,6 @@ impl<T, U: Clone> Clone for InnerAdapter<T, U> {
     }
 }
 
-unsafe impl<T, U: Send + Clone> Send for InnerAdapter<T, U> {}
-
 #[async_trait::async_trait(?Send)]
 impl<T: CallTrait, U: AsyncCall<Call = Call<T::Call>> + Clone> AsyncCall for InnerAdapter<T, U>
 where
@@ -190,18 +188,24 @@ where
 #[async_trait::async_trait(?Send)]
 impl<
         T: QueryTrait + State,
-        U: for<'a> AsyncQuery<Query = Query<T>, Response<'a> = IbcPlugin<T>> + Clone,
+        U: for<'a> AsyncQuery<Query = Query<T>, Response<'a> = Rc<IbcPlugin<T>>> + Clone,
     > AsyncQuery for InnerAdapter<T, U>
 {
     type Query = T::Query;
-    type Response<'a> = T;
+    type Response<'a> = Rc<T>;
 
     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
     where
         F: FnMut(Self::Response<'_>) -> Result<R>,
     {
         self.parent
-            .query(Query::Inner(query), |plugin| check(plugin.inner))
+            .query(Query::Inner(query), |plugin| {
+                check(Rc::new(
+                    Rc::try_unwrap(plugin)
+                        .map_err(|_| orga::Error::Ibc("cannot unwrap ibc plugin inner".into()))?
+                        .inner,
+                ))
+            })
             .await
     }
 }
@@ -219,8 +223,6 @@ impl<T, U: Clone> Clone for IbcAdapter<T, U> {
         }
     }
 }
-
-unsafe impl<T, U: Send + Clone> Send for IbcAdapter<T, U> {}
 
 #[async_trait::async_trait(?Send)]
 impl<T: CallTrait, U: AsyncCall<Call = Call<T::Call>> + Clone> AsyncCall for IbcAdapter<T, U>
@@ -240,18 +242,24 @@ where
 #[async_trait::async_trait(?Send)]
 impl<
         T: QueryTrait + State,
-        U: for<'a> AsyncQuery<Query = Query<T>, Response<'a> = IbcPlugin<T>> + Clone,
+        U: for<'a> AsyncQuery<Query = Query<T>, Response<'a> = Rc<IbcPlugin<T>>> + Clone,
     > AsyncQuery for IbcAdapter<T, U>
 {
     type Query = <Ibc as QueryTrait>::Query;
-    type Response<'a> = Ibc;
+    type Response<'a> = Rc<Ibc>;
 
     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
     where
         F: FnMut(Self::Response<'_>) -> Result<R>,
     {
         self.parent
-            .query(Query::Ibc(query), |plugin| check(plugin.ibc))
+            .query(Query::Ibc(query), |plugin| {
+                check(Rc::new(
+                    Rc::try_unwrap(plugin)
+                        .map_err(|_| orga::Error::Ibc("cannot unwrap ibc plugin".into()))?
+                        .ibc,
+                ))
+            })
             .await
     }
 }
@@ -339,6 +347,7 @@ mod abci {
         fn abci_query(&self, req: &RequestQuery) -> Result<ResponseQuery> {
             // TODO: ABCI queries should also be forwarded to the inner app if
             // the path isn't an IBC-related query.
+            println!("got raw abci_query in IBC plugin");
             self.ibc.abci_query(req)
         }
     }

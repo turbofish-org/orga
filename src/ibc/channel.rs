@@ -3,11 +3,10 @@ use ibc::core::ics02_client::client_consensus::AnyConsensusState;
 use ibc::core::ics02_client::client_state::AnyClientState;
 use ibc::core::ics03_connection::connection::ConnectionEnd;
 use ibc::core::ics04_channel::channel::ChannelEnd;
+use ibc::core::ics04_channel::commitment::{AcknowledgementCommitment, PacketCommitment};
 use ibc::core::ics04_channel::context::{ChannelKeeper, ChannelReader};
 use ibc::core::ics04_channel::error::Error;
 use ibc::core::ics04_channel::packet::{Receipt, Sequence};
-use ibc::core::ics05_port::capabilities::Capability;
-use ibc::core::ics05_port::capabilities::ChannelCapability;
 use ibc::core::ics24_host::identifier::{ChannelId, ClientId, ConnectionId, PortId};
 use ibc::timestamp::Timestamp;
 use ibc::Height;
@@ -37,10 +36,6 @@ impl ChannelReader for Ibc {
         todo!()
     }
 
-    fn authenticated_capability(&self, port_id: &PortId) -> Result<ChannelCapability, Error> {
-        todo!()
-    }
-
     fn get_next_sequence_send(
         &self,
         port_channel_id: &(PortId, ChannelId),
@@ -62,7 +57,10 @@ impl ChannelReader for Ibc {
         todo!()
     }
 
-    fn get_packet_commitment(&self, key: &(PortId, ChannelId, Sequence)) -> Result<String, Error> {
+    fn get_packet_commitment(
+        &self,
+        key: &(PortId, ChannelId, Sequence),
+    ) -> Result<PacketCommitment, Error> {
         todo!()
     }
 
@@ -73,11 +71,11 @@ impl ChannelReader for Ibc {
     fn get_packet_acknowledgement(
         &self,
         key: &(PortId, ChannelId, Sequence),
-    ) -> Result<String, Error> {
+    ) -> Result<AcknowledgementCommitment, Error> {
         todo!()
     }
 
-    fn hash(&self, value: String) -> String {
+    fn hash(&self, value: Vec<u8>) -> Vec<u8> {
         todo!()
     }
 
@@ -101,20 +99,6 @@ impl ChannelReader for Ibc {
         todo!()
     }
 
-    fn lookup_module_by_channel(
-        &self,
-        channel_id: &ChannelId,
-        port_id: &PortId,
-    ) -> Result<
-        (
-            ibc::core::ics26_routing::context::ModuleId,
-            ChannelCapability,
-        ),
-        Error,
-    > {
-        todo!()
-    }
-
     fn max_expected_time_per_block(&self) -> std::time::Duration {
         todo!()
     }
@@ -128,9 +112,7 @@ impl ChannelKeeper for Ibc {
     fn store_packet_commitment(
         &mut self,
         key: (PortId, ChannelId, Sequence),
-        timestamp: Timestamp,
-        heigh: Height,
-        data: Vec<u8>,
+        commitment: PacketCommitment,
     ) -> Result<(), Error> {
         todo!()
     }
@@ -153,7 +135,7 @@ impl ChannelKeeper for Ibc {
     fn store_packet_acknowledgement(
         &mut self,
         key: (PortId, ChannelId, Sequence),
-        ack: Vec<u8>,
+        ack: AcknowledgementCommitment,
     ) -> Result<(), Error> {
         todo!()
     }

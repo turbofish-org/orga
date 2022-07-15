@@ -8,14 +8,16 @@ use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
 use crate::plugins::BeginBlockCtx;
 use crate::plugins::Events;
-use crate::query::Query as QueryTrait;
+use crate::query::Query;
 use crate::state::State;
 use crate::Result;
 use client::ClientStore;
 use encoding::*;
-use ibc::applications::ics20_fungible_token_transfer::context::Ics20Context;
+use ibc::applications::transfer::context::Ics20Context;
+use ibc::core::ics02_client::height::Height;
 use ibc::core::ics26_routing::handler::dispatch;
 use tendermint_proto::abci::{EventAttribute, RequestQuery, ResponseQuery};
+use tendermint_proto::Protobuf;
 
 mod channel;
 mod client;
@@ -27,14 +29,24 @@ mod port;
 mod routing;
 
 mod grpc;
+use crate::store::Store;
 pub use grpc::start_grpc;
 pub use routing::Ics26Message;
 use tendermint_proto::abci::Event;
+use tendermint_proto::crypto::ProofOps;
 
-#[derive(State, Call, Client)]
+use self::connection::ConnectionStore;
+
+#[derive(State, Call, Client, Query)]
 pub struct Ibc {
-    client: ClientStore,
+    pub client: ClientStore,
+    pub connections: ConnectionStore,
+    height: u64,
+    lunchbox: Lunchbox,
 }
+
+#[derive(State)]
+pub struct Lunchbox(Store);
 
 impl Ibc {
     #[call]
@@ -68,61 +80,113 @@ impl Ibc {
 
         Ok(())
     }
+
+    // #[query]
+    // pub fn client_states(&self) -> Result<()> {
+    //     println!("queried client states with query method");
+    //     let client_states = self.client.query_client_states()?;
+    //     Ok(())
+    // }
 }
 
-#[derive(Encode)]
-pub enum Query {
-    ClientStates,
-}
+// #[derive(Encode)]
+// pub enum Query {
+//     ClientStates,
+// }
 
-impl Decode for Query {
-    fn decode<R: std::io::Read>(mut reader: R) -> ed::Result<Self> {
-        println!("decoding IBC query");
-        let mut bytes = vec![];
-        reader.read_to_end(&mut bytes)?;
-        let path = Path::try_from(bytes.as_slice()).map_err(|_| ed::Error::UnexpectedByte(0))?;
-        dbg!(&path);
+// impl Decode for Query {
+//     fn decode<R: std::io::Read>(mut reader: R) -> ed::Result<Self> {
+//         println!("decoding IBC query");
+//         let mut bytes = vec![];
+//         reader.read_to_end(&mut bytes)?;
+//         let path = Path::try_from(bytes.as_slice()).map_err(|_| ed::Error::UnexpectedByte(0))?;
+//         dbg!(&path);
 
-        todo!()
-    }
-}
+//         todo!()
+//     }
+// }
 
-impl QueryTrait for Ibc {
-    type Query = Query;
+// impl QueryTrait for Ibc {
+//     type Query = Query;
 
-    fn query(&self, query: Self::Query) -> Result<()> {
-        todo!()
-    }
-}
+//     fn query(&self, query: Self::Query) -> Result<()> {
+//         todo!()
+//     }
+// }
 
 impl BeginBlock for Ibc {
     fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
+        self.height = ctx.height;
         self.client.begin_block(ctx)
     }
 }
 
+use crate::store::Read;
 impl AbciQuery for Ibc {
     fn abci_query(&self, req: &RequestQuery) -> Result<ResponseQuery> {
         println!("reached ibc module's abci query handler");
-        dbg!(&req);
         use ibc::core::ics02_client::context::ClientReader;
         use ibc::core::ics24_host::path::ClientStatePath;
         use ibc::core::ics24_host::Path;
         let path =
             from_utf8(&req.data).map_err(|_| crate::Error::Ibc("Invalid path encoding".into()))?;
-        // let path =
-        dbg!(&path);
         let path: Path = path
             .parse()
             .map_err(|_| crate::Error::Ibc(format!("Invalid path: {}", path)))?;
 
-        dbg!(&path);
-        if let Path::ClientState(ClientStatePath(client_id)) = path {
-            let client_state = self.client_state(&client_id).unwrap();
-            dbg!(client_state);
+        println!(
+            "formatted path: {}, is provable: {}",
+            path,
+            path.is_provable()
+        );
+        if path.is_provable() && !matches!(path, Path::ClientState(_)) {
+            let value_bytes = self
+                .lunchbox
+                .0
+                .get(path.into_bytes().as_slice())?
+                .unwrap_or_default();
+            return Ok(ResponseQuery {
+                code: 0,
+                key: req.data.clone(),
+                codespace: "".to_string(),
+                log: "".to_string(),
+                value: value_bytes,
+                proof_ops: Some(ProofOps::default()),
+                ..Default::default()
+            });
         }
-        todo!()
+
+        let value_bytes = match path {
+            Path::ClientState(ClientStatePath(client_id)) => {
+                let client_state = self.client_state(&client_id).unwrap();
+                dbg!(&client_state);
+                client_state.encode_vec().unwrap()
+            }
+
+            Path::ClientConsensusState(data) => {
+                let client_consensus_state = self
+                    .consensus_state(
+                        &data.client_id,
+                        Height::new(data.epoch, data.height).unwrap(),
+                    )
+                    .unwrap();
+                dbg!(&client_consensus_state);
+                client_consensus_state.encode_vec().unwrap()
+            }
+
+            _ => todo!(),
+        };
+
+        Ok(ResponseQuery {
+            code: 0,
+            key: req.data.clone(),
+            codespace: "".to_string(),
+            log: "".to_string(),
+            value: value_bytes,
+            proof_ops: Some(ProofOps::default()),
+            ..Default::default()
+        })
     }
 }
 
-impl Ics20Context for Ibc {}
+// impl Ics20Context for Ibc {}

@@ -1,10 +1,17 @@
 use std::convert::TryInto;
+use std::ops::Bound;
 
-use super::{Adapter, Ibc, ProtobufAdapter};
+use super::{Adapter, Ibc, Lunchbox, ProtobufAdapter};
 use crate::abci::BeginBlock;
-use crate::collections::{map::Ref, Deque, Entry, EntryMap, Map};
+use crate::call::Call;
+use crate::client::Client;
+use crate::collections::Map;
+use crate::collections::Next;
+use crate::encoding::Encode;
 use crate::plugins::BeginBlockCtx;
+use crate::query::Query;
 use crate::state::State;
+use crate::store::Write;
 use ibc::clients::ics07_tendermint::consensus_state::ConsensusState;
 use ibc::core::ics02_client::client_consensus::AnyConsensusState;
 use ibc::core::ics02_client::client_state::AnyClientState;
@@ -13,10 +20,12 @@ use ibc::core::ics02_client::context::{ClientKeeper, ClientReader};
 use ibc::core::ics02_client::error::Error;
 use ibc::core::ics23_commitment::commitment::CommitmentRoot;
 use ibc::core::ics24_host::identifier::ClientId;
+use ibc::core::ics24_host::path::{ClientConsensusStatePath, ClientTypePath};
+use ibc::core::ics24_host::Path;
 use ibc::timestamp::Timestamp;
 use ibc::Height;
-use ibc_proto::google::protobuf::Any;
-use ibc_proto::ibc::lightclients::tendermint::v1::ConsensusState as TmConsensusState;
+use ibc_proto::ibc::core::client::v1::ConsensusStateWithHeight;
+use ibc_proto::ibc::core::client::v1::IdentifiedClientState;
 
 impl From<crate::Error> for Error {
     fn from(_err: crate::Error) -> Error {
@@ -24,63 +33,100 @@ impl From<crate::Error> for Error {
     }
 }
 
-// #[derive(State)]
-// pub struct ConsensusStateMap {
-//     consensus_epochs: Map<u64, Map<u64, ProtobufAdapter<AnyConsensusState>>>,
-// }
+impl Lunchbox {
+    fn insert_client_type<T: Into<Adapter<ClientType>>>(
+        &mut self,
+        client_id: ClientId,
+        client_type: T,
+    ) -> crate::Result<()> {
+        let key = Path::ClientType(ClientTypePath(client_id)).into_bytes();
+        self.0.put(key, client_type.into().encode()?)
+    }
 
-// impl ConsensusStateMap {
-//     pub fn get(&self, height: Height) -> Result<AnyConsensusState, Error> {
-//         let Height {
-//             revision_height,
-//             revision_number,
-//         } = height;
-
-//         let states_for_epoch = self.consensus_epochs.get(revision_number).map(
-//             |maybe_states| match maybe_states {
-//                 Some(states) => Ok(states),
-//                 None => Err(Error::implementation_specific()),
-//             },
-//         )??;
-
-//         states_for_epoch
-//             .get(revision_height)
-//             .map(|maybe_state| match maybe_state {
-//                 Some(state) => Ok(state.clone()),
-//                 None => Err(Error::implementation_specific()),
-//             })?
-//     }
-
-//     pub fn insert(
-//         &mut self,
-//         height: Height,
-//         consensus_state: AnyConsensusState,
-//     ) -> Result<(), Error> {
-//         let Height {
-//             revision_height,
-//             revision_number,
-//         } = height;
-
-//         let mut states_for_epoch = self
-//             .consensus_epochs
-//             .entry(revision_number)?
-//             .or_insert_default()?;
-
-//         states_for_epoch.insert(revision_height, consensus_state.into())?;
-
-//         Ok(())
-//     }
-// }
+    fn insert_client_consensus_state<T: Into<ProtobufAdapter<AnyConsensusState>>>(
+        &mut self,
+        client_id: ClientId,
+        client_height: Height,
+        client_consensus_state: T,
+    ) -> crate::Result<()> {
+        let key = Path::ClientConsensusState(ClientConsensusStatePath {
+            client_id,
+            epoch: client_height.revision_number(),
+            height: client_height.revision_height(),
+        })
+        .into_bytes();
+        self.0.put(key, client_consensus_state.into().encode()?)
+    }
+}
 
 #[derive(State)]
+pub struct ConsensusStateMap {
+    states: Map<Adapter<Height>, ProtobufAdapter<AnyConsensusState>>,
+    prev_height: Map<Adapter<Height>, Adapter<Height>>,
+    latest_height: Map<u8, Adapter<Height>>,
+}
+
+impl ConsensusStateMap {
+    fn insert(&mut self, height: Height, consensus_state: AnyConsensusState) -> crate::Result<()> {
+        let next_height = self.next_height(height)?;
+        if let Some(next_height) = next_height {
+            if let Some(mut next_prev_height) = self.prev_height.get_mut(next_height.into())? {
+                let old_next_prev_height = next_prev_height.clone();
+                *next_prev_height = height.into();
+                self.prev_height
+                    .insert(height.into(), old_next_prev_height)?;
+            }
+        } else {
+            let old_latest = self.latest_height.get(0)?;
+            if let Some(old_latest) = old_latest {
+                self.prev_height.insert(height.into(), old_latest.clone())?;
+            }
+            self.latest_height.insert(0, height.into())?;
+        }
+
+        self.states.insert(height.into(), consensus_state.into())
+    }
+
+    fn next_height(&self, height: Height) -> crate::Result<Option<Height>> {
+        let rb = (Bound::Excluded(Adapter::from(height)), Bound::Unbounded);
+        if let Some((next_height, _)) = self.states.range(rb)?.next().transpose()? {
+            Ok(Some(next_height.clone().into_inner()))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn next_state(&self, height: Height) -> crate::Result<Option<AnyConsensusState>> {
+        let next_height = self.next_height(height)?;
+        if let Some(next_height) = next_height {
+            Ok(self.states.get(next_height.into())?.map(|v| v.clone()))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn prev_state(&self, height: Height) -> crate::Result<Option<AnyConsensusState>> {
+        let prev_height = self.prev_height.get(height.into())?;
+        if let Some(prev_height) = prev_height {
+            Ok(self.states.get(prev_height.clone())?.map(|v| v.clone()))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn get(&self, height: Height) -> crate::Result<Option<AnyConsensusState>> {
+        Ok(self.states.get(height.into())?.map(|v| v.clone()))
+    }
+}
+
+#[derive(State, Call, Query, Client)]
 pub struct ClientStore {
-    host_consensus_state: Map<u64, ProtobufAdapter<ConsensusState, TmConsensusState>>,
+    host_consensus_state: Map<u64, ProtobufAdapter<ConsensusState>>,
     height: u64,
     client_type: Map<Adapter<ClientId>, Adapter<ClientType>>,
-    client_state: Map<Adapter<ClientId>, Adapter<AnyClientState>>,
+    client_state: Map<Adapter<ClientId>, ProtobufAdapter<AnyClientState>>,
     client_update_time: Map<Adapter<(ClientId, Height)>, Adapter<Timestamp>>,
-    client_consensus_state:
-        Map<Adapter<(ClientId, Height)>, ProtobufAdapter<AnyConsensusState, Any>>,
+    client_consensus_state: Map<Adapter<ClientId>, ConsensusStateMap>,
     client_height: Map<Adapter<(ClientId, Height)>, Adapter<Height>>,
     client_counter: u64,
 }
@@ -94,7 +140,9 @@ impl ClientKeeper for Ibc {
         println!("store client type");
         self.client
             .client_type
-            .insert(client_id.into(), client_type.into())?;
+            .insert(client_id.clone().into(), client_type.into())?;
+
+        self.lunchbox.insert_client_type(client_id, client_type)?;
 
         Ok(())
     }
@@ -108,6 +156,7 @@ impl ClientKeeper for Ibc {
             "store client state. client_id: {:?}, state: {:?}",
             client_id, client_state
         );
+
         self.client
             .client_state
             .insert(client_id.into(), client_state.into())?;
@@ -121,15 +170,19 @@ impl ClientKeeper for Ibc {
         height: Height,
         consensus_state: AnyConsensusState,
     ) -> Result<(), Error> {
-        // self.client
-        //     .consensus_state
-        //     .entry(client_id.into())?
-        //     .or_insert_default()?
-        //     .insert(height, consensus_state)?;
-        println!("store consensus state");
+        println!(
+            "store consensus state for client: {:?}, height: {:?}",
+            client_id, height
+        );
+
         self.client
             .client_consensus_state
-            .insert((client_id, height).into(), consensus_state.into())?;
+            .entry(client_id.clone().into())?
+            .or_insert_default()?
+            .insert(height, consensus_state.clone())?;
+
+        self.lunchbox
+            .insert_client_consensus_state(client_id, height, consensus_state)?;
 
         Ok(())
     }
@@ -185,7 +238,7 @@ impl ClientReader for Ibc {
             .client_state
             .get(client_id.clone().into())
             .map(|entry| match entry {
-                Some(v) => Ok(v.clone().into_inner()),
+                Some(v) => Ok(v.clone()),
                 None => Err(Error::implementation_specific()),
             })?
     }
@@ -195,15 +248,16 @@ impl ClientReader for Ibc {
         client_id: &ClientId,
         height: Height,
     ) -> Result<AnyConsensusState, Error> {
-        // self.client
-        //     .consensus_state
-        //     .get(client_id.clone().into())
-        //     .map(|maybe_states| match maybe_states {
-        //         Some(states) => Ok(states),
-        //         None => Err(Error::implementation_specific()),
-        //     })??
-        //     .get(height)
-        todo!()
+        println!(
+            "reading client consensus state for id: {:?}, height: {:?}",
+            client_id, height
+        );
+        self.client
+            .client_consensus_state
+            .get(client_id.clone().into())?
+            .ok_or_else(|| Error::client_not_found(client_id.clone()))?
+            .get(height)?
+            .ok_or_else(|| Error::consensus_state_not_found(client_id.clone(), height))
     }
 
     fn next_consensus_state(
@@ -211,7 +265,12 @@ impl ClientReader for Ibc {
         client_id: &ClientId,
         height: Height,
     ) -> Result<Option<AnyConsensusState>, Error> {
-        todo!()
+        Ok(self
+            .client
+            .client_consensus_state
+            .get(client_id.clone().into())?
+            .ok_or_else(|| Error::client_not_found(client_id.clone()))?
+            .next_state(height)?)
     }
 
     fn prev_consensus_state(
@@ -219,7 +278,12 @@ impl ClientReader for Ibc {
         client_id: &ClientId,
         height: Height,
     ) -> Result<Option<AnyConsensusState>, Error> {
-        todo!()
+        Ok(self
+            .client
+            .client_consensus_state
+            .get(client_id.clone().into())?
+            .ok_or_else(|| Error::client_not_found(client_id.clone()))?
+            .prev_state(height)?)
     }
 
     fn client_counter(&self) -> Result<u64, Error> {
@@ -227,14 +291,14 @@ impl ClientReader for Ibc {
     }
 
     fn host_height(&self) -> Height {
-        Height::new(0, self.client.height)
+        Height::new(0, self.client.height).unwrap()
     }
 
     fn host_consensus_state(&self, height: Height) -> Result<AnyConsensusState, Error> {
         let consensus_state = self
             .client
             .host_consensus_state
-            .get(height.revision_height)?
+            .get(height.revision_height())?
             .unwrap() // TODO: handle None
             .clone();
 
@@ -276,8 +340,83 @@ impl BeginBlock for ClientStore {
     }
 }
 
+impl Next for Adapter<ClientId> {
+    fn next(&self) -> Option<Self> {
+        let client_type = ClientType::Tendermint;
+        let counter = self
+            .inner
+            .as_str()
+            .strip_prefix(format!("{}-", client_type.as_str()).as_str())
+            .unwrap()
+            .parse::<u64>()
+            .unwrap();
+
+        if counter == u64::MAX {
+            return None;
+        }
+
+        let new_client_id = ClientId::new(client_type, counter + 1).unwrap();
+
+        Some(new_client_id.into())
+    }
+}
+
+impl Next for Adapter<Height> {
+    fn next(&self) -> Option<Self> {
+        // TODO: support epochs
+        Some(self.increment().into())
+    }
+}
+
+// Call and query methods
 impl ClientStore {
-    pub fn query_client_states(&self) -> crate::Result<()> {
-        Ok(())
+    #[query]
+    pub fn query_client_states(&self) -> crate::Result<Vec<IdentifiedClientState>> {
+        println!("querying client states in ibc module");
+        let mut states = vec![];
+
+        for entry in self.client_state.iter()? {
+            let (client_id, state) = entry?;
+            dbg!(&client_id.clone().as_str());
+
+            states.push(IdentifiedClientState {
+                client_id: client_id.clone().as_str().to_string(),
+                client_state: Some(state.clone().into()),
+            });
+        }
+        dbg!(&states);
+
+        Ok(states)
+    }
+
+    #[query]
+    pub fn query_consensus_states(
+        &self,
+        client_id: Adapter<ClientId>,
+    ) -> crate::Result<Vec<ConsensusStateWithHeight>> {
+        println!("querying consensus states in ibc module");
+        let mut states = vec![];
+        let client = self
+            .client_consensus_state
+            .get(client_id)?
+            .ok_or_else(|| crate::Error::Ibc("Client not found".to_string()))?;
+
+        let mut latest_height = client.latest_height.get(0)?;
+
+        while let Some(height) = &latest_height {
+            let height = (*height).clone().into_inner();
+            let consensus_state = client
+                .get(height)?
+                .ok_or_else(|| crate::Error::Ibc("Failed reading consensus state".into()))?;
+
+            states.push(ConsensusStateWithHeight {
+                height: Some(height.into()),
+                consensus_state: Some(consensus_state.into()),
+            });
+
+            latest_height = client.prev_height.get(height.into())?;
+        }
+
+        Ok(states)
     }
 }

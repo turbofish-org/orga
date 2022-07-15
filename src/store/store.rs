@@ -2,6 +2,7 @@
 use mutagen::mutate;
 
 use super::{Read, Shared, Write, KV};
+use crate::state::State;
 use crate::{Error, Result};
 
 // TODO: figure out how to let users set DefaultBackingStore, similar to setting
@@ -34,6 +35,21 @@ impl<S> Clone for Store<S> {
             store: self.store.clone(),
         }
     }
+}
+
+impl State for Store {
+    type Encoding = ();
+    fn create(store: Store, _: Self::Encoding) -> Result<Self> {
+        Ok(store)
+    }
+
+    fn flush(self) -> Result<Self::Encoding> {
+        Ok(())
+    }
+}
+
+impl<S> From<Store<S>> for () {
+    fn from(_store: Store<S>) -> Self {}
 }
 
 impl<S> Store<S> {

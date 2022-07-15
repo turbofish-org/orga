@@ -1,18 +1,17 @@
-use std::convert::TryInto;
-
-use cosmos_sdk_proto::cosmos::tx::v1beta1::service_server::Service as TxService;
 use cosmrs::Tx;
 
-use cosmos_sdk_proto::cosmos::tx::v1beta1::{
+use ibc::core::ics26_routing::msgs::Ics26Envelope;
+use ibc_proto::cosmos::tx::v1beta1::service_server::Service as TxService;
+use ibc_proto::cosmos::tx::v1beta1::{
     BroadcastTxRequest, BroadcastTxResponse, GetBlockWithTxsRequest, GetBlockWithTxsResponse,
     GetTxRequest, GetTxResponse, GetTxsEventRequest, GetTxsEventResponse, SimulateRequest,
     SimulateResponse,
 };
-use ibc::core::ics26_routing::msgs::Ics26Envelope;
 
 use super::Ibc;
 use crate::client::{AsyncCall, AsyncQuery, Call};
 use std::convert::TryFrom;
+use std::rc::Rc;
 use tonic::{Request, Response, Status};
 
 #[tonic::async_trait]
@@ -21,12 +20,13 @@ where
     T: Clone + Send + Sync + 'static,
     // T: AsyncCall<Call = <Ibc as Call>::Call>,
     T: AsyncQuery,
-    T: for<'a> AsyncQuery<Response<'a> = Ibc>,
+    T: for<'a> AsyncQuery<Response<'a> = Rc<Ibc>>,
 {
     async fn simulate(
         &self,
         request: Request<SimulateRequest>,
     ) -> Result<Response<SimulateResponse>, Status> {
+        println!("grpc simulate");
         let tx_bytes = request.get_ref().tx_bytes.as_slice();
         let tx = Tx::from_bytes(tx_bytes).unwrap();
 
@@ -73,6 +73,7 @@ where
         _request: Request<GetBlockWithTxsRequest>,
     ) -> Result<Response<GetBlockWithTxsResponse>, Status> {
         dbg!("get block with txs");
+
         todo!()
     }
 }

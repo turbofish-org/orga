@@ -14,11 +14,15 @@ pub struct Counter {
 
 #[derive(State, Debug, Clone)]
 pub struct Simp(());
-impl Symbol for Simp {}
+impl Symbol for Simp {
+    const INDEX: u8 = 1;
+}
 
 impl BeginBlock for Counter {
     fn begin_block(&mut self, _ctx: &BeginBlockCtx) -> Result<()> {
-        println!("count is {:?}", self.count);
+        if self.count % 50 == 0 {
+            println!("count is {:?}", self.count);
+        }
         self.count += 1;
 
         Ok(())

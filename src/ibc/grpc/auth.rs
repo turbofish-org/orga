@@ -1,14 +1,14 @@
-use cosmos_sdk_proto::cosmos::auth::v1beta1::query_server::Query as AuthQuery;
-use cosmos_sdk_proto::cosmos::auth::v1beta1::BaseAccount;
-use cosmos_sdk_proto::cosmos::auth::v1beta1::{
-    QueryAccountRequest, QueryAccountResponse, QueryAccountsRequest, QueryAccountsResponse,
-    QueryParamsRequest as AuthQueryParamsRequest, QueryParamsResponse as AuthQueryParamsResponse,
-};
-use prost::Message;
-use prost_types::Any;
-
 use super::Ibc;
 use crate::client::{AsyncCall, AsyncQuery, Call};
+use ibc_proto::cosmos::auth::v1beta1::BaseAccount;
+use ibc_proto::cosmos::auth::v1beta1::{
+    query_server::{Query as AuthQuery, QueryServer},
+    QueryAccountRequest, QueryAccountResponse, QueryAccountsRequest, QueryAccountsResponse,
+    QueryParamsRequest, QueryParamsResponse,
+};
+use ibc_proto::google::protobuf::Any;
+use prost::Message;
+use std::rc::Rc;
 use tonic::{Request, Response, Status};
 
 #[tonic::async_trait]
@@ -17,12 +17,13 @@ where
     T: Clone + Send + Sync + 'static,
     // T: AsyncCall<Call = <Ibc as Call>::Call>,
     T: AsyncQuery,
-    T: for<'a> AsyncQuery<Response<'a> = Ibc>,
+    T: for<'a> AsyncQuery<Response<'a> = Rc<Ibc>>,
 {
     async fn accounts(
         &self,
         _request: Request<QueryAccountsRequest>,
     ) -> Result<Response<QueryAccountsResponse>, Status> {
+        println!("grpc accounts");
         unimplemented!()
     }
 
@@ -62,8 +63,9 @@ where
 
     async fn params(
         &self,
-        _request: Request<AuthQueryParamsRequest>,
-    ) -> Result<Response<AuthQueryParamsResponse>, Status> {
+        _request: Request<QueryParamsRequest>,
+    ) -> Result<Response<QueryParamsResponse>, Status> {
+        println!("grpc params");
         unimplemented!()
     }
 }

@@ -1,15 +1,21 @@
+use crate::call::Call;
+use crate::client::Client;
+use crate::collections::Next;
 use crate::encoding::{Decode, Encode, Terminated};
+use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
+use ibc::core::ics24_host::identifier::ConnectionId;
 use prost::Message;
 use serde::{Deserialize, Serialize};
-use std::marker::PhantomData;
 use tendermint_proto::Protobuf;
 
-#[derive(Clone)]
+#[derive(Clone, Call, Client, Query)]
 pub struct Adapter<T> {
-    inner: T,
+    pub(crate) inner: T,
 }
+
+unsafe impl<T> Send for Adapter<T> {}
 
 impl<T> Encode for Adapter<T>
 where
@@ -23,10 +29,13 @@ where
     }
 
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
-        let bytes = bincode::serialize(&self.inner).map_err(|_e| ed::Error::UnexpectedByte(0))?;
+        // let bytes = bincode::serialize(&self.inner).map_err(|_e|
+        // ed::Error::UnexpectedByte(0))?;
+        let bytes =
+            serde_json::to_string(&self.inner).map_err(|_e| ed::Error::UnexpectedByte(0))?;
         let len = bytes.len() as u16;
         dest.write_all(&len.encode()?)?;
-        dest.write_all(&bytes)?;
+        dest.write_all(bytes.as_bytes())?;
 
         Ok(())
     }
@@ -35,24 +44,24 @@ where
 impl<'a, T> Decode for Adapter<T>
 where
     T: for<'de> Deserialize<'de>,
+    T: std::fmt::Debug,
 {
     fn decode<R: std::io::Read>(mut reader: R) -> ed::Result<Self> {
         let len = u16::decode(&mut reader)?;
         let mut bytes = vec![0u8; len as usize];
         reader.read_exact(&mut bytes)?;
-        let inner: T = bincode::deserialize_from(bytes.as_slice())
-            .map_err(|_e| ed::Error::UnexpectedByte(0))?;
-
+        let inner: T = serde_json::from_slice(&bytes).map_err(|_e| {
+            dbg!(_e);
+            ed::Error::UnexpectedByte(124)
+        })?;
+        dbg!(&inner);
         Ok(Self { inner })
     }
 }
 
 impl<T> Terminated for Adapter<T> {}
 
-impl<T> From<T> for Adapter<T>
-where
-    T: IbcProto,
-{
+impl<T> From<T> for Adapter<T> {
     fn from(inner: T) -> Self {
         Self { inner }
     }
@@ -81,6 +90,7 @@ impl<T> std::ops::DerefMut for Adapter<T> {
 impl<'a, T> State for Adapter<T>
 where
     T: Serialize + for<'de> Deserialize<'de>,
+    T: std::fmt::Debug,
 {
     type Encoding = Self;
 
@@ -93,16 +103,16 @@ where
     }
 }
 
-pub struct ProtobufAdapter<T, P> {
+#[derive(Call, Query, Client)]
+pub struct ProtobufAdapter<T> {
     inner: T,
-    _pb: PhantomData<P>,
 }
 
-impl<T, P> Encode for ProtobufAdapter<T, P>
+impl<T> Encode for ProtobufAdapter<T>
 where
-    T: Protobuf<P>,
-    P: From<T> + Default + Message,
-    <T as std::convert::TryFrom<P>>::Error: std::fmt::Display,
+    T: IbcProto,
+    T: Protobuf<<T as IbcProto>::Proto>,
+    <T as std::convert::TryFrom<<T as IbcProto>::Proto>>::Error: std::fmt::Display,
 {
     fn encoding_length(&self) -> ed::Result<usize> {
         Ok(self.inner.encoded_len())
@@ -113,72 +123,64 @@ where
         self.inner
             .encode(&mut bytes)
             .map_err(|e| ed::Error::UnexpectedByte(0))?;
-        let len = bytes.len() as u16;
 
-        dest.write_all(&len.encode()?)?;
         dest.write_all(&bytes)?;
 
         Ok(())
     }
 }
 
-impl<T, P> Decode for ProtobufAdapter<T, P>
+impl<T> Decode for ProtobufAdapter<T>
 where
-    T: Protobuf<P>,
-    P: From<T> + Default + Message,
-    <T as std::convert::TryFrom<P>>::Error: std::fmt::Display,
+    T: IbcProto,
+    T: Protobuf<<T as IbcProto>::Proto>,
+    <T as std::convert::TryFrom<<T as IbcProto>::Proto>>::Error: std::fmt::Display,
 {
     fn decode<R: std::io::Read>(mut reader: R) -> ed::Result<Self> {
-        let len = u16::decode(&mut reader)?;
-        let mut bytes = vec![0u8; len as usize];
-        reader.read_exact(&mut bytes)?;
+        let mut bytes = vec![];
+        reader.read_to_end(&mut bytes)?;
 
         let inner: T = T::decode(bytes.as_slice()).map_err(|_e| ed::Error::UnexpectedByte(0))?;
 
-        Ok(Self {
-            inner,
-            _pb: PhantomData,
-        })
+        Ok(Self { inner })
     }
 }
 
-impl<T, P> Terminated for ProtobufAdapter<T, P> {}
-
-trait IbcProto {}
-
-impl IbcProto for ibc::core::ics02_client::client_consensus::AnyConsensusState {}
-impl IbcProto for ibc::core::ics24_host::identifier::ClientId {}
-impl IbcProto for ibc::core::ics02_client::client_type::ClientType {}
-impl IbcProto for ibc::core::ics02_client::client_state::AnyClientState {}
-impl IbcProto for ibc::clients::ics07_tendermint::consensus_state::ConsensusState {}
-impl IbcProto for ibc::timestamp::Timestamp {}
-impl IbcProto for ibc::Height {}
-impl<A, B> IbcProto for (A, B)
-where
-    A: IbcProto,
-    B: IbcProto,
-{
+use ibc_proto::google::protobuf::Any;
+trait IbcProto: Sized {
+    type Proto: From<Self> + Default + Message;
 }
 
-impl<T, P> From<T> for ProtobufAdapter<T, P>
+impl IbcProto for ibc::core::ics02_client::client_consensus::AnyConsensusState {
+    type Proto = Any;
+}
+impl IbcProto for ibc::core::ics02_client::client_state::AnyClientState {
+    type Proto = Any;
+}
+impl IbcProto for ibc::core::ics03_connection::connection::ConnectionEnd {
+    type Proto = ibc_proto::ibc::core::connection::v1::ConnectionEnd;
+}
+
+impl IbcProto for ibc::clients::ics07_tendermint::consensus_state::ConsensusState {
+    type Proto = ibc_proto::ibc::lightclients::tendermint::v1::ConsensusState;
+}
+
+impl<T> From<T> for ProtobufAdapter<T>
 where
     T: IbcProto,
 {
     fn from(inner: T) -> Self {
-        Self {
-            inner,
-            _pb: PhantomData,
-        }
+        Self { inner }
     }
 }
 
-impl<T, P> ProtobufAdapter<T, P> {
+impl<T> ProtobufAdapter<T> {
     pub fn into_inner(self) -> T {
         self.inner
     }
 }
 
-impl<T, P> std::ops::Deref for ProtobufAdapter<T, P> {
+impl<T> std::ops::Deref for ProtobufAdapter<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -186,17 +188,17 @@ impl<T, P> std::ops::Deref for ProtobufAdapter<T, P> {
     }
 }
 
-impl<T, P> std::ops::DerefMut for ProtobufAdapter<T, P> {
+impl<T> std::ops::DerefMut for ProtobufAdapter<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }
 }
 
-impl<T, P> State for ProtobufAdapter<T, P>
+impl<T> State for ProtobufAdapter<T>
 where
-    T: Protobuf<P>,
-    P: From<T> + Default + Message,
-    <T as std::convert::TryFrom<P>>::Error: std::fmt::Display,
+    T: IbcProto,
+    T: Protobuf<<T as IbcProto>::Proto>,
+    <T as std::convert::TryFrom<<T as IbcProto>::Proto>>::Error: std::fmt::Display,
 {
     type Encoding = Self;
 
