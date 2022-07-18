@@ -6,6 +6,7 @@ use crate::call::Call;
 use crate::client::Client;
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
+use crate::merk::MerkStore;
 use crate::plugins::BeginBlockCtx;
 use crate::plugins::Events;
 use crate::query::Query;
@@ -16,7 +17,7 @@ use encoding::*;
 use ibc::applications::transfer::context::Ics20Context;
 use ibc::core::ics02_client::height::Height;
 use ibc::core::ics26_routing::handler::dispatch;
-use ics23::LeafOp;
+use ics23::{InnerSpec, LeafOp, ProofSpec};
 use sha2::Sha512_256;
 use tendermint_proto::abci::{EventAttribute, RequestQuery, ResponseQuery};
 use tendermint_proto::Protobuf;
@@ -67,31 +68,32 @@ impl From<Lunchbox> for () {
 impl Ibc {
     #[call]
     pub fn deliver_message(&mut self, msg: Ics26Message) -> Result<()> {
-        println!("made deliver_message call: {:#?}", msg);
-        let output = dispatch(self, msg.0.first().unwrap().clone())
-            .map_err(|e| crate::Error::Ibc(e.to_string()))?;
+        for message in msg.0 {
+            let output =
+                dispatch(self, message.clone()).map_err(|e| crate::Error::Ibc(e.to_string()))?;
 
-        let ctx = self
-            .context::<Events>()
-            .ok_or_else(|| crate::Error::Ibc("No Events context available".into()))?;
+            let ctx = self
+                .context::<Events>()
+                .ok_or_else(|| crate::Error::Ibc("No Events context available".into()))?;
 
-        for event in output.events.into_iter() {
-            let abci_event = tendermint::abci::Event::try_from(event)
-                .map_err(|e| crate::Error::Ibc(format!("{}", e)))?;
-            let tm_proto_event = Event {
-                r#type: abci_event.type_str,
-                attributes: abci_event
-                    .attributes
-                    .into_iter()
-                    .map(|attr| EventAttribute {
-                        key: attr.key.as_ref().into(),
-                        value: attr.value.as_ref().into(),
-                        index: true,
-                    })
-                    .collect(),
-            };
+            for event in output.events.into_iter() {
+                let abci_event = tendermint::abci::Event::try_from(event)
+                    .map_err(|e| crate::Error::Ibc(format!("{}", e)))?;
+                let tm_proto_event = Event {
+                    r#type: abci_event.type_str,
+                    attributes: abci_event
+                        .attributes
+                        .into_iter()
+                        .map(|attr| EventAttribute {
+                            key: attr.key.as_ref().into(),
+                            value: attr.value.as_ref().into(),
+                            index: true,
+                        })
+                        .collect(),
+                };
 
-            ctx.add(tm_proto_event);
+                ctx.add(tm_proto_event);
+            }
         }
 
         Ok(())
@@ -140,7 +142,6 @@ impl BeginBlock for Ibc {
 use crate::store::Read;
 impl AbciQuery for Ibc {
     fn abci_query(&self, req: &RequestQuery) -> Result<ResponseQuery> {
-        println!("reached ibc module's abci query handler");
         use ibc::core::ics02_client::context::ClientReader;
         use ibc::core::ics24_host::path::ClientStatePath;
         use ibc::core::ics24_host::Path;
@@ -163,7 +164,7 @@ impl AbciQuery for Ibc {
                 .get(path.clone().into_bytes().as_slice())?
                 .unwrap_or_default();
 
-            dbg!(&req.data);
+            // dbg!(&req.data);
             let key = path.clone().into_bytes();
 
             use prost::Message;
@@ -176,7 +177,8 @@ impl AbciQuery for Ibc {
                 .borrow()
                 .use_merkstore(|store| store.merk().root_hash());
 
-            ics23::CommitmentProof {
+            println!("inner root hash: {:?}", &inner_root_hash);
+            let outer_proof = ics23::CommitmentProof {
                 proof: Some(ics23::commitment_proof::Proof::Exist(
                     ics23::ExistenceProof {
                         key: b"ibc".to_vec(),
@@ -191,16 +193,28 @@ impl AbciQuery for Ibc {
                         path: vec![],
                     },
                 )),
-            }
-            .encode(&mut outer_proof_bytes)
-            .map_err(|_| Error::Ibc("Failed to create outer proof".into()))?;
+            };
+            outer_proof
+                .encode(&mut outer_proof_bytes)
+                .map_err(|_| Error::Ibc("Failed to create outer proof".into()))?;
 
             let mut proof_bytes = vec![];
-            self.lunchbox
+            let proof = self
+                .lunchbox
                 .0
                 .backing_store()
                 .borrow()
-                .use_merkstore(|store| dbg!(store.create_ics23_proof(key.as_slice())))?
+                .use_merkstore(|store| store.create_ics23_proof(key.as_slice()))?;
+
+            // dbg!(ics23::verify_membership(
+            //     &proof,
+            //     &MerkStore::ics23_spec(),
+            //     &inner_root_hash.to_vec(),
+            //     key.as_slice(),
+            //     value_bytes.as_slice()
+            // ));
+
+            proof
                 .encode(&mut proof_bytes)
                 .map_err(|_| Error::Ibc("Failed to create proof".into()))?;
 
@@ -212,14 +226,40 @@ impl AbciQuery for Ibc {
                 .borrow()
                 .use_merkstore(|store| store.root_hash())?;
 
-            dbg!(&value_bytes.len());
-            dbg!(&proof_bytes.len());
+            println!("\n\nouter app hash: {:?}\n\n", outer_app_hash);
+
+            // dbg!(&value_bytes.len());
+            // dbg!(&proof_bytes.len());
+
+            // dbg!(ics23::verify_membership(
+            //     &outer_proof,
+            //     &ProofSpec {
+            //         inner_spec: Some(InnerSpec {
+            //             child_order: vec![0],
+            //             child_size: 32,
+            //             empty_child: vec![],
+            //             min_prefix_length: 0,
+            //             max_prefix_length: 0,
+            //             hash: 6,
+            //         }),
+            //         leaf_spec: Some(LeafOp {
+            //             hash: 6,
+            //             length: 0,
+            //             prefix: vec![],
+            //             prehash_key: 0,
+            //             prehash_value: 0,
+            //         }),
+            //         max_depth: 0,
+            //         min_depth: 0,
+            //     },
+            //     &outer_app_hash,
+            //     b"ibc",
+            //     &inner_root_hash
+            // ));
 
             return Ok(ResponseQuery {
                 code: 0,
                 key: req.data.clone(),
-                codespace: "".to_string(),
-                log: "".to_string(),
                 value: value_bytes,
                 proof_ops: Some(ProofOps {
                     ops: vec![
@@ -235,6 +275,7 @@ impl AbciQuery for Ibc {
                         },
                     ],
                 }),
+                height: self.height as i64,
                 ..Default::default()
             });
         }
@@ -242,7 +283,7 @@ impl AbciQuery for Ibc {
         let value_bytes = match path {
             Path::ClientState(ClientStatePath(client_id)) => {
                 let client_state = self.client_state(&client_id).unwrap();
-                dbg!(&client_state);
+                // dbg!(&client_state);
                 client_state.encode_vec().unwrap()
             }
 
@@ -253,7 +294,7 @@ impl AbciQuery for Ibc {
                         Height::new(data.epoch, data.height).unwrap(),
                     )
                     .unwrap();
-                dbg!(&client_consensus_state);
+                // dbg!(&client_consensus_state);
                 client_consensus_state.encode_vec().unwrap()
             }
 

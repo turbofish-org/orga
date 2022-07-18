@@ -263,6 +263,7 @@ impl<A: Application> ABCIStateMachine<A> {
 
                 let mut res_commit = ResponseCommit::default();
                 let self_store = self_store_shared.into_inner();
+
                 res_commit.data = self_store.root_hash()?;
                 self.store = Some(Shared::new(self_store));
                 Ok(Res::Commit(res_commit))

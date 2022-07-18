@@ -41,13 +41,10 @@ where
         _request: Request<QueryClientStatesRequest>,
     ) -> Result<Response<QueryClientStatesResponse>, Status> {
         println!("query client states");
-        dbg!(&_request);
         let res = QueryClientStatesResponse {
             client_states: self.ibc.client.query_client_states().await??,
             ..Default::default()
         };
-
-        dbg!(&res);
 
         Ok(Response::new(res))
     }

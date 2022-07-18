@@ -148,7 +148,7 @@ impl ClientKeeper for Ibc {
         client_id: ClientId,
         client_type: ClientType,
     ) -> Result<(), Error> {
-        println!("store client type");
+        // println!("store client type");
         self.client
             .client_type
             .insert(client_id.clone().into(), client_type.into())?;
@@ -163,10 +163,10 @@ impl ClientKeeper for Ibc {
         client_id: ClientId,
         client_state: AnyClientState,
     ) -> Result<(), Error> {
-        println!(
-            "store client state. client_id: {:?}, state: {:?}",
-            client_id, client_state
-        );
+        // println!(
+        //     "store client state. client_id: {:?}, state: {:?}",
+        //     client_id, client_state
+        // );
 
         self.client
             .client_state
@@ -183,10 +183,10 @@ impl ClientKeeper for Ibc {
         height: Height,
         consensus_state: AnyConsensusState,
     ) -> Result<(), Error> {
-        println!(
-            "store consensus state for client: {:?}, height: {:?}",
-            client_id, height
-        );
+        // println!(
+        //     "store consensus state for client: {:?}, height: {:?}",
+        //     client_id, height
+        // );
 
         self.client
             .client_consensus_state
@@ -206,7 +206,7 @@ impl ClientKeeper for Ibc {
         height: Height,
         timestamp: Timestamp,
     ) -> Result<(), Error> {
-        println!("store update time");
+        // println!("store update time");
         self.client
             .client_update_time
             .insert((client_id, height).into(), timestamp.into())?;
@@ -220,7 +220,7 @@ impl ClientKeeper for Ibc {
         height: Height,
         host_height: Height,
     ) -> Result<(), Error> {
-        println!("store update height");
+        // println!("store update height");
         self.client
             .client_height
             .insert((client_id, height).into(), host_height.into())?;
@@ -229,7 +229,7 @@ impl ClientKeeper for Ibc {
     }
 
     fn increase_client_counter(&mut self) {
-        println!("increase client counter");
+        // println!("increase client counter");
         self.client.client_counter += 1;
     }
 }
@@ -246,7 +246,7 @@ impl ClientReader for Ibc {
     }
 
     fn client_state(&self, client_id: &ClientId) -> Result<AnyClientState, Error> {
-        println!("reading client state for client_id: {:?}", client_id);
+        // println!("reading client state for client_id: {:?}", client_id);
         self.client
             .client_state
             .get(client_id.clone().into())
@@ -261,10 +261,10 @@ impl ClientReader for Ibc {
         client_id: &ClientId,
         height: Height,
     ) -> Result<AnyConsensusState, Error> {
-        println!(
-            "reading client consensus state for id: {:?}, height: {:?}",
-            client_id, height
-        );
+        // println!(
+        //     "reading client consensus state for id: {:?}, height: {:?}",
+        //     client_id, height
+        // );
         self.client
             .client_consensus_state
             .get(client_id.clone().into())?
@@ -390,14 +390,12 @@ impl ClientStore {
 
         for entry in self.client_state.iter()? {
             let (client_id, state) = entry?;
-            dbg!(&client_id.clone().as_str());
 
             states.push(IdentifiedClientState {
                 client_id: client_id.clone().as_str().to_string(),
                 client_state: Some(state.clone().into()),
             });
         }
-        dbg!(&states);
 
         Ok(states)
     }
@@ -407,7 +405,7 @@ impl ClientStore {
         &self,
         client_id: Adapter<ClientId>,
     ) -> crate::Result<Vec<ConsensusStateWithHeight>> {
-        println!("querying consensus states in ibc module");
+        // println!("querying consensus states in ibc module");
         let mut states = vec![];
         let client = self
             .client_consensus_state

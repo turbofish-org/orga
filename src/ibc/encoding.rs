@@ -50,11 +50,8 @@ where
         let len = u16::decode(&mut reader)?;
         let mut bytes = vec![0u8; len as usize];
         reader.read_exact(&mut bytes)?;
-        let inner: T = serde_json::from_slice(&bytes).map_err(|_e| {
-            dbg!(_e);
-            ed::Error::UnexpectedByte(124)
-        })?;
-        dbg!(&inner);
+        let inner: T =
+            serde_json::from_slice(&bytes).map_err(|_e| ed::Error::UnexpectedByte(124))?;
         Ok(Self { inner })
     }
 }

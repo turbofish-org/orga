@@ -150,7 +150,6 @@ impl<T: QueryTrait> QueryTrait for IbcPlugin<T> {
     type Query = Query<T>;
 
     fn query(&self, query: Self::Query) -> Result<()> {
-        println!("reached ibc plugin query");
         match query {
             Query::Inner(inner_query) => self.inner.query(inner_query),
             Query::Ibc(ibc_query) => self.ibc.query(ibc_query),
@@ -347,7 +346,6 @@ mod abci {
         fn abci_query(&self, req: &RequestQuery) -> Result<ResponseQuery> {
             // TODO: ABCI queries should also be forwarded to the inner app if
             // the path isn't an IBC-related query.
-            println!("got raw abci_query in IBC plugin");
             self.ibc.abci_query(req)
         }
     }

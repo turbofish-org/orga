@@ -55,6 +55,7 @@ pub struct ConnectionStore {
 
 impl ConnectionReader for Ibc {
     fn connection_end(&self, conn_id: &ConnectionId) -> Result<ConnectionEnd> {
+        println!("get connection end");
         self.connections
             .ends
             .get(conn_id.clone().into())?
@@ -72,12 +73,12 @@ impl ConnectionReader for Ibc {
     }
 
     fn host_oldest_height(&self) -> Height {
-        self.host_current_height()
+        Height::new(0, 2).unwrap()
     }
 
     fn commitment_prefix(&self) -> CommitmentPrefix {
-        panic!("Commitment prefix");
-        self.lunchbox.0.prefix().to_vec().try_into().unwrap()
+        // self.lunchbox.0.prefix().to_vec().try_into().unwrap()
+        b"ibc".to_vec().try_into().unwrap()
     }
 
     fn client_consensus_state(
