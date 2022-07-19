@@ -9,13 +9,15 @@ use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
 pub const MAX_CALL_SIZE: usize = 65_535;
+pub const NATIVE_CALL_FLAG: u8 = 0xff;
 
-pub struct SdkCompatPlugin<S, T> {
-    inner: T,
+#[derive(State)]
+pub struct SdkCompatPlugin<S, T: State> {
     symbol: PhantomData<S>,
+    inner: T,
 }
 
-impl<S, T> Deref for SdkCompatPlugin<S, T> {
+impl<S, T: State> Deref for SdkCompatPlugin<S, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -23,24 +25,9 @@ impl<S, T> Deref for SdkCompatPlugin<S, T> {
     }
 }
 
-impl<S, T> DerefMut for SdkCompatPlugin<S, T> {
+impl<S, T: State> DerefMut for SdkCompatPlugin<S, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
-    }
-}
-
-impl<S, T: State> State for SdkCompatPlugin<S, T> {
-    type Encoding = (T::Encoding,);
-
-    fn create(store: orga::store::Store, data: Self::Encoding) -> Result<Self> {
-        Ok(Self {
-            inner: T::create(store, data.0)?,
-            symbol: PhantomData,
-        })
-    }
-
-    fn flush(self) -> Result<Self::Encoding> {
-        Ok((self.inner.flush()?,))
     }
 }
 
@@ -60,27 +47,18 @@ unsafe impl<T> Send for Call<T> {}
 impl<T: Encode> Encode for Call<T> {
     fn encoding_length(&self) -> ed::Result<usize> {
         match self {
-            Call::Native(native) => native.encoding_length(),
-            Call::Sdk(tx) => {
-                let bytes = serde_json::to_vec(tx).map_err(|_| ed::Error::UnexpectedByte(0))?;
-                Ok(bytes.len())
-            }
+            Call::Native(native) => Ok(native.encoding_length()? + 1),
+            Call::Sdk(tx) => tx.encoding_length(),
         }
     }
 
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
         match self {
-            Call::Native(native) => native.encode_into(dest),
-            Call::Sdk(tx) => {
-                let bytes = serde_json::to_vec(tx).map_err(|_| ed::Error::UnexpectedByte(0))?;
-
-                if bytes.len() > MAX_CALL_SIZE {
-                    return Err(ed::Error::UnexpectedByte(0));
-                }
-
-                dest.write_all(&bytes)?;
-                Ok(())
+            Call::Native(native) => {
+                NATIVE_CALL_FLAG.encode_into(dest)?;
+                native.encode_into(dest)
             }
+            Call::Sdk(tx) => tx.encode_into(dest),
         }
     }
 }
@@ -94,23 +72,86 @@ impl<T: Decode> Decode for Call<T> {
             return Err(ed::Error::UnexpectedByte(0));
         }
 
-        if let Some('{') = bytes.first().map(|b| *b as char) {
-            let tx = serde_json::from_slice(bytes.as_slice())
-                .map_err(|_| ed::Error::UnexpectedByte(123))?;
-            Ok(Call::Sdk(tx))
-        } else {
-            let native = T::decode(bytes.as_slice())?;
-            Ok(Call::Native(native))
+        match bytes.first() {
+            Some(&NATIVE_CALL_FLAG) => {
+                let native = T::decode(&bytes.as_slice()[1..])?;
+                Ok(Call::Native(native))
+            }
+            Some(_) => {
+                let tx = sdk::Tx::decode(bytes.as_slice())?;
+                Ok(Call::Sdk(tx))
+            }
+            None => {
+                let io_err = std::io::ErrorKind::UnexpectedEof.into();
+                Err(ed::Error::IOError(io_err))
+            }
         }
     }
 }
 
 pub mod sdk {
-    use super::{Address, Error, Result};
+    use super::{Address, Error, Result, Encode, Decode, MAX_CALL_SIZE};
     use serde::{Deserialize, Serialize};
 
+    #[derive(Debug, Clone)]
+    pub enum Tx {
+        Amino(AminoTx),
+        Protobuf(cosmrs::Tx),
+    }
+
+    impl Encode for Tx {
+        fn encoding_length(&self) -> ed::Result<usize> {
+            match self {
+                Tx::Amino(tx) => {
+                    let bytes = serde_json::to_vec(tx).map_err(|_| ed::Error::UnexpectedByte(0))?;
+                    Ok(bytes.len())
+                }
+                Tx::Protobuf(tx) => {
+                    todo!()
+                }
+            }
+        }
+
+        fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+            match self {
+                Tx::Amino(tx) => {
+                    let bytes = serde_json::to_vec(tx).map_err(|_| ed::Error::UnexpectedByte(0))?;
+
+                    if bytes.len() > MAX_CALL_SIZE {
+                        return Err(ed::Error::UnexpectedByte(0));
+                    }
+
+                    dest.write_all(&bytes)?;
+                    Ok(())
+                }
+                Tx::Protobuf(tx) => {
+                    todo!()
+                }
+            }
+        }
+    }
+
+    impl Decode for Tx {
+        fn decode<R: std::io::Read>(mut reader: R) -> ed::Result<Self> {
+            let mut bytes = Vec::with_capacity(MAX_CALL_SIZE);
+            reader.read_to_end(&mut bytes)?;
+
+            if bytes.len() > MAX_CALL_SIZE || bytes.len() == 0 {
+                return Err(ed::Error::UnexpectedByte(0));
+            }
+
+            if b'{' == bytes[0] {
+                let tx = serde_json::from_slice(bytes.as_slice())
+                    .map_err(|_| ed::Error::UnexpectedByte(123))?;
+                return Ok(Tx::Amino(tx));
+            }
+
+            todo!()
+        }
+    }
+
     #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-    pub struct Tx {
+    pub struct AminoTx {
         pub msg: Vec<Msg>,
         pub fee: Fee,
         pub memo: String,
@@ -119,32 +160,47 @@ pub mod sdk {
 
     impl Tx {
         pub fn sign_bytes(&self, chain_id: String, nonce: u64) -> Result<Vec<u8>> {
-            let sign_tx = SignDoc {
-                account_number: "0".to_string(),
-                chain_id,
-                fee: self.fee.clone(),
-                memo: self.memo.clone(),
-                msgs: self.msg.clone(),
-                sequence: nonce.to_string(),
-            };
+            match self {
+                Tx::Amino(tx) => {
+                    let sign_tx = SignDoc {
+                        account_number: "0".to_string(),
+                        chain_id,
+                        fee: tx.fee.clone(),
+                        memo: tx.memo.clone(),
+                        msgs: tx.msg.clone(),
+                        sequence: nonce.to_string(),
+                    };
 
-            serde_json::to_vec(&sign_tx).map_err(|e| Error::App(e.to_string()))
+                    serde_json::to_vec(&sign_tx).map_err(|e| Error::App(e.to_string()))
+                }
+                Tx::Protobuf(tx) => {
+                    todo!()
+                }
+            }
         }
 
         pub fn sender_pubkey(&self) -> Result<[u8; 33]> {
-            let pubkey_b64 = &self
-                .signatures
-                .first()
-                .ok_or_else(|| Error::App("No signatures provided".to_string()))?
-                .pub_key
-                .value;
+            match self {
+                Tx::Amino(tx) => {
+                    let pubkey_b64 = &tx
+                        .signatures
+                        .first()
+                        .ok_or_else(|| Error::App("No signatures provided".to_string()))?
+                        .pub_key
+                        .value;
 
-            let pubkey_bytes = base64::decode(pubkey_b64).map_err(|e| Error::App(e.to_string()))?;
+                    let pubkey_bytes =
+                        base64::decode(pubkey_b64).map_err(|e| Error::App(e.to_string()))?;
 
-            let mut pubkey_arr = [0; 33];
-            pubkey_arr.copy_from_slice(&pubkey_bytes);
+                    let mut pubkey_arr = [0; 33];
+                    pubkey_arr.copy_from_slice(&pubkey_bytes);
 
-            Ok(pubkey_arr)
+                    Ok(pubkey_arr)
+                }
+                Tx::Protobuf(tx) => {
+                    todo!()
+                }
+            }
         }
 
         pub fn sender_address(&self) -> Result<Address> {
@@ -152,18 +208,26 @@ pub mod sdk {
         }
 
         pub fn signature(&self) -> Result<[u8; 64]> {
-            let sig_b64 = &self
-                .signatures
-                .first()
-                .ok_or_else(|| Error::App("No signatures provided".to_string()))?
-                .signature;
+            match self {
+                Tx::Amino(tx) => {
+                    let sig_b64 = &tx
+                        .signatures
+                        .first()
+                        .ok_or_else(|| Error::App("No signatures provided".to_string()))?
+                        .signature;
 
-            let sig_bytes = base64::decode(sig_b64).map_err(|e| Error::App(e.to_string()))?;
+                    let sig_bytes =
+                        base64::decode(sig_b64).map_err(|e| Error::App(e.to_string()))?;
 
-            let mut sig_arr = [0; 64];
-            sig_arr.copy_from_slice(&sig_bytes);
+                    let mut sig_arr = [0; 64];
+                    sig_arr.copy_from_slice(&sig_bytes);
 
-            Ok(sig_arr)
+                    Ok(sig_arr)
+                }
+                Tx::Protobuf(tx) => {
+                    todo!()
+                }
+            }
         }
     }
 
@@ -262,7 +326,7 @@ where
     }
 }
 
-impl<S, T: Query> Query for SdkCompatPlugin<S, T> {
+impl<S, T: Query + State> Query for SdkCompatPlugin<S, T> {
     type Query = T::Query;
 
     fn query(&self, query: Self::Query) -> Result<()> {
@@ -298,8 +362,12 @@ where
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Query, U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = std::rc::Rc<SdkCompatPlugin<S, T>>> + Clone, S>
-    AsyncQuery for SdkCompatAdapter<T, U, S>
+impl<
+        T: Query + State,
+        U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = std::rc::Rc<SdkCompatPlugin<S, T>>>
+            + Clone,
+        S,
+    > AsyncQuery for SdkCompatAdapter<T, U, S>
 {
     type Query = T::Query;
     type Response<'a> = std::rc::Rc<T>;
@@ -308,7 +376,16 @@ impl<T: Query, U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = std::rc::R
     where
         F: FnMut(Self::Response<'_>) -> Result<R>,
     {
-        self.parent.query(query, |plugin| check(std::rc::Rc::new(std::rc::Rc::try_unwrap(plugin).map_err(|_| ()).unwrap().inner))).await
+        self.parent
+            .query(query, |plugin| {
+                check(std::rc::Rc::new(
+                    std::rc::Rc::try_unwrap(plugin)
+                        .map_err(|_| ())
+                        .unwrap()
+                        .inner,
+                ))
+            })
+            .await
     }
 }
 
@@ -341,7 +418,10 @@ impl<
     > SdkCompatClient<T, U, S>
 {
     #[cfg(target_arch = "wasm32")]
-    pub async fn send_sdk_tx(&mut self, sign_doc: sdk::SignDoc) -> std::result::Result<(), JsValue> {
+    pub async fn send_sdk_tx(
+        &mut self,
+        sign_doc: sdk::SignDoc,
+    ) -> std::result::Result<(), JsValue> {
         let signer = crate::plugins::signer::keplr::Signer;
         let sig = signer.sign_sdk(sign_doc.clone()).await?;
 
@@ -351,11 +431,14 @@ impl<
             fee: sign_doc.fee,
             memo: sign_doc.memo,
         };
-        self._parent.call(Call::Sdk(tx)).await.map_err(|e| e.to_string().into())
+        self._parent
+            .call(Call::Sdk(tx))
+            .await
+            .map_err(|e| e.to_string().into())
     }
 }
 
-impl<S, T: Client<SdkCompatAdapter<T, U, S>>, U: Clone> Client<U> for SdkCompatPlugin<S, T> {
+impl<S, T: Client<SdkCompatAdapter<T, U, S>> + State, U: Clone> Client<U> for SdkCompatPlugin<S, T> {
     type Client = SdkCompatClient<T, U, S>;
 
     fn create_client(parent: U) -> Self::Client {
@@ -375,7 +458,7 @@ mod abci {
     use super::*;
     use crate::abci::{BeginBlock, EndBlock, InitChain};
 
-    impl<S, T> BeginBlock for SdkCompatPlugin<S, T>
+    impl<S, T: State> BeginBlock for SdkCompatPlugin<S, T>
     where
         T: BeginBlock + State,
     {
@@ -384,7 +467,7 @@ mod abci {
         }
     }
 
-    impl<S, T> EndBlock for SdkCompatPlugin<S, T>
+    impl<S, T: State> EndBlock for SdkCompatPlugin<S, T>
     where
         T: EndBlock + State,
     {
@@ -393,7 +476,7 @@ mod abci {
         }
     }
 
-    impl<S, T> InitChain for SdkCompatPlugin<S, T>
+    impl<S, T: State> InitChain for SdkCompatPlugin<S, T>
     where
         T: InitChain + State + CallTrait,
     {
