@@ -2,8 +2,7 @@ use crate::abci::AbciQuery;
 use crate::call::Call as CallTrait;
 use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::encoding::{Decode, Encode};
-use crate::ibc::path::{Identifier, Path};
-use crate::ibc::{Ibc, Ics26Message};
+use crate::ibc::{Ibc, IbcTx};
 use crate::query::Query as QueryTrait;
 use crate::state::State;
 use crate::Result;
@@ -56,21 +55,21 @@ impl<T: State> From<IbcPlugin<T>> for (<Ibc as State>::Encoding, T::Encoding) {
 
 pub enum Call<T> {
     Inner(T),
-    Ics26(Ics26Message),
+    Ibc(IbcTx),
 }
 
 impl<T: Encode> Encode for Call<T> {
     fn encoding_length(&self) -> ed::Result<usize> {
         match self {
             Call::Inner(inner) => inner.encoding_length(),
-            Call::Ics26(message) => message.encoding_length(),
+            Call::Ibc(message) => message.encoding_length(),
         }
     }
 
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
         match self {
             Call::Inner(inner) => inner.encode_into(dest),
-            Call::Ics26(message) => message.encode_into(dest),
+            Call::Ibc(message) => message.encode_into(dest),
         }
     }
 }
@@ -80,8 +79,8 @@ impl<T: Decode> Decode for Call<T> {
         let mut bytes = vec![];
         reader.read_to_end(&mut bytes)?;
 
-        if let Ok(message) = Ics26Message::decode(bytes.clone().as_slice()) {
-            Ok(Call::Ics26(message))
+        if let Ok(message) = IbcTx::decode(bytes.clone().as_slice()) {
+            Ok(Call::Ibc(message))
         } else {
             let native = T::decode(bytes.as_slice())?;
             Ok(Call::Inner(native))
@@ -99,7 +98,7 @@ where
     fn call(&mut self, call: Self::Call) -> Result<()> {
         match call {
             Call::Inner(native) => self.inner.call(native),
-            Call::Ics26(message) => self
+            Call::Ibc(message) => self
                 .ibc
                 .call(<Ibc as CallTrait>::Call::MethodDeliverMessage(
                     message,
@@ -229,12 +228,10 @@ where
     T::Call: Send,
     U: Send,
 {
-    // type Call = <Ibc as CallTrait>::Call;
-    type Call = Ics26Message;
+    type Call = IbcTx;
 
     async fn call(&self, call: Self::Call) -> Result<()> {
-        self.parent.call(Call::Ics26(call)).await
-        // self.parent.call(Call::Ics26()).await
+        self.parent.call(Call::Ibc(call)).await
     }
 }
 
@@ -335,6 +332,7 @@ mod abci {
         T: InitChain + State,
     {
         fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
+            self.ibc.init_chain(ctx)?;
             self.inner.init_chain(ctx)
         }
     }

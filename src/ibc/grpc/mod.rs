@@ -11,12 +11,15 @@ use ibc_proto::cosmos::bank::v1beta1::query_server::QueryServer as BankQueryServ
 use ibc_proto::cosmos::base::tendermint::v1beta1::service_server::ServiceServer as HealthServer;
 use ibc_proto::cosmos::staking::v1beta1::query_server::QueryServer as StakingQueryServer;
 use ibc_proto::cosmos::tx::v1beta1::service_server::ServiceServer as TxServer;
+use ibc_proto::ibc::core::channel::v1::query_server::QueryServer as ChannelQueryServer;
 use ibc_proto::ibc::core::client::v1::query_server::QueryServer as ClientQueryServer;
 use ibc_proto::ibc::core::connection::v1::query_server::QueryServer as ConnectionQueryServer;
+
 use tonic::transport::Server;
 
 mod auth;
 mod bank;
+mod channel;
 mod client;
 mod connection;
 mod health;
@@ -40,6 +43,14 @@ where
     pub fn new(ibc: AppClient<T>) -> Self {
         Self { ibc }
     }
+
+    async fn height(&self) -> u64 {
+        // TODO: remove this function, get height from query responses
+        use tendermint_rpc::Client;
+        let client = tendermint_rpc::HttpClient::new("http://localhost:26357").unwrap();
+        let status = client.status().await.unwrap();
+        status.sync_info.latest_block_height.into()
+    }
 }
 
 pub async fn start_grpc<T>(ibc: AppClient<T>)
@@ -56,6 +67,7 @@ where
         .add_service(TxServer::new(server.clone()))
         .add_service(ClientQueryServer::new(server.clone()))
         .add_service(ConnectionQueryServer::new(server.clone()))
+        .add_service(ChannelQueryServer::new(server.clone()))
         .add_service(HealthServer::new(server.clone()))
         .add_service(AuthQueryServer::new(server.clone()))
         .add_service(BankQueryServer::new(server.clone()))

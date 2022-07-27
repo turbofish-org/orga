@@ -34,8 +34,12 @@ where
         &self,
         request: Request<QueryBalanceRequest>,
     ) -> Result<Response<QueryBalanceResponse>, Status> {
-        println!("grpc balance");
-        todo!()
+        Ok(Response::new(QueryBalanceResponse {
+            balance: Some(RawCoin {
+                denom: "simp".to_string(),
+                amount: "1000".to_string(),
+            }),
+        }))
     }
 
     async fn all_balances(

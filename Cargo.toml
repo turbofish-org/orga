@@ -52,6 +52,7 @@ prost-types = {version = "0.10", optional = true}
 tokio = "1.18.1"
 tonic = "0.7"
 cosmrs = "0.7.0"
+derive_more = "0.99.17"
 
 [dev-dependencies]
 tempdir = "0.3.7"

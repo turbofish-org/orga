@@ -2,10 +2,10 @@ use super::{Adapter, Ibc, Lunchbox, ProtobufAdapter};
 use crate::call::Call;
 use crate::client::Client;
 use crate::collections::{Deque, Map};
-use crate::encoding::Encode;
+use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
-use crate::store::Write;
+use crate::store::{Read, Write};
 use ibc::{
     core::{
         ics02_client::{
@@ -31,18 +31,32 @@ type Result<T> = std::result::Result<T, Error>;
 
 impl From<crate::Error> for Error {
     fn from(_err: crate::Error) -> Error {
+        dbg!(_err);
         Error::implementation_specific()
     }
 }
 
 impl Lunchbox {
-    fn insert_connection<T: Into<ProtobufAdapter<ConnectionEnd>>>(
+    pub fn insert_connection<T: Into<ProtobufAdapter<ConnectionEnd>>>(
         &mut self,
         connection_id: ConnectionId,
         connection_end: T,
     ) -> crate::Result<()> {
         let key = Path::Connections(ConnectionsPath(connection_id)).into_bytes();
         self.0.put(key, connection_end.into().encode()?)
+    }
+
+    pub fn read_connection(
+        &self,
+        connection_id: ConnectionId,
+    ) -> crate::Result<ProtobufAdapter<ConnectionEnd>> {
+        let key = Path::Connections(ConnectionsPath(connection_id)).into_bytes();
+        let bytes = self
+            .0
+            .get(&key)?
+            .ok_or_else(|| crate::Error::Ibc("Connection not found".into()))?;
+
+        Ok(Decode::decode(bytes.as_slice())?)
     }
 }
 
@@ -51,6 +65,7 @@ pub struct ConnectionStore {
     count: u64,
     ends: Map<Adapter<ConnectionId>, ProtobufAdapter<ConnectionEnd>>,
     by_client: Map<Adapter<ClientId>, Deque<Adapter<ConnectionId>>>,
+    pub height: u64,
 }
 
 impl ConnectionReader for Ibc {
@@ -58,7 +73,8 @@ impl ConnectionReader for Ibc {
         println!("get connection end");
         self.connections
             .ends
-            .get(conn_id.clone().into())?
+            .get(conn_id.clone().into())
+            .map_err(|_| Error::connection_not_found(conn_id.clone()))?
             .map(|v| v.clone())
             .ok_or_else(|| Error::connection_not_found(conn_id.clone()))
     }
@@ -146,5 +162,25 @@ impl ConnectionStore {
             .map(|v| v.clone())
             .ok_or_else(|| Error::connection_not_found(id.clone().into_inner()))?
             .into())
+    }
+
+    #[query]
+    pub fn client_connections(&self, client_id: Adapter<ClientId>) -> Result<Vec<ConnectionId>> {
+        let mut conn_ids = vec![];
+        let conns = self
+            .by_client
+            .get(client_id)?
+            .ok_or_else(|| crate::Error::Ibc("Client not found".into()))?;
+
+        for i in 0..conns.len() {
+            let conn_id: ConnectionId = conns
+                .get(i)?
+                .ok_or_else(|| crate::Error::Ibc("Connection not found".into()))?
+                .clone()
+                .into_inner();
+            conn_ids.push(conn_id);
+        }
+
+        Ok(conn_ids)
     }
 }

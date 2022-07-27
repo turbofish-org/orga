@@ -162,6 +162,10 @@ impl IbcProto for ibc::clients::ics07_tendermint::consensus_state::ConsensusStat
     type Proto = ibc_proto::ibc::lightclients::tendermint::v1::ConsensusState;
 }
 
+impl IbcProto for ibc::core::ics04_channel::channel::ChannelEnd {
+    type Proto = ibc_proto::ibc::core::channel::v1::Channel;
+}
+
 impl<T> From<T> for ProtobufAdapter<T>
 where
     T: IbcProto,
@@ -205,5 +209,14 @@ where
 
     fn flush(self) -> crate::Result<Self::Encoding> {
         Ok(self)
+    }
+}
+
+impl Next for Adapter<ConnectionId> {
+    fn next(&self) -> Option<Self> {
+        let current_id: u64 = self.inner.as_str()[11..].parse().unwrap();
+        Some(Self {
+            inner: ConnectionId::new(current_id + 1),
+        })
     }
 }

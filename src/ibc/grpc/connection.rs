@@ -1,4 +1,4 @@
-use ibc::core::ics24_host::identifier::ConnectionId;
+use ibc::core::ics24_host::identifier::{ClientId, ConnectionId};
 use ibc_proto::ibc::core::connection::v1::{
     query_server::{Query as ConnectionQuery, QueryServer as ConnectionQueryServer},
     ConnectionEnd as RawConnectionEnd, IdentifiedConnection as RawIdentifiedConnection,
@@ -81,30 +81,27 @@ where
         &self,
         request: Request<QueryClientConnectionsRequest>,
     ) -> Result<Response<QueryClientConnectionsResponse>, Status> {
-        todo!()
-        // trace!("Got client connections request: {:?}", request);
+        let client_id: ClientId = request
+            .get_ref()
+            .client_id
+            .parse()
+            .map_err(|e| Status::invalid_argument(format!("{}", e)))?;
 
-        // let client_id = request
-        //     .get_ref()
-        //     .client_id
-        //     .parse()
-        //     .map_err(|e| Status::invalid_argument(format!("{}", e)))?;
-        // let path = path::ClientConnectionsPath(client_id);
-        // let connection_ids = self
-        //     .connection_ids_store
-        //     .get(Height::Pending, &path)
-        //     .unwrap_or_default();
-        // let connection_paths = connection_ids
-        //     .into_iter()
-        //     .map(|conn_id| conn_id.to_string())
-        //     .collect();
+        let connections: Vec<String> = self
+            .ibc
+            .connections
+            .client_connections(client_id.into())
+            .await?
+            .unwrap() // TODO
+            .into_iter()
+            .map(|c| c.as_str().to_string())
+            .collect();
 
-        // Ok(Response::new(QueryClientConnectionsResponse {
-        //     connection_paths,
-        //     // Note: proofs aren't being used by hermes currently
-        //     proof: vec![],
-        //     proof_height: None,
-        // }))
+        Ok(Response::new(QueryClientConnectionsResponse {
+            connection_paths: connections,
+            proof: vec![],
+            proof_height: None,
+        }))
     }
 
     async fn connection_client_state(

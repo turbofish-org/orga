@@ -5,6 +5,7 @@ use ibc_proto::cosmos::base::tendermint::v1beta1::{
     GetSyncingResponse, GetValidatorSetByHeightRequest, GetValidatorSetByHeightResponse,
     Module as VersionInfoModule, VersionInfo,
 };
+use tendermint_proto::p2p::DefaultNodeInfo;
 
 use super::Ibc;
 use crate::client::{AsyncCall, AsyncQuery, Call};
@@ -23,8 +24,10 @@ where
         &self,
         _request: Request<GetNodeInfoRequest>,
     ) -> Result<Response<GetNodeInfoResponse>, Status> {
-        dbg!("get_node_info");
-        unimplemented!()
+        Ok(Response::new(GetNodeInfoResponse {
+            default_node_info: Some(DefaultNodeInfo::default()),
+            application_version: None,
+        }))
     }
 
     async fn get_syncing(

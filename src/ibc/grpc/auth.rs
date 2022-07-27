@@ -32,7 +32,6 @@ where
         request: Request<QueryAccountRequest>,
     ) -> Result<Response<QueryAccountResponse>, Status> {
         println!("auth.account()");
-        dbg!(&request);
 
         let address = request.get_ref().address.clone();
         let account = BaseAccount {

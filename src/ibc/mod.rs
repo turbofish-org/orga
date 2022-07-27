@@ -1,23 +1,27 @@
 use std::convert::TryFrom;
 use std::str::from_utf8;
 
-use crate::abci::{AbciQuery, BeginBlock};
+use crate::abci::{AbciQuery, BeginBlock, InitChain};
 use crate::call::Call;
 use crate::client::Client;
-use crate::context::GetContext;
+use crate::context::{Context, GetContext};
 use crate::encoding::{Decode, Encode};
 use crate::merk::MerkStore;
-use crate::plugins::BeginBlockCtx;
 use crate::plugins::Events;
+use crate::plugins::{BeginBlockCtx, InitChainCtx};
 use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
 use client::ClientStore;
 use encoding::*;
 use ibc::applications::transfer::context::Ics20Context;
+use ibc::applications::transfer::relay::send_transfer::send_transfer;
 use ibc::core::ics02_client::height::Height;
+use ibc::core::ics26_routing::context::Module;
 use ibc::core::ics26_routing::handler::dispatch;
-use ics23::{InnerSpec, LeafOp, ProofSpec};
+use ibc::handler::HandlerOutputBuilder;
+use ics23::commitment_proof::Proof;
+use ics23::{CommitmentProof, InnerSpec, LeafOp, ProofSpec};
 use sha2::Sha512_256;
 use tendermint_proto::abci::{EventAttribute, RequestQuery, ResponseQuery};
 use tendermint_proto::Protobuf;
@@ -26,25 +30,30 @@ mod channel;
 mod client;
 mod connection;
 mod encoding;
-pub mod path;
-use path::{Identifier, Path};
+mod grpc;
 mod port;
 mod routing;
+mod transfer;
 
-mod grpc;
 use crate::store::Store;
 pub use grpc::start_grpc;
-pub use routing::Ics26Message;
 use tendermint_proto::abci::Event;
 use tendermint_proto::crypto::{ProofOp, ProofOps};
 
+use self::channel::ChannelStore;
 use self::connection::ConnectionStore;
+use self::port::PortStore;
+pub use self::routing::{IbcMessage, IbcTx};
+use self::transfer::TransferModule;
 
 #[derive(State, Call, Client, Query)]
 pub struct Ibc {
-    pub client: ClientStore,
+    pub clients: ClientStore,
     pub connections: ConnectionStore,
+    pub channels: ChannelStore,
+    ports: PortStore,
     height: u64,
+    pub transfers: TransferModule,
     pub(super) lunchbox: Lunchbox,
 }
 
@@ -52,7 +61,7 @@ pub struct Lunchbox(pub(super) Store);
 
 impl State for Lunchbox {
     type Encoding = ();
-    fn create(store: Store, data: Self::Encoding) -> Result<Self> {
+    fn create(store: Store, _data: Self::Encoding) -> Result<Self> {
         Ok(unsafe { Self(store.with_prefix(vec![])) })
     }
 
@@ -67,18 +76,37 @@ impl From<Lunchbox> for () {
 
 impl Ibc {
     #[call]
-    pub fn deliver_message(&mut self, msg: Ics26Message) -> Result<()> {
+    pub fn deliver_message(&mut self, msg: IbcTx) -> Result<()> {
+        let mut outputs = vec![];
         for message in msg.0 {
-            let output =
-                dispatch(self, message.clone()).map_err(|e| crate::Error::Ibc(e.to_string()))?;
+            let output = match message {
+                IbcMessage::Ics26(message) => {
+                    // println!("Ics26 message: {:?}", message);
+                    dispatch(self, message.clone())
+                        .map_err(|e| dbg!(crate::Error::Ibc(e.to_string())))?
+                }
+                IbcMessage::Ics20(message) => {
+                    // println!("Transfer message: {:?}", message);
+                    let mut transfer_output = HandlerOutputBuilder::new();
+                    send_transfer(&mut self.transfers, &mut transfer_output, message)
+                        .map_err(|e| dbg!(crate::Error::Ibc(e.to_string())))?;
+                    transfer_output.with_result(())
+                }
 
-            let ctx = self
-                .context::<Events>()
-                .ok_or_else(|| crate::Error::Ibc("No Events context available".into()))?;
+                _ => return Err(crate::Error::Ibc("Unsupported IBC message".to_string())),
+            };
 
+            outputs.push(output);
+        }
+
+        let ctx = self
+            .context::<Events>()
+            .ok_or_else(|| dbg!(crate::Error::Ibc("No events context available".into())))?;
+
+        for output in outputs {
             for event in output.events.into_iter() {
                 let abci_event = tendermint::abci::Event::try_from(event)
-                    .map_err(|e| crate::Error::Ibc(format!("{}", e)))?;
+                    .map_err(|e| crate::Error::Ibc(format!("{}", dbg!(e))))?;
                 let tm_proto_event = Event {
                     r#type: abci_event.type_str,
                     attributes: abci_event
@@ -98,44 +126,15 @@ impl Ibc {
 
         Ok(())
     }
-
-    // #[query]
-    // pub fn client_states(&self) -> Result<()> {
-    //     println!("queried client states with query method");
-    //     let client_states = self.client.query_client_states()?;
-    //     Ok(())
-    // }
 }
-
-// #[derive(Encode)]
-// pub enum Query {
-//     ClientStates,
-// }
-
-// impl Decode for Query {
-//     fn decode<R: std::io::Read>(mut reader: R) -> ed::Result<Self> {
-//         println!("decoding IBC query");
-//         let mut bytes = vec![];
-//         reader.read_to_end(&mut bytes)?;
-//         let path = Path::try_from(bytes.as_slice()).map_err(|_| ed::Error::UnexpectedByte(0))?;
-//         dbg!(&path);
-
-//         todo!()
-//     }
-// }
-
-// impl QueryTrait for Ibc {
-//     type Query = Query;
-
-//     fn query(&self, query: Self::Query) -> Result<()> {
-//         todo!()
-//     }
-// }
 
 impl BeginBlock for Ibc {
     fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
         self.height = ctx.height;
-        self.client.begin_block(ctx)
+        self.transfers.height = ctx.height;
+        self.channels.height = ctx.height;
+        self.connections.height = ctx.height;
+        self.clients.begin_block(ctx)
     }
 }
 
@@ -151,18 +150,10 @@ impl AbciQuery for Ibc {
             .parse()
             .map_err(|_| crate::Error::Ibc(format!("Invalid path: {}", path)))?;
 
-        println!(
-            "formatted path: {}, is provable: {}, wants proof: {}",
-            path,
-            path.is_provable(),
-            req.prove,
-        );
+        println!("path: {}, prove: {}", path, req.prove,);
         if path.is_provable() {
-            let value_bytes = self
-                .lunchbox
-                .0
-                .get(path.clone().into_bytes().as_slice())?
-                .unwrap_or_default();
+            let maybe_value_bytes = self.lunchbox.0.get(path.clone().into_bytes().as_slice())?;
+            let value_bytes = maybe_value_bytes.unwrap_or_default();
 
             // dbg!(&req.data);
             let key = path.clone().into_bytes();
@@ -177,7 +168,6 @@ impl AbciQuery for Ibc {
                 .borrow()
                 .use_merkstore(|store| store.merk().root_hash());
 
-            println!("inner root hash: {:?}", &inner_root_hash);
             let outer_proof = ics23::CommitmentProof {
                 proof: Some(ics23::commitment_proof::Proof::Exist(
                     ics23::ExistenceProof {
@@ -218,15 +208,23 @@ impl AbciQuery for Ibc {
                 .encode(&mut proof_bytes)
                 .map_err(|_| Error::Ibc("Failed to create proof".into()))?;
 
-            use crate::abci::ABCIStore;
-            let outer_app_hash = self
-                .lunchbox
-                .0
-                .backing_store()
-                .borrow()
-                .use_merkstore(|store| store.root_hash())?;
+            match proof.proof {
+                Some(Proof::Exist(..)) => {
+                    println!("proof is exist")
+                }
+                Some(Proof::Nonexist(_)) => {
+                    println!("proof is nonexist")
+                }
+                _ => unreachable!(),
+            }
 
-            println!("\n\nouter app hash: {:?}\n\n", outer_app_hash);
+            use crate::abci::ABCIStore;
+            // let outer_app_hash = self
+            //     .lunchbox
+            //     .0
+            //     .backing_store()
+            //     .borrow()
+            //     .use_merkstore(|store| store.root_hash())?;
 
             // dbg!(&value_bytes.len());
             // dbg!(&proof_bytes.len());
@@ -313,4 +311,9 @@ impl AbciQuery for Ibc {
     }
 }
 
-// impl Ics20Context for Ibc {}
+use ibc::core::ics26_routing::context::Router;
+impl InitChain for Ibc {
+    fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
+        Ok(())
+    }
+}

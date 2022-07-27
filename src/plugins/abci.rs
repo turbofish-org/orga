@@ -303,7 +303,18 @@ mod full {
 
                     res
                 }
-                CheckTx(inner_call) => self.inner.call(inner_call),
+                CheckTx(inner_call) => {
+                    Context::add(Events::default());
+                    self.events.replace(vec![]);
+                    let res = self.inner.call(inner_call);
+                    if res.is_ok() {
+                        self.events
+                            .replace(Context::resolve::<Events>().unwrap().events.clone());
+                    }
+                    Context::remove::<Events>();
+
+                    res
+                }
             }?;
 
             let validators = Context::resolve::<Validators>().unwrap();

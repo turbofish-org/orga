@@ -288,6 +288,7 @@ where
         match run_res {
             Ok(events) => {
                 deliver_tx_res.events = events;
+                deliver_tx_res.log = "success".to_string();
             }
             Err(err) => {
                 deliver_tx_res.code = 1;

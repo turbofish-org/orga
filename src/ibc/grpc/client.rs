@@ -42,7 +42,7 @@ where
     ) -> Result<Response<QueryClientStatesResponse>, Status> {
         println!("query client states");
         let res = QueryClientStatesResponse {
-            client_states: self.ibc.client.query_client_states().await??,
+            client_states: self.ibc.clients.query_client_states().await??,
             ..Default::default()
         };
 
@@ -79,7 +79,7 @@ where
 
             let consensus_states = self
                 .ibc
-                .client
+                .clients
                 .query_consensus_states(client_id.into())
                 .await??;
             Ok(Response::new(QueryConsensusStatesResponse {
