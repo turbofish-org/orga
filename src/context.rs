@@ -4,13 +4,13 @@ use mutagen::mutate;
 use crate::state::State;
 use std::any::TypeId;
 use std::collections::HashMap;
+use std::lazy::SyncLazy;
 use std::mem::{transmute, ManuallyDrop};
-use std::sync::LazyLock;
 use std::sync::Mutex;
 
 type ContextMap = ManuallyDrop<HashMap<TypeId, Box<()>>>;
-static CONTEXT_MAP: LazyLock<Mutex<ContextMap>> =
-    LazyLock::new(|| Mutex::new(ManuallyDrop::new(HashMap::new())));
+static CONTEXT_MAP: SyncLazy<Mutex<ContextMap>> =
+    SyncLazy::new(|| Mutex::new(ManuallyDrop::new(HashMap::new())));
 
 pub struct Context<I> {
     _inner: I,
