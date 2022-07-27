@@ -311,7 +311,7 @@ macro_rules! state_tuple_impl {
             where
                 S: Read,
             {
-                Ok(($($type::create(store.sub(&[$indices]), data.inner.$indices)?,)* $last_type::create(store.clone(), data.inner.$length)?))
+                Ok(($($type::create(store.sub(&[$indices]), data.inner.$indices)?,)* $last_type::create(store.sub(&[$indices]), data.inner.$length)?))
             }
 
             fn flush(self) -> Result<Self::Encoding> {
