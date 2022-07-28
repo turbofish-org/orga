@@ -22,7 +22,7 @@ pub use tendermint_proto::abci as messages;
 use tendermint_proto::abci::request::Value as Req;
 use tendermint_proto::abci::response::Value as Res;
 
-mod tendermint_client;
+pub mod tendermint_client;
 pub use tendermint_client::TendermintClient;
 
 /// Top-level struct for running an ABCI application. Maintains an ABCI server,
@@ -263,6 +263,7 @@ impl<A: Application> ABCIStateMachine<A> {
 
                 let mut res_commit = ResponseCommit::default();
                 let self_store = self_store_shared.into_inner();
+
                 res_commit.data = self_store.root_hash()?;
                 self.store = Some(Shared::new(self_store));
                 Ok(Res::Commit(res_commit))
@@ -555,8 +556,23 @@ impl<S: State> InitChain for S {
     }
 }
 
-pub trait App: BeginBlock + EndBlock + InitChain + State + Call + Query {}
-impl<T: BeginBlock + EndBlock + InitChain + State + Call + Query> App for T where
+pub trait AbciQuery {
+    fn abci_query(&self, request: &RequestQuery) -> Result<ResponseQuery>;
+}
+
+impl<S: State> AbciQuery for S {
+    default fn abci_query(&self, request: &RequestQuery) -> Result<ResponseQuery> {
+        Ok(ResponseQuery {
+            code: 1,
+            height: request.height as i64,
+            log: format!("Query path not handled: {}", request.path),
+            ..Default::default()
+        })
+    }
+}
+
+pub trait App: BeginBlock + EndBlock + InitChain + AbciQuery + State + Call + Query {}
+impl<T: BeginBlock + EndBlock + InitChain + AbciQuery + State + Call + Query> App for T where
     <T as State>::Encoding: Default
 {
 }

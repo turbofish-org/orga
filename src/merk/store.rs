@@ -1,3 +1,4 @@
+use ed25519_dalek::Sha512;
 #[cfg(test)]
 use mutagen::mutate;
 
@@ -123,7 +124,7 @@ impl MerkStore {
             .apply(batch.as_ref(), aux_batch.as_ref())?)
     }
 
-    pub(super) fn merk(&self) -> &Merk {
+    pub(crate) fn merk(&self) -> &Merk {
         self.merk.as_ref().unwrap()
     }
 }
@@ -229,7 +230,14 @@ impl ABCIStore for MerkStore {
     }
 
     fn root_hash(&self) -> Result<Vec<u8>> {
-        Ok(self.merk.as_ref().unwrap().root_hash().to_vec())
+        let merk_root = self.merk.as_ref().unwrap().root_hash();
+        use sha2::{Digest, Sha512_256};
+
+        let mut hasher = Sha512_256::new();
+        hasher.update(b"ibc");
+        hasher.update(merk_root);
+
+        Ok(hasher.finalize().to_vec())
     }
 
     fn commit(&mut self, height: u64) -> Result<()> {
