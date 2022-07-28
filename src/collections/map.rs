@@ -363,7 +363,7 @@ where
     }
 }
 
-impl<'a, 'b, K, V, S> Map<K, V, S>
+impl<'a, K, V, S> Map<K, V, S>
 where
     K: Encode + Decode + Terminated + Next + Clone,
     V: State<S>,
