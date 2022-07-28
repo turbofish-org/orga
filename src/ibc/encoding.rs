@@ -84,7 +84,7 @@ impl<T> std::ops::DerefMut for Adapter<T> {
     }
 }
 
-impl<'a, T> State for Adapter<T>
+impl<T> State for Adapter<T>
 where
     T: Serialize + for<'de> Deserialize<'de>,
     T: std::fmt::Debug,
