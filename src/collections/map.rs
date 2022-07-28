@@ -748,7 +748,7 @@ impl<'a, V: Default> Default for Ref<'a, V> {
 
 impl<'a, V: PartialEq> PartialEq for Ref<'a, V> {
     fn eq(&self, other: &Self) -> bool {
-        self.deref().eq(&*other)
+        self.deref().eq(other)
     }
 }
 
@@ -756,13 +756,13 @@ impl<'a, V: Eq> Eq for Ref<'a, V> {}
 
 impl<'a, V: PartialOrd> PartialOrd for Ref<'a, V> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.deref().partial_cmp(&*other)
+        self.deref().partial_cmp(other)
     }
 }
 
 impl<'a, V: Ord> Ord for Ref<'a, V> {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.deref().cmp(&*other)
+        self.deref().cmp(other)
     }
 }
 
