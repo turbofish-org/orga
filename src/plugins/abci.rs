@@ -326,7 +326,7 @@ mod full {
             }
 
             self.build_updates()?;
-            Ok(res)
+            Ok(())
         }
     }
 
