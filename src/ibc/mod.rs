@@ -82,7 +82,7 @@ impl Ibc {
             let output = match message {
                 IbcMessage::Ics26(message) => {
                     // println!("Ics26 message: {:?}", message);
-                    dispatch(self, message.clone())
+                    dispatch(self, *message.clone())
                         .map_err(|e| dbg!(crate::Error::Ibc(e.to_string())))?
                 }
                 IbcMessage::Ics20(message) => {
