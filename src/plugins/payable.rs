@@ -147,8 +147,8 @@ where
 
                 let ctx = self.context::<Paid>().unwrap();
                 ctx.running_payer = false;
-                let res = self.inner.call(calls.paid)?;
-                Ok(res)
+                self.inner.call(calls.paid)?;
+                Ok(())
             }
         }
     }
