@@ -41,7 +41,7 @@ where
     }
 }
 
-impl<'a, T> Decode for Adapter<T>
+impl<T> Decode for Adapter<T>
 where
     T: for<'de> Deserialize<'de>,
     T: std::fmt::Debug,
