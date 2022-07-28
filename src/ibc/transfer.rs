@@ -61,12 +61,7 @@ impl BankKeeper for TransferModule {
     }
 
     fn mint_coins(&mut self, account: &Self::AccountId, amt: &PrefixedCoin) -> Result<(), Error> {
-        println!(
-            "mint coins: {} {:#?} {}",
-            account,
-            amt,
-            amt.denom.to_string()
-        );
+        println!("mint coins: {} {:#?} {}", account, amt, amt.denom);
         Ok(())
     }
 
