@@ -164,6 +164,7 @@ mod tests {
         ));
     }
 
+    #[ignore]
     #[test]
     fn nonexistence_proof() {
         let path = "/tmp/ics23-proof-test2";
