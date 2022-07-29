@@ -46,22 +46,22 @@ pub struct Staking<S: Symbol> {
     consensus_keys: Map<Address, [u8; 32]>,
     last_signed_block: Map<[u8; 20], u64>,
     #[call]
-    max_validators: u64,
+    pub max_validators: u64,
     #[call]
-    min_self_delegation_min: u64,
+    pub min_self_delegation_min: u64,
     validators_by_power: EntryMap<ValidatorPowerEntry>,
     last_indexed_power: Map<Address, u64>,
     last_validator_powers: Map<Address, u64>,
     address_for_tm_hash: Map<[u8; 20], Address>,
     unbonding_seconds: u64,
     #[call]
-    max_offline_blocks: u64,
+    pub max_offline_blocks: u64,
     #[call]
-    slash_fraction_double_sign: Decimal,
+    pub slash_fraction_double_sign: Decimal,
     #[call]
-    slash_fraction_downtime: Decimal,
+    pub slash_fraction_downtime: Decimal,
     #[call]
-    downtime_jail_seconds: u64,
+    pub downtime_jail_seconds: u64,
     validator_queue: EntryMap<ValidatorQueueEntry>,
     unbonding_delegation_queue: Deque<UnbondingDelegationEntry>,
     redelegation_queue: Deque<RedelegationEntry>,
