@@ -10,9 +10,12 @@ use orga::query::Query;
 
 #[derive(Query, Call)]
 struct Foo<T> {
+    #[call]
     pub a: u8,
     _a2: u8,
+    #[call]
     pub b: Option<T>,
+    #[call]
     pub bar: Bar,
 }
 
@@ -26,12 +29,13 @@ pub struct Baz<T: Clone>
 where
     T: Add,
 {
-    pub deque: Deque<u32>,
+    #[call]
+    deque: Deque<u32>,
     _marker: std::marker::PhantomData<T>,
 }
 
 #[derive(Query, Call)]
-pub struct TupleStruct(pub u32);
+pub struct TupleStruct(#[call] u32);
 
 impl<T> Foo<T> {
     pub fn _no_attr(&self) {}
