@@ -43,6 +43,7 @@ pub struct ChannelStore {
     commitments: Map<Adapter<(PortId, ChannelId)>, Deque<Adapter<PacketState>>>,
     all_channels: Deque<Adapter<(PortId, ChannelId)>>,
     lunchbox: Lunchbox,
+    #[call]
     pub height: u64,
 }
 
