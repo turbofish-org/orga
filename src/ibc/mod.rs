@@ -48,12 +48,17 @@ use self::transfer::TransferModule;
 
 #[derive(State, Call, Client, Query)]
 pub struct Ibc {
+    #[call]
     pub clients: ClientStore,
+    #[call]
     pub connections: ConnectionStore,
+    #[call]
     pub channels: ChannelStore,
     ports: PortStore,
     height: u64,
+    #[call]
     pub transfers: TransferModule,
+    #[call]
     pub(super) lunchbox: Lunchbox,
 }
 
