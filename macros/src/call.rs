@@ -120,7 +120,15 @@ pub(super) fn create_call_impl(
         Data::Union(_) => panic!("Unions are not supported"),
     };
     let field_call_arms: Vec<_> = fields
-        .filter(|field| matches!(field.vis, Visibility::Public(_)))
+        .filter(|field| {
+            let field_names: Vec<String> = field
+                .attrs
+                .iter()
+                .map(|attr| attr.path.get_ident().unwrap().to_string())
+                .collect();
+
+            field_names.contains(&("call".into()))
+        })
         .enumerate()
         .map(|(i, field)| {
             let variant_name = field.ident.as_ref().map_or(
