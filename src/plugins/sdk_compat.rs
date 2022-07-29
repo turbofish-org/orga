@@ -90,8 +90,11 @@ impl<T: Decode> Decode for Call<T> {
 }
 
 pub mod sdk {
-    use super::{Address, Error, Result, Encode, Decode, MAX_CALL_SIZE};
+    use super::{Address, Decode, Encode, Error, Result, MAX_CALL_SIZE};
+    use cosmrs::proto::cosmos::tx::v1beta1::Tx as ProtoTx;
+    use prost::Message;
     use serde::{Deserialize, Serialize};
+    use std::io::{Error as IoError, ErrorKind};
 
     #[derive(Debug, Clone)]
     pub enum Tx {
@@ -107,27 +110,29 @@ pub mod sdk {
                     Ok(bytes.len())
                 }
                 Tx::Protobuf(tx) => {
-                    todo!()
+                    let tx: ProtoTx = tx.clone().into();
+                    Ok(tx.encoded_len())
                 }
             }
         }
 
         fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
-            match self {
+            let bytes = match self {
                 Tx::Amino(tx) => {
-                    let bytes = serde_json::to_vec(tx).map_err(|_| ed::Error::UnexpectedByte(0))?;
-
-                    if bytes.len() > MAX_CALL_SIZE {
-                        return Err(ed::Error::UnexpectedByte(0));
-                    }
-
-                    dest.write_all(&bytes)?;
-                    Ok(())
+                    serde_json::to_vec(tx).map_err(|_| ed::Error::UnexpectedByte(0))?
                 }
                 Tx::Protobuf(tx) => {
-                    todo!()
+                    let tx: ProtoTx = tx.clone().into();
+                    tx.encode_to_vec()
                 }
+            };
+
+            if bytes.len() > MAX_CALL_SIZE {
+                return Err(ed::Error::UnexpectedByte(0));
             }
+
+            dest.write_all(&bytes)?;
+            Ok(())
         }
     }
 
@@ -136,7 +141,7 @@ pub mod sdk {
             let mut bytes = Vec::with_capacity(MAX_CALL_SIZE);
             reader.read_to_end(&mut bytes)?;
 
-            if bytes.len() > MAX_CALL_SIZE || bytes.len() == 0 {
+            if bytes.len() > MAX_CALL_SIZE || bytes.is_empty() {
                 return Err(ed::Error::UnexpectedByte(0));
             }
 
@@ -146,7 +151,9 @@ pub mod sdk {
                 return Ok(Tx::Amino(tx));
             }
 
-            todo!()
+            let tx = cosmrs::Tx::from_bytes(bytes.as_slice())
+                .map_err(|e| IoError::new(ErrorKind::InvalidData, e))?;
+            Ok(Tx::Protobuf(tx))
         }
     }
 
@@ -174,13 +181,26 @@ pub mod sdk {
                     serde_json::to_vec(&sign_tx).map_err(|e| Error::App(e.to_string()))
                 }
                 Tx::Protobuf(tx) => {
-                    todo!()
+                    let tx = tx.clone();
+                    let signdoc = cosmrs::tx::SignDoc {
+                        body_bytes: tx
+                            .body
+                            .into_bytes()
+                            .map_err(|e| Error::App(e.to_string()))?,
+                        auth_info_bytes: tx
+                            .auth_info
+                            .into_bytes()
+                            .map_err(|e| Error::App(e.to_string()))?,
+                        chain_id,
+                        account_number: 0,
+                    };
+                    signdoc.into_bytes().map_err(|e| Error::App(e.to_string()))
                 }
             }
         }
 
         pub fn sender_pubkey(&self) -> Result<[u8; 33]> {
-            match self {
+            let pubkey_vec = match self {
                 Tx::Amino(tx) => {
                     let pubkey_b64 = &tx
                         .signatures
@@ -189,18 +209,25 @@ pub mod sdk {
                         .pub_key
                         .value;
 
-                    let pubkey_bytes =
-                        base64::decode(pubkey_b64).map_err(|e| Error::App(e.to_string()))?;
-
-                    let mut pubkey_arr = [0; 33];
-                    pubkey_arr.copy_from_slice(&pubkey_bytes);
-
-                    Ok(pubkey_arr)
+                    base64::decode(pubkey_b64).map_err(|e| Error::App(e.to_string()))?
                 }
-                Tx::Protobuf(tx) => {
-                    todo!()
-                }
-            }
+                Tx::Protobuf(tx) => tx
+                    .auth_info
+                    .signer_infos
+                    .first()
+                    .ok_or_else(|| Error::App("No auth info provided".to_string()))?
+                    .public_key
+                    .as_ref()
+                    .ok_or_else(|| Error::App("No public key provided".to_string()))?
+                    .single()
+                    .ok_or_else(|| Error::App("Invalid public key".to_string()))?
+                    .to_bytes(),
+            };
+
+            let mut pubkey_arr = [0; 33];
+            pubkey_arr.copy_from_slice(&pubkey_vec);
+
+            Ok(pubkey_arr)
         }
 
         pub fn sender_address(&self) -> Result<Address> {
@@ -208,7 +235,7 @@ pub mod sdk {
         }
 
         pub fn signature(&self) -> Result<[u8; 64]> {
-            match self {
+            let sig_vec = match self {
                 Tx::Amino(tx) => {
                     let sig_b64 = &tx
                         .signatures
@@ -216,18 +243,19 @@ pub mod sdk {
                         .ok_or_else(|| Error::App("No signatures provided".to_string()))?
                         .signature;
 
-                    let sig_bytes =
-                        base64::decode(sig_b64).map_err(|e| Error::App(e.to_string()))?;
-
-                    let mut sig_arr = [0; 64];
-                    sig_arr.copy_from_slice(&sig_bytes);
-
-                    Ok(sig_arr)
+                    base64::decode(sig_b64).map_err(|e| Error::App(e.to_string()))?
                 }
-                Tx::Protobuf(tx) => {
-                    todo!()
-                }
-            }
+                Tx::Protobuf(tx) => tx
+                    .signatures
+                    .first()
+                    .ok_or_else(|| Error::App("No signatures provided".to_string()))?
+                    .clone(),
+            };
+
+            let mut sig_arr = [0; 64];
+            sig_arr.copy_from_slice(&sig_vec);
+
+            Ok(sig_arr)
         }
     }
 
@@ -438,7 +466,9 @@ impl<
     }
 }
 
-impl<S, T: Client<SdkCompatAdapter<T, U, S>> + State, U: Clone> Client<U> for SdkCompatPlugin<S, T> {
+impl<S, T: Client<SdkCompatAdapter<T, U, S>> + State, U: Clone> Client<U>
+    for SdkCompatPlugin<S, T>
+{
     type Client = SdkCompatClient<T, U, S>;
 
     fn create_client(parent: U) -> Self::Client {
