@@ -208,16 +208,6 @@ impl AbciQuery for Ibc {
                 .encode(&mut proof_bytes)
                 .map_err(|_| Error::Ibc("Failed to create proof".into()))?;
 
-            match proof.proof {
-                Some(Proof::Exist(..)) => {
-                    println!("proof is exist")
-                }
-                Some(Proof::Nonexist(_)) => {
-                    println!("proof is nonexist")
-                }
-                _ => unreachable!(),
-            }
-
             use crate::abci::ABCIStore;
             // let outer_app_hash = self
             //     .lunchbox

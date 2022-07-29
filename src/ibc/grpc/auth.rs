@@ -23,7 +23,6 @@ where
         &self,
         _request: Request<QueryAccountsRequest>,
     ) -> Result<Response<QueryAccountsResponse>, Status> {
-        println!("grpc accounts");
         unimplemented!()
     }
 
@@ -31,8 +30,6 @@ where
         &self,
         request: Request<QueryAccountRequest>,
     ) -> Result<Response<QueryAccountResponse>, Status> {
-        println!("auth.account()");
-
         let address = request.get_ref().address.clone();
         let account = BaseAccount {
             address,
@@ -64,7 +61,6 @@ where
         &self,
         _request: Request<QueryParamsRequest>,
     ) -> Result<Response<QueryParamsResponse>, Status> {
-        println!("grpc params");
         unimplemented!()
     }
 }

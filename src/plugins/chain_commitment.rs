@@ -223,4 +223,16 @@ mod abci {
             self.inner.init_chain(ctx)
         }
     }
+
+    impl<T, const ID: &'static str> crate::abci::AbciQuery for ChainCommitmentPlugin<T, ID>
+    where
+        T: crate::abci::AbciQuery + State,
+    {
+        fn abci_query(
+            &self,
+            request: &tendermint_proto::abci::RequestQuery,
+        ) -> Result<tendermint_proto::abci::ResponseQuery> {
+            self.inner.abci_query(request)
+        }
+    }
 }

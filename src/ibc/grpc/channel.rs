@@ -203,14 +203,11 @@ where
             .map_err(|_| Status::invalid_argument("invalid channel id"))?;
         let sequences_to_check: Vec<u64> = request.packet_commitment_sequences;
 
-        dbg!(&sequences_to_check);
         let unreceived_sequences: Vec<u64> = self
             .ibc
             .channels
             .query_unreceived_packets((port_id, channel_id).into(), sequences_to_check.into())
             .await?;
-
-        dbg!(&unreceived_sequences);
 
         Ok(Response::new(QueryUnreceivedPacketsResponse {
             sequences: unreceived_sequences,
@@ -232,14 +229,11 @@ where
             .map_err(|_| Status::invalid_argument("invalid channel id"))?;
         let sequences_to_check: Vec<u64> = request.packet_ack_sequences;
 
-        dbg!(&sequences_to_check);
         let unreceived_sequences: Vec<u64> = self
             .ibc
             .channels
             .query_unreceived_acks((port_id, channel_id).into(), sequences_to_check.into())
             .await?;
-
-        dbg!(&unreceived_sequences);
 
         Ok(Response::new(QueryUnreceivedAcksResponse {
             sequences: unreceived_sequences,

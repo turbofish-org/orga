@@ -70,7 +70,6 @@ pub struct ConnectionStore {
 
 impl ConnectionReader for Ibc {
     fn connection_end(&self, conn_id: &ConnectionId) -> Result<ConnectionEnd> {
-        println!("get connection end");
         self.connections
             .ends
             .get(conn_id.clone().into())
