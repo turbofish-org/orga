@@ -305,7 +305,7 @@ mod full {
                     }
                     Context::remove::<Events>();
                 }
-            }?;
+            };
 
             let validators = Context::resolve::<Validators>().unwrap();
             let mut current_vp_ref = validators.current_vp.borrow_mut();
