@@ -37,6 +37,7 @@ use super::{Adapter, Ibc, Lunchbox};
 pub struct TransferModule {
     lunchbox: Lunchbox,
     commitments: Map<Adapter<(PortId, ChannelId)>, Deque<Adapter<PacketState>>>,
+    #[call]
     pub height: u64,
 }
 
