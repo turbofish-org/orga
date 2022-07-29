@@ -67,6 +67,7 @@ abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto", "prost", "i
 merk-verify = ["merk/verify"]
 merk-full = ["merk/full", "ics23", "sha2"]
 state-sync = []
+feat-ibc = ["ibc", "ibc-proto", "bincode", "ics23", "prost-types"]
 
 [profile.release]
 lto = true
