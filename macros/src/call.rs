@@ -271,7 +271,15 @@ pub(super) fn create_call_enum(item: &DeriveInput, source: &File) -> (TokenStrea
         Data::Union(_) => panic!("Unions are not supported"),
     };
     let field_variants: Vec<_> = fields
-        .filter(|field| matches!(field.vis, Visibility::Public(_)))
+        .filter(|field| {
+            let field_names: Vec<String> = field
+                .attrs
+                .iter()
+                .map(|attr| attr.path.get_ident().unwrap().to_string())
+                .collect();
+
+            field_names.contains(&("call".into()))
+        })
         .enumerate()
         .map(|(i, field)| {
             let name = field.ident.as_ref().map_or(
