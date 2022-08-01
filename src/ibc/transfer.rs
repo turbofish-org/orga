@@ -35,13 +35,13 @@ use ibc::Height;
 use ibc_proto::ibc::core::channel::v1::PacketState;
 use ripemd::Digest;
 
-use super::{Adapter, Ibc, Lunchbox};
+use super::{Adapter, Lunchbox};
 
 #[derive(State, Call, Query, Client)]
 pub struct TransferModule {
     lunchbox: Lunchbox,
     commitments: Map<Adapter<(PortId, ChannelId)>, Deque<Adapter<PacketState>>>,
-    bank: Bank,
+    pub(super) bank: Bank,
     pub height: u64,
 }
 
@@ -560,6 +560,9 @@ impl FromStr for Dynom {
 pub struct Bank {
     pub balances: Map<Dynom, Map<Address, Amount>>,
 }
+
+unsafe impl Send for Bank {}
+unsafe impl Sync for Bank {}
 
 impl Bank {
     pub fn transfer(

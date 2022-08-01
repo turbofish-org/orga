@@ -5,13 +5,33 @@
 #![feature(type_name_of_val)]
 #![feature(generic_associated_types)]
 
-use orga::ibc::{start_grpc, Ibc};
+use orga::ibc::{start_grpc, Ibc, IbcTx};
 use orga::prelude::*;
 
 #[derive(State, Query, Client, Call)]
 pub struct Counter {
     count: u64,
     pub ibc: Ibc,
+}
+
+impl Counter {
+    #[call]
+    pub fn noop(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    #[call]
+    pub fn mint_simp(&mut self, amount: Amount) -> Result<()> {
+        let signer = self.signer()?;
+        self.ibc.bank_mut().mint(signer, amount, "simp".parse()?)
+    }
+
+    fn signer(&mut self) -> Result<Address> {
+        self.context::<Signer>()
+            .ok_or_else(|| orga::Error::Signer("No Signer context available".into()))?
+            .signer
+            .ok_or_else(|| orga::Error::Coins("Unauthorized account action".into()))
+    }
 }
 
 #[derive(State, Debug, Clone)]
@@ -21,13 +41,13 @@ impl Symbol for Simp {
 }
 
 impl BeginBlock for Counter {
-    fn begin_block(&mut self, _ctx: &BeginBlockCtx) -> Result<()> {
+    fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
         if self.count % 50 == 0 {
             println!("count is {:?}", self.count);
         }
         self.count += 1;
 
-        Ok(())
+        self.ibc.begin_block(ctx)
     }
 }
 
@@ -46,8 +66,17 @@ impl InitChain for Counter {
 impl ConvertSdkTx for Counter {
     type Output = PaidCall<<Counter as Call>::Call>;
     fn convert(&self, msg: &sdk_compat::sdk::Tx) -> Result<Self::Output> {
-        dbg!(msg);
-        todo!()
+        type AppCall = <Counter as Call>::Call;
+
+        let tx_bytes = msg.encode()?;
+        let _ibc_tx = IbcTx::decode(tx_bytes.as_slice())?;
+        let deliver_msg_call_bytes = [vec![5], tx_bytes].concat();
+
+        let paid_call = AppCall::FieldIbc(deliver_msg_call_bytes);
+        Ok(PaidCall {
+            payer: AppCall::MethodNoop(vec![]),
+            paid: paid_call,
+        })
     }
 }
 
@@ -57,7 +86,7 @@ impl AbciQuery for Counter {
     }
 }
 
-type MyApp = DefaultPlugins<Simp, Counter, "ibc-example">;
+type MyApp = DefaultPlugins<Simp, Counter, "orga-0">;
 
 fn app_client() -> TendermintClient<MyApp> {
     TendermintClient::new("http://localhost:26357").unwrap()

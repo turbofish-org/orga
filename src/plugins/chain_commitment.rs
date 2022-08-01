@@ -69,21 +69,14 @@ where
     type Output = Vec<u8>;
 
     fn convert(&self, sdk_tx: &SdkTx) -> Result<Vec<u8>> {
-        match sdk_tx {
-            SdkTx::Amino(tx) => {
-                let id_bytes = ID.as_bytes();
-                let inner_call = self.inner.convert(sdk_tx)?;
+        let id_bytes = ID.as_bytes();
+        let inner_call = self.inner.convert(sdk_tx)?;
 
-                let mut call_bytes = Vec::with_capacity(id_bytes.len() + inner_call.encoding_length()?);
-                call_bytes.extend_from_slice(id_bytes);
-                inner_call.encode_into(&mut call_bytes)?;
+        let mut call_bytes = Vec::with_capacity(id_bytes.len() + inner_call.encoding_length()?);
+        call_bytes.extend_from_slice(id_bytes);
+        inner_call.encode_into(&mut call_bytes)?;
 
-                Ok(call_bytes)
-            }
-            SdkTx::Protobuf(tx) => {
-                todo!()
-            }
-        }
+        Ok(call_bytes)
     }
 }
 

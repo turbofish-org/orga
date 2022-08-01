@@ -175,23 +175,16 @@ where
     type Output = SignerCall;
 
     fn convert(&self, sdk_tx: &SdkTx) -> Result<SignerCall> {
-        match sdk_tx {
-            SdkTx::Amino(tx) => {
-                let signature = sdk_tx.signature()?;
-                let pubkey = sdk_tx.sender_pubkey()?;
-                let inner_call = self.inner.convert(sdk_tx)?.encode()?;
+        let signature = sdk_tx.signature()?;
+        let pubkey = sdk_tx.sender_pubkey()?;
+        let inner_call = self.inner.convert(sdk_tx)?.encode()?;
 
-                Ok(SignerCall {
-                    signature: Some(signature),
-                    pubkey: Some(pubkey),
-                    sigtype: SigType::Sdk(sdk_tx.clone()),
-                    call_bytes: inner_call,
-                })
-            }
-            SdkTx::Protobuf(tx) => {
-                todo!()
-            }
-        }
+        Ok(SignerCall {
+            signature: Some(signature),
+            pubkey: Some(pubkey),
+            sigtype: SigType::Sdk(sdk_tx.clone()),
+            call_bytes: inner_call,
+        })
     }
 }
 

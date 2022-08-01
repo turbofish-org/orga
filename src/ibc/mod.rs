@@ -126,6 +126,10 @@ impl Ibc {
 
         Ok(())
     }
+
+    pub fn bank_mut(&mut self) -> &mut transfer::Bank {
+        &mut self.transfers.bank
+    }
 }
 
 impl BeginBlock for Ibc {
