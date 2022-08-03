@@ -22,9 +22,9 @@ pub fn derive(item: TokenStream) -> TokenStream {
 
     let output = quote!(
         use ::orga::macros::*;
-
         pub mod #modname {
             use super::*;
+
             #call_enum_tokens
             #call_impl_tokens
         }
@@ -358,7 +358,7 @@ pub(super) fn create_call_enum(item: &DeriveInput, source: &File) -> (TokenStrea
     };
 
     let struct_output = quote! {
-        #[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
+        #[derive(::orga::encoding::Encode, ::orga::encoding::Decode, std::fmt::Debug)]
         pub enum Call#generic_params {
             Noop,
             #(#field_variants,)*
@@ -368,7 +368,6 @@ pub(super) fn create_call_enum(item: &DeriveInput, source: &File) -> (TokenStrea
 
     let output = quote! {
         #struct_output
-
         impl#generic_params Default for Call#generic_params {
             fn default() -> Self {
                 Call::Noop
