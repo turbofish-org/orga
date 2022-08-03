@@ -72,6 +72,7 @@ impl Paid {
     }
 }
 
+#[derive(Debug)]
 pub struct PaidCall<T> {
     pub payer: T,
     pub paid: T,
@@ -118,7 +119,7 @@ impl<T: Decode> Decode for PaidCall<T> {
     }
 }
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode)]
 pub enum PayableCall<T> {
     Paid(PaidCall<T>),
     Unpaid(T),
