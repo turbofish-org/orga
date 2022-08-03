@@ -37,6 +37,7 @@ impl<S, T: State> From<SdkCompatPlugin<S, T>> for (T::Encoding,) {
     }
 }
 
+#[derive(Debug)]
 pub enum Call<T> {
     Native(T),
     Sdk(sdk::Tx),
