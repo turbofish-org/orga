@@ -114,6 +114,26 @@ pub(super) fn create_call_impl(
         .map(|t| quote!(#t: ::orga::call::Call,));
     let call_bounds = quote!(#(#call_bounds)*);
 
+    let parameter_bounds = relevant_methods(name, "call", source)
+        .into_iter()
+        .flat_map(|(method, _)| {
+            let inputs: Vec<_> = method
+                .sig
+                .inputs
+                .iter()
+                .skip(1)
+                .map(|input| match input {
+                    FnArg::Typed(input) => *input.ty.clone(),
+                    _ => panic!("unexpected input"),
+                })
+                .collect();
+
+            inputs
+        })
+        .map(|t| quote!(#t: std::fmt::Debug,))
+        .collect::<Vec<_>>();
+    let parameter_bounds = quote!(#(#parameter_bounds)*);
+
     let fields = match &item.data {
         Data::Struct(data) => data.fields.iter(),
         Data::Enum(_) => todo!("Enums are not supported yet"),
@@ -237,7 +257,7 @@ pub(super) fn create_call_impl(
 
     let impl_output = quote! {
         impl#generics_sanitized ::orga::call::Call for #name#generic_params
-        where #where_preds #encoding_bounds
+        where #where_preds #encoding_bounds #parameter_bounds
         {
             type Call = #call_type#call_generics;
 
