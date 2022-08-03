@@ -81,7 +81,7 @@ impl<T: State + Query> Query for NoncePlugin<T> {
     }
 }
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode)]
 pub struct NonceCall<T> {
     pub nonce: Option<u64>,
     pub inner_call: T,
@@ -375,7 +375,7 @@ mod tests {
         }
     }
 
-    #[derive(Encode, Decode)]
+    #[derive(Debug, Encode, Decode)]
     enum CounterCall {
         Increment,
     }
