@@ -53,6 +53,7 @@ impl<T: State> From<IbcPlugin<T>> for (<Ibc as State>::Encoding, T::Encoding) {
     }
 }
 
+#[derive(Debug)]
 pub enum Call<T> {
     Inner(T),
     Ibc(IbcTx),
