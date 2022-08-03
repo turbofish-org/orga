@@ -45,7 +45,7 @@ pub struct ValidatorQueryInfo {
     pub amount_staked: Amount,
 }
 
-#[derive(Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct ValidatorInfo {
     pub bytes: Vec<u8>,
 }

@@ -540,7 +540,7 @@ impl TransferModule {
     }
 }
 
-#[derive(State, Encode, Decode, Clone)]
+#[derive(Debug, State, Encode, Decode, Clone)]
 pub struct Dynom(LengthVec<u8, u8>);
 
 impl FromStr for Dynom {
