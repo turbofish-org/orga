@@ -30,7 +30,7 @@ pub struct Signer {
     pub signer: Option<Address>,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode)]
 pub struct SignerCall {
     pub signature: Option<[u8; 64]>,
     pub pubkey: Option<[u8; 33]>,
@@ -38,7 +38,7 @@ pub struct SignerCall {
     pub call_bytes: Vec<u8>,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode)]
 pub enum SigType {
     Native,
     Adr36,
