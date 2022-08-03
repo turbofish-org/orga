@@ -11,7 +11,7 @@ use std::result::Result as StdResult;
 pub use orga_macros::{call, Call};
 
 pub trait Call {
-    type Call: Encode + Decode + std::fmt::Debug;
+    type Call: Encode + Decode;
 
     fn call(&mut self, call: Self::Call) -> Result<()>;
 }
