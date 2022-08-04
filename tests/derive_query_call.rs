@@ -153,3 +153,12 @@ fn _exhaustive_match_call<T: Call>(call: foo_call::Call<T>) {
         Call::MethodGenericOutputCall(subcall) => _assert_type::<Vec<u8>>(subcall),
     }
 }
+
+#[test]
+fn query_call_debug() {
+    let query = <Foo<i32> as orga::query::Query>::Query::MethodGenericInput(123, vec![42]);
+    println!("{:?}", query);
+
+    let call = <Foo<i32> as orga::call::Call>::Call::MethodGenericInputCall(234, vec![42]);
+    println!("{:?}", call);
+}
