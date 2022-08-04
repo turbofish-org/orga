@@ -109,9 +109,9 @@ where
     }
 }
 
-#[derive(Encode, Decode)]
-pub enum Query<T: QueryTrait> {
-    Inner(T::Query),
+#[derive(Encode, Decode, Debug)]
+pub enum Query<T> {
+    Inner(T),
     Ibc(<Ibc as QueryTrait>::Query),
 }
 
@@ -147,7 +147,7 @@ pub enum Query<T: QueryTrait> {
 // }
 
 impl<T: QueryTrait> QueryTrait for IbcPlugin<T> {
-    type Query = Query<T>;
+    type Query = Query<T::Query>;
 
     fn query(&self, query: Self::Query) -> Result<()> {
         match query {
@@ -187,7 +187,7 @@ where
 #[async_trait::async_trait(?Send)]
 impl<
         T: QueryTrait + State,
-        U: for<'a> AsyncQuery<Query = Query<T>, Response<'a> = Rc<IbcPlugin<T>>> + Clone,
+        U: for<'a> AsyncQuery<Query = Query<T::Query>, Response<'a> = Rc<IbcPlugin<T>>> + Clone,
     > AsyncQuery for InnerAdapter<T, U>
 {
     type Query = T::Query;
