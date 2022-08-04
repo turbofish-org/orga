@@ -6,7 +6,7 @@ use std::result::Result as StdResult;
 pub use orga_macros::{query, Query};
 
 pub trait Query {
-    type Query: Encode + Decode;
+    type Query: Encode + Decode + std::fmt::Debug;
 
     fn query(&self, query: Self::Query) -> Result<()>;
 }
