@@ -10,7 +10,7 @@ use prost::Message;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
 
-#[derive(Clone, Call, Client, Query)]
+#[derive(Clone, Call, Client, Query, Debug)]
 pub struct Adapter<T> {
     pub(crate) inner: T,
 }
