@@ -226,19 +226,13 @@ where
                 *last_entry = *new_denom_period_entry;
                 use std::cmp::Ordering::*;
                 match delta.cmp(&0.into()) {
-                    Less => {
-                        debug_assert!(false, "Taking from pools is currently not supported");
-                        return Err(Error::Coins(
-                            "Taking from pools is currently not supported".to_string(),
-                        ));
-                    }
+                    Less | Equal => {}
                     Greater => {
                         let amount_to_give = delta.amount()?;
                         if amount_to_give >= 1 {
                             entry.give((*denom_index, amount_to_give))?;
                         }
                     }
-                    Equal => {}
                 };
             }
         }
