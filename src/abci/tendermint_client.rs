@@ -1,7 +1,10 @@
+use std::cell::Cell;
 use std::convert::TryInto;
 use std::ops::{Deref, DerefMut};
+use std::sync::{Arc, Mutex};
 
 use tendermint_rpc as tm;
+use tm::endpoint::abci_query::AbciQuery;
 use tm::Client as _;
 
 use crate::call::Call;
@@ -94,6 +97,7 @@ impl<T: Client<TendermintAdapter<T>> + Query + State> TendermintClient<T> {
 pub struct TendermintAdapter<T> {
     marker: std::marker::PhantomData<fn() -> T>,
     client: tm::HttpClient,
+    res_store: Option<Arc<Mutex<Cell<Option<AbciQuery>>>>>,
 }
 
 impl<T> Clone for TendermintAdapter<T> {
@@ -101,6 +105,7 @@ impl<T> Clone for TendermintAdapter<T> {
         TendermintAdapter {
             marker: self.marker,
             client: self.client.clone(),
+            res_store: self.res_store.clone(),
         }
     }
 }
@@ -150,6 +155,13 @@ impl<T: Query + State> AsyncQuery for TendermintAdapter<T> {
             .client
             .abci_query(None, query_bytes, None, true)
             .await?;
+
+        if let Some(res_store) = &self.res_store {
+            res_store
+                .lock()
+                .map_err(|e| Error::Poison(e.to_string()))?
+                .replace(Some(res.clone()));
+        }
 
         if let tendermint::abci::Code::Err(code) = res.code {
             let msg = format!("code {}: {}", code, res.log);
