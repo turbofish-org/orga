@@ -38,7 +38,7 @@ impl<T: Client<TendermintAdapter<T>>> TendermintClient<T> {
     }
 
     //this should await something
-    pub async fn with_responce<F, R>(self, f: F) -> Result<(R, AbciQuery)>
+    pub async fn with_response<F, R>(self, f: F) -> Result<(R, AbciQuery)>
     where
         F: FnOnce(T::Client) -> Result<R>,
     {
