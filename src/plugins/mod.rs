@@ -13,8 +13,6 @@ pub use payable::*;
 mod fee;
 pub use fee::*;
 
-pub mod ibc;
-
 pub mod chain_commitment;
 pub use chain_commitment::{ChainCommitmentPlugin, ChainId};
 

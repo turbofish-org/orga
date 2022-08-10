@@ -96,6 +96,7 @@ impl BankKeeper for TransferModule {
             .to_string()
             .parse()
             .map_err(|_| Error::invalid_token())?;
+
         let amount: Amount = amt.amount.try_into().map_err(|_| Error::invalid_token())?;
 
         self.bank
@@ -145,10 +146,6 @@ impl Ics20Reader for TransferModule {
                 .parse()
                 .map_err(|_| Error::parse_account_failure())?;
 
-        println!(
-            "Escrow address for port {} channel {} is {}",
-            port_id, channel_id, escrow_addr
-        );
         Ok(escrow_addr)
     }
 
@@ -540,8 +537,8 @@ impl TransferModule {
     }
 }
 
-#[derive(State, Encode, Decode, Clone)]
-pub struct Dynom(LengthVec<u8, u8>);
+#[derive(State, Encode, Decode, Clone, Debug)]
+pub struct Dynom(pub LengthVec<u8, u8>);
 
 impl FromStr for Dynom {
     type Err = crate::Error;

@@ -1,3 +1,4 @@
+use super::utils::parse_parent;
 use heck::{CamelCase, SnakeCase};
 use proc_macro::TokenStream;
 use proc_macro2::{Literal, Span, TokenStream as TokenStream2};
@@ -372,12 +373,6 @@ pub(crate) fn create_query_enum(item: &DeriveInput, source: &File) -> (TokenStre
     };
 
     (output, query_enum)
-}
-
-fn parse_parent() -> File {
-    let path = proc_macro::Span::call_site().source_file().path();
-    let source = std::fs::read_to_string(path).unwrap();
-    parse_file(source.as_str()).unwrap()
 }
 
 fn get_generic_requirements<I, J>(inputs: I, params: J) -> Vec<Ident>
