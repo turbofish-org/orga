@@ -9,18 +9,21 @@ use ibc_proto::cosmos::tx::v1beta1::{
 };
 
 use super::Ibc;
-use crate::client::{AsyncCall, AsyncQuery, Call};
+use crate::abci::tendermint_client::{TendermintAdapter, TendermintClient};
+use crate::client::{AsyncCall, AsyncQuery, Call, Client};
 use std::convert::TryFrom;
 use std::rc::Rc;
 use tonic::{Request, Response, Status};
 
 #[tonic::async_trait]
-impl<T> TxService for super::GrpcServer<T>
+impl<T, U> TxService for super::GrpcServer<T, U>
 where
     T: Clone + Send + Sync + 'static,
     // T: AsyncCall<Call = <Ibc as Call>::Call>,
     T: AsyncQuery,
     T: for<'a> AsyncQuery<Response<'a> = Rc<Ibc>>,
+    U: Client<TendermintAdapter<U>>,
+    <U as Client<TendermintAdapter<U>>>::Client: Sync + Send,
 {
     async fn simulate(
         &self,
