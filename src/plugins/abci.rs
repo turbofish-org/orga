@@ -268,28 +268,22 @@ mod full {
             };
             create_time_ctx(&self.time);
 
-            let res = match call {
+            match call {
                 InitChain(req) => {
                     let ctx: InitChainCtx = req.into_inner().into();
                     self.time = ctx.time.clone();
                     create_time_ctx(&self.time);
                     self.inner.init_chain(&ctx)?;
-
-                    Ok(())
                 }
                 BeginBlock(req) => {
                     let ctx: BeginBlockCtx = req.into_inner().into();
                     self.time = ctx.header.clone().time;
                     create_time_ctx(&self.time);
                     self.inner.begin_block(&ctx)?;
-
-                    Ok(())
                 }
                 EndBlock(req) => {
                     let ctx = req.into_inner().into();
                     self.inner.end_block(&ctx)?;
-
-                    Ok(())
                 }
                 DeliverTx(inner_call) => {
                     Context::add(Events::default());
@@ -300,8 +294,6 @@ mod full {
                             .replace(Context::resolve::<Events>().unwrap().events.clone());
                     }
                     Context::remove::<Events>();
-
-                    res
                 }
                 CheckTx(inner_call) => {
                     Context::add(Events::default());
@@ -312,10 +304,8 @@ mod full {
                             .replace(Context::resolve::<Events>().unwrap().events.clone());
                     }
                     Context::remove::<Events>();
-
-                    res
                 }
-            }?;
+            };
 
             let validators = Context::resolve::<Validators>().unwrap();
             let mut current_vp_ref = validators.current_vp.borrow_mut();
@@ -336,7 +326,7 @@ mod full {
             }
 
             self.build_updates()?;
-            Ok(res)
+            Ok(())
         }
     }
 

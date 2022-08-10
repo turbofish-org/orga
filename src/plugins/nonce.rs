@@ -180,8 +180,10 @@ where
 #[async_trait::async_trait(?Send)]
 impl<
         T: Query + State,
-        U: for<'a> AsyncQuery<Query = NonceQuery<T::Query>, Response<'a> = std::rc::Rc<NoncePlugin<T>>>
-            + Clone,
+        U: for<'a> AsyncQuery<
+                Query = NonceQuery<T::Query>,
+                Response<'a> = std::rc::Rc<NoncePlugin<T>>,
+            > + Clone,
     > AsyncQuery for NonceAdapter<T, U>
 {
     type Query = T::Query;

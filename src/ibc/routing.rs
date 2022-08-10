@@ -78,7 +78,7 @@ impl TryFrom<&[u8]> for IbcTx {
                 };
 
                 if let Ok(msg) = Ics26Envelope::try_from(msg.clone()) {
-                    return Ok(IbcMessage::Ics26(msg));
+                    return Ok(IbcMessage::Ics26(Box::new(msg)));
                 } else if let Ok(msg) = MsgTransfer::try_from(msg) {
                     return Ok(IbcMessage::Ics20(msg));
                 }
@@ -96,5 +96,5 @@ pub struct IbcTx(pub Vec<IbcMessage>);
 #[derive(Debug, Clone)]
 pub enum IbcMessage {
     Ics20(MsgTransfer),
-    Ics26(Ics26Envelope),
+    Ics26(Box<Ics26Envelope>),
 }

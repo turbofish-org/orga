@@ -43,6 +43,7 @@ pub struct ChannelStore {
     commitments: Map<Adapter<(PortId, ChannelId)>, Deque<Adapter<PacketState>>>,
     all_channels: Deque<Adapter<(PortId, ChannelId)>>,
     lunchbox: Lunchbox,
+    #[call]
     pub height: u64,
 }
 
@@ -596,7 +597,7 @@ impl ChannelStore {
                 packet_states.push(PacketState {
                     port_id: ids.0.clone().to_string(),
                     channel_id: ids.1.clone().to_string(),
-                    sequence: seq.into(),
+                    sequence: seq,
                     data,
                 });
             }

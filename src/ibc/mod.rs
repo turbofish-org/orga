@@ -56,12 +56,17 @@ use self::transfer::{Dynom, TransferModule};
 
 #[derive(State, Call, Client, Query)]
 pub struct Ibc {
+    #[call]
     pub clients: ClientStore,
+    #[call]
     pub connections: ConnectionStore,
+    #[call]
     pub channels: ChannelStore,
     ports: PortStore,
     height: u64,
+    #[call]
     pub transfers: TransferModule,
+    #[call]
     pub(super) lunchbox: Lunchbox,
 }
 
@@ -82,7 +87,7 @@ impl From<Lunchbox> for () {
     fn from(_: Lunchbox) -> Self {}
 }
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Debug)]
 pub struct TransferOpts {
     channel_id: Adapter<ChannelId>,
     port_id: Adapter<PortId>,
@@ -136,7 +141,7 @@ impl Ibc {
             let output = match message {
                 IbcMessage::Ics26(message) => {
                     // println!("Ics26 message: {:?}", message);
-                    dispatch(self, message.clone())
+                    dispatch(self, *message.clone())
                         .map_err(|e| dbg!(crate::Error::Ibc(e.to_string())))?
                 }
                 IbcMessage::Ics20(message) => {

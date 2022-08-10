@@ -1,11 +1,12 @@
-use orga::abci::ABCIStore;
-use orga::merk::{store::SNAPSHOT_INTERVAL, MerkStore};
-use orga::store::Write;
-use tempdir::TempDir;
-use tendermint_proto::abci::RequestLoadSnapshotChunk;
-
 #[test]
+#[cfg(all(feature = "abci", feature = "merk/full", feature = "tendermint-proto"))]
 fn drop_used_snapshot() {
+    use orga::abci::ABCIStore;
+    use orga::merk::{store::SNAPSHOT_INTERVAL, MerkStore};
+    use orga::store::Write;
+    use tempdir::TempDir;
+    use tendermint_proto::abci::RequestLoadSnapshotChunk;
+
     let dir = TempDir::new("test").unwrap().into_path();
     println!("snapshot test dir: {}", dir.display());
 

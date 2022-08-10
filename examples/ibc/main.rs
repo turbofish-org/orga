@@ -12,6 +12,7 @@ use orga::prelude::*;
 #[derive(State, Query, Client, Call)]
 pub struct Counter {
     count: u64,
+    #[call]
     pub ibc: Ibc,
 }
 
@@ -53,17 +54,17 @@ impl BeginBlock for Counter {
     }
 }
 
-impl EndBlock for Counter {
-    fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
-        Ok(())
-    }
-}
+// impl EndBlock for Counter {
+//     fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
+//         Ok(())
+//     }
+// }
 
-impl InitChain for Counter {
-    fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
-        Ok(())
-    }
-}
+// impl InitChain for Counter {
+//     fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
+//         Ok(())
+//     }
+// }
 
 impl ConvertSdkTx for Counter {
     type Output = PaidCall<<Counter as Call>::Call>;
