@@ -223,7 +223,7 @@ mod full {
         }
     }
 
-    #[derive(Encode, Decode)]
+    #[derive(Debug, Encode, Decode)]
     pub enum ABCICall<C> {
         InitChain(Adapter<RequestInitChain>),
         BeginBlock(Box<Adapter<RequestBeginBlock>>), // Boxed because this variant is much larger than the others

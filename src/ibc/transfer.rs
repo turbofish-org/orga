@@ -1,7 +1,10 @@
+use std::str::FromStr;
+
 use crate::call::Call;
 use crate::client::Client;
-use crate::coins::Address;
+use crate::coins::{Address, Amount};
 use crate::collections::{Deque, Map};
+use crate::encoding::{Decode, Encode, LengthVec};
 use crate::query::Query;
 use crate::state::State;
 use ibc::applications::transfer::context::{
@@ -12,6 +15,7 @@ use ibc::applications::transfer::context::{
 };
 use ibc::applications::transfer::error::Error;
 use ibc::applications::transfer::{PrefixedCoin, PrefixedDenom};
+use ibc::bigint::U256;
 use ibc::core::ics02_client::client_consensus::AnyConsensusState;
 use ibc::core::ics02_client::client_state::AnyClientState;
 use ibc::core::ics03_connection::connection::ConnectionEnd;
@@ -31,18 +35,33 @@ use ibc::Height;
 use ibc_proto::ibc::core::channel::v1::PacketState;
 use ripemd::Digest;
 
-use super::{Adapter, Ibc, Lunchbox};
+use super::{Adapter, Lunchbox};
 
 #[derive(State, Call, Query, Client)]
 pub struct TransferModule {
     lunchbox: Lunchbox,
     commitments: Map<Adapter<(PortId, ChannelId)>, Deque<Adapter<PacketState>>>,
     #[call]
+    pub(super) bank: Bank,
+    #[call]
     pub height: u64,
 }
 
 unsafe impl Send for TransferModule {}
 unsafe impl Sync for TransferModule {}
+
+use ibc::applications::transfer::Amount as IbcAmount;
+impl TryFrom<IbcAmount> for Amount {
+    type Error = crate::Error;
+
+    fn try_from(amount: IbcAmount) -> crate::Result<Self> {
+        let amt: U256 = amount.into();
+
+        Ok(Amount::new(amt.try_into().map_err(|_| {
+            crate::Error::Ibc("Coin amount is too large".into())
+        })?))
+    }
+}
 
 impl TryFrom<Signer> for Address {
     type Error = Error;
@@ -58,11 +77,33 @@ impl BankKeeper for TransferModule {
     type AccountId = Address;
     fn burn_coins(&mut self, account: &Self::AccountId, amt: &PrefixedCoin) -> Result<(), Error> {
         println!("burn coins: {} {:?}", account, amt);
+        let denom: Dynom = amt
+            .denom
+            .to_string()
+            .parse()
+            .map_err(|_| Error::invalid_token())?;
+        let amount: Amount = amt.amount.try_into().map_err(|_| Error::invalid_token())?;
+
+        self.bank
+            .burn(*account, amount, denom)
+            .map_err(|_| Error::invalid_token())?;
         Ok(())
     }
 
     fn mint_coins(&mut self, account: &Self::AccountId, amt: &PrefixedCoin) -> Result<(), Error> {
-        println!("mint coins: {} {:#?} {}", account, amt, amt.denom);
+        println!("mint coins: {} {}", account, amt,);
+
+        let denom: Dynom = amt
+            .denom
+            .to_string()
+            .parse()
+            .map_err(|_| Error::invalid_token())?;
+
+        let amount: Amount = amt.amount.try_into().map_err(|_| Error::invalid_token())?;
+
+        self.bank
+            .mint(*account, amount, denom)
+            .map_err(|_| Error::invalid_token())?;
         Ok(())
     }
 
@@ -72,7 +113,17 @@ impl BankKeeper for TransferModule {
         to: &Self::AccountId,
         amt: &PrefixedCoin,
     ) -> Result<(), Error> {
-        println!("send coins: {} -> {}, amount: {:#?} {}", from, to, amt, amt);
+        println!("send coins: {} -> {}, amount: {}", from, to, amt);
+        let denom: Dynom = amt
+            .denom
+            .to_string()
+            .parse()
+            .map_err(|_| Error::invalid_token())?;
+        let amount: Amount = amt.amount.try_into().map_err(|_| Error::invalid_token())?;
+
+        self.bank
+            .transfer(*from, *to, amount, denom)
+            .map_err(|_| Error::invalid_token())?;
         Ok(())
     }
 }
@@ -97,10 +148,6 @@ impl Ics20Reader for TransferModule {
                 .parse()
                 .map_err(|_| Error::parse_account_failure())?;
 
-        println!(
-            "Escrow address for port {} channel {} is {}",
-            port_id, channel_id, escrow_addr
-        );
         Ok(escrow_addr)
     }
 
@@ -489,5 +536,68 @@ impl TransferModule {
         }
 
         Ok(packet_states)
+    }
+}
+
+#[derive(State, Encode, Decode, Clone, Debug)]
+pub struct Dynom(pub LengthVec<u8, u8>);
+
+impl FromStr for Dynom {
+    type Err = crate::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let bytes: Vec<u8> = s.as_bytes().into();
+        if bytes.len() > u8::MAX as usize {
+            return Err(crate::Error::Ibc("Denom name is too long".into()));
+        }
+
+        Ok(Self(bytes.into()))
+    }
+}
+
+#[derive(State, Call, Query, Client)]
+pub struct Bank {
+    #[call]
+    pub balances: Map<Dynom, Map<Address, Amount>>,
+}
+
+unsafe impl Send for Bank {}
+unsafe impl Sync for Bank {}
+
+impl Bank {
+    pub fn transfer(
+        &mut self,
+        from: Address,
+        to: Address,
+        amount: Amount,
+        denom: Dynom,
+    ) -> crate::Result<()> {
+        let mut denom_balances = self.balances.entry(denom)?.or_default()?;
+
+        let mut sender_balance = denom_balances.entry(from)?.or_default()?;
+        *sender_balance = (*sender_balance - amount)?;
+
+        let mut receiver_balance = denom_balances.entry(to)?.or_default()?;
+        *receiver_balance = (*receiver_balance + amount)?;
+
+        Ok(())
+    }
+
+    pub fn mint(&mut self, to: Address, amount: Amount, denom: Dynom) -> crate::Result<()> {
+        let mut denom_balances = self.balances.entry(denom)?.or_default()?;
+
+        let mut receiver_balance = denom_balances.entry(to)?.or_default()?;
+        *receiver_balance = (*receiver_balance + amount)?;
+
+        Ok(())
+    }
+
+    pub fn burn(&mut self, from: Address, amount: Amount, denom: Dynom) -> crate::Result<()> {
+        let mut denom_balances = self.balances.entry(denom)?.or_default()?;
+
+        let mut sender_balance = denom_balances.entry(from)?.or_default()?;
+        *sender_balance = (*sender_balance - amount)?;
+
+        Ok(())
     }
 }

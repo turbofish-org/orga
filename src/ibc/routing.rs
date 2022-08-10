@@ -90,9 +90,10 @@ impl TryFrom<&[u8]> for IbcTx {
     }
 }
 
+#[derive(Debug)]
 pub struct IbcTx(pub Vec<IbcMessage>);
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum IbcMessage {
     Ics20(MsgTransfer),
     Ics26(Box<Ics26Envelope>),

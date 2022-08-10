@@ -30,7 +30,7 @@ pub struct Signer {
     pub signer: Option<Address>,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode)]
 pub struct SignerCall {
     pub signature: Option<[u8; 64]>,
     pub pubkey: Option<[u8; 33]>,
@@ -38,7 +38,7 @@ pub struct SignerCall {
     pub call_bytes: Vec<u8>,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode)]
 pub enum SigType {
     Native,
     Adr36,
@@ -555,6 +555,18 @@ mod abci {
     {
         fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
             self.inner.init_chain(ctx)
+        }
+    }
+
+    impl<T> crate::abci::AbciQuery for SignerPlugin<T>
+    where
+        T: crate::abci::AbciQuery + State + Call,
+    {
+        fn abci_query(
+            &self,
+            request: &tendermint_proto::abci::RequestQuery,
+        ) -> Result<tendermint_proto::abci::ResponseQuery> {
+            self.inner.abci_query(request)
         }
     }
 }

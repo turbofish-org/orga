@@ -1,4 +1,6 @@
 use super::Ibc;
+use crate::abci::tendermint_client::{TendermintAdapter, TendermintClient};
+use crate::client::Client;
 use crate::client::{AsyncCall, AsyncQuery, Call};
 use ibc_proto::cosmos::auth::v1beta1::BaseAccount;
 use ibc_proto::cosmos::auth::v1beta1::{
@@ -12,18 +14,19 @@ use std::rc::Rc;
 use tonic::{Request, Response, Status};
 
 #[tonic::async_trait]
-impl<T> AuthQuery for super::GrpcServer<T>
+impl<T, U> AuthQuery for super::GrpcServer<T, U>
 where
     T: Clone + Send + Sync + 'static,
     // T: AsyncCall<Call = <Ibc as Call>::Call>,
     T: AsyncQuery,
     T: for<'a> AsyncQuery<Response<'a> = Rc<Ibc>>,
+    U: Client<TendermintAdapter<U>>,
+    <U as Client<TendermintAdapter<U>>>::Client: Sync + Send,
 {
     async fn accounts(
         &self,
         _request: Request<QueryAccountsRequest>,
     ) -> Result<Response<QueryAccountsResponse>, Status> {
-        println!("grpc accounts");
         unimplemented!()
     }
 
@@ -31,8 +34,6 @@ where
         &self,
         request: Request<QueryAccountRequest>,
     ) -> Result<Response<QueryAccountResponse>, Status> {
-        println!("auth.account()");
-
         let address = request.get_ref().address.clone();
         let account = BaseAccount {
             address,
@@ -64,7 +65,6 @@ where
         &self,
         _request: Request<QueryParamsRequest>,
     ) -> Result<Response<QueryParamsResponse>, Status> {
-        println!("grpc params");
         unimplemented!()
     }
 }

@@ -195,4 +195,17 @@ mod abci {
             self.inner.init_chain(ctx)
         }
     }
+
+    impl<S, T> crate::abci::AbciQuery for FeePlugin<S, T>
+    where
+        S: Symbol,
+        T: crate::abci::AbciQuery + State + Call,
+    {
+        fn abci_query(
+            &self,
+            request: &tendermint_proto::abci::RequestQuery,
+        ) -> Result<tendermint_proto::abci::ResponseQuery> {
+            self.inner.abci_query(request)
+        }
+    }
 }

@@ -71,7 +71,6 @@ pub struct ConnectionStore {
 
 impl ConnectionReader for Ibc {
     fn connection_end(&self, conn_id: &ConnectionId) -> Result<ConnectionEnd> {
-        println!("get connection end");
         self.connections
             .ends
             .get(conn_id.clone().into())
@@ -94,7 +93,6 @@ impl ConnectionReader for Ibc {
     }
 
     fn commitment_prefix(&self) -> CommitmentPrefix {
-        // self.lunchbox.0.prefix().to_vec().try_into().unwrap()
         b"ibc".to_vec().try_into().unwrap()
     }
 

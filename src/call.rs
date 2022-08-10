@@ -11,7 +11,7 @@ use std::result::Result as StdResult;
 pub use orga_macros::{call, Call};
 
 pub trait Call {
-    type Call: Encode + Decode;
+    type Call: Encode + Decode + std::fmt::Debug;
 
     fn call(&mut self, call: Self::Call) -> Result<()>;
 }
@@ -106,7 +106,7 @@ impl<T: Call> Call for (T,) {
     }
 }
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode)]
 pub enum Tuple2Call<T, U>
 where
     T: Call,
@@ -118,8 +118,8 @@ where
 
 impl<T, U> Call for (T, U)
 where
-    T: Call,
-    U: Call,
+    T: Call + std::fmt::Debug,
+    U: Call + std::fmt::Debug,
 {
     type Call = Tuple2Call<T, U>;
 
@@ -131,12 +131,12 @@ where
     }
 }
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode)]
 pub enum Tuple3Call<T, U, V>
 where
-    T: Call,
-    U: Call,
-    V: Call,
+    T: Call + std::fmt::Debug,
+    U: Call + std::fmt::Debug,
+    V: Call + std::fmt::Debug,
 {
     Field0(T::Call),
     Field1(U::Call),
@@ -145,9 +145,9 @@ where
 
 impl<T, U, V> Call for (T, U, V)
 where
-    T: Call,
-    U: Call,
-    V: Call,
+    T: Call + std::fmt::Debug,
+    U: Call + std::fmt::Debug,
+    V: Call + std::fmt::Debug,
 {
     type Call = Tuple3Call<T, U, V>;
 
@@ -160,7 +160,7 @@ where
     }
 }
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode)]
 pub enum Tuple4Call<T, U, V, W>
 where
     T: Call,
@@ -176,10 +176,10 @@ where
 
 impl<T, U, V, W> Call for (T, U, V, W)
 where
-    T: Call,
-    U: Call,
-    V: Call,
-    W: Call,
+    T: Call + std::fmt::Debug,
+    U: Call + std::fmt::Debug,
+    V: Call + std::fmt::Debug,
+    W: Call + std::fmt::Debug,
 {
     type Call = Tuple4Call<T, U, V, W>;
 

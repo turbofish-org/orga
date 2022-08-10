@@ -129,7 +129,8 @@ where
         let mut vec: Vec<Result<T>> = Vec::with_capacity(N);
         self_vec
             .into_iter()
-            .for_each(|x| vec.push(T::create(store.clone(), x)));
+            .enumerate()
+            .for_each(|(i, x)| vec.push(T::create(store.sub(&[i as u8]), x)));
         let result: Result<Vec<T>> = vec.into_iter().collect();
         //since vec is directly created and populated from passed value, panic! will never be reached
         let result_array: [T; N] = result?.try_into().unwrap_or_else(|v: Vec<T>| {
@@ -228,7 +229,7 @@ where
     }
 }
 
-impl<T: State<S>, S> State<S> for PhantomData<T> {
+impl<T, S> State<S> for PhantomData<T> {
     type Encoding = Self;
 
     fn create(_: Store<S>, data: Self::Encoding) -> Result<Self> {
@@ -269,7 +270,7 @@ where
     where
         S: Read,
     {
-        Ok((A::create(store, data.inner.0)?,))
+        Ok((A::create(store.sub(&[0]), data.inner.0)?,))
     }
 
     fn flush(self) -> Result<Self::Encoding> {
@@ -311,7 +312,7 @@ macro_rules! state_tuple_impl {
             where
                 S: Read,
             {
-                Ok(($($type::create(store.clone(), data.inner.$indices)?,)* $last_type::create(store.clone(), data.inner.$length)?))
+                Ok(($($type::create(store.sub(&[$indices]), data.inner.$indices)?,)* $last_type::create(store.sub(&[$length]), data.inner.$length)?))
             }
 
             fn flush(self) -> Result<Self::Encoding> {

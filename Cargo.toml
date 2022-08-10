@@ -31,7 +31,7 @@ bech32 = "0.8.1"
 async-trait = "0.1.51"
 futures-lite = "1.12.0"
 num-rational = "0.4.0"
-num-traits = "0.2.14"
+num-traits = "0.2.15"
 rust_decimal = "1.18"
 ripemd = "0.1.0"
 web-sys = { version = "0.3.55", features = ["Window", "Storage"] }
@@ -67,9 +67,15 @@ abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto", "prost", "i
 merk-verify = ["merk/verify"]
 merk-full = ["merk/full", "ics23", "sha2"]
 state-sync = []
+feat-ibc = ["ibc", "ibc-proto", "bincode", "ics23", "prost-types"]
 
 [profile.release]
 lto = true
+
+[[example]]
+name = "ibc"
+required-features = ["abci", "merk-full", "feat-ibc"]
+
 
 [patch.crates-io]
 ibc = { git = "https://github.com/informalsystems/ibc-rs.git", rev = "e8c98d4" }

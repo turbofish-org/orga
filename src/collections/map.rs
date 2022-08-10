@@ -16,7 +16,7 @@ use crate::store::*;
 use crate::{Error, Result};
 use ed::*;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MapKey<K> {
     inner: K,
     inner_bytes: Vec<u8>,
@@ -166,8 +166,8 @@ where
 
 unsafe impl<K: Clone, V: Call, U: Clone> Send for Client<K, V, U>
 where
+    Map<K, V>: Call,
     U: AsyncCall<Call = <Map<K, V> as Call>::Call>,
-    K: Encode + Decode + Terminated,
     V::Call: Sync,
     U: Send,
     K: Send,
@@ -177,8 +177,8 @@ where
 #[async_trait::async_trait(?Send)]
 impl<K: Clone, V: Call, U: Clone> AsyncCall for Client<K, V, U>
 where
+    Map<K, V>: Call<Call = map_call::Call<K>>,
     U: AsyncCall<Call = <Map<K, V> as Call>::Call>,
-    K: Encode + Decode + Terminated,
     V::Call: Sync + Send,
     U: Send,
     K: Send,

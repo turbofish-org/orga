@@ -41,6 +41,8 @@ pub enum Error {
     Overflow,
     #[error("Parse Int Error: {0}")]
     ParseInt(#[from] std::num::ParseIntError),
+    #[error("Poison Error: {0}")]
+    Poison(String),
     #[error("Tendermint Error: {0}")]
     Tendermint(String),
     #[cfg(feature = "abci")]

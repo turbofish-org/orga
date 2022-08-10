@@ -22,19 +22,22 @@ use ibc_proto::ibc::core::{
 };
 
 use super::Ibc;
-use crate::client::{AsyncCall, AsyncQuery, Call};
+use crate::abci::tendermint_client::{TendermintAdapter, TendermintClient};
+use crate::client::{AsyncCall, AsyncQuery, Call, Client};
 use crate::query::Query;
 use std::{rc::Rc, str::FromStr};
 use tonic::{Request, Response, Status};
 
 #[tonic::async_trait]
-impl<T> ChannelQuery for super::GrpcServer<T>
+impl<T, U> ChannelQuery for super::GrpcServer<T, U>
 where
     T: Clone + Send + Sync + 'static,
     // T: AsyncCall<Call = <Ibc as Call>::Call>,
     T: AsyncQuery,
     T: for<'a> AsyncQuery<Response<'a> = Rc<Ibc>>,
     T: AsyncQuery<Query = <Ibc as Query>::Query>,
+    U: Client<TendermintAdapter<U>>,
+    <U as Client<TendermintAdapter<U>>>::Client: Sync + Send,
 {
     async fn channel(
         &self,
@@ -63,15 +66,21 @@ where
         &self,
         _request: Request<QueryChannelsRequest>,
     ) -> Result<Response<QueryChannelsResponse>, Status> {
-        let channels = self.ibc.channels.query_channels().await??;
-
+        let channels_response = self
+            .ibc_with_height(async move |client| {
+                Fn::call(&self.ibc_provider, (client,))
+                    .channels
+                    .query_channels()
+                    .await
+            })
+            .await?;
         Ok(Response::new(QueryChannelsResponse {
-            channels,
+            channels: channels_response.0?,
             pagination: None,
             height: Some(RawHeight {
-                revision_height: self.height().await,
+                revision_height: channels_response.1,
                 revision_number: 0,
-            }), // TODO
+            }),
         }))
     }
     async fn connection_channels(
@@ -81,19 +90,22 @@ where
         let conn_id = ConnectionId::from_str(&request.get_ref().connection)
             .map_err(|_| Status::invalid_argument("invalid connection id"))?;
 
-        let channels = self
-            .ibc
-            .channels
-            .query_connection_channels(conn_id.into())
-            .await??;
+        let channels_response = self
+            .ibc_with_height(async move |client| {
+                Fn::call(&self.ibc_provider, (client,))
+                    .channels
+                    .query_connection_channels(conn_id.into())
+                    .await
+            })
+            .await?;
 
         Ok(Response::new(QueryConnectionChannelsResponse {
-            channels,
+            channels: channels_response.0?,
             pagination: None,
             height: Some(RawHeight {
-                revision_height: self.height().await,
+                revision_height: channels_response.1,
                 revision_number: 0,
-            }), // TODO
+            }),
         }))
     }
 
@@ -128,27 +140,34 @@ where
         let channel_id = ChannelId::from_str(&request.channel_id)
             .map_err(|_| Status::invalid_argument("invalid channel id"))?;
 
+        let async_port_id = port_id.clone();
+        let async_channel_id = channel_id.clone();
+
+        //TODO: combine commitment queries
         let commitments = self
             .ibc
             .channels
             .packet_commitments((port_id.clone(), channel_id.clone()).into())
             .await??;
 
-        let transfer_commitments = self
-            .ibc
-            .transfers
-            .packet_commitments((port_id, channel_id).into())
-            .await??;
+        let transfer_commitments_response = self
+            .ibc_with_height(async move |client| {
+                Fn::call(&self.ibc_provider, (client,))
+                    .transfers
+                    .packet_commitments((async_port_id, async_channel_id).into())
+                    .await
+            })
+            .await?;
 
-        let commitments = [commitments, transfer_commitments].concat();
+        let commitments = [commitments, transfer_commitments_response.0?].concat();
 
         Ok(Response::new(QueryPacketCommitmentsResponse {
             commitments,
             pagination: None,
             height: Some(RawHeight {
-                revision_height: self.height().await,
+                revision_height: transfer_commitments_response.1,
                 revision_number: 0,
-            }), // TODO
+            }),
         }))
     }
 
@@ -176,19 +195,22 @@ where
         let channel_id = ChannelId::from_str(&request.channel_id)
             .map_err(|_| Status::invalid_argument("invalid channel id"))?;
 
-        let acknowledgements = self
-            .ibc
-            .channels
-            .query_packet_acks((port_id, channel_id).into())
+        let acknowledgements_response = self
+            .ibc_with_height(async move |client| {
+                Fn::call(&self.ibc_provider, (client,))
+                    .channels
+                    .query_packet_acks((port_id, channel_id).into())
+                    .await
+            })
             .await?;
 
         Ok(Response::new(QueryPacketAcknowledgementsResponse {
-            acknowledgements,
+            acknowledgements: acknowledgements_response.0,
             pagination: None,
             height: Some(RawHeight {
                 revision_number: 0,
-                revision_height: self.height().await,
-            }), // TODO
+                revision_height: acknowledgements_response.1,
+            }),
         }))
     }
 
@@ -203,21 +225,24 @@ where
             .map_err(|_| Status::invalid_argument("invalid channel id"))?;
         let sequences_to_check: Vec<u64> = request.packet_commitment_sequences;
 
-        dbg!(&sequences_to_check);
-        let unreceived_sequences: Vec<u64> = self
-            .ibc
-            .channels
-            .query_unreceived_packets((port_id, channel_id).into(), sequences_to_check.into())
+        let unreceived_sequences_response = self
+            .ibc_with_height(async move |client| {
+                Fn::call(&self.ibc_provider, (client,))
+                    .channels
+                    .query_unreceived_packets(
+                        (port_id, channel_id).into(),
+                        sequences_to_check.into(),
+                    )
+                    .await
+            })
             .await?;
 
-        dbg!(&unreceived_sequences);
-
         Ok(Response::new(QueryUnreceivedPacketsResponse {
-            sequences: unreceived_sequences,
+            sequences: unreceived_sequences_response.0,
             height: Some(RawHeight {
                 revision_number: 0,
-                revision_height: self.height().await,
-            }), // TODO
+                revision_height: unreceived_sequences_response.1,
+            }),
         }))
     }
 
@@ -232,21 +257,21 @@ where
             .map_err(|_| Status::invalid_argument("invalid channel id"))?;
         let sequences_to_check: Vec<u64> = request.packet_ack_sequences;
 
-        dbg!(&sequences_to_check);
-        let unreceived_sequences: Vec<u64> = self
-            .ibc
-            .channels
-            .query_unreceived_acks((port_id, channel_id).into(), sequences_to_check.into())
+        let unreceived_sequences_response = self
+            .ibc_with_height(async move |client| {
+                Fn::call(&self.ibc_provider, (client,))
+                    .channels
+                    .query_unreceived_acks((port_id, channel_id).into(), sequences_to_check.into())
+                    .await
+            })
             .await?;
 
-        dbg!(&unreceived_sequences);
-
         Ok(Response::new(QueryUnreceivedAcksResponse {
-            sequences: unreceived_sequences,
+            sequences: unreceived_sequences_response.0,
             height: Some(RawHeight {
                 revision_number: 0,
-                revision_height: self.height().await,
-            }), // TODO
+                revision_height: unreceived_sequences_response.1,
+            }),
         }))
     }
 

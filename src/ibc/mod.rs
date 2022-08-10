@@ -4,10 +4,12 @@ use std::str::from_utf8;
 use crate::abci::{AbciQuery, BeginBlock, InitChain};
 use crate::call::Call;
 use crate::client::Client;
+use crate::coins::{Address, Amount};
 use crate::context::{Context, GetContext};
 use crate::encoding::{Decode, Encode};
 use crate::merk::MerkStore;
 use crate::plugins::Events;
+use crate::plugins::Signer;
 use crate::plugins::{BeginBlockCtx, InitChainCtx};
 use crate::query::Query;
 use crate::state::State;
@@ -15,11 +17,17 @@ use crate::{Error, Result};
 use client::ClientStore;
 use encoding::*;
 use ibc::applications::transfer::context::Ics20Context;
+use ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use ibc::applications::transfer::relay::send_transfer::send_transfer;
 use ibc::core::ics02_client::height::Height;
+use ibc::core::ics04_channel::timeout::TimeoutHeight;
+use ibc::core::ics24_host::identifier::{ChannelId, PortId};
 use ibc::core::ics26_routing::context::Module;
 use ibc::core::ics26_routing::handler::dispatch;
 use ibc::handler::HandlerOutputBuilder;
+use ibc::signer::Signer as IbcSigner;
+use ibc::timestamp::Timestamp;
+use ibc_proto::cosmos::base::v1beta1::Coin;
 use ics23::commitment_proof::Proof;
 use ics23::{CommitmentProof, InnerSpec, LeafOp, ProofSpec};
 use sha2::Sha512_256;
@@ -44,7 +52,7 @@ use self::channel::ChannelStore;
 use self::connection::ConnectionStore;
 use self::port::PortStore;
 pub use self::routing::{IbcMessage, IbcTx};
-use self::transfer::TransferModule;
+use self::transfer::{Dynom, TransferModule};
 
 #[derive(State, Call, Client, Query)]
 pub struct Ibc {
@@ -79,9 +87,55 @@ impl From<Lunchbox> for () {
     fn from(_: Lunchbox) -> Self {}
 }
 
+#[derive(Encode, Decode, Debug)]
+pub struct TransferOpts {
+    channel_id: Adapter<ChannelId>,
+    port_id: Adapter<PortId>,
+    amount: Amount,
+    denom: Dynom,
+    receiver: Adapter<IbcSigner>,
+    timeout_height: Adapter<TimeoutHeight>,
+    timeout_timestamp: Adapter<Timestamp>,
+}
+
+pub struct TransferArgs {
+    pub channel_id: String,
+    pub port_id: String,
+    pub amount: Amount,
+    pub denom: String,
+    pub receiver: String,
+}
+
+impl TryFrom<TransferArgs> for TransferOpts {
+    type Error = crate::Error;
+    fn try_from(args: TransferArgs) -> crate::Result<Self> {
+        Ok(TransferOpts {
+            channel_id: args
+                .channel_id
+                .parse::<ChannelId>()
+                .map_err(|_| crate::Error::Ibc("Invalid channel id".into()))?
+                .into(),
+            port_id: args
+                .port_id
+                .parse::<PortId>()
+                .map_err(|_| crate::Error::Ibc("Invalid port".into()))?
+                .into(),
+            amount: args.amount,
+            denom: args.denom.as_str().parse().unwrap(),
+            receiver: args
+                .receiver
+                .parse::<IbcSigner>()
+                .map_err(|_| crate::Error::Ibc("Invalid receiver".into()))?
+                .into(),
+            timeout_height: TimeoutHeight::Never.into(),
+            timeout_timestamp: Timestamp::from_nanoseconds(0).unwrap().into(),
+        })
+    }
+}
+
 impl Ibc {
     #[call]
-    pub fn deliver_message(&mut self, msg: IbcTx) -> Result<()> {
+    pub fn deliver_tx(&mut self, msg: IbcTx) -> Result<()> {
         let mut outputs = vec![];
         for message in msg.0 {
             let output = match message {
@@ -92,6 +146,16 @@ impl Ibc {
                 }
                 IbcMessage::Ics20(message) => {
                     // println!("Transfer message: {:?}", message);
+                    let signer = self.signer()?;
+                    let sender_addr: Address = message
+                        .sender
+                        .clone()
+                        .try_into()
+                        .map_err(|_| crate::Error::Ibc("Invalid message sender".into()))?;
+                    if sender_addr != signer {
+                        return Err(Error::Ibc("Unauthorized account action".into()));
+                    }
+
                     let mut transfer_output = HandlerOutputBuilder::new();
                     send_transfer(&mut self.transfers, &mut transfer_output, message)
                         .map_err(|e| dbg!(crate::Error::Ibc(e.to_string())))?;
@@ -131,6 +195,47 @@ impl Ibc {
 
         Ok(())
     }
+
+    pub fn bank_mut(&mut self) -> &mut transfer::Bank {
+        &mut self.transfers.bank
+    }
+
+    pub fn bank(&self) -> &transfer::Bank {
+        &self.transfers.bank
+    }
+
+    fn signer(&mut self) -> Result<Address> {
+        self.context::<Signer>()
+            .ok_or_else(|| Error::Signer("No Signer context available".into()))?
+            .signer
+            .ok_or_else(|| Error::Coins("Unauthorized account action".into()))
+    }
+
+    #[call]
+    pub fn transfer(&mut self, opts: TransferOpts) -> Result<()> {
+        let signer = self.signer()?;
+        let amt: u64 = opts.amount.into();
+        let msg_transfer = MsgTransfer {
+            token: Coin {
+                amount: amt.to_string(),
+                denom: String::from_utf8(opts.denom.0.to_vec())
+                    .map_err(|_| crate::Error::Ibc("Invalid denom".into()))?,
+            },
+            receiver: opts.receiver.into_inner(),
+            sender: signer
+                .to_string()
+                .parse()
+                .map_err(|_| crate::Error::Ibc("Invalid sender address".into()))?,
+            source_channel: opts.channel_id.into_inner(),
+            source_port: opts.port_id.into_inner(),
+            timeout_height: opts.timeout_height.into_inner(),
+            timeout_timestamp: opts.timeout_timestamp.into_inner(),
+        };
+
+        let ibc_tx = IbcTx(vec![IbcMessage::Ics20(msg_transfer)]);
+
+        self.deliver_tx(ibc_tx)
+    }
 }
 
 impl BeginBlock for Ibc {
@@ -160,7 +265,6 @@ impl AbciQuery for Ibc {
             let maybe_value_bytes = self.lunchbox.0.get(path.clone().into_bytes().as_slice())?;
             let value_bytes = maybe_value_bytes.unwrap_or_default();
 
-            // dbg!(&req.data);
             let key = path.clone().into_bytes();
 
             use prost::Message;
@@ -201,64 +305,9 @@ impl AbciQuery for Ibc {
                 .borrow()
                 .use_merkstore(|store| store.create_ics23_proof(key.as_slice()))?;
 
-            // dbg!(ics23::verify_membership(
-            //     &proof,
-            //     &MerkStore::ics23_spec(),
-            //     &inner_root_hash.to_vec(),
-            //     key.as_slice(),
-            //     value_bytes.as_slice()
-            // ));
-
             proof
                 .encode(&mut proof_bytes)
                 .map_err(|_| Error::Ibc("Failed to create proof".into()))?;
-
-            match proof.proof {
-                Some(Proof::Exist(..)) => {
-                    println!("proof is exist")
-                }
-                Some(Proof::Nonexist(_)) => {
-                    println!("proof is nonexist")
-                }
-                _ => unreachable!(),
-            }
-
-            use crate::abci::ABCIStore;
-            // let outer_app_hash = self
-            //     .lunchbox
-            //     .0
-            //     .backing_store()
-            //     .borrow()
-            //     .use_merkstore(|store| store.root_hash())?;
-
-            // dbg!(&value_bytes.len());
-            // dbg!(&proof_bytes.len());
-
-            // dbg!(ics23::verify_membership(
-            //     &outer_proof,
-            //     &ProofSpec {
-            //         inner_spec: Some(InnerSpec {
-            //             child_order: vec![0],
-            //             child_size: 32,
-            //             empty_child: vec![],
-            //             min_prefix_length: 0,
-            //             max_prefix_length: 0,
-            //             hash: 6,
-            //         }),
-            //         leaf_spec: Some(LeafOp {
-            //             hash: 6,
-            //             length: 0,
-            //             prefix: vec![],
-            //             prehash_key: 0,
-            //             prehash_value: 0,
-            //         }),
-            //         max_depth: 0,
-            //         min_depth: 0,
-            //     },
-            //     &outer_app_hash,
-            //     b"ibc",
-            //     &inner_root_hash
-            // ));
 
             return Ok(ResponseQuery {
                 code: 0,
@@ -285,23 +334,36 @@ impl AbciQuery for Ibc {
 
         let value_bytes = match path {
             Path::ClientState(ClientStatePath(client_id)) => {
-                let client_state = self.client_state(&client_id).unwrap();
-                // dbg!(&client_state);
-                client_state.encode_vec().unwrap()
+                let client_state = self
+                    .client_state(&client_id)
+                    .map_err(|_| crate::Error::Ibc("Failed to read client state".into()))?;
+                client_state
+                    .encode_vec()
+                    .map_err(|_| crate::Error::Ibc("Failed to encode client state".into()))?
             }
 
             Path::ClientConsensusState(data) => {
                 let client_consensus_state = self
                     .consensus_state(
                         &data.client_id,
-                        Height::new(data.epoch, data.height).unwrap(),
+                        Height::new(data.epoch, data.height)
+                            .map_err(|_| crate::Error::Ibc("Invalid height".into()))?,
                     )
-                    .unwrap();
+                    .map_err(|_| {
+                        crate::Error::Ibc("Failed to read client consensus state".into())
+                    })?;
                 // dbg!(&client_consensus_state);
-                client_consensus_state.encode_vec().unwrap()
+                client_consensus_state.encode_vec().map_err(|_| {
+                    crate::Error::Ibc("Failed to encode client consensus state".into())
+                })?
             }
 
-            _ => todo!(),
+            _ => {
+                return Err(crate::Error::Ibc(format!(
+                    "Unsupported path query: {}",
+                    path
+                )))
+            }
         };
 
         Ok(ResponseQuery {
@@ -313,12 +375,5 @@ impl AbciQuery for Ibc {
             proof_ops: Some(ProofOps::default()),
             ..Default::default()
         })
-    }
-}
-
-use ibc::core::ics26_routing::context::Router;
-impl InitChain for Ibc {
-    fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
-        Ok(())
     }
 }
