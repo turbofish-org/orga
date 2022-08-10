@@ -5,6 +5,7 @@
 #![feature(type_name_of_val)]
 #![feature(generic_associated_types)]
 
+use orga::abci::tendermint_client::TendermintAdapter;
 use orga::ibc::{start_grpc, Ibc, IbcTx};
 use orga::prelude::*;
 
@@ -101,8 +102,11 @@ async fn main() {
             .run()
             .unwrap();
     });
+    let app_client = app_client();
     std::thread::sleep(std::time::Duration::from_secs(4));
-    let ibc_client = app_client().ibc.clone();
-    start_grpc(ibc_client).await;
+    start_grpc(app_client.clone(), app_client.ibc.clone(), &|client| {
+        client.ibc.clone()
+    })
+    .await;
     std::thread::sleep(std::time::Duration::from_secs(1000));
 }
