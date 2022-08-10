@@ -11,7 +11,7 @@ use std::ops::{Deref, DerefMut};
 pub const MAX_CALL_SIZE: usize = 65_535;
 pub const NATIVE_CALL_FLAG: u8 = 0xff;
 
-#[derive(State)]
+#[derive(State, Clone)]
 pub struct SdkCompatPlugin<S, T: State> {
     symbol: PhantomData<S>,
     inner: T,
