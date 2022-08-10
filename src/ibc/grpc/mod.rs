@@ -79,14 +79,6 @@ where
         }
     }
 
-    async fn height(&self) -> u64 {
-        // TODO: remove this function, get height from query responses
-        use tendermint_rpc::Client;
-        let client = tendermint_rpc::HttpClient::new("http://localhost:26357").unwrap();
-        let status = client.status().await.unwrap();
-        status.sync_info.latest_block_height.into()
-    }
-
     async fn ibc_with_height<
         R,
         F: FnOnce(U::Client) -> X,
