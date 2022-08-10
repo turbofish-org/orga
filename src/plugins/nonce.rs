@@ -61,14 +61,14 @@ where
     }
 }
 
-#[derive(Encode, Decode)]
-pub enum NonceQuery<T: Query> {
+#[derive(Encode, Decode, Debug)]
+pub enum NonceQuery<T> {
     Nonce(Address),
-    Inner(T::Query),
+    Inner(T),
 }
 
 impl<T: State + Query> Query for NoncePlugin<T> {
-    type Query = NonceQuery<T>;
+    type Query = NonceQuery<T::Query>;
 
     fn query(&self, query: Self::Query) -> Result<()> {
         match query {
@@ -81,7 +81,7 @@ impl<T: State + Query> Query for NoncePlugin<T> {
     }
 }
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode)]
 pub struct NonceCall<T> {
     pub nonce: Option<u64>,
     pub inner_call: T,
@@ -180,7 +180,7 @@ where
 #[async_trait::async_trait(?Send)]
 impl<
         T: Query + State,
-        U: for<'a> AsyncQuery<Query = NonceQuery<T>, Response<'a> = std::rc::Rc<NoncePlugin<T>>>
+        U: for<'a> AsyncQuery<Query = NonceQuery<T::Query>, Response<'a> = std::rc::Rc<NoncePlugin<T>>>
             + Clone,
     > AsyncQuery for NonceAdapter<T, U>
 {
@@ -375,7 +375,7 @@ mod tests {
         }
     }
 
-    #[derive(Encode, Decode)]
+    #[derive(Debug, Encode, Decode)]
     enum CounterCall {
         Increment,
     }

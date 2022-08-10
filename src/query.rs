@@ -6,7 +6,7 @@ use std::result::Result as StdResult;
 pub use orga_macros::{query, Query};
 
 pub trait Query {
-    type Query: Encode + Decode;
+    type Query: Encode + Decode + std::fmt::Debug;
 
     fn query(&self, query: Self::Query) -> Result<()>;
 }
@@ -85,7 +85,7 @@ where
     }
 }
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Debug)]
 pub enum Tuple2Query<T, U>
 where
     T: Query,
@@ -97,8 +97,8 @@ where
 
 impl<T, U> Query for (T, U)
 where
-    T: Query,
-    U: Query,
+    T: Query + std::fmt::Debug,
+    U: Query + std::fmt::Debug,
 {
     type Query = Tuple2Query<T, U>;
 
@@ -110,7 +110,7 @@ where
     }
 }
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode)]
 pub enum Tuple3Query<T, U, V>
 where
     T: Query,
@@ -124,9 +124,9 @@ where
 
 impl<T, U, V> Query for (T, U, V)
 where
-    T: Query,
-    U: Query,
-    V: Query,
+    T: Query + std::fmt::Debug,
+    U: Query + std::fmt::Debug,
+    V: Query + std::fmt::Debug,
 {
     type Query = Tuple3Query<T, U, V>;
 
@@ -139,7 +139,7 @@ where
     }
 }
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Debug)]
 pub enum Tuple4Query<T, U, V, W>
 where
     T: Query,
@@ -155,10 +155,10 @@ where
 
 impl<T, U, V, W> Query for (T, U, V, W)
 where
-    T: Query,
-    U: Query,
-    V: Query,
-    W: Query,
+    T: Query + std::fmt::Debug,
+    U: Query + std::fmt::Debug,
+    V: Query + std::fmt::Debug,
+    W: Query + std::fmt::Debug,
 {
     type Query = Tuple4Query<T, U, V, W>;
 
