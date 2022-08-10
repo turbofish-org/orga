@@ -36,6 +36,7 @@ impl Counter {
 
 #[derive(State, Debug, Clone)]
 pub struct Simp(());
+
 impl Symbol for Simp {
     const INDEX: u8 = 1;
 }
@@ -103,6 +104,6 @@ async fn main() {
     });
     std::thread::sleep(std::time::Duration::from_secs(4));
     let ibc_client = app_client().ibc.clone();
-    start_grpc(ibc_client).await;
+    start_grpc(ibc_client, 9001).await;
     std::thread::sleep(std::time::Duration::from_secs(1000));
 }

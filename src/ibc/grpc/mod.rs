@@ -3,7 +3,6 @@ use std::rc::Rc;
 use super::Ibc;
 use crate::abci::TendermintClient;
 use crate::client::{AsyncCall, AsyncQuery, Call, Client};
-use crate::plugins::ibc::{IbcAdapter, IbcPlugin};
 use crate::query::Query;
 use crate::state::State;
 use ibc_proto::cosmos::auth::v1beta1::query_server::QueryServer as AuthQueryServer;
@@ -53,7 +52,7 @@ where
     }
 }
 
-pub async fn start_grpc<T>(ibc: AppClient<T>)
+pub async fn start_grpc<T>(ibc: AppClient<T>, port: u16)
 where
     T: Clone + Send + Sync + 'static,
     // T: AsyncCall<Call = <Ibc as Call>::Call>,
@@ -72,11 +71,9 @@ where
         .add_service(AuthQueryServer::new(server.clone()))
         .add_service(BankQueryServer::new(server.clone()))
         .add_service(StakingQueryServer::new(server.clone()))
-        .serve("127.0.0.1:9001".parse().unwrap())
+        .serve(format!("127.0.0.1:{}", port).parse().unwrap())
         .await
         .unwrap();
-
-    // let res = ibc.deliver_message().await.unwrap();
 }
 
 impl From<orga::Error> for tonic::Status {

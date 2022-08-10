@@ -4,7 +4,7 @@ pub use ed::*;
 use derive_more::{Deref, DerefMut, Into};
 use std::convert::{TryFrom, TryInto};
 
-#[derive(Debug, Deref, DerefMut, Encode, Into, Default, Clone)]
+#[derive(Deref, DerefMut, Encode, Into, Default, Clone, Debug)]
 pub struct LengthVec<P, T>
 where
     P: Encode + Terminated,

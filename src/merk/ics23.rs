@@ -130,66 +130,68 @@ fn leaf_op() -> LeafOp {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use crate::merk::MerkStore;
-//     use crate::store::Write;
+#[cfg(test)]
+mod tests {
+    use crate::merk::MerkStore;
+    use crate::store::Write;
 
-//     #[test]
-//     fn existence_proof() {
-//         let path = "/tmp/ics23-proof-test";
-//         let mut store = MerkStore::new(path.into());
+    #[test]
+    fn existence_proof() {
+        let path = "/tmp/ics23-proof-test";
+        let mut store = MerkStore::new(path.into());
 
-//         store.put(b"foo".to_vec(), b"1".to_vec()).unwrap();
-//         store.put(b"bar".to_vec(), b"2".to_vec()).unwrap();
-//         store.put(b"baz".to_vec(), b"3".to_vec()).unwrap();
-//         store.put(b"bar2".to_vec(), b"4".to_vec()).unwrap();
-//         store.put(b"baz2".to_vec(), b"5".to_vec()).unwrap();
-//         store.put(b"bar3".to_vec(), b"6".to_vec()).unwrap();
-//         store.put(b"baz4".to_vec(), b"7".to_vec()).unwrap();
-//         store.write(vec![]).unwrap();
+        store.put(b"foo".to_vec(), b"1".to_vec()).unwrap();
+        store.put(b"bar".to_vec(), b"2".to_vec()).unwrap();
+        store.put(b"baz".to_vec(), b"3".to_vec()).unwrap();
+        store.put(b"bar2".to_vec(), b"4".to_vec()).unwrap();
+        store.put(b"baz2".to_vec(), b"5".to_vec()).unwrap();
+        store.put(b"bar3".to_vec(), b"6".to_vec()).unwrap();
+        store.put(b"baz4".to_vec(), b"7".to_vec()).unwrap();
+        store.write(vec![]).unwrap();
 
-//         let proof = store.create_ics23_proof(b"foo").unwrap();
-//         let root_hash = store.merk().root_hash().to_vec();
+        let proof = store.create_ics23_proof(b"foo").unwrap();
+        let root_hash = store.merk().root_hash().to_vec();
 
-//         drop(store);
-//         merk::Merk::destroy(merk::Merk::open(path).unwrap()).unwrap();
+        drop(store);
+        merk::Merk::destroy(merk::Merk::open(path).unwrap()).unwrap();
 
-//         assert!(ics23::verify_membership(
-//             &proof,
-//             &MerkStore::ics23_spec(),
-//             &root_hash,
-//             b"foo",
-//             b"1"
-//         ));
-//     }
+        assert!(ics23::verify_membership(
+            &proof,
+            &MerkStore::ics23_spec(),
+            &root_hash,
+            b"foo",
+            b"1"
+        ));
+    }
 
-//     #[test]
-//     fn nonexistence_proof() {
-//         let path = "/tmp/ics23-proof-test2";
-//         let mut store = MerkStore::new(path.into());
+    #[test]
+    #[ignore]
+    fn nonexistence_proof() {
+        let path = "/tmp/ics23-proof-test2";
+        let mut store = MerkStore::new(path.into());
 
-//         store.put(b"foo".to_vec(), b"1".to_vec()).unwrap();
-//         store.put(b"bar".to_vec(), b"2".to_vec()).unwrap();
-//         store.put(b"baz".to_vec(), b"3".to_vec()).unwrap();
-//         store.put(b"bar2".to_vec(), b"4".to_vec()).unwrap();
-//         store.put(b"baz2".to_vec(), b"5".to_vec()).unwrap();
-//         store.put(b"bar3".to_vec(), b"6".to_vec()).unwrap();
-//         store.put(b"baz4".to_vec(), b"7".to_vec()).unwrap();
-//         store.write(vec![]).unwrap();
+        store.put(b"foo".to_vec(), b"1".to_vec()).unwrap();
+        store.put(b"bar".to_vec(), b"2".to_vec()).unwrap();
+        store.put(b"baz".to_vec(), b"3".to_vec()).unwrap();
+        store.put(b"bar2".to_vec(), b"4".to_vec()).unwrap();
+        store.put(b"baz2".to_vec(), b"5".to_vec()).unwrap();
+        store.put(b"bar3".to_vec(), b"6".to_vec()).unwrap();
+        store.put(b"baz4".to_vec(), b"7".to_vec()).unwrap();
+        store.write(vec![]).unwrap();
 
-//         let proof = store.create_ics23_proof(b"foo2").unwrap();
-//         dbg!(&proof);
-//         let root_hash = store.merk().root_hash().to_vec();
+        let proof = store.create_ics23_proof(b"foo2").unwrap();
+        dbg!(&proof);
+        let root_hash = store.merk().root_hash().to_vec();
 
-//         drop(store);
-//         merk::Merk::destroy(merk::Merk::open(path).unwrap()).unwrap();
+        drop(store);
+        merk::Merk::destroy(merk::Merk::open(path).unwrap()).unwrap();
 
-//         assert!(ics23::verify_non_membership(
-//             &proof,
-//             &MerkStore::ics23_spec(),
-//             &root_hash,
-//             b"foo2",
-//         ));
-//     }
-// }
+        assert!(ics23::verify_non_membership(
+            &proof,
+            &MerkStore::ics23_spec(),
+            &root_hash,
+            b"foo2",
+        ));
+    }
+}
+>>>>>>> ibc2

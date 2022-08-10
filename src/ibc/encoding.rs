@@ -215,6 +215,9 @@ where
 impl Next for Adapter<ConnectionId> {
     fn next(&self) -> Option<Self> {
         let current_id: u64 = self.inner.as_str()[11..].parse().unwrap();
+        if current_id == u64::MAX {
+            return None;
+        }
         Some(Self {
             inner: ConnectionId::new(current_id + 1),
         })

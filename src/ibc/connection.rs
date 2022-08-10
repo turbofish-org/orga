@@ -92,7 +92,6 @@ impl ConnectionReader for Ibc {
     }
 
     fn commitment_prefix(&self) -> CommitmentPrefix {
-        // self.lunchbox.0.prefix().to_vec().try_into().unwrap()
         b"ibc".to_vec().try_into().unwrap()
     }
 
