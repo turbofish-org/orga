@@ -69,6 +69,12 @@ impl<S> BufStore<S> {
         self.map
     }
 
+    #[inline]
+    #[cfg_attr(test, mutate)]
+    pub fn store(&self) -> &S {
+        &self.store
+    }
+
     /// Consumes the `BufStore`'s in-memory buffer and writes all of its values
     /// to the underlying store.
     ///

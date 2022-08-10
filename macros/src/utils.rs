@@ -5,7 +5,7 @@ use syn::*;
 
 pub fn parse_parent() -> File {
     let path = proc_macro::Span::call_site().source_file().path();
-    let source = std::fs::read_to_string(path).unwrap();
+    let source = std::fs::read_to_string(path).unwrap_or_default();
     parse_file(source.as_str()).unwrap()
 }
 

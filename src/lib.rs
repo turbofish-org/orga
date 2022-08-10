@@ -9,6 +9,8 @@
 #![feature(try_trait_v2)]
 #![feature(never_type)]
 #![feature(adt_const_params)]
+#![feature(fn_traits)]
+#![feature(async_closure)]
 
 extern crate self as orga;
 
@@ -59,6 +61,9 @@ pub mod context;
 
 #[cfg(feature = "abci")]
 pub mod migrate;
+
+#[cfg(feature = "abci")]
+pub mod ibc;
 
 mod error;
 

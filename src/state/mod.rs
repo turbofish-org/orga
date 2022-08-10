@@ -229,7 +229,7 @@ where
     }
 }
 
-impl<T: State<S>, S> State<S> for PhantomData<T> {
+impl<T, S> State<S> for PhantomData<T> {
     type Encoding = Self;
 
     fn create(_: Store<S>, data: Self::Encoding) -> Result<Self> {

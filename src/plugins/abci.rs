@@ -14,7 +14,7 @@ impl Time {
 #[cfg(feature = "abci")]
 mod full {
     use super::Time;
-    use crate::abci::{prost::Adapter, App};
+    use crate::abci::{prost::Adapter, AbciQuery, App};
     use crate::call::Call;
     use crate::collections::{Entry, EntryMap, Map};
     use crate::context::Context;
@@ -27,6 +27,7 @@ mod full {
     use std::collections::HashMap;
     use std::convert::TryInto;
     use std::rc::Rc;
+    use tendermint_proto::abci::{Event, RequestQuery, ResponseQuery};
     use tendermint_proto::abci::{
         Evidence, LastCommitInfo, RequestBeginBlock, RequestEndBlock, RequestInitChain,
         ValidatorUpdate,
@@ -48,6 +49,7 @@ mod full {
         pub(crate) validator_updates: Option<HashMap<[u8; 32], ValidatorUpdate>>,
         updates: UpdateMap,
         time: Option<Timestamp>,
+        pub(crate) events: Option<Vec<Event>>,
         current_vp: Rc<RefCell<Option<EntryMap<ValidatorEntry>>>>,
         cons_key_by_op_addr: Rc<RefCell<Option<OperatorMap>>>,
     }
@@ -210,6 +212,17 @@ mod full {
         }
     }
 
+    #[derive(Default)]
+    pub struct Events {
+        pub(crate) events: Vec<Event>,
+    }
+
+    impl Events {
+        pub fn add(&mut self, event: Event) {
+            self.events.push(event);
+        }
+    }
+
     #[derive(Encode, Decode)]
     pub enum ABCICall<C> {
         InitChain(Adapter<RequestInitChain>),
@@ -278,8 +291,30 @@ mod full {
 
                     Ok(())
                 }
-                DeliverTx(inner_call) => self.inner.call(inner_call),
-                CheckTx(inner_call) => self.inner.call(inner_call),
+                DeliverTx(inner_call) => {
+                    Context::add(Events::default());
+                    self.events.replace(vec![]);
+                    let res = self.inner.call(inner_call);
+                    if res.is_ok() {
+                        self.events
+                            .replace(Context::resolve::<Events>().unwrap().events.clone());
+                    }
+                    Context::remove::<Events>();
+
+                    res
+                }
+                CheckTx(inner_call) => {
+                    Context::add(Events::default());
+                    self.events.replace(vec![]);
+                    let res = self.inner.call(inner_call);
+                    if res.is_ok() {
+                        self.events
+                            .replace(Context::resolve::<Events>().unwrap().events.clone());
+                    }
+                    Context::remove::<Events>();
+
+                    res
+                }
             }?;
 
             let validators = Context::resolve::<Validators>().unwrap();
@@ -347,6 +382,7 @@ mod full {
                 validator_updates: None,
                 updates: UpdateMap::create(store.sub(&[1]), ())?,
                 time: None,
+                events: None,
                 current_vp: Rc::new(RefCell::new(Some(State::create(store.sub(&[2]), ())?))),
                 cons_key_by_op_addr: Rc::new(RefCell::new(Some(State::create(
                     store.sub(&[3]),
@@ -374,6 +410,15 @@ mod full {
     {
         fn from(provider: ABCIPlugin<T>) -> Self {
             (provider.inner.into(),)
+        }
+    }
+
+    impl<T> AbciQuery for ABCIPlugin<T>
+    where
+        T: State + AbciQuery,
+    {
+        fn abci_query(&self, req: &RequestQuery) -> Result<ResponseQuery> {
+            self.inner.abci_query(req)
         }
     }
 }

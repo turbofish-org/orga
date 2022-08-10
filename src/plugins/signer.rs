@@ -351,7 +351,7 @@ pub mod keplr {
             unsafe {
                 let window = web_sys::window().expect("no global `window` exists");
                 let keplr = window.get("keplr").expect("no `keplr` in global `window`");
-                
+
                 let storage = window
                     .local_storage()
                     .expect("no `localStorage` in global `window`")
@@ -468,7 +468,8 @@ pub mod keplr {
 
                 let handle = self.handle();
 
-                let sign_amino: Function = get(&handle.keplr, &"signAmino".to_string().into())?.into();
+                let sign_amino: Function =
+                    get(&handle.keplr, &"signAmino".to_string().into())?.into();
                 let sign_promise: Promise =
                     apply(&sign_amino, &handle.keplr, &args).unwrap().into();
                 let res = JsFuture::from(sign_promise).await.unwrap();
@@ -554,6 +555,18 @@ mod abci {
     {
         fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
             self.inner.init_chain(ctx)
+        }
+    }
+
+    impl<T> crate::abci::AbciQuery for SignerPlugin<T>
+    where
+        T: crate::abci::AbciQuery + State + Call,
+    {
+        fn abci_query(
+            &self,
+            request: &tendermint_proto::abci::RequestQuery,
+        ) -> Result<tendermint_proto::abci::ResponseQuery> {
+            self.inner.abci_query(request)
         }
     }
 }

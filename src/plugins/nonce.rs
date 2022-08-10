@@ -178,8 +178,11 @@ where
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Query + State, U: for<'a> AsyncQuery<Query = NonceQuery<T>, Response<'a> = std::rc::Rc<NoncePlugin<T>>> + Clone>
-    AsyncQuery for NonceAdapter<T, U>
+impl<
+        T: Query + State,
+        U: for<'a> AsyncQuery<Query = NonceQuery<T>, Response<'a> = std::rc::Rc<NoncePlugin<T>>>
+            + Clone,
+    > AsyncQuery for NonceAdapter<T, U>
 {
     type Query = T::Query;
     type Response<'a> = std::rc::Rc<T>;
@@ -189,7 +192,14 @@ impl<T: Query + State, U: for<'a> AsyncQuery<Query = NonceQuery<T>, Response<'a>
         F: FnMut(Self::Response<'_>) -> Result<R>,
     {
         self.parent
-            .query(NonceQuery::Inner(query), |plugin| check(std::rc::Rc::new(std::rc::Rc::try_unwrap(plugin).map_err(|_| ()).unwrap().inner)))
+            .query(NonceQuery::Inner(query), |plugin| {
+                check(std::rc::Rc::new(
+                    std::rc::Rc::try_unwrap(plugin)
+                        .map_err(|_| ())
+                        .unwrap()
+                        .inner,
+                ))
+            })
             .await
     }
 }
@@ -215,7 +225,8 @@ impl<T: Client<NonceAdapter<T, U>> + State, U: Clone> DerefMut for NonceClient<T
 
 impl<
         T: Client<NonceAdapter<T, U>> + State + Query,
-        U: Clone + for<'a> AsyncQuery<Query = NonceQuery<T>, Response<'a> = std::rc::Rc<NoncePlugin<T>>>,
+        U: Clone
+            + for<'a> AsyncQuery<Query = NonceQuery<T>, Response<'a> = std::rc::Rc<NoncePlugin<T>>>,
     > NonceClient<T, U>
 {
     pub async fn nonce(&self, address: Address) -> Result<u64> {
@@ -328,6 +339,18 @@ mod abci {
     {
         fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
             self.inner.init_chain(ctx)
+        }
+    }
+
+    impl<T> crate::abci::AbciQuery for NoncePlugin<T>
+    where
+        T: crate::abci::AbciQuery + State + Call,
+    {
+        fn abci_query(
+            &self,
+            request: &tendermint_proto::abci::RequestQuery,
+        ) -> Result<tendermint_proto::abci::ResponseQuery> {
+            self.inner.abci_query(request)
         }
     }
 }
