@@ -23,6 +23,24 @@ pub struct TendermintClient<T: Client<TendermintAdapter<T>>> {
     tm_client: tm::HttpClient,
 }
 
+impl<T> Clone for TendermintClient<T>
+where
+    T: Client<TendermintAdapter<T>>,
+{
+    fn clone(&self) -> Self {
+        let state_client = T::create_client(TendermintAdapter {
+            marker: std::marker::PhantomData,
+            client: self.tm_client.clone(),
+            res_store: None,
+        });
+
+        Self {
+            state_client,
+            tm_client: self.tm_client.clone(),
+        }
+    }
+}
+
 impl<T: Client<TendermintAdapter<T>>> TendermintClient<T> {
     pub fn new(addr: &str) -> Result<Self> {
         let tm_client = tm::HttpClient::new(addr)?;
