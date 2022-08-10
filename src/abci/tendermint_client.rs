@@ -56,9 +56,12 @@ impl<T: Client<TendermintAdapter<T>>> TendermintClient<T> {
     }
 
     //this should await something
-    pub async fn with_response<F, R>(self, f: F) -> Result<(R, AbciQuery)>
+    pub async fn with_response<F, R, X: std::future::Future<Output = Result<R>>>(
+        &self,
+        f: F,
+    ) -> Result<(R, AbciQuery)>
     where
-        F: FnOnce(T::Client) -> Result<R>,
+        F: FnOnce(T::Client) -> X,
     {
         let res_store = Arc::new(Mutex::new(Cell::new(None)));
         let state_client = T::create_client(TendermintAdapter {
@@ -67,17 +70,14 @@ impl<T: Client<TendermintAdapter<T>>> TendermintClient<T> {
             res_store: Some(res_store.clone()),
         });
 
-        let query_res = f(state_client)?;
+        let query_res = f(state_client).await?;
 
-        let x = Ok((
-            query_res,
-            res_store
-                .lock()
-                .map_err(|e| Error::Poison(e.to_string()))?
-                .take()
-                .ok_or_else(|| Error::Query("No query preformed in closure".to_string()))?,
-        ));
-        x
+        let response = res_store
+            .lock()
+            .map_err(|e| Error::Poison(e.to_string()))?
+            .take()
+            .ok_or_else(|| Error::Query("No query preformed in closure".to_string()))?;
+        Ok((query_res, response))
     }
 }
 
