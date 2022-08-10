@@ -22,19 +22,22 @@ use ibc_proto::ibc::core::{
 };
 
 use super::Ibc;
-use crate::client::{AsyncCall, AsyncQuery, Call};
+use crate::abci::tendermint_client::{TendermintAdapter, TendermintClient};
+use crate::client::{AsyncCall, AsyncQuery, Call, Client};
 use crate::query::Query;
 use std::{rc::Rc, str::FromStr};
 use tonic::{Request, Response, Status};
 
 #[tonic::async_trait]
-impl<T> ChannelQuery for super::GrpcServer<T>
+impl<T, U> ChannelQuery for super::GrpcServer<T, U>
 where
     T: Clone + Send + Sync + 'static,
     // T: AsyncCall<Call = <Ibc as Call>::Call>,
     T: AsyncQuery,
     T: for<'a> AsyncQuery<Response<'a> = Rc<Ibc>>,
     T: AsyncQuery<Query = <Ibc as Query>::Query>,
+    U: Client<TendermintAdapter<U>>,
+    <U as Client<TendermintAdapter<U>>>::Client: Sync + Send,
 {
     async fn channel(
         &self,
@@ -128,27 +131,34 @@ where
         let channel_id = ChannelId::from_str(&request.channel_id)
             .map_err(|_| Status::invalid_argument("invalid channel id"))?;
 
+        let async_port_id = port_id.clone();
+        let async_channel_id = channel_id.clone();
+
+        //TODO: combine commitment queries
         let commitments = self
             .ibc
             .channels
             .packet_commitments((port_id.clone(), channel_id.clone()).into())
             .await??;
 
-        let transfer_commitments = self
-            .ibc
-            .transfers
-            .packet_commitments((port_id, channel_id).into())
-            .await??;
+        let transfer_commitments_response = self
+            .ibc_with_height(async move |client| {
+                Fn::call(&self.ibc_provider, (client,))
+                    .transfers
+                    .packet_commitments((async_port_id, async_channel_id).into())
+                    .await
+            })
+            .await?;
 
-        let commitments = [commitments, transfer_commitments].concat();
+        let commitments = [commitments, transfer_commitments_response.0?].concat();
 
         Ok(Response::new(QueryPacketCommitmentsResponse {
             commitments,
             pagination: None,
             height: Some(RawHeight {
-                revision_height: self.height().await,
+                revision_height: transfer_commitments_response.1,
                 revision_number: 0,
-            }), // TODO
+            }),
         }))
     }
 
