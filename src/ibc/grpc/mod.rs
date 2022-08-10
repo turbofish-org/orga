@@ -15,8 +15,12 @@ use ibc_proto::ibc::core::channel::v1::query_server::QueryServer as ChannelQuery
 use ibc_proto::ibc::core::client::v1::query_server::QueryServer as ClientQueryServer;
 use ibc_proto::ibc::core::connection::v1::query_server::QueryServer as ConnectionQueryServer;
 
+use crate::error::Result;
+use ibc_proto::ibc::core::client::v1::Height as RawHeight;
+use std::sync::{Arc, Mutex};
 use tonic::transport::Server;
 
+use crate::abci::tendermint_client::TendermintAdapter;
 mod auth;
 mod bank;
 mod channel;
@@ -28,20 +32,51 @@ mod tx;
 
 type AppClient<T> = <Ibc as Client<T>>::Client;
 
-#[derive(Clone)]
-struct GrpcServer<T>
+type IbcProvider<T, U: Client<TendermintAdapter<U>>> =
+    &'static (dyn Fn(U::Client) -> AppClient<T> + Send + Sync);
+
+struct GrpcServer<T, U>
 where
-    T: Clone + Send + Sync,
+    T: Clone + Send + Sync + 'static,
+    U: Client<TendermintAdapter<U>> + 'static,
+    <U as Client<TendermintAdapter<U>>>::Client: Sync + Send + 'static,
 {
     ibc: AppClient<T>,
+    tm_client: TendermintClient<U>,
+    ibc_provider: IbcProvider<T, U>,
 }
 
-impl<T> GrpcServer<T>
+impl<T, U> Clone for GrpcServer<T, U>
 where
     T: Clone + Send + Sync,
+    U: Client<TendermintAdapter<U>> + 'static,
+    <U as Client<TendermintAdapter<U>>>::Client: Sync + Send + 'static,
 {
-    pub fn new(ibc: AppClient<T>) -> Self {
-        Self { ibc }
+    fn clone(&self) -> Self {
+        GrpcServer {
+            ibc_provider: self.ibc_provider,
+            ibc: self.ibc.clone(),
+            tm_client: self.tm_client.clone(),
+        }
+    }
+}
+
+impl<T, U> GrpcServer<T, U>
+where
+    T: Clone + Send + Sync + 'static,
+    U: Client<TendermintAdapter<U>> + 'static,
+    <U as Client<TendermintAdapter<U>>>::Client: Sync + Send + 'static,
+{
+    pub fn new(
+        tm_client: TendermintClient<U>,
+        ibc: AppClient<T>,
+        ibc_provider: IbcProvider<T, U>,
+    ) -> Self {
+        Self {
+            tm_client,
+            ibc,
+            ibc_provider,
+        }
     }
 
     async fn height(&self) -> u64 {
@@ -51,18 +86,36 @@ where
         let status = client.status().await.unwrap();
         status.sync_info.latest_block_height.into()
     }
+
+    async fn ibc_with_height<
+        R,
+        F: FnOnce(U::Client) -> X,
+        X: std::future::Future<Output = Result<R>>,
+    >(
+        &self,
+        f: F,
+    ) -> Result<(R, u64)> {
+        let response = self.tm_client.with_response(f).await?;
+
+        Ok((response.0, response.1.height.into()))
+    }
 }
 
-pub async fn start_grpc<T>(ibc: AppClient<T>)
-where
+pub async fn start_grpc<T, U>(
+    tm_client: TendermintClient<U>,
+    ibc: AppClient<T>,
+    ibc_provider: IbcProvider<T, U>,
+) where
     T: Clone + Send + Sync + 'static,
     // T: AsyncCall<Call = <Ibc as Call>::Call>,
     T: AsyncQuery,
     T: for<'a> AsyncQuery<Response<'a> = Rc<Ibc>>,
     T: AsyncQuery<Query = <Ibc as Query>::Query>,
+    U: Client<TendermintAdapter<U>> + 'static,
+    <U as Client<TendermintAdapter<U>>>::Client: Sync + Send + 'static,
 {
     println!("started grpc server");
-    let server = GrpcServer::new(ibc);
+    let server = GrpcServer::new(tm_client, ibc, ibc_provider);
     Server::builder()
         .add_service(TxServer::new(server.clone()))
         .add_service(ClientQueryServer::new(server.clone()))
