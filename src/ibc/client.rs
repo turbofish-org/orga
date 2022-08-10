@@ -345,7 +345,7 @@ impl ClientReader for Ibc {
             .clients
             .host_consensus_state
             .get(height.revision_height())?
-            .unwrap() // TODO: handle None
+            .ok_or_else(|| Error::missing_local_consensus_state(height))?
             .clone();
 
         Ok(AnyConsensusState::Tendermint(consensus_state))

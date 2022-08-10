@@ -92,7 +92,7 @@ where
             .connections
             .client_connections(client_id.into())
             .await?
-            .unwrap() // TODO
+            .map_err(|e| Status::not_found(format!("{}", e)))?
             .into_iter()
             .map(|c| c.as_str().to_string())
             .collect();

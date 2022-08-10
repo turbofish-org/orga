@@ -266,7 +266,20 @@ impl ChannelReader for Ibc {
     }
 
     fn connection_channels(&self, cid: &ConnectionId) -> Result<Vec<(PortId, ChannelId)>, Error> {
-        todo!()
+        let conn_chans = self
+            .channels
+            .connection_channels
+            .get_or_default(cid.clone().into())?;
+
+        let mut res = vec![];
+        for i in 0..conn_chans.len() {
+            let chan = conn_chans
+                .get(i)?
+                .ok_or_else(|| crate::Error::Ibc("Failed to read channel".into()))?;
+            res.push(chan.clone().into_inner());
+        }
+
+        Ok(res)
     }
 
     fn client_state(&self, client_id: &ClientId) -> Result<AnyClientState, Error> {
