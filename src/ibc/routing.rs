@@ -1,6 +1,5 @@
 use super::Ibc;
-use crate::encoding::{Decode, Encode, Terminated};
-use crate::state::State;
+use crate::encoding::{Decode, Encode};
 use crate::Result;
 use cosmrs::Tx;
 use ibc::applications::transfer::msgs::transfer::MsgTransfer;

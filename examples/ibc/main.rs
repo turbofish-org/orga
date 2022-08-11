@@ -5,7 +5,7 @@
 #![feature(type_name_of_val)]
 #![feature(generic_associated_types)]
 
-use orga::abci::tendermint_client::TendermintAdapter;
+
 use orga::ibc::{start_grpc, Ibc, IbcTx};
 use orga::prelude::*;
 

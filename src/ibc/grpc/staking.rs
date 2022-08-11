@@ -1,7 +1,7 @@
 use ibc_proto::{
     cosmos::staking::v1beta1::{
-        query_server::{Query as StakingQuery, QueryServer},
-        Params, QueryDelegationRequest, QueryDelegationResponse, QueryDelegatorDelegationsRequest,
+        query_server::Query as StakingQuery, Params, QueryDelegationRequest,
+        QueryDelegationResponse, QueryDelegatorDelegationsRequest,
         QueryDelegatorDelegationsResponse, QueryDelegatorUnbondingDelegationsRequest,
         QueryDelegatorUnbondingDelegationsResponse, QueryDelegatorValidatorRequest,
         QueryDelegatorValidatorResponse, QueryDelegatorValidatorsRequest,
@@ -18,8 +18,8 @@ use ibc_proto::{
 use tonic::{Request, Response, Status};
 
 use super::Ibc;
-use crate::abci::tendermint_client::{TendermintAdapter, TendermintClient};
-use crate::client::{AsyncCall, AsyncQuery, Call, Client};
+use crate::abci::tendermint_client::TendermintAdapter;
+use crate::client::{AsyncQuery, Client};
 use crate::query::Query;
 use std::rc::Rc;
 

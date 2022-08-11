@@ -1,6 +1,3 @@
-use cosmrs::Tx;
-
-use ibc::core::ics26_routing::msgs::Ics26Envelope;
 use ibc_proto::cosmos::tx::v1beta1::service_server::Service as TxService;
 use ibc_proto::cosmos::tx::v1beta1::{
     BroadcastTxRequest, BroadcastTxResponse, GetBlockWithTxsRequest, GetBlockWithTxsResponse,
@@ -9,9 +6,8 @@ use ibc_proto::cosmos::tx::v1beta1::{
 };
 
 use super::Ibc;
-use crate::abci::tendermint_client::{TendermintAdapter, TendermintClient};
-use crate::client::{AsyncCall, AsyncQuery, Call, Client};
-use std::convert::TryFrom;
+use crate::abci::tendermint_client::TendermintAdapter;
+use crate::client::{AsyncQuery, Client};
 use std::rc::Rc;
 use tonic::{Request, Response, Status};
 

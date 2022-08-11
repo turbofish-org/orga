@@ -6,7 +6,6 @@ use super::{MerkStore, ProofBuilder};
 use crate::store::{BufStore, MapStore, Read, Shared, Write, KV};
 use crate::{Error, Result};
 use merk::proofs::query::Map as ProofMap;
-use std::cell::Ref;
 use std::ops::Bound;
 
 #[cfg(feature = "merk-full")]
