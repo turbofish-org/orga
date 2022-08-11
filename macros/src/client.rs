@@ -331,7 +331,6 @@ fn create_client_struct(
                 }
             });
 
-
     let query_method_impls_and_adapters =
     relevant_methods(name, "query", source)
         .into_iter()
@@ -720,16 +719,14 @@ fn replace_lifetimes(ty: &mut Type, name: &str) {
         Type::Path(path) => {
             if let Some(last_segment) = path.path.segments.last_mut() {
                 if let PathArguments::AngleBracketed(args) = &mut last_segment.arguments {
-                    args.args.iter_mut().for_each(|arg| {
-                        match arg {
-                            GenericArgument::Lifetime(ref mut ty) => {
-                                *ty = Lifetime::new(name, Span::call_site());
-                            }
-                            GenericArgument::Type(ty) => {
-                                replace_lifetimes(ty, name);
-                            }
-                            _ => {}
+                    args.args.iter_mut().for_each(|arg| match arg {
+                        GenericArgument::Lifetime(ref mut ty) => {
+                            *ty = Lifetime::new(name, Span::call_site());
                         }
+                        GenericArgument::Type(ty) => {
+                            replace_lifetimes(ty, name);
+                        }
+                        _ => {}
                     });
                 }
             }
@@ -738,9 +735,10 @@ fn replace_lifetimes(ty: &mut Type, name: &str) {
             ref_.lifetime = Some(Lifetime::new(name, Span::call_site()));
             replace_lifetimes(&mut ref_.elem, name);
         }
-        Type::Tuple(ref mut tuple) => {
-            tuple.elems.iter_mut().for_each(|t| replace_lifetimes(t, name))
-        }
+        Type::Tuple(ref mut tuple) => tuple
+            .elems
+            .iter_mut()
+            .for_each(|t| replace_lifetimes(t, name)),
         _ => {}
     }
 }
