@@ -43,7 +43,7 @@ pub enum SigType {
     Native,
     Adr36,
     #[skip]
-    Sdk(sdk_compat::sdk::Tx),
+    Sdk(Box<sdk_compat::sdk::Tx>),
 }
 
 use serde::Serialize;
@@ -182,7 +182,7 @@ where
         Ok(SignerCall {
             signature: Some(signature),
             pubkey: Some(pubkey),
-            sigtype: SigType::Sdk(sdk_tx.clone()),
+            sigtype: SigType::Sdk(Box::new(sdk_tx.clone())),
             call_bytes: inner_call,
         })
     }
