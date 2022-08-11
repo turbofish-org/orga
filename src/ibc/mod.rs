@@ -155,9 +155,7 @@ impl Ibc {
                     send_transfer(&mut self.transfers, &mut transfer_output, message)
                         .map_err(|e| dbg!(crate::Error::Ibc(e.to_string())))?;
                     transfer_output.with_result(())
-                }
-
-                _ => return Err(crate::Error::Ibc("Unsupported IBC message".to_string())),
+                } // _ => return Err(crate::Error::Ibc("Unsupported IBC message".to_string())),
             };
 
             outputs.push(output);
