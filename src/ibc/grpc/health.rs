@@ -3,13 +3,12 @@ use ibc_proto::cosmos::base::tendermint::v1beta1::{
     GetLatestBlockRequest, GetLatestBlockResponse, GetLatestValidatorSetRequest,
     GetLatestValidatorSetResponse, GetNodeInfoRequest, GetNodeInfoResponse, GetSyncingRequest,
     GetSyncingResponse, GetValidatorSetByHeightRequest, GetValidatorSetByHeightResponse,
-    Module as VersionInfoModule, VersionInfo,
 };
 use tendermint_proto::p2p::DefaultNodeInfo;
 
 use super::Ibc;
-use crate::abci::tendermint_client::{TendermintAdapter, TendermintClient};
-use crate::client::{AsyncCall, AsyncQuery, Call, Client};
+use crate::abci::tendermint_client::TendermintAdapter;
+use crate::client::{AsyncQuery, Client};
 use std::rc::Rc;
 use tonic::{Request, Response, Status};
 

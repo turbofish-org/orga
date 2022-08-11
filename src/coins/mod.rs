@@ -63,7 +63,7 @@ use crate::macros::State;
 use crate::query::Query;
 use ed::{Decode, Encode};
 use ripemd::{Digest as _, Ripemd160};
-use sha2::{Digest as _, Sha256};
+use sha2::Sha256;
 
 #[derive(
     Encode,

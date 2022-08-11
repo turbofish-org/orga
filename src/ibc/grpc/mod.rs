@@ -2,9 +2,8 @@ use std::rc::Rc;
 
 use super::Ibc;
 use crate::abci::TendermintClient;
-use crate::client::{AsyncCall, AsyncQuery, Call, Client};
+use crate::client::{AsyncQuery, Client};
 use crate::query::Query;
-use crate::state::State;
 use ibc_proto::cosmos::auth::v1beta1::query_server::QueryServer as AuthQueryServer;
 use ibc_proto::cosmos::bank::v1beta1::query_server::QueryServer as BankQueryServer;
 use ibc_proto::cosmos::base::tendermint::v1beta1::service_server::ServiceServer as HealthServer;
@@ -15,8 +14,6 @@ use ibc_proto::ibc::core::client::v1::query_server::QueryServer as ClientQuerySe
 use ibc_proto::ibc::core::connection::v1::query_server::QueryServer as ConnectionQueryServer;
 
 use crate::error::Result;
-use ibc_proto::ibc::core::client::v1::Height as RawHeight;
-use std::sync::{Arc, Mutex};
 use tonic::transport::Server;
 
 use crate::abci::tendermint_client::TendermintAdapter;
@@ -31,6 +28,7 @@ mod tx;
 
 type AppClient<T> = <Ibc as Client<T>>::Client;
 
+#[allow(type_alias_bounds)]
 type IbcProvider<T, U: Client<TendermintAdapter<U>>> =
     &'static (dyn Fn(U::Client) -> AppClient<T> + Send + Sync);
 

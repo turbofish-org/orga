@@ -1,13 +1,11 @@
 use super::sdk_compat::{sdk::Tx as SdkTx, ConvertSdkTx};
 use crate::call::Call;
 use crate::client::{AsyncCall, AsyncQuery, Client};
-use crate::coins::{Coin, Symbol};
-use crate::context::GetContext;
-use crate::plugins::Paid;
+use crate::coins::Symbol;
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
-use crate::{Error, Result};
+use crate::Result;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 

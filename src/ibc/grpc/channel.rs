@@ -1,19 +1,15 @@
-use ibc::{
-    core::ics24_host::identifier::{ChannelId, ConnectionId, PortId},
-    Height,
-};
+use ibc::core::ics24_host::identifier::{ChannelId, ConnectionId, PortId};
 use ibc_proto::ibc::core::{
     channel::v1::{
-        query_server::{Query as ChannelQuery, QueryServer as ChannelQueryServer},
-        Channel as RawChannelEnd, IdentifiedChannel as RawIdentifiedChannel, PacketState,
-        QueryChannelClientStateRequest, QueryChannelClientStateResponse,
-        QueryChannelConsensusStateRequest, QueryChannelConsensusStateResponse, QueryChannelRequest,
-        QueryChannelResponse, QueryChannelsRequest, QueryChannelsResponse,
-        QueryConnectionChannelsRequest, QueryConnectionChannelsResponse,
-        QueryNextSequenceReceiveRequest, QueryNextSequenceReceiveResponse,
-        QueryPacketAcknowledgementRequest, QueryPacketAcknowledgementResponse,
-        QueryPacketAcknowledgementsRequest, QueryPacketAcknowledgementsResponse,
-        QueryPacketCommitmentRequest, QueryPacketCommitmentResponse, QueryPacketCommitmentsRequest,
+        query_server::Query as ChannelQuery, QueryChannelClientStateRequest,
+        QueryChannelClientStateResponse, QueryChannelConsensusStateRequest,
+        QueryChannelConsensusStateResponse, QueryChannelRequest, QueryChannelResponse,
+        QueryChannelsRequest, QueryChannelsResponse, QueryConnectionChannelsRequest,
+        QueryConnectionChannelsResponse, QueryNextSequenceReceiveRequest,
+        QueryNextSequenceReceiveResponse, QueryPacketAcknowledgementRequest,
+        QueryPacketAcknowledgementResponse, QueryPacketAcknowledgementsRequest,
+        QueryPacketAcknowledgementsResponse, QueryPacketCommitmentRequest,
+        QueryPacketCommitmentResponse, QueryPacketCommitmentsRequest,
         QueryPacketCommitmentsResponse, QueryPacketReceiptRequest, QueryPacketReceiptResponse,
         QueryUnreceivedAcksRequest, QueryUnreceivedAcksResponse, QueryUnreceivedPacketsRequest,
         QueryUnreceivedPacketsResponse,
@@ -22,8 +18,8 @@ use ibc_proto::ibc::core::{
 };
 
 use super::Ibc;
-use crate::abci::tendermint_client::{TendermintAdapter, TendermintClient};
-use crate::client::{AsyncCall, AsyncQuery, Call, Client};
+use crate::abci::tendermint_client::TendermintAdapter;
+use crate::client::{AsyncQuery, Client};
 use crate::query::Query;
 use std::{rc::Rc, str::FromStr};
 use tonic::{Request, Response, Status};

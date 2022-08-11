@@ -1,6 +1,5 @@
 use super::Ibc;
-use crate::encoding::{Decode, Encode, Terminated};
-use crate::state::State;
+use crate::encoding::{Decode, Encode};
 use crate::Result;
 use cosmrs::Tx;
 use ibc::applications::transfer::msgs::transfer::MsgTransfer;
@@ -45,7 +44,7 @@ impl Encode for IbcTx {
         unimplemented!()
     }
 
-    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+    fn encode_into<W: std::io::Write>(&self, _dest: &mut W) -> ed::Result<()> {
         unimplemented!()
     }
 }

@@ -1,36 +1,31 @@
 use std::convert::TryFrom;
 use std::str::from_utf8;
 
-use crate::abci::{AbciQuery, BeginBlock, InitChain};
+use crate::abci::{AbciQuery, BeginBlock};
 use crate::call::Call;
 use crate::client::Client;
 use crate::coins::{Address, Amount};
-use crate::context::{Context, GetContext};
+use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
-use crate::merk::MerkStore;
+use crate::plugins::BeginBlockCtx;
 use crate::plugins::Events;
 use crate::plugins::Signer;
-use crate::plugins::{BeginBlockCtx, InitChainCtx};
 use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
 use client::ClientStore;
 use encoding::*;
-use ibc::applications::transfer::context::Ics20Context;
 use ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use ibc::applications::transfer::relay::send_transfer::send_transfer;
 use ibc::core::ics02_client::height::Height;
 use ibc::core::ics04_channel::timeout::TimeoutHeight;
 use ibc::core::ics24_host::identifier::{ChannelId, PortId};
-use ibc::core::ics26_routing::context::Module;
 use ibc::core::ics26_routing::handler::dispatch;
 use ibc::handler::HandlerOutputBuilder;
 use ibc::signer::Signer as IbcSigner;
 use ibc::timestamp::Timestamp;
 use ibc_proto::cosmos::base::v1beta1::Coin;
-use ics23::commitment_proof::Proof;
-use ics23::{CommitmentProof, InnerSpec, LeafOp, ProofSpec};
-use sha2::Sha512_256;
+use ics23::LeafOp;
 use tendermint_proto::abci::{EventAttribute, RequestQuery, ResponseQuery};
 use tendermint_proto::Protobuf;
 
@@ -160,9 +155,7 @@ impl Ibc {
                     send_transfer(&mut self.transfers, &mut transfer_output, message)
                         .map_err(|e| dbg!(crate::Error::Ibc(e.to_string())))?;
                     transfer_output.with_result(())
-                }
-
-                _ => return Err(crate::Error::Ibc("Unsupported IBC message".to_string())),
+                } // _ => return Err(crate::Error::Ibc("Unsupported IBC message".to_string())),
             };
 
             outputs.push(output);

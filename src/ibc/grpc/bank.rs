@@ -1,23 +1,18 @@
-use ibc::bigint::U256;
-use ibc_proto::{
-    cosmos::{
-        bank::v1beta1::{
-            query_server::{Query as BankQuery, QueryServer},
-            QueryAllBalancesRequest, QueryAllBalancesResponse, QueryBalanceRequest,
-            QueryBalanceResponse, QueryDenomMetadataRequest, QueryDenomMetadataResponse,
-            QueryDenomsMetadataRequest, QueryDenomsMetadataResponse, QueryParamsRequest,
-            QueryParamsResponse, QuerySpendableBalancesRequest, QuerySpendableBalancesResponse,
-            QuerySupplyOfRequest, QuerySupplyOfResponse, QueryTotalSupplyRequest,
-            QueryTotalSupplyResponse,
-        },
-        base::v1beta1::Coin as RawCoin,
+use ibc_proto::cosmos::{
+    bank::v1beta1::{
+        query_server::Query as BankQuery, QueryAllBalancesRequest, QueryAllBalancesResponse,
+        QueryBalanceRequest, QueryBalanceResponse, QueryDenomMetadataRequest,
+        QueryDenomMetadataResponse, QueryDenomsMetadataRequest, QueryDenomsMetadataResponse,
+        QueryParamsRequest, QueryParamsResponse, QuerySpendableBalancesRequest,
+        QuerySpendableBalancesResponse, QuerySupplyOfRequest, QuerySupplyOfResponse,
+        QueryTotalSupplyRequest, QueryTotalSupplyResponse,
     },
-    google::protobuf::Any,
+    base::v1beta1::Coin as RawCoin,
 };
 
 use super::Ibc;
-use crate::abci::tendermint_client::{TendermintAdapter, TendermintClient};
-use crate::client::{AsyncCall, AsyncQuery, Call, Client};
+use crate::abci::tendermint_client::TendermintAdapter;
+use crate::client::{AsyncQuery, Client};
 use crate::query::Query;
 use std::rc::Rc;
 use tonic::{Request, Response, Status};
@@ -35,7 +30,7 @@ where
 {
     async fn balance(
         &self,
-        request: Request<QueryBalanceRequest>,
+        _request: Request<QueryBalanceRequest>,
     ) -> Result<Response<QueryBalanceResponse>, Status> {
         Ok(Response::new(QueryBalanceResponse {
             balance: Some(RawCoin {

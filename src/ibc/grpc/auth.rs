@@ -1,12 +1,11 @@
 use super::Ibc;
-use crate::abci::tendermint_client::{TendermintAdapter, TendermintClient};
+use crate::abci::tendermint_client::TendermintAdapter;
+use crate::client::AsyncQuery;
 use crate::client::Client;
-use crate::client::{AsyncCall, AsyncQuery, Call};
 use ibc_proto::cosmos::auth::v1beta1::BaseAccount;
 use ibc_proto::cosmos::auth::v1beta1::{
-    query_server::{Query as AuthQuery, QueryServer},
-    QueryAccountRequest, QueryAccountResponse, QueryAccountsRequest, QueryAccountsResponse,
-    QueryParamsRequest, QueryParamsResponse,
+    query_server::Query as AuthQuery, QueryAccountRequest, QueryAccountResponse,
+    QueryAccountsRequest, QueryAccountsResponse, QueryParamsRequest, QueryParamsResponse,
 };
 use ibc_proto::google::protobuf::Any;
 use prost::Message;

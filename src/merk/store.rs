@@ -1,4 +1,3 @@
-use ed25519_dalek::Sha512;
 #[cfg(test)]
 use mutagen::mutate;
 

@@ -1,7 +1,5 @@
-use ibc_proto::ibc::core::client::v1::query_server::QueryServer as ClientQueryServer;
 use ibc_proto::ibc::core::client::v1::{
-    query_server::Query as ClientQuery, ConsensusStateWithHeight, Height as RawHeight,
-    IdentifiedClientState, QueryClientParamsRequest, QueryClientParamsResponse,
+    query_server::Query as ClientQuery, QueryClientParamsRequest, QueryClientParamsResponse,
     QueryClientStateRequest, QueryClientStateResponse, QueryClientStatesRequest,
     QueryClientStatesResponse, QueryClientStatusRequest, QueryClientStatusResponse,
     QueryConsensusStateRequest, QueryConsensusStateResponse, QueryConsensusStatesRequest,
@@ -14,8 +12,8 @@ use ibc_proto::ibc::core::client::v1::{
 };
 
 use super::Ibc;
-use crate::abci::tendermint_client::{TendermintAdapter, TendermintClient};
-use crate::client::{AsyncCall, AsyncQuery, Call, Client};
+use crate::abci::tendermint_client::TendermintAdapter;
+use crate::client::{AsyncQuery, Client};
 use crate::query::Query;
 use std::rc::Rc;
 use tonic::{Request, Response, Status};

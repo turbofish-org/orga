@@ -1,18 +1,16 @@
 use ibc::core::ics24_host::identifier::{ClientId, ConnectionId};
 use ibc_proto::ibc::core::connection::v1::{
-    query_server::{Query as ConnectionQuery, QueryServer as ConnectionQueryServer},
-    ConnectionEnd as RawConnectionEnd, IdentifiedConnection as RawIdentifiedConnection,
-    QueryClientConnectionsRequest, QueryClientConnectionsResponse,
-    QueryConnectionClientStateRequest, QueryConnectionClientStateResponse,
-    QueryConnectionConsensusStateRequest, QueryConnectionConsensusStateResponse,
-    QueryConnectionRequest, QueryConnectionResponse, QueryConnectionsRequest,
-    QueryConnectionsResponse,
+    query_server::Query as ConnectionQuery, QueryClientConnectionsRequest,
+    QueryClientConnectionsResponse, QueryConnectionClientStateRequest,
+    QueryConnectionClientStateResponse, QueryConnectionConsensusStateRequest,
+    QueryConnectionConsensusStateResponse, QueryConnectionRequest, QueryConnectionResponse,
+    QueryConnectionsRequest, QueryConnectionsResponse,
 };
 use std::str::FromStr;
 
 use super::Ibc;
-use crate::abci::tendermint_client::{TendermintAdapter, TendermintClient};
-use crate::client::{AsyncCall, AsyncQuery, Call, Client};
+use crate::abci::tendermint_client::TendermintAdapter;
+use crate::client::{AsyncQuery, Client};
 use crate::query::Query;
 use std::rc::Rc;
 use tonic::{Request, Response, Status};

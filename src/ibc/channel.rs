@@ -643,14 +643,14 @@ impl ChannelStore {
 
 impl Query for Channel {
     type Query = ();
-    fn query(&self, query: Self::Query) -> crate::Result<()> {
+    fn query(&self, _query: Self::Query) -> crate::Result<()> {
         Ok(())
     }
 }
 
 impl<T: Clone> Client<T> for Channel {
     type Client = ();
-    fn create_client(parent: T) -> Self::Client {
+    fn create_client(_parent: T) -> Self::Client {
         unimplemented!()
     }
 }
