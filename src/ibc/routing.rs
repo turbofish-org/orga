@@ -44,7 +44,7 @@ impl Encode for IbcTx {
         unimplemented!()
     }
 
-    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+    fn encode_into<W: std::io::Write>(&self, _dest: &mut W) -> ed::Result<()> {
         unimplemented!()
     }
 }

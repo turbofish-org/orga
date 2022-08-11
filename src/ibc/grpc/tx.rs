@@ -23,7 +23,7 @@ where
 {
     async fn simulate(
         &self,
-        request: Request<SimulateRequest>,
+        _request: Request<SimulateRequest>,
     ) -> Result<Response<SimulateResponse>, Status> {
         Ok(Response::new(SimulateResponse {
             gas_info: None,

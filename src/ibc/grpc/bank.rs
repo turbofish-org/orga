@@ -30,7 +30,7 @@ where
 {
     async fn balance(
         &self,
-        request: Request<QueryBalanceRequest>,
+        _request: Request<QueryBalanceRequest>,
     ) -> Result<Response<QueryBalanceResponse>, Status> {
         Ok(Response::new(QueryBalanceResponse {
             balance: Some(RawCoin {

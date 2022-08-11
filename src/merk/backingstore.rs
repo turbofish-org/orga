@@ -135,7 +135,7 @@ impl BackingStore {
     #[cfg(feature = "merk-full")]
     pub fn use_merkstore<F: FnOnce(&MerkStore) -> T, T>(&self, f: F) -> T {
         let wrapped_store = match self {
-            BackingStore::WrappedMerk(store) => todo!(),
+            BackingStore::WrappedMerk(_store) => todo!(),
             BackingStore::Merk(store) => store,
             _ => panic!("Cannot get MerkStore from BackingStore variant"),
         };

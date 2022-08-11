@@ -119,7 +119,7 @@ where
         let mut bytes = vec![];
         self.inner
             .encode(&mut bytes)
-            .map_err(|e| ed::Error::UnexpectedByte(0))?;
+            .map_err(|_e| ed::Error::UnexpectedByte(0))?;
 
         dest.write_all(&bytes)?;
 
