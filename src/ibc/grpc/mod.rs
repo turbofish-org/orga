@@ -28,6 +28,7 @@ mod tx;
 
 type AppClient<T> = <Ibc as Client<T>>::Client;
 
+#[allow(type_alias_bounds)]
 type IbcProvider<T, U: Client<TendermintAdapter<U>>> =
     &'static (dyn Fn(U::Client) -> AppClient<T> + Send + Sync);
 
