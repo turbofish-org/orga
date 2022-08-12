@@ -5,7 +5,6 @@
 #![feature(type_name_of_val)]
 #![feature(generic_associated_types)]
 
-
 use orga::ibc::{start_grpc, Ibc, IbcTx};
 use orga::prelude::*;
 
