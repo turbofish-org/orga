@@ -49,8 +49,8 @@ ibc = {version = "=0.16.0", optional = true }
 ibc-proto = { version = "=0.19.0", default-features = false, features = ["server"], optional = true }
 ics23 = { version = "=0.8.0-alpha", default-features = false, optional = true }
 prost-types = {version = "0.10", optional = true}
-tokio = "1.18.1"
-tonic = "0.7"
+tokio = { version = "1.18.1", optional = true }
+tonic = { version = "0.7", optional = true }
 cosmrs = "0.7.0"
 derive_more = "0.99.17"
 
@@ -63,7 +63,7 @@ serial_test = "0.5.1"
 features = ["abci", "merk/full"]
 
 [features]
-abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto", "prost", "is_executable", "home", "secp256k1/rand-std"]
+abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto", "prost", "is_executable", "home", "secp256k1/rand-std", "tokio", "tonic"]
 merk-verify = ["merk/verify"]
 merk-full = ["merk/full", "ics23", "sha2"]
 state-sync = []

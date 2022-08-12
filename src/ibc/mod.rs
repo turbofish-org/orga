@@ -33,13 +33,16 @@ mod channel;
 mod client;
 mod connection;
 mod encoding;
+#[cfg(feature = "abci")]
 mod grpc;
 mod port;
 mod routing;
 mod transfer;
 
-use crate::store::Store;
+#[cfg(feature = "abci")]
 pub use grpc::start_grpc;
+
+use crate::store::Store;
 use tendermint_proto::abci::Event;
 use tendermint_proto::crypto::{ProofOp, ProofOps};
 
