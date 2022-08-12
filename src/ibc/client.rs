@@ -2,12 +2,14 @@ use std::convert::TryInto;
 use std::ops::Bound;
 
 use super::{Adapter, Ibc, Lunchbox, ProtobufAdapter};
+#[cfg(feature = "abci")]
 use crate::abci::BeginBlock;
 use crate::call::Call;
 use crate::client::Client;
 use crate::collections::Map;
 use crate::collections::Next;
 use crate::encoding::{Decode, Encode};
+#[cfg(feature = "abci")]
 use crate::plugins::BeginBlockCtx;
 use crate::query::Query;
 use crate::state::State;
@@ -358,6 +360,7 @@ impl ClientReader for Ibc {
     }
 }
 
+#[cfg(feature = "abci")]
 impl BeginBlock for ClientStore {
     fn begin_block(&mut self, ctx: &BeginBlockCtx) -> crate::Result<()> {
         self.height = ctx.height;

@@ -62,7 +62,7 @@ pub mod context;
 #[cfg(feature = "abci")]
 pub mod migrate;
 
-#[cfg(feature = "abci")]
+#[cfg(feature = "feat-ibc")]
 pub mod ibc;
 
 mod error;

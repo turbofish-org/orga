@@ -1,13 +1,16 @@
 use std::convert::TryFrom;
 use std::str::from_utf8;
 
+#[cfg(feature = "abci")]
 use crate::abci::{AbciQuery, BeginBlock};
 use crate::call::Call;
 use crate::client::Client;
 use crate::coins::{Address, Amount};
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
+#[cfg(feature = "abci")]
 use crate::plugins::BeginBlockCtx;
+#[cfg(feature = "abci")]
 use crate::plugins::Events;
 use crate::plugins::Signer;
 use crate::query::Query;
@@ -134,6 +137,15 @@ impl TryFrom<TransferArgs> for TransferOpts {
 impl Ibc {
     #[call]
     pub fn deliver_tx(&mut self, msg: IbcTx) -> Result<()> {
+        #[cfg(feature = "abci")]
+        return self.exec_deliver_tx(msg);
+
+        #[cfg(not(feature = "abci"))]
+        panic!()
+    }
+
+    #[cfg(feature = "abci")]
+    fn exec_deliver_tx(&mut self, msg: IbcTx) -> Result<()> {
         let mut outputs = vec![];
         for message in msg.0 {
             let output = match message {
@@ -234,6 +246,7 @@ impl Ibc {
     }
 }
 
+#[cfg(feature = "abci")]
 impl BeginBlock for Ibc {
     fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
         self.height = ctx.height;
@@ -245,6 +258,7 @@ impl BeginBlock for Ibc {
 }
 
 use crate::store::Read;
+#[cfg(feature = "abci")]
 impl AbciQuery for Ibc {
     fn abci_query(&self, req: &RequestQuery) -> Result<ResponseQuery> {
         use ibc::core::ics02_client::context::ClientReader;
