@@ -454,12 +454,12 @@ impl<
         let signer = crate::plugins::signer::keplr::Signer;
         let sig = signer.sign_sdk(sign_doc.clone()).await?;
 
-        let tx = sdk::Tx {
+        let tx = sdk::Tx::Amino(sdk::AminoTx {
             msg: sign_doc.msgs,
             signatures: vec![sig],
             fee: sign_doc.fee,
             memo: sign_doc.memo,
-        };
+        });
         self._parent
             .call(Call::Sdk(tx))
             .await
