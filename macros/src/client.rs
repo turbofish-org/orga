@@ -331,6 +331,7 @@ fn create_client_struct(
                 }
             });
 
+
     let query_method_impls_and_adapters =
     relevant_methods(name, "query", source)
         .into_iter()
@@ -599,6 +600,30 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
 
             let parent_client_ty: GenericParam = syn::parse2(quote!(__Parent)).unwrap();
         
+            let async_call_def = if item.attrs.iter().any(|a| a.path.is_ident("async")) {
+                quote! {
+                    #[::orga::async_trait(?Send)]
+                    impl#generics_with_parent ::orga::client::AsyncCall for #struct_name#generic_params_bracketed_with_parent
+                    where
+                        #parent_client_ty: Clone + Send,
+                        #parent_client_ty: ::orga::client::AsyncCall<Call = <#item_ty as ::orga::call::Call>::Call>,
+                    {
+                        type Call = <#field_ty as ::orga::call::Call>::Call;
+            
+                        async fn call(&self, call: Self::Call) -> ::orga::Result<()> {
+                            // assumes that the call has a tuple variant called "Field" +
+                            // the camel-cased name as the field
+                            let subcall_bytes = ::orga::encoding::Encode::encode(&call)?; // TODO: error handling
+                            let subcall = <#item_ty as ::orga::call::Call>::Call::#variant_name(subcall_bytes);
+                            self.parent.call(subcall).await
+                        }
+                    }
+
+                }
+            } else {
+                quote! {}
+            };
+
             let struct_def = quote! {
                 #[derive(Clone)]
                 pub struct #struct_name#generics_with_parent
@@ -620,23 +645,8 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
                         Self { parent, marker: ::std::marker::PhantomData }
                     }
                 }
-        
-                #[::orga::async_trait(?Send)]
-                impl#generics_with_parent ::orga::client::AsyncCall for #struct_name#generic_params_bracketed_with_parent
-                where
-                    #parent_client_ty: Clone + Send,
-                    #parent_client_ty: ::orga::client::AsyncCall<Call = <#item_ty as ::orga::call::Call>::Call>,
-                {
-                    type Call = <#field_ty as ::orga::call::Call>::Call;
-        
-                    async fn call(&self, call: Self::Call) -> ::orga::Result<()> {
-                        // assumes that the call has a tuple variant called "Field" +
-                        // the camel-cased name as the field
-                        let subcall_bytes = ::orga::encoding::Encode::encode(&call)?; // TODO: error handling
-                        let subcall = <#item_ty as ::orga::call::Call>::Call::#variant_name(subcall_bytes);
-                        self.parent.call(subcall).await
-                    }
-                }
+                
+                #async_call_def
 
                 #[::orga::async_trait(?Send)]
                 impl#generics_with_parent ::orga::client::AsyncQuery for #struct_name#generic_params_bracketed_with_parent
@@ -719,14 +729,16 @@ fn replace_lifetimes(ty: &mut Type, name: &str) {
         Type::Path(path) => {
             if let Some(last_segment) = path.path.segments.last_mut() {
                 if let PathArguments::AngleBracketed(args) = &mut last_segment.arguments {
-                    args.args.iter_mut().for_each(|arg| match arg {
-                        GenericArgument::Lifetime(ref mut ty) => {
-                            *ty = Lifetime::new(name, Span::call_site());
+                    args.args.iter_mut().for_each(|arg| {
+                        match arg {
+                            GenericArgument::Lifetime(ref mut ty) => {
+                                *ty = Lifetime::new(name, Span::call_site());
+                            }
+                            GenericArgument::Type(ty) => {
+                                replace_lifetimes(ty, name);
+                            }
+                            _ => {}
                         }
-                        GenericArgument::Type(ty) => {
-                            replace_lifetimes(ty, name);
-                        }
-                        _ => {}
                     });
                 }
             }
@@ -735,10 +747,9 @@ fn replace_lifetimes(ty: &mut Type, name: &str) {
             ref_.lifetime = Some(Lifetime::new(name, Span::call_site()));
             replace_lifetimes(&mut ref_.elem, name);
         }
-        Type::Tuple(ref mut tuple) => tuple
-            .elems
-            .iter_mut()
-            .for_each(|t| replace_lifetimes(t, name)),
+        Type::Tuple(ref mut tuple) => {
+            tuple.elems.iter_mut().for_each(|t| replace_lifetimes(t, name))
+        }
         _ => {}
     }
 }
