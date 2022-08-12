@@ -67,6 +67,8 @@ pub mod ibc;
 
 mod error;
 
+pub use cosmrs;
+
 // re-exports
 pub use async_trait::async_trait;
 pub use error::*;
