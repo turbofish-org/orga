@@ -600,7 +600,7 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
 
             let parent_client_ty: GenericParam = syn::parse2(quote!(__Parent)).unwrap();
         
-            let async_call_def = if item.attrs.iter().any(|a| a.path.is_ident("async")) {
+            let async_call_def = if field.attrs.iter().any(|a| a.path.is_ident("async")) {
                 quote! {
                     #[::orga::async_trait(?Send)]
                     impl#generics_with_parent ::orga::client::AsyncCall for #struct_name#generic_params_bracketed_with_parent
