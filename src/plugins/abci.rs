@@ -294,6 +294,7 @@ mod full {
                             .replace(Context::resolve::<Events>().unwrap().events.clone());
                     }
                     Context::remove::<Events>();
+                    res?;
                 }
                 CheckTx(inner_call) => {
                     Context::add(Events::default());
@@ -304,6 +305,7 @@ mod full {
                             .replace(Context::resolve::<Events>().unwrap().events.clone());
                     }
                     Context::remove::<Events>();
+                    res?;
                 }
             };
 
