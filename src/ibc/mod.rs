@@ -125,7 +125,9 @@ impl TryFrom<TransferArgs> for TransferOpts {
                 .map_err(|_| crate::Error::Ibc("Invalid receiver".into()))?
                 .into(),
             timeout_height: TimeoutHeight::Never.into(),
-            timeout_timestamp: Timestamp::from_nanoseconds(0).unwrap().into(),
+            timeout_timestamp: Timestamp::from_nanoseconds(60 * 60 * 1_000_000_000)
+                .unwrap()
+                .into(),
         })
     }
 }
