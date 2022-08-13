@@ -106,6 +106,7 @@ pub struct TransferArgs {
 impl TryFrom<TransferArgs> for TransferOpts {
     type Error = crate::Error;
     fn try_from(args: TransferArgs) -> crate::Result<Self> {
+        let now_ns = Timestamp::now().nanoseconds();
         Ok(TransferOpts {
             channel_id: args
                 .channel_id
@@ -125,7 +126,7 @@ impl TryFrom<TransferArgs> for TransferOpts {
                 .map_err(|_| crate::Error::Ibc("Invalid receiver".into()))?
                 .into(),
             timeout_height: TimeoutHeight::Never.into(),
-            timeout_timestamp: Timestamp::from_nanoseconds(60 * 60 * 1_000_000_000)
+            timeout_timestamp: Timestamp::from_nanoseconds(now_ns + 60 * 60 * 1_000_000_000)
                 .unwrap()
                 .into(),
         })
