@@ -28,6 +28,7 @@ use ibc::handler::HandlerOutputBuilder;
 use ibc::signer::Signer as IbcSigner;
 use ibc::timestamp::Timestamp;
 use ibc_proto::cosmos::base::v1beta1::Coin;
+use ibc_proto::ibc::core::channel::v1::PacketState;
 use ics23::LeafOp;
 use tendermint_proto::abci::{EventAttribute, RequestQuery, ResponseQuery};
 use tendermint_proto::Protobuf;
@@ -242,6 +243,17 @@ impl Ibc {
         let ibc_tx = IbcTx(vec![IbcMessage::Ics20(msg_transfer)]);
 
         self.deliver_tx(ibc_tx)
+    }
+
+    #[query]
+    pub fn all_packet_commitments(
+        &self,
+        ids: Adapter<(PortId, ChannelId)>,
+    ) -> Result<Vec<PacketState>> {
+        let commitments = self.channels.packet_commitments(ids.clone())?;
+        let transfer_commitments = self.transfers.packet_commitments(ids)?;
+
+        Ok([commitments, transfer_commitments].concat())
     }
 }
 

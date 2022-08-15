@@ -136,32 +136,21 @@ where
         let channel_id = ChannelId::from_str(&request.channel_id)
             .map_err(|_| Status::invalid_argument("invalid channel id"))?;
 
-        let async_port_id = port_id.clone();
-        let async_channel_id = channel_id.clone();
-
-        //TODO: combine commitment queries
-        let commitments = self
-            .ibc
-            .channels
-            .packet_commitments((port_id.clone(), channel_id.clone()).into())
-            .await??;
-
-        let transfer_commitments_response = self
+        let commitments_response = self
             .ibc_with_height(async move |client| {
                 Fn::call(&self.ibc_provider, (client,))
-                    .transfers
-                    .packet_commitments((async_port_id, async_channel_id).into())
+                    .all_packet_commitments((port_id, channel_id).into())
                     .await
             })
             .await?;
 
-        let commitments = [commitments, transfer_commitments_response.0?].concat();
+        let commitments = commitments_response.0?;
 
         Ok(Response::new(QueryPacketCommitmentsResponse {
             commitments,
             pagination: None,
             height: Some(RawHeight {
-                revision_height: transfer_commitments_response.1,
+                revision_height: commitments_response.1,
                 revision_number: 0,
             }),
         }))
