@@ -50,32 +50,18 @@ where
         &self,
         _request: Request<QueryConnectionsRequest>,
     ) -> Result<Response<QueryConnectionsResponse>, Status> {
-        todo!()
-        // let connection_path_prefix: Path = String::from("connections")
-        //     .try_into()
-        //     .expect("'connections' expected to be a valid Path");
+        let connections = self
+            .ibc
+            .connections
+            .all_connections()
+            .await?
+            .map_err(|_| Status::aborted("Failed to query connections"))?;
 
-        // let connection_paths = self.connection_end_store.get_keys(&connection_path_prefix);
-
-        // let identified_connections: Vec<RawIdentifiedConnection> = connection_paths
-        //     .into_iter()
-        //     .map(|path| match path.try_into() {
-        //         Ok(IbcPath::Connections(connections_path)) => {
-        //             let connection_end = self
-        //                 .connection_end_store
-        //                 .get(Height::Pending, &connections_path)
-        //                 .unwrap();
-        //             IdentifiedConnectionEnd::new(connections_path.0, connection_end).into()
-        //         }
-        //         _ => panic!("unexpected path"),
-        //     })
-        //     .collect();
-
-        // Ok(Response::new(QueryConnectionsResponse {
-        //     connections: identified_connections,
-        //     pagination: None,
-        //     height: None,
-        // }))
+        Ok(Response::new(QueryConnectionsResponse {
+            connections,
+            pagination: None,
+            height: None,
+        }))
     }
 
     async fn client_connections(
@@ -109,13 +95,13 @@ where
         &self,
         _request: Request<QueryConnectionClientStateRequest>,
     ) -> Result<Response<QueryConnectionClientStateResponse>, Status> {
-        todo!()
+        unimplemented!()
     }
 
     async fn connection_consensus_state(
         &self,
         _request: Request<QueryConnectionConsensusStateRequest>,
     ) -> Result<Response<QueryConnectionConsensusStateResponse>, Status> {
-        todo!()
+        unimplemented!()
     }
 }

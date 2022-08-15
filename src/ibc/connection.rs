@@ -6,6 +6,7 @@ use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::{Read, Write};
+use ibc::core::ics03_connection::connection::IdentifiedConnectionEnd;
 use ibc::{
     core::{
         ics02_client::{
@@ -26,12 +27,12 @@ use ibc::{
     },
     Height,
 };
+use ibc_proto::ibc::core::connection::v1::IdentifiedConnection as RawIdentifiedConnection;
 
 type Result<T> = std::result::Result<T, Error>;
 
 impl From<crate::Error> for Error {
     fn from(_err: crate::Error) -> Error {
-        dbg!(_err);
         Error::implementation_specific()
     }
 }
@@ -80,7 +81,6 @@ impl ConnectionReader for Ibc {
     }
 
     fn client_state(&self, client_id: &ClientId) -> Result<AnyClientState> {
-        println!("connections::client_state {:?}", client_id);
         ClientReader::client_state(self, client_id).map_err(Error::ics02_client)
     }
 
@@ -181,5 +181,21 @@ impl ConnectionStore {
         }
 
         Ok(conn_ids)
+    }
+
+    #[query]
+    pub fn all_connections(&self) -> Result<Vec<RawIdentifiedConnection>> {
+        let mut connections = vec![];
+        for i in 0..self.count {
+            let connection_id = ConnectionId::new(i);
+            let connection_end = self
+                .ends
+                .get(connection_id.clone().into())?
+                .ok_or_else(|| crate::Error::Ibc("Failed to read connection end".into()))?
+                .clone();
+            connections.push(IdentifiedConnectionEnd::new(connection_id, connection_end).into());
+        }
+
+        Ok(connections)
     }
 }
