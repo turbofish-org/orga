@@ -19,9 +19,7 @@ pub struct Deque<T, S = DefaultBackingStore> {
 
 impl<T, S> std::fmt::Debug for Deque<T, S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Deque")
-            .field("meta", &self.meta)
-            .finish()
+        f.debug_struct("Deque").field("meta", &self.meta).finish()
     }
 }
 

@@ -331,7 +331,6 @@ fn create_client_struct(
                 }
             });
 
-
     let query_method_impls_and_adapters =
     relevant_methods(name, "query", source)
         .into_iter()
@@ -599,7 +598,6 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
             let field_ty = &field.ty;
 
             let parent_client_ty: GenericParam = syn::parse2(quote!(__Parent)).unwrap();
-        
             let struct_def = quote! {
                 #[derive(Clone)]
                 pub struct #struct_name#generics_with_parent
@@ -610,7 +608,6 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
                     marker: ::std::marker::PhantomData<fn() -> #item_ty>,
                 }
             };
-        
             let output = quote! {
                 #struct_def
                 impl#generics_with_parent #struct_name#generic_params_bracketed_with_parent
@@ -621,7 +618,6 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
                         Self { parent, marker: ::std::marker::PhantomData }
                     }
                 }
-        
                 #[::orga::async_trait(?Send)]
                 impl#generics_with_parent ::orga::client::AsyncCall for #struct_name#generic_params_bracketed_with_parent
                 where
@@ -629,7 +625,6 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
                     #parent_client_ty: ::orga::client::AsyncCall<Call = <#item_ty as ::orga::call::Call>::Call>,
                 {
                     type Call = <#field_ty as ::orga::call::Call>::Call;
-        
                     async fn call(&self, call: Self::Call) -> ::orga::Result<()> {
                         // assumes that the call has a tuple variant called "Field" +
                         // the camel-cased name as the field
@@ -648,7 +643,6 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
                 {
                     type Query = <#field_ty as ::orga::query::Query>::Query;
                     type Response<'a> = ::std::rc::Rc<#field_ty>;
-        
                     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> ::orga::Result<R>
                     where
                         F: FnMut(Self::Response<'_>) -> ::orga::Result<R>
@@ -660,7 +654,6 @@ fn create_field_adapters(item: &DeriveInput) -> (TokenStream2, Vec<(&Field, Item
                     }
                 }
             };
-        
             (output, struct_def)
         })
         .collect();
@@ -720,16 +713,14 @@ fn replace_lifetimes(ty: &mut Type, name: &str) {
         Type::Path(path) => {
             if let Some(last_segment) = path.path.segments.last_mut() {
                 if let PathArguments::AngleBracketed(args) = &mut last_segment.arguments {
-                    args.args.iter_mut().for_each(|arg| {
-                        match arg {
-                            GenericArgument::Lifetime(ref mut ty) => {
-                                *ty = Lifetime::new(name, Span::call_site());
-                            }
-                            GenericArgument::Type(ty) => {
-                                replace_lifetimes(ty, name);
-                            }
-                            _ => {}
+                    args.args.iter_mut().for_each(|arg| match arg {
+                        GenericArgument::Lifetime(ref mut ty) => {
+                            *ty = Lifetime::new(name, Span::call_site());
                         }
+                        GenericArgument::Type(ty) => {
+                            replace_lifetimes(ty, name);
+                        }
+                        _ => {}
                     });
                 }
             }
@@ -738,9 +729,10 @@ fn replace_lifetimes(ty: &mut Type, name: &str) {
             ref_.lifetime = Some(Lifetime::new(name, Span::call_site()));
             replace_lifetimes(&mut ref_.elem, name);
         }
-        Type::Tuple(ref mut tuple) => {
-            tuple.elems.iter_mut().for_each(|t| replace_lifetimes(t, name))
-        }
+        Type::Tuple(ref mut tuple) => tuple
+            .elems
+            .iter_mut()
+            .for_each(|t| replace_lifetimes(t, name)),
         _ => {}
     }
 }
