@@ -7,11 +7,11 @@ description = "State machine engine"
 license = "MIT"
 
 [dependencies]
-abci2 = { git = "https://github.com/nomic-io/abci2", rev = "6b8ee2146eb9d64f17c3567c19d062741b5d7cfe", optional = true }
+abci2 = { git = "https://github.com/nomic-io/abci2", rev = "e9d12675bcc8baffe45c976cd6d2a7b76b916da7", optional = true }
 merk = { git = "https://github.com/nomic-io/merk", rev = "a2e46ed40c7b7eeaaed7a94654c18413728f7b8d", optional = true, default-features = false }
-tendermint-rpc = { version = "0.23.5", features = ["http-client"], optional = true }
-tendermint = { version = "0.23.5", optional = true }
-tendermint-proto = { version = "0.23.5", optional = true }
+tendermint-rpc = { version = "=0.23.7", features = ["http-client"], optional = true }
+tendermint = { version = "=0.23.7", optional = true }
+tendermint-proto = { version = "=0.23.7", optional = true }
 orga-macros = { path = "macros", version = "0.2.4" }
 seq-macro = "0.1.4"
 log = "0.4.8"
@@ -23,7 +23,6 @@ flate2 = "1.0.20"
 tar = "0.4.33"
 ed = "0.3.0" 
 toml_edit = "0.2.0"
-prost = {version = "0.9", optional = true}
 home = { version = "0.5.3", optional = true }
 ed25519-dalek = "1"
 thiserror = "1.0.29"
@@ -44,7 +43,7 @@ base64 = "0.13.0"
 secp256k1 = { version = "0.22.1", features = ["bitcoin_hashes"] }
 serde = { version = "1.0.133", features = ["derive"] }
 serde_json = "1.0.74"
-v2 = { git = "https://github.com/nomic-io/orga", branch = "v2-legacy-main", features = ["merk-full", "abci"], package = "orga", optional = true }
+prost = {version = "=0.10", optional = true}
 
 [dev-dependencies]
 tempdir = "0.3.7"
@@ -56,7 +55,7 @@ serial_test = "0.5.1"
 features = ["abci", "merk/full"]
 
 [features]
-abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto", "prost", "is_executable", "home", "secp256k1/rand-std", "v2"]
+abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto", "prost", "is_executable", "home", "secp256k1/rand-std"]
 merk-verify = ["merk/verify"]
 merk-full = ["merk/full"]
 state-sync = []

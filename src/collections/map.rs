@@ -94,6 +94,12 @@ pub struct Map<K, V, S = DefaultBackingStore> {
     children: BTreeMap<MapKey<K>, Option<V>>,
 }
 
+impl<K, V, S> Map<K, V, S> {
+    pub fn store(&self) -> &Store<S> {
+        &self.store
+    }
+}
+
 impl<K, V, S> From<Map<K, V, S>> for () {
     fn from(_map: Map<K, V, S>) {}
 }

@@ -11,24 +11,24 @@ use super::UNBONDING_SECONDS;
 
 #[derive(State)]
 pub struct Unbond<S: Symbol> {
-    pub(super) coins: Share<S>,
-    pub(super) start_seconds: i64,
+    pub coins: Share<S>,
+    pub start_seconds: i64,
 }
 
 #[derive(State, Clone)]
 pub struct Redelegation {
-    pub(super) amount: Amount,
-    pub(super) address: Address,
-    pub(super) start_seconds: i64,
+    pub amount: Amount,
+    pub address: Address,
+    pub start_seconds: i64,
 }
 
 #[derive(State)]
 pub struct Delegator<S: Symbol> {
-    pub(super) liquid: MultiShare,
-    pub(super) staked: Share<S>,
-    pub(super) unbonding: Deque<Unbond<S>>,
-    pub(super) redelegations_out: Deque<Redelegation>,
-    pub(super) redelegations_in: Deque<Redelegation>,
+    pub liquid: MultiShare,
+    pub staked: Share<S>,
+    pub unbonding: Deque<Unbond<S>>,
+    pub redelegations_out: Deque<Redelegation>,
+    pub redelegations_in: Deque<Redelegation>,
 }
 
 impl<S: Symbol> Delegator<S> {

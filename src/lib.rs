@@ -57,9 +57,6 @@ pub mod coins;
 
 pub mod context;
 
-#[cfg(feature = "abci")]
-pub mod migrate;
-
 mod error;
 
 // re-exports

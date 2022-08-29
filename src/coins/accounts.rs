@@ -4,8 +4,6 @@ use crate::coins::{Address, Amount, Coin, Give, Symbol, Take};
 use crate::collections::Map;
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
-#[cfg(feature = "abci")]
-use crate::migrate::Migrate;
 use crate::plugins::Paid;
 use crate::plugins::Signer;
 use crate::query::Query;
@@ -127,20 +125,8 @@ impl<S: Symbol> Accounts<S> {
         let mut account = self.accounts.entry(address)?.or_insert_default()?;
         account.take(amount)
     }
-}
 
-#[cfg(feature = "abci")]
-impl<S: Symbol, T: v2::coins::Symbol> Migrate<v2::coins::Accounts<T>> for Accounts<S> {
-    fn migrate(&mut self, legacy: v2::coins::Accounts<T>) -> Result<()> {
-        let accounts = legacy.accounts();
-        for entry in accounts.iter().unwrap() {
-            let (addr, coins) = entry.unwrap();
-            let amt: u64 = coins.amount.into();
-            if amt > 0 {
-                self.deposit(addr.bytes().into(), amt.into())?;
-            }
-        }
-
-        Ok(())
+    pub fn accounts(&self) -> &Map<Address, Coin<S>> {
+        &self.accounts
     }
 }

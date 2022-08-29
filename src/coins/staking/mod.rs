@@ -27,9 +27,6 @@ pub use delegator::*;
 mod validator;
 pub use validator::*;
 
-#[cfg(feature = "abci")]
-mod migrate;
-
 #[cfg(test)]
 const UNBONDING_SECONDS: u64 = 10; // 10 seconds
 #[cfg(not(test))]
@@ -312,6 +309,14 @@ impl<S: Symbol> Default for StakingEncoding<S> {
 }
 
 impl<S: Symbol> Staking<S> {
+    pub fn validators(&self) -> &Pool<Address, Validator<S>, S> {
+        &self.validators
+    }
+
+    pub fn consensus_keys(&self) -> &Map<Address, [u8; 32]> {
+        &self.consensus_keys
+    }
+
     pub fn delegate(
         &mut self,
         val_address: Address,

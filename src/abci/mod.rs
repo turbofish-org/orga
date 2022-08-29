@@ -1,8 +1,8 @@
 #![cfg(feature = "abci")]
 use std::clone::Clone;
-use std::env;
 use std::net::ToSocketAddrs;
 use std::sync::mpsc::{self, Receiver, Sender, SyncSender};
+use std::sync::{Arc, RwLock};
 
 use log::info;
 
@@ -35,6 +35,9 @@ pub struct ABCIStateMachine<A: Application> {
     mempool_state: Option<BufStoreMap>,
     consensus_state: Option<BufStoreMap>,
     height: u64,
+    now_seconds: i64,
+    commit_seconds: i64,
+    stop_seconds: Option<i64>,
 }
 
 impl<A: Application> ABCIStateMachine<A> {
@@ -51,6 +54,9 @@ impl<A: Application> ABCIStateMachine<A> {
             mempool_state: Some(Default::default()),
             consensus_state: Some(Default::default()),
             height: 0,
+            now_seconds: 0,
+            commit_seconds: 0,
+            stop_seconds: None,
         }
     }
 
@@ -98,26 +104,14 @@ impl<A: Application> ABCIStateMachine<A> {
                 let store = self.store.take().unwrap();
                 let app = self.app.take().unwrap();
 
-                let res = app
-                    .query(store.clone(), req)
-                    .unwrap_or_else(|err| ResponseQuery {
-                        code: 1,
-                        log: err.to_string(),
-                        info: err.to_string(),
-                        codespace: "".to_string(),
-                        height: self.height as i64,
-                        index: 0,
-                        key: vec![],
-                        proof_ops: None,
-                        value: vec![],
-                    });
+                let res = app.query(store.clone(), req)?;
 
                 self.store.replace(store);
                 self.app.replace(app);
-
                 Ok(Res::Query(res))
             }
             Req::InitChain(req) => {
+                self.now_seconds = req.time.as_ref().unwrap().seconds;
                 let app = self.app.take().unwrap();
                 let self_store = self.store.take().unwrap().into_inner();
                 let self_store_shared = Shared::new(self_store);
@@ -146,6 +140,14 @@ impl<A: Application> ABCIStateMachine<A> {
                 Ok(Res::InitChain(res_init_chain))
             }
             Req::BeginBlock(req) => {
+                // if let Some(stop_height) = self.stop_height {
+                //     if req.header.as_ref().unwrap().height as u64 > stop_height {
+                //         std::thread::sleep(std::time::Duration::from_secs(10));
+                //         return Err(Error::ABCI("Reached stop height".into()));
+                //     }
+                // }
+                self.now_seconds = req.header.as_ref().unwrap().time.as_ref().unwrap().seconds;
+
                 let app = self.app.take().unwrap();
                 let self_store = self.store.take().unwrap().into_inner();
                 let self_store_shared = Shared::new(self_store);
@@ -244,19 +246,7 @@ impl<A: Application> ABCIStateMachine<A> {
                 }
 
                 self_store_shared.borrow_mut().commit(self.height)?;
-
-                if let Some(stop_height_str) = env::var_os("STOP_HEIGHT") {
-                    let stop_height: u64 = stop_height_str
-                        .into_string()
-                        .unwrap()
-                        .parse()
-                        .expect("Invalid STOP_HEIGHT value");
-                    assert!(
-                        self.height < stop_height,
-                        "Reached stop height ({})",
-                        stop_height
-                    );
-                }
+                self.commit_seconds = self.now_seconds;
 
                 self.mempool_state.replace(Default::default());
                 self.consensus_state.replace(Default::default());
@@ -329,6 +319,11 @@ impl<A: Application> ABCIStateMachine<A> {
         }
     }
 
+    pub fn stop_seconds(mut self, stop_seconds: i64) -> Self {
+        self.stop_seconds.replace(stop_seconds);
+        self
+    }
+
     /// Creates a TCP server for the ABCI protocol and begins handling the
     /// incoming connections.
     pub fn listen<SA: ToSocketAddrs>(mut self, addr: SA) -> Result<()> {
@@ -336,14 +331,24 @@ impl<A: Application> ABCIStateMachine<A> {
 
         let (err_sender, err_receiver) = mpsc::channel();
 
+        let shutdown = Arc::new(RwLock::new(false));
+
         // TODO: keep workers in struct
         // TODO: more intelligently handle connections, e.g. handle tendermint dying/reconnecting?
-        self.create_worker(server.accept()?, err_sender.clone())?;
-        self.create_worker(server.accept()?, err_sender.clone())?;
-        self.create_worker(server.accept()?, err_sender.clone())?;
-        self.create_worker(server.accept()?, err_sender)?;
+        let create_worker = || -> Result<_> {
+            Ok(Worker::new(
+                self.sender.clone(),
+                server.accept()?,
+                err_sender.clone(),
+                shutdown.clone(),
+            ))
+        };
+        create_worker()?;
+        create_worker()?;
+        create_worker()?;
+        create_worker()?;
 
-        loop {
+        let mut listen = || loop {
             match err_receiver.try_recv() {
                 Err(mpsc::TryRecvError::Empty) => {}
                 Err(err) => Err(err).unwrap(),
@@ -355,13 +360,18 @@ impl<A: Application> ABCIStateMachine<A> {
                 value: Some(self.run(req)?),
             };
             cb.send(res).unwrap();
-        }
-    }
 
-    /// Creates a new worker to handle the incoming ABCI requests for `conn`
-    /// within its own threads.
-    fn create_worker(&self, conn: abci2::Connection, err_channel: Sender<Error>) -> Result<Worker> {
-        Ok(Worker::new(self.sender.clone(), conn, err_channel))
+            if let Some(stop_seconds) = &self.stop_seconds {
+                if self.commit_seconds >= *stop_seconds {
+                    std::thread::sleep(std::time::Duration::from_secs(10));
+                    return Err(Error::ABCI("Reached stop height".into()));
+                }
+            }
+        };
+
+        let res = listen();
+        *shutdown.write().unwrap() = true;
+        res
     }
 }
 
@@ -375,7 +385,29 @@ impl Worker {
         req_sender: SyncSender<(Request, SyncSender<Response>)>,
         mut conn: abci2::Connection,
         err_sender: Sender<Error>,
+        shutdown: Arc<RwLock<bool>>,
     ) -> Self {
+        macro_rules! maybe_shutdown {
+            () => {
+                if *shutdown.read().unwrap() {
+                    return;
+                }
+            };
+            ($expr:expr) => {{
+                if *shutdown.read().unwrap() {
+                    return;
+                }
+
+                let _res = $expr;
+
+                if !*shutdown.read().unwrap() {
+                    _res.unwrap()
+                } else {
+                    return;
+                }
+            }};
+        }
+
         let thread = std::thread::spawn(move || {
             let (res_sender, res_receiver) = mpsc::sync_channel(0);
             loop {
@@ -386,13 +418,24 @@ impl Worker {
                         return;
                     }
                 };
-                req_sender
-                    .send((req, res_sender.clone()))
-                    .expect("failed to send request");
-                let res = res_receiver.recv().unwrap();
-                conn.write(res).unwrap();
+
+                if let Request {
+                    value: Some(Req::Flush { .. }),
+                } = req
+                {
+                    conn.write(Response {
+                        value: Some(Res::Flush(Default::default())),
+                    })
+                    .unwrap_or(());
+                    continue;
+                }
+
+                maybe_shutdown!(req_sender.send((req, res_sender.clone())));
+                let res = maybe_shutdown!(res_receiver.recv());
+                maybe_shutdown!(conn.write(res));
             }
         });
+
         Worker { thread }
     }
 }
