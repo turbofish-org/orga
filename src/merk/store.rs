@@ -219,6 +219,16 @@ impl Write for MerkStore {
     }
 }
 
+fn calc_app_hash(merk_root: &[u8]) -> Vec<u8> {
+    use sha2::{Digest, Sha512_256};
+
+    let mut hasher = Sha512_256::new();
+    hasher.update(b"ibc");
+    hasher.update(merk_root);
+
+    hasher.finalize().to_vec()
+}
+
 impl ABCIStore for MerkStore {
     fn height(&self) -> Result<u64> {
         let maybe_bytes = self.merk().get_aux(b"height")?;
@@ -230,13 +240,8 @@ impl ABCIStore for MerkStore {
 
     fn root_hash(&self) -> Result<Vec<u8>> {
         let merk_root = self.merk.as_ref().unwrap().root_hash();
-        use sha2::{Digest, Sha512_256};
 
-        let mut hasher = Sha512_256::new();
-        hasher.update(b"ibc");
-        hasher.update(merk_root);
-
-        Ok(hasher.finalize().to_vec())
+        Ok(calc_app_hash(merk_root.as_slice()))
     }
 
     fn commit(&mut self, height: u64) -> Result<()> {
@@ -329,7 +334,7 @@ impl ABCIStore for MerkStore {
         if let Some(snapshot) = req.snapshot {
             let is_canonical_height = snapshot.height % SNAPSHOT_INTERVAL == 0
                 || snapshot.height == FIRST_SNAPSHOT_HEIGHT;
-            if is_canonical_height && snapshot.hash == req.app_hash {
+            if is_canonical_height && calc_app_hash(snapshot.hash.as_slice()) == req.app_hash {
                 self.target_snapshot = Some(snapshot);
                 res.set_result(abci::response_offer_snapshot::Result::Accept);
             }
