@@ -173,6 +173,15 @@ mod full {
 
             let sum = Some(Sum::Ed25519(pub_key.to_vec()));
             let key = PublicKey { sum };
+            self.current_vp
+                .borrow_mut()
+                .as_mut()
+                .unwrap() // TODO: return a result instead
+                .insert(ValidatorEntry {
+                    power,
+                    pubkey: pub_key,
+                })
+                .unwrap();
             self.updates.insert(
                 pub_key,
                 Adapter(tendermint_proto::abci::ValidatorUpdate {
