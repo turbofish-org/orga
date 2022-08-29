@@ -5,6 +5,7 @@ use super::map::{ChildMut, Map, ReadOnly, Ref};
 use crate::call::Call;
 use crate::client::Client;
 use crate::encoding::{Decode, Encode};
+use crate::migrate::Migrate;
 use crate::query::Query;
 use crate::state::State;
 use crate::store::DefaultBackingStore;
@@ -15,6 +16,23 @@ use crate::Result;
 pub struct Deque<T, S = DefaultBackingStore> {
     meta: Meta,
     map: Map<u64, T, S>,
+}
+
+impl<T, S, T2, S2> Migrate<v3::collections::Deque<T2, S2>, S2> for Deque<T, S>
+where
+    T2: v3::state::State<S2>,
+    S: Write,
+    S2: v3::store::Read,
+{
+    fn migrate(&mut self, legacy: v3::collections::Deque<T2, S2>) -> Result<()> {
+        let (meta, map) = legacy.explode();
+        self.meta.head = meta.head;
+        self.meta.tail = meta.tail;
+
+        self.map.migrate(map)?;
+
+        Ok(())
+    }
 }
 
 impl<T, S> std::fmt::Debug for Deque<T, S> {

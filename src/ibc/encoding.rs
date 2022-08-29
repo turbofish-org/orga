@@ -5,7 +5,14 @@ use crate::encoding::{Decode, Encode, Terminated};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
-use ibc::core::ics24_host::identifier::ConnectionId;
+use ibc::core::ics02_client::client_type::ClientType;
+use ibc::core::ics04_channel::packet::Sequence;
+use ibc::core::ics04_channel::timeout::TimeoutHeight;
+use ibc::core::ics24_host::identifier::{ChannelId, ClientId, ConnectionId, PortId};
+use ibc::signer::Signer;
+use ibc::timestamp::Timestamp;
+use ibc::Height;
+use ibc_proto::ibc::core::channel::v1::PacketState;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
@@ -58,13 +65,33 @@ where
 
 impl<T> Terminated for Adapter<T> {}
 
-impl<T> From<T> for Adapter<T> {
-    fn from(inner: T) -> Self {
-        Self { inner }
-    }
+macro_rules! from_impl {
+    ($type:ty) => {
+        impl From<$type> for Adapter<$type> {
+            fn from(inner: $type) -> Self {
+                Self { inner }
+            }
+        }
+    };
 }
+from_impl!(ClientId);
+from_impl!((PortId, ChannelId));
+from_impl!(ChannelId);
+from_impl!(PortId);
+from_impl!(ConnectionId);
+from_impl!(Sequence);
+from_impl!(ClientType);
+from_impl!((ClientId, Height));
+from_impl!(Height);
+from_impl!(Timestamp);
+from_impl!(PacketState);
+from_impl!(Signer);
+from_impl!(TimeoutHeight);
 
 impl<T> Adapter<T> {
+    pub fn new(inner: T) -> Self {
+        Self { inner }
+    }
     pub fn into_inner(self) -> T {
         self.inner
     }

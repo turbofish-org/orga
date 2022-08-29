@@ -993,6 +993,26 @@ impl<'a, K: Encode, V, S> From<Entry<'a, K, V, S>> for Option<ChildMut<'a, K, V,
     }
 }
 
+#[cfg(feature = "abci")]
+impl<K, V, S, K2, V2, S2> crate::migrate::Migrate<v3::collections::Map<K2, V2, S2>, S2>
+    for Map<K, V, S>
+where
+    v3::collections::Map<K2, V2, S2>: v3::state::State<S2>,
+    S: crate::store::Write,
+    S2: v3::store::Read,
+{
+    fn migrate(&mut self, legacy: v3::collections::Map<K2, V2, S2>) -> Result<()> {
+        use v3::store::Read;
+        let old_store = legacy.store().clone();
+        for entry in old_store.range(..) {
+            let (k, v) = entry.unwrap();
+            self.store.put(k, v)?;
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::deque::{Deque as OrgaDeque, *};

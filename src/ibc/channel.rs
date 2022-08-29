@@ -270,7 +270,7 @@ impl ChannelReader for Ibc {
         let conn_chans = self
             .channels
             .connection_channels
-            .get_or_default(cid.clone().into())?;
+            .get_or_default(Adapter::new(cid.clone()))?;
 
         let mut res = vec![];
         for i in 0..conn_chans.len() {
@@ -389,17 +389,14 @@ impl ChannelKeeper for Ibc {
         let mut commitments = self
             .channels
             .commitments
-            .entry((key.0.clone(), key.1.clone()).into())?
+            .entry(Adapter::new((key.0.clone(), key.1.clone())))?
             .or_insert_default()?;
-        commitments.push_back(
-            PacketState {
-                port_id: key.0.to_string(),
-                channel_id: key.1.to_string(),
-                sequence: key.2.into(),
-                data: commitment.clone().into_vec(),
-            }
-            .into(),
-        )?;
+        commitments.push_back(Adapter::new(PacketState {
+            port_id: key.0.to_string(),
+            channel_id: key.1.to_string(),
+            sequence: key.2.into(),
+            data: commitment.clone().into_vec(),
+        }))?;
         Ok(self.lunchbox.insert_packet_commitment(key, commitment)?)
     }
 
@@ -441,14 +438,14 @@ impl ChannelKeeper for Ibc {
     ) -> Result<(), Error> {
         self.channels
             .all_channels
-            .push_back(port_channel_id.clone().into())?;
+            .push_back(Adapter::new(port_channel_id.clone()))?;
 
         Ok(self
             .channels
             .connection_channels
-            .entry(conn_id.into())?
+            .entry(Adapter::new(conn_id))?
             .or_insert_default()?
-            .push_back(port_channel_id.clone().into())?)
+            .push_back(Adapter::new(port_channel_id.clone()))?)
     }
 
     fn store_channel(
