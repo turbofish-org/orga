@@ -5,6 +5,7 @@ use super::map::{ChildMut, Map, ReadOnly, Ref};
 use crate::call::Call;
 use crate::client::Client;
 use crate::encoding::{Decode, Encode};
+#[cfg(feature = "abci")]
 use crate::migrate::Migrate;
 use crate::query::Query;
 use crate::state::State;
@@ -18,6 +19,7 @@ pub struct Deque<T, S = DefaultBackingStore> {
     map: Map<u64, T, S>,
 }
 
+#[cfg(feature = "abci")]
 impl<T, S, T2, S2> Migrate<v3::collections::Deque<T2, S2>, S2> for Deque<T, S>
 where
     T2: v3::state::State<S2>,
