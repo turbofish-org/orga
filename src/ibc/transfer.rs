@@ -76,7 +76,6 @@ impl TryFrom<Signer> for Address {
 impl BankKeeper for TransferModule {
     type AccountId = Address;
     fn burn_coins(&mut self, account: &Self::AccountId, amt: &PrefixedCoin) -> Result<(), Error> {
-        println!("burn coins: {} {:?}", account, amt);
         let denom: Dynom = amt
             .denom
             .to_string()
@@ -91,8 +90,6 @@ impl BankKeeper for TransferModule {
     }
 
     fn mint_coins(&mut self, account: &Self::AccountId, amt: &PrefixedCoin) -> Result<(), Error> {
-        println!("mint coins: {} {}", account, amt,);
-
         let denom: Dynom = amt
             .denom
             .to_string()
@@ -113,7 +110,6 @@ impl BankKeeper for TransferModule {
         to: &Self::AccountId,
         amt: &PrefixedCoin,
     ) -> Result<(), Error> {
-        println!("send coins: {} -> {}, amount: {}", from, to, amt);
         let denom: Dynom = amt
             .denom
             .to_string()

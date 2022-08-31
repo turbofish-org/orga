@@ -152,7 +152,7 @@ impl Ibc {
                 IbcMessage::Ics26(message) => {
                     // println!("Ics26 message: {:?}", message);
                     dispatch(self, *message.clone())
-                        .map_err(|e| dbg!(crate::Error::Ibc(e.to_string())))?
+                        .map_err(|e| crate::Error::Ibc(e.to_string()))?
                 }
                 IbcMessage::Ics20(message) => {
                     // println!("Transfer message: {:?}", message);
@@ -168,7 +168,7 @@ impl Ibc {
 
                     let mut transfer_output = HandlerOutputBuilder::new();
                     send_transfer(&mut self.transfers, &mut transfer_output, message)
-                        .map_err(|e| dbg!(crate::Error::Ibc(e.to_string())))?;
+                        .map_err(|e| crate::Error::Ibc(e.to_string()))?;
                     transfer_output.with_result(())
                 } // _ => return Err(crate::Error::Ibc("Unsupported IBC message".to_string())),
             };
@@ -183,7 +183,7 @@ impl Ibc {
         for output in outputs {
             for event in output.events.into_iter() {
                 let abci_event = tendermint::abci::Event::try_from(event)
-                    .map_err(|e| crate::Error::Ibc(format!("{}", dbg!(e))))?;
+                    .map_err(|e| crate::Error::Ibc(format!("{}", e)))?;
                 let tm_proto_event = Event {
                     r#type: abci_event.type_str,
                     attributes: abci_event
@@ -281,7 +281,6 @@ impl AbciQuery for Ibc {
             .parse()
             .map_err(|_| crate::Error::Ibc(format!("Invalid path: {}", path)))?;
 
-        println!("path: {}, prove: {}", path, req.prove,);
         if path.is_provable() {
             let maybe_value_bytes = self.lunchbox.0.get(path.clone().into_bytes().as_slice())?;
             let value_bytes = maybe_value_bytes.unwrap_or_default();
@@ -373,7 +372,6 @@ impl AbciQuery for Ibc {
                     .map_err(|_| {
                         crate::Error::Ibc("Failed to read client consensus state".into())
                     })?;
-                // dbg!(&client_consensus_state);
                 client_consensus_state.encode_vec().map_err(|_| {
                     crate::Error::Ibc("Failed to encode client consensus state".into())
                 })?
