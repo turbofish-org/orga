@@ -533,6 +533,15 @@ impl TransferModule {
 
         Ok(packet_states)
     }
+
+    #[query]
+    pub fn escrowed_balance(&self, address: Address, denom: Dynom) -> crate::Result<Amount> {
+        let accounts = self.bank.balances.get(denom)?;
+        match accounts {
+            Some(accounts) => Ok(*accounts.get(address)?.unwrap_or_default()),
+            None => Ok(0.into()),
+        }
+    }
 }
 
 #[derive(State, Encode, Decode, Clone, Debug)]
