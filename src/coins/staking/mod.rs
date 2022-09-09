@@ -674,6 +674,20 @@ impl<S: Symbol> Staking<S> {
             .collect()
     }
 
+    #[query]
+    pub fn delegators(&self, val_address: Address) -> Result<Vec<(Address, Amount)>> {
+        let validator = self.validators.get(val_address)?;
+
+        let mut delegators = vec![];
+
+        for delegator in validator.delegators.iter()? {
+            let (delegator_address, delegator) = delegator?;
+            delegators.push((delegator_address, delegator.staked.amount()?));
+        }
+
+        Ok(delegators)
+    }
+
     #[call]
     pub fn unbond_self(&mut self, val_address: Address, amount: Amount) -> Result<()> {
         assert_positive(amount)?;
