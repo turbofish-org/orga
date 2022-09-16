@@ -117,7 +117,7 @@ impl MerkStore {
         let batch = to_batch(map);
         let aux_batch = to_batch(aux);
         let merk = self.merk.as_mut().unwrap();
-        let max_batch_size = if height >= 450_000 - 1 {
+        let max_batch_size = if height >= 440_000 - 1 {
             1000
         } else {
             100_000_000
