@@ -346,7 +346,8 @@ impl<S: Symbol> Staking<S> {
             .insert(val_address, ())
     }
 
-    fn consensus_key(&self, val_address: Address) -> Result<[u8; 32]> {
+    #[query]
+    pub fn consensus_key(&self, val_address: Address) -> Result<[u8; 32]> {
         let consensus_key = match self.consensus_keys.get(val_address)? {
             Some(key) => *key,
             None => return Err(Error::Coins("Validator is not declared".into())),
