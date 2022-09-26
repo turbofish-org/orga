@@ -85,7 +85,7 @@ impl From<Lunchbox> for () {
     fn from(_: Lunchbox) -> Self {}
 }
 
-#[derive(Encode, Decode, Debug)]
+#[derive(Encode, Decode, Debug, Clone)]
 pub struct TransferOpts {
     channel_id: Adapter<ChannelId>,
     port_id: Adapter<PortId>,
