@@ -18,13 +18,15 @@ use crate::state::State;
 use crate::{Error, Result};
 use client::ClientStore;
 use encoding::*;
+pub use ibc as ibc_rs;
 use ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use ibc::applications::transfer::relay::send_transfer::send_transfer;
 use ibc::core::ics02_client::height::Height;
 use ibc::core::ics04_channel::timeout::TimeoutHeight;
 use ibc::core::ics24_host::identifier::{ChannelId, PortId};
 use ibc::core::ics26_routing::handler::dispatch;
-use ibc::handler::HandlerOutputBuilder;
+use ibc::events::IbcEvent;
+use ibc::handler::{HandlerOutput, HandlerOutputBuilder};
 use ibc::signer::Signer as IbcSigner;
 use ibc::timestamp::Timestamp;
 use ibc_proto::cosmos::base::v1beta1::Coin;
@@ -149,13 +151,9 @@ impl Ibc {
         let mut outputs = vec![];
         for message in msg.0 {
             let output = match message {
-                IbcMessage::Ics26(message) => {
-                    // println!("Ics26 message: {:?}", message);
-                    dispatch(self, *message.clone())
-                        .map_err(|e| crate::Error::Ibc(e.to_string()))?
-                }
+                IbcMessage::Ics26(message) => dispatch(self, *message.clone())
+                    .map_err(|e| crate::Error::Ibc(e.to_string()))?,
                 IbcMessage::Ics20(message) => {
-                    // println!("Transfer message: {:?}", message);
                     let signer = self.signer()?;
                     let sender_addr: Address = message
                         .sender
@@ -170,15 +168,33 @@ impl Ibc {
                     send_transfer(&mut self.transfers, &mut transfer_output, message)
                         .map_err(|e| crate::Error::Ibc(e.to_string()))?;
                     transfer_output.with_result(())
-                } // _ => return Err(crate::Error::Ibc("Unsupported IBC message".to_string())),
+                }
             };
-
             outputs.push(output);
         }
 
-        let ctx = self
-            .context::<Events>()
-            .ok_or_else(|| dbg!(crate::Error::Ibc("No events context available".into())))?;
+        self.build_events(outputs)
+    }
+
+    pub fn bank_mut(&mut self) -> &mut transfer::Bank {
+        &mut self.transfers.bank
+    }
+
+    pub fn bank(&self) -> &transfer::Bank {
+        &self.transfers.bank
+    }
+
+    fn signer(&mut self) -> Result<Address> {
+        self.context::<Signer>()
+            .ok_or_else(|| Error::Signer("No Signer context available".into()))?
+            .signer
+            .ok_or_else(|| Error::Coins("Unauthorized account action".into()))
+    }
+    fn build_events(&mut self, outputs: Vec<HandlerOutput<(), IbcEvent>>) -> Result<()> {
+        let ctx = match self.context::<Events>() {
+            Some(ctx) => ctx,
+            None => return Ok(()),
+        };
 
         for output in outputs {
             for event in output.events.into_iter() {
@@ -202,21 +218,6 @@ impl Ibc {
         }
 
         Ok(())
-    }
-
-    pub fn bank_mut(&mut self) -> &mut transfer::Bank {
-        &mut self.transfers.bank
-    }
-
-    pub fn bank(&self) -> &transfer::Bank {
-        &self.transfers.bank
-    }
-
-    fn signer(&mut self) -> Result<Address> {
-        self.context::<Signer>()
-            .ok_or_else(|| Error::Signer("No Signer context available".into()))?
-            .signer
-            .ok_or_else(|| Error::Coins("Unauthorized account action".into()))
     }
 
     #[call]
@@ -254,6 +255,13 @@ impl Ibc {
         let transfer_commitments = self.transfers.packet_commitments(ids)?;
 
         Ok([commitments, transfer_commitments].concat())
+    }
+
+    pub fn raw_transfer(&mut self, message: MsgTransfer) -> Result<()> {
+        let mut transfer_output = HandlerOutputBuilder::new();
+        send_transfer(&mut self.transfers, &mut transfer_output, message)
+            .map_err(|e| crate::Error::Ibc(e.to_string()))?;
+        self.build_events(vec![transfer_output.with_result(())])
     }
 }
 
