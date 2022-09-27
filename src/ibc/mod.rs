@@ -90,13 +90,13 @@ impl From<Lunchbox> for () {
 
 #[derive(Encode, Decode, Debug, Clone)]
 pub struct TransferOpts {
-    channel_id: Adapter<ChannelId>,
-    port_id: Adapter<PortId>,
-    amount: Amount,
-    denom: Dynom,
-    receiver: Adapter<IbcSigner>,
-    timeout_height: Adapter<TimeoutHeight>,
-    timeout_timestamp: Adapter<Timestamp>,
+    pub channel_id: Adapter<ChannelId>,
+    pub port_id: Adapter<PortId>,
+    pub amount: Amount,
+    pub denom: Dynom,
+    pub receiver: Adapter<IbcSigner>,
+    pub timeout_height: Adapter<TimeoutHeight>,
+    pub timeout_timestamp: Adapter<Timestamp>,
 }
 
 pub struct TransferArgs {
