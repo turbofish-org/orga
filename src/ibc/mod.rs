@@ -29,6 +29,7 @@ use ibc::events::IbcEvent;
 use ibc::handler::{HandlerOutput, HandlerOutputBuilder};
 use ibc::signer::Signer as IbcSigner;
 use ibc::timestamp::Timestamp;
+pub use ibc_proto as proto;
 use ibc_proto::cosmos::base::v1beta1::Coin;
 use ibc_proto::ibc::core::channel::v1::PacketState;
 use ics23::LeafOp;
