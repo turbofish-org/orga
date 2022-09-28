@@ -39,7 +39,7 @@ use tendermint_proto::Protobuf;
 mod channel;
 mod client;
 mod connection;
-mod encoding;
+pub mod encoding;
 #[cfg(feature = "abci")]
 mod grpc;
 mod port;
