@@ -191,6 +191,8 @@ impl Ibc {
             .signer
             .ok_or_else(|| Error::Coins("Unauthorized account action".into()))
     }
+
+    #[cfg(feature = "abci")]
     fn build_events(&mut self, outputs: Vec<HandlerOutput<(), IbcEvent>>) -> Result<()> {
         let ctx = match self.context::<Events>() {
             Some(ctx) => ctx,
@@ -258,6 +260,7 @@ impl Ibc {
         Ok([commitments, transfer_commitments].concat())
     }
 
+    #[cfg(feature = "abci")]
     pub fn raw_transfer(&mut self, message: MsgTransfer) -> Result<()> {
         let mut transfer_output = HandlerOutputBuilder::new();
         send_transfer(&mut self.transfers, &mut transfer_output, message)
