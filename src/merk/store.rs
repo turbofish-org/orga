@@ -113,22 +113,14 @@ impl MerkStore {
         let map = self.map.take().unwrap();
         self.map = Some(Map::new());
 
-        let height = self.height()?;
         let batch = to_batch(map);
         let aux_batch = to_batch(aux);
-        let merk = self.merk.as_mut().unwrap();
-        let max_batch_size = if height >= 440_000 - 1 {
-            1000
-        } else {
-            100_000_000
-        };
 
-        merk.apply(&[], aux_batch.as_ref())?;
-        for batch in batch.chunks(max_batch_size) {
-            merk.apply(batch, &[])?;
-        }
-
-        Ok(())
+        Ok(self
+            .merk
+            .as_mut()
+            .unwrap()
+            .apply(batch.as_ref(), aux_batch.as_ref())?)
     }
 
     pub(crate) fn merk(&self) -> &Merk {
