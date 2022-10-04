@@ -197,6 +197,9 @@ impl ABCIPrefixedProofStore {
     }
 
     fn prefix_key(key: &[u8]) -> Vec<u8> {
+        if !key.is_empty() && key[0] > 3 {
+            return key.to_vec();
+        }
         let mut prefixed_key = Vec::with_capacity(key.len() + 1);
         prefixed_key.push(0);
         prefixed_key.extend_from_slice(key);
@@ -204,7 +207,10 @@ impl ABCIPrefixedProofStore {
     }
 
     fn deprefix_key(mut key: Vec<u8>) -> Vec<u8> {
-        key.remove(0);
+        if !key.is_empty() && key[0] == 0 {
+            key.remove(0);
+        }
+
         key
     }
 }
