@@ -185,7 +185,7 @@ where
                 Fn::call(&self.ibc_provider, (client,))
                     .channels
                     .query_packet_acks((port_id, channel_id).into())
-                    .await
+                    .await?
             })
             .await?;
 

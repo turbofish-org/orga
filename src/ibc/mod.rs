@@ -257,7 +257,9 @@ impl Ibc {
         let commitments = self.channels.packet_commitments(ids.clone())?;
         let transfer_commitments = self.transfers.packet_commitments(ids)?;
 
-        Ok([commitments, transfer_commitments].concat())
+        let commitments = [commitments, transfer_commitments].concat();
+
+        Ok(commitments)
     }
 
     #[cfg(feature = "abci")]

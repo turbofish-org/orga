@@ -113,7 +113,7 @@ impl Lunchbox {
         })
         .into_bytes();
 
-        self.0.put(key, vec![])
+        self.0.put(key, vec![0])
     }
 
     pub fn insert_packet_ack(
@@ -146,6 +146,37 @@ impl Lunchbox {
             .get(key.as_slice())?
             .map(|v| v.into())
             .ok_or_else(|| crate::Error::Ibc("Packet ack not found".into()))
+    }
+
+    pub fn read_packet_acks(
+        &self,
+        ids: (PortId, ChannelId),
+    ) -> crate::Result<Vec<(Sequence, AcknowledgementCommitment)>> {
+        let key = |s: u64| {
+            Path::Acks(AcksPath {
+                port_id: ids.0.clone(),
+                channel_id: ids.1.clone(),
+                sequence: s.into(),
+            })
+            .into_bytes()
+        };
+
+        let seqs: Vec<_> = self
+            .0
+            .range(key(0)..=key(u64::MAX))
+            .map(|res| {
+                res.map(|(k, v)| {
+                    let key: Path = String::from_utf8(k).unwrap().parse().unwrap();
+                    let seq = match key {
+                        Path::Acks(AcksPath { sequence, .. }) => sequence,
+                        _ => panic!("unexpected key"),
+                    };
+                    (seq, v.into())
+                })
+            })
+            .collect::<crate::Result<_>>()?;
+
+        Ok(seqs)
     }
 
     pub fn read_packet_receipt(
@@ -391,12 +422,14 @@ impl ChannelKeeper for Ibc {
             .commitments
             .entry(Adapter::new((key.0.clone(), key.1.clone())))?
             .or_insert_default()?;
+
         commitments.push_back(Adapter::new(PacketState {
             port_id: key.0.to_string(),
             channel_id: key.1.to_string(),
             sequence: key.2.into(),
             data: commitment.clone().into_vec(),
         }))?;
+
         Ok(self.lunchbox.insert_packet_commitment(key, commitment)?)
     }
 
@@ -412,7 +445,6 @@ impl ChannelKeeper for Ibc {
         key: (PortId, ChannelId, Sequence),
         receipt: Receipt,
     ) -> Result<(), Error> {
-        println!("store packet receipt for key {:?}", key);
         Ok(self.lunchbox.insert_packet_receipt(key, receipt)?)
     }
 
@@ -495,13 +527,23 @@ impl ChannelStore {
     ) -> crate::Result<Vec<PacketState>> {
         let mut packet_states = vec![];
 
-        let packets = self.commitments.get_or_default(ids)?;
-
+        let packets = self.commitments.get_or_default(ids.clone())?;
         for i in 0..packets.len() {
             let packet_state = packets
                 .get(i)?
                 .ok_or_else(|| crate::Error::Ibc("Could not get packet commitment".into()))?;
-            packet_states.push(packet_state.clone().into_inner());
+
+            if self
+                .lunchbox
+                .read_packet_commitment((
+                    ids.0.clone(),
+                    ids.1.clone(),
+                    packet_state.sequence.into(),
+                ))
+                .is_ok()
+            {
+                packet_states.push(packet_state.clone().into_inner());
+            }
         }
 
         Ok(packet_states)
@@ -570,7 +612,7 @@ impl ChannelStore {
             if self
                 .lunchbox
                 .read_packet_commitment((ids.0.clone(), ids.1.clone(), (*seq).into()))
-                .is_err()
+                .is_ok()
             // TODO: check error variant or return option from read_packet_receipt
             {
                 unreceived.push(*seq);
@@ -581,27 +623,27 @@ impl ChannelStore {
     }
 
     #[query]
-    pub fn query_packet_acks(&self, ids: Adapter<(PortId, ChannelId)>) -> Vec<PacketState> {
-        let mut packet_states = vec![];
-        let mut seq = 0;
-        while let Ok(ack) =
-            self.lunchbox
-                .read_packet_ack((ids.0.clone(), ids.1.clone(), seq.into()))
+    pub fn query_packet_acks(
+        &self,
+        ids: Adapter<(PortId, ChannelId)>,
+    ) -> crate::Result<Vec<PacketState>> {
         // TODO: check error variant / use option
-        {
-            let data = ack.into_vec();
-            if !data.is_empty() {
-                packet_states.push(PacketState {
+        let acks = self
+            .lunchbox
+            .read_packet_acks((ids.0.clone(), ids.1.clone()))?
+            .into_iter()
+            .filter_map(|(seq, ack)| {
+                let data = ack.into_vec();
+                (!data.is_empty()).then(|| PacketState {
                     port_id: ids.0.clone().to_string(),
                     channel_id: ids.1.clone().to_string(),
-                    sequence: seq,
+                    sequence: seq.into(),
                     data,
-                });
-            }
-            seq += 1;
-        }
+                })
+            })
+            .collect();
 
-        packet_states
+        Ok(acks)
     }
 
     #[query]

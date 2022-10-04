@@ -522,13 +522,24 @@ impl TransferModule {
     ) -> crate::Result<Vec<PacketState>> {
         let mut packet_states = vec![];
 
-        let packets = self.commitments.get_or_default(ids)?;
+        let commitments = self.commitments.get_or_default(ids.clone())?;
 
-        for i in 0..packets.len() {
-            let packet_state = packets
+        for i in 0..commitments.len() {
+            let packet_state = commitments
                 .get(i)?
                 .ok_or_else(|| crate::Error::Ibc("Could not get packet commitment".into()))?;
-            packet_states.push(packet_state.clone().into_inner());
+
+            if self
+                .lunchbox
+                .read_packet_commitment((
+                    ids.0.clone(),
+                    ids.1.clone(),
+                    packet_state.sequence.into(),
+                ))
+                .is_ok()
+            {
+                packet_states.push(packet_state.clone().into_inner());
+            }
         }
 
         Ok(packet_states)
