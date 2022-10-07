@@ -1,3 +1,4 @@
+use ibc::core::ics24_host::identifier::ClientId;
 use ibc_proto::ibc::core::client::v1::{
     query_server::Query as ClientQuery, QueryClientParamsRequest, QueryClientParamsResponse,
     QueryClientStateRequest, QueryClientStateResponse, QueryClientStatesRequest,
@@ -71,27 +72,21 @@ where
         request: Request<QueryConsensusStatesRequest>,
     ) -> Result<Response<QueryConsensusStatesResponse>, Status> {
         println!("grpc consensus states");
-        use ibc::core::ics24_host::Path;
-        let path: Path = format!("clients/{}/consensusStates", request.get_ref().client_id)
+        let client_id: ClientId = request
+            .get_ref()
+            .client_id
             .parse()
-            .map_err(|e| Status::invalid_argument(format!("{}", e)))?;
-        if let Path::ClientConsensusState(data) = path {
-            let client_id = data.client_id;
+            .map_err(|_| Status::invalid_argument("invalid connection id"))?;
 
-            let consensus_states = self
-                .ibc
-                .clients
-                .query_consensus_states(client_id.into())
-                .await??;
-            Ok(Response::new(QueryConsensusStatesResponse {
-                consensus_states,
-                pagination: None,
-            }))
-        } else {
-            Err(Status::invalid_argument(
-                "Could not fetch client consensus states",
-            ))
-        }
+        let consensus_states = self
+            .ibc
+            .clients
+            .query_consensus_states(client_id.into())
+            .await??;
+        Ok(Response::new(QueryConsensusStatesResponse {
+            consensus_states,
+            pagination: None,
+        }))
     }
 
     async fn client_status(
