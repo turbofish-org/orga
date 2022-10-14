@@ -415,16 +415,14 @@ where
     /// This method is used to delete a child value and all of its child entries
     /// (if any).
     fn remove_from_store(store: &mut Store<S>, prefix: &[u8]) -> Result<bool> {
-        let entries = store.range(prefix.to_vec()..);
-        // TODO: make so we don't have to collect (should be able to delete
-        // while iterating, either a .drain() iterator or an entry type with a
-        // delete method)
-        let to_delete: Vec<_> = entries
-            .collect::<Result<Vec<_>>>()?
-            .into_iter()
-            .take_while(|(key, _)| key.starts_with(prefix))
-            .map(|(key, _)| key.to_vec())
-            .collect();
+        let mut to_delete = vec![];
+        for entry in store.range(prefix.to_vec()..) {
+            let (key, _) = entry?;
+            if !key.starts_with(prefix) {
+                break;
+            }
+            to_delete.push(key);
+        }
 
         let exists = !to_delete.is_empty();
         for key in to_delete {
