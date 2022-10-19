@@ -1,7 +1,7 @@
 use super::{Amount, Coin, Decimal, Symbol};
 use crate::context::GetContext;
-#[cfg(feature = "abci")]
-use crate::migrate::Migrate;
+// #[cfg(feature = "abci")]
+// use crate::migrate::Migrate;
 use crate::plugins::Time;
 use crate::state::State;
 use crate::{Error, Result};
@@ -105,25 +105,25 @@ pub struct FaucetOptions {
     pub start_seconds: i64,
 }
 
-#[cfg(feature = "abci")]
-impl<S: Symbol, T: v3::coins::Symbol> Migrate<v3::coins::Faucet<T>> for Faucet<S> {
-    fn migrate(&mut self, legacy: v3::coins::Faucet<T>) -> Result<()> {
-        use crate::encoding::Decode;
-        use v3::encoding::Encode;
-        let data: <v3::coins::Faucet<T> as v3::state::State>::Encoding = legacy.into();
+// #[cfg(feature = "abci")]
+// impl<S: Symbol, T: v3::coins::Symbol> Migrate<v3::coins::Faucet<T>> for Faucet<S> {
+//     fn migrate(&mut self, legacy: v3::coins::Faucet<T>) -> Result<()> {
+//         use crate::encoding::Decode;
+//         use v3::encoding::Encode;
+//         let data: <v3::coins::Faucet<T> as v3::state::State>::Encoding = legacy.into();
 
-        self.configured = data.1;
-        self.amount_minted = data.2 .0.into();
-        self.start_seconds = data.3;
-        self.multiplier_total = Decode::decode(data.4.encode().unwrap().as_slice())?;
-        self.total_to_mint = data.5 .0.into();
-        self.period_decay = Decode::decode(data.6.encode().unwrap().as_slice())?;
-        self.seconds_per_period = data.7;
-        self.num_periods = data.8;
+//         self.configured = data.1;
+//         self.amount_minted = data.2 .0.into();
+//         self.start_seconds = data.3;
+//         self.multiplier_total = Decode::decode(data.4.encode().unwrap().as_slice())?;
+//         self.total_to_mint = data.5 .0.into();
+//         self.period_decay = Decode::decode(data.6.encode().unwrap().as_slice())?;
+//         self.seconds_per_period = data.7;
+//         self.num_periods = data.8;
 
-        Ok(())
-    }
-}
+//         Ok(())
+//     }
+// }
 
 #[cfg(test)]
 mod tests {

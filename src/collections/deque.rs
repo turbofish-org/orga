@@ -5,8 +5,8 @@ use super::map::{ChildMut, Map, ReadOnly, Ref};
 use crate::call::Call;
 use crate::client::Client;
 use crate::encoding::{Decode, Encode};
-#[cfg(feature = "abci")]
-use crate::migrate::Migrate;
+// #[cfg(feature = "abci")]
+// use crate::migrate::Migrate;
 use crate::query::Query;
 use crate::state::State;
 use crate::store::DefaultBackingStore;
@@ -19,23 +19,23 @@ pub struct Deque<T, S = DefaultBackingStore> {
     map: Map<u64, T, S>,
 }
 
-#[cfg(feature = "abci")]
-impl<T, S, T2, S2> Migrate<v3::collections::Deque<T2, S2>, S2> for Deque<T, S>
-where
-    T2: v3::state::State<S2>,
-    S: Write,
-    S2: v3::store::Read,
-{
-    fn migrate(&mut self, legacy: v3::collections::Deque<T2, S2>) -> Result<()> {
-        let (meta, map) = legacy.explode();
-        self.meta.head = meta.head;
-        self.meta.tail = meta.tail;
+// #[cfg(feature = "abci")]
+// impl<T, S, T2, S2> Migrate<v3::collections::Deque<T2, S2>, S2> for Deque<T, S>
+// where
+//     T2: v3::state::State<S2>,
+//     S: Write,
+//     S2: v3::store::Read,
+// {
+//     fn migrate(&mut self, legacy: v3::collections::Deque<T2, S2>) -> Result<()> {
+//         let (meta, map) = legacy.explode();
+//         self.meta.head = meta.head;
+//         self.meta.tail = meta.tail;
 
-        self.map.migrate(map)?;
+//         self.map.migrate(map)?;
 
-        Ok(())
-    }
-}
+//         Ok(())
+//     }
+// }
 
 impl<T, S> std::fmt::Debug for Deque<T, S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

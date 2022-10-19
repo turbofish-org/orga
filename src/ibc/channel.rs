@@ -135,12 +135,14 @@ impl Lunchbox {
         &self,
         ids: (PortId, ChannelId, Sequence),
     ) -> crate::Result<AcknowledgementCommitment> {
-        let key = Path::Acks(AcksPath {
+        let key = dbg!(Path::Acks(AcksPath {
             port_id: ids.0,
             channel_id: ids.1,
             sequence: ids.2,
-        })
+        }))
         .into_bytes();
+
+        dbg!(&key);
 
         self.0
             .get(key.as_slice())?
