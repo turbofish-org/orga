@@ -44,6 +44,8 @@ pub enum SigType {
     Adr36,
     #[skip]
     Sdk(Box<sdk_compat::sdk::Tx>),
+    #[skip]
+    EthPersonalSign(Box<sdk_compat::sdk::Tx>),
 }
 
 use serde::Serialize;
@@ -122,13 +124,34 @@ where
                 let pubkey = PublicKey::from_slice(&pubkey_bytes)?;
                 let address = Address::from_pubkey(pubkey_bytes);
 
-                let bytes = match &call.sigtype {
-                    SigType::Native => call.call_bytes.to_vec(),
-                    SigType::Adr36 => adr36_bytes(call.call_bytes.as_slice(), address)?,
-                    SigType::Sdk(tx) => self.sdk_sign_bytes(tx, address)?,
+                let msg = match &call.sigtype {
+                    SigType::Native => Message::from_hashed_data::<sha256::Hash>(&call.call_bytes),
+                    SigType::Adr36 => {
+                        let bytes = adr36_bytes(call.call_bytes.as_slice(), address)?;
+                        Message::from_hashed_data::<sha256::Hash>(bytes.as_slice())
+                    }
+                    SigType::Sdk(tx) => {
+                        let bytes = self.sdk_sign_bytes(tx, address)?;
+                        Message::from_hashed_data::<sha256::Hash>(bytes.as_slice())
+                    }
+                    SigType::EthPersonalSign(tx) => {
+                        let prefix = b"\x19Ethereum Signed Message:\n";
+                        let mut sdk_bytes = self.sdk_sign_bytes(tx, address)?;
+                        let mut len_bytes = sdk_bytes.len().to_string().as_bytes().to_vec();
+
+                        let mut bytes = prefix.to_vec();
+                        bytes.append(&mut len_bytes);
+                        bytes.append(&mut sdk_bytes);
+
+                        use sha3::{Digest, Keccak256};
+                        let mut hasher = Keccak256::new();
+                        hasher.update(&bytes);
+                        let hash = hasher.finalize();
+
+                        Message::from_slice(&hash)?
+                    }
                 };
 
-                let msg = Message::from_hashed_data::<sha256::Hash>(bytes.as_slice());
                 let signature = Signature::from_compact(&signature)?;
                 #[cfg(not(fuzzing))]
                 secp.verify_ecdsa(&msg, &signature, &pubkey)?;
@@ -177,12 +200,20 @@ where
     fn convert(&self, sdk_tx: &SdkTx) -> Result<SignerCall> {
         let signature = sdk_tx.signature()?;
         let pubkey = sdk_tx.sender_pubkey()?;
+        let sig_type = sdk_tx.sig_type()?;
         let inner_call = self.inner.convert(sdk_tx)?.encode()?;
+        
+        let sdk_tx = Box::new(sdk_tx.clone());
+        let sigtype = match sig_type {
+            None | Some("sdk") => SigType::Sdk(sdk_tx),
+            Some("eth") => SigType::EthPersonalSign(sdk_tx),
+            Some(_) => return Err(Error::App("Unknown signature type".to_string())),
+        };
 
         Ok(SignerCall {
             signature: Some(signature),
             pubkey: Some(pubkey),
-            sigtype: SigType::Sdk(Box::new(sdk_tx.clone())),
+            sigtype,
             call_bytes: inner_call,
         })
     }

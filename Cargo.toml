@@ -54,6 +54,7 @@ tonic = { version = "0.7", optional = true }
 cosmrs = "0.7.0"
 derive_more = "0.99.17"
 v3 = { git = "https://github.com/nomic-io/orga", branch="v3-legacy", features = ["merk-full", "abci"], package = "orga", optional = true }
+sha3 = "0.10.6"
 
 [dev-dependencies]
 tempdir = "0.3.7"

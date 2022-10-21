@@ -258,6 +258,19 @@ pub mod sdk {
 
             Ok(sig_arr)
         }
+
+        pub fn sig_type(&self) -> Result<Option<&str>> {
+            Ok(match self {
+                Tx::Amino(tx) => {
+                    let sig_type = &tx
+                        .signatures
+                        .first()
+                        .ok_or_else(|| Error::App("No signatures provided".to_string()))?
+                        .r#type;
+                }
+                Tx::Protobuf(tx) => None,
+            })
+        }
     }
 
     #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -293,6 +306,7 @@ pub mod sdk {
     pub struct Signature {
         pub pub_key: PubKey,
         pub signature: String,
+        pub r#type: Option<String>,
     }
 
     #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
