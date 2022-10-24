@@ -10,8 +10,8 @@ use ibc::core::ics03_connection::connection::IdentifiedConnectionEnd;
 use ibc::{
     core::{
         ics02_client::{
-            client_consensus::AnyConsensusState, client_state::AnyClientState,
-            context::ClientReader,
+            client_state::ClientState as ClientStateTrait,
+            consensus_state::ConsensusState as ConsensusStateTrait, context::ClientReader,
         },
         ics03_connection::{
             connection::ConnectionEnd,
@@ -80,7 +80,7 @@ impl ConnectionReader for Ibc {
             .ok_or_else(|| Error::connection_not_found(conn_id.clone()))
     }
 
-    fn client_state(&self, client_id: &ClientId) -> Result<AnyClientState> {
+    fn client_state(&self, client_id: &ClientId) -> Result<Box<dyn ClientStateTrait>> {
         ClientReader::client_state(self, client_id).map_err(Error::ics02_client)
     }
 
@@ -100,16 +100,23 @@ impl ConnectionReader for Ibc {
         &self,
         client_id: &ClientId,
         height: Height,
-    ) -> Result<AnyConsensusState> {
+    ) -> Result<Box<dyn ConsensusStateTrait>> {
         ClientReader::consensus_state(self, client_id, height).map_err(Error::ics02_client)
     }
 
-    fn host_consensus_state(&self, height: Height) -> Result<AnyConsensusState> {
+    fn host_consensus_state(&self, height: Height) -> Result<Box<dyn ConsensusStateTrait>> {
         ClientReader::host_consensus_state(self, height).map_err(Error::ics02_client)
     }
 
     fn connection_counter(&self) -> Result<u64> {
         Ok(self.connections.count)
+    }
+
+    fn decode_client_state(
+        &self,
+        client_state: ibc_proto::google::protobuf::Any,
+    ) -> Result<Box<dyn ClientStateTrait>> {
+        ClientReader::decode_client_state(self, client_state).map_err(Error::ics02_client)
     }
 }
 

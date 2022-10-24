@@ -1,13 +1,10 @@
-use ibc_proto::cosmos::{
-    bank::v1beta1::{
-        query_server::Query as BankQuery, QueryAllBalancesRequest, QueryAllBalancesResponse,
-        QueryBalanceRequest, QueryBalanceResponse, QueryDenomMetadataRequest,
-        QueryDenomMetadataResponse, QueryDenomsMetadataRequest, QueryDenomsMetadataResponse,
-        QueryParamsRequest, QueryParamsResponse, QuerySpendableBalancesRequest,
-        QuerySpendableBalancesResponse, QuerySupplyOfRequest, QuerySupplyOfResponse,
-        QueryTotalSupplyRequest, QueryTotalSupplyResponse,
-    },
-    base::v1beta1::Coin as RawCoin,
+use ibc_proto::cosmos::bank::v1beta1::{
+    query_server::Query as BankQuery, QueryAllBalancesRequest, QueryAllBalancesResponse,
+    QueryBalanceRequest, QueryBalanceResponse, QueryDenomMetadataRequest,
+    QueryDenomMetadataResponse, QueryDenomOwnersRequest, QueryDenomOwnersResponse,
+    QueryDenomsMetadataRequest, QueryDenomsMetadataResponse, QueryParamsRequest,
+    QueryParamsResponse, QuerySpendableBalancesRequest, QuerySpendableBalancesResponse,
+    QuerySupplyOfRequest, QuerySupplyOfResponse, QueryTotalSupplyRequest, QueryTotalSupplyResponse,
 };
 
 use super::Ibc;
@@ -21,7 +18,6 @@ use tonic::{Request, Response, Status};
 impl<T, U> BankQuery for super::GrpcServer<T, U>
 where
     T: Clone + Send + Sync + 'static,
-    // T: AsyncCall<Call = <Ibc as Call>::Call>,
     T: AsyncQuery,
     T: for<'a> AsyncQuery<Response<'a> = Rc<Ibc>>,
     T: AsyncQuery<Query = <Ibc as Query>::Query>,
@@ -32,12 +28,7 @@ where
         &self,
         _request: Request<QueryBalanceRequest>,
     ) -> Result<Response<QueryBalanceResponse>, Status> {
-        Ok(Response::new(QueryBalanceResponse {
-            balance: Some(RawCoin {
-                denom: "simp".to_string(),
-                amount: "1000".to_string(),
-            }),
-        }))
+        Ok(Response::new(QueryBalanceResponse { balance: None }))
     }
 
     async fn all_balances(
@@ -86,6 +77,12 @@ where
         &self,
         _request: Request<QuerySpendableBalancesRequest>,
     ) -> Result<Response<QuerySpendableBalancesResponse>, Status> {
+        unimplemented!()
+    }
+    async fn denom_owners(
+        &self,
+        _request: Request<QueryDenomOwnersRequest>,
+    ) -> Result<Response<QueryDenomOwnersResponse>, Status> {
         unimplemented!()
     }
 }

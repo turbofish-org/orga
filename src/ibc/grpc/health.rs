@@ -4,6 +4,7 @@ use ibc_proto::cosmos::base::tendermint::v1beta1::{
     GetLatestValidatorSetResponse, GetNodeInfoRequest, GetNodeInfoResponse, GetSyncingRequest,
     GetSyncingResponse, GetValidatorSetByHeightRequest, GetValidatorSetByHeightResponse,
 };
+use ibc_proto::cosmos::base::tendermint::v1beta1::{AbciQueryRequest, AbciQueryResponse};
 use tendermint_proto::p2p::DefaultNodeInfo;
 
 use super::Ibc;
@@ -16,7 +17,6 @@ use tonic::{Request, Response, Status};
 impl<T, U> HealthService for super::GrpcServer<T, U>
 where
     T: Clone + Send + Sync + 'static,
-    // T: AsyncCall<Call = <Ibc as Call>::Call>,
     T: AsyncQuery,
     T: for<'a> AsyncQuery<Response<'a> = Rc<Ibc>>,
     U: Client<TendermintAdapter<U>>,
@@ -36,8 +36,6 @@ where
         &self,
         _request: Request<GetSyncingRequest>,
     ) -> Result<Response<GetSyncingResponse>, Status> {
-        dbg!("get_syncing");
-
         unimplemented!()
     }
 
@@ -45,7 +43,6 @@ where
         &self,
         _request: Request<GetLatestBlockRequest>,
     ) -> Result<Response<GetLatestBlockResponse>, Status> {
-        dbg!("get_latest_block");
         unimplemented!()
     }
 
@@ -53,7 +50,6 @@ where
         &self,
         _request: Request<GetBlockByHeightRequest>,
     ) -> Result<Response<GetBlockByHeightResponse>, Status> {
-        dbg!("get_block_by_height");
         unimplemented!()
     }
 
@@ -61,7 +57,6 @@ where
         &self,
         _request: Request<GetLatestValidatorSetRequest>,
     ) -> Result<Response<GetLatestValidatorSetResponse>, Status> {
-        println!("grpc get latest validator set");
         unimplemented!()
     }
 
@@ -69,7 +64,13 @@ where
         &self,
         _request: Request<GetValidatorSetByHeightRequest>,
     ) -> Result<Response<GetValidatorSetByHeightResponse>, Status> {
-        println!("grpc get validator set by height");
+        unimplemented!()
+    }
+
+    async fn abci_query(
+        &self,
+        _request: Request<AbciQueryRequest>,
+    ) -> Result<Response<AbciQueryResponse>, Status> {
         unimplemented!()
     }
 }

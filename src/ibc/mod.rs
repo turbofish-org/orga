@@ -34,7 +34,6 @@ use ibc_proto::cosmos::base::v1beta1::Coin;
 use ibc_proto::ibc::core::channel::v1::PacketState;
 use ics23::LeafOp;
 use tendermint_proto::abci::{EventAttribute, RequestQuery, ResponseQuery};
-use tendermint_proto::Protobuf;
 
 mod channel;
 mod client;

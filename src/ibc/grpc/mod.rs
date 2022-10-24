@@ -97,7 +97,6 @@ pub async fn start_grpc<T, U>(
     port: u16,
 ) where
     T: Clone + Send + Sync + 'static,
-    // T: AsyncCall<Call = <Ibc as Call>::Call>,
     T: AsyncQuery,
     T: for<'a> AsyncQuery<Response<'a> = Rc<Ibc>>,
     T: AsyncQuery<Query = <Ibc as Query>::Query>,

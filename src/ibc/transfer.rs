@@ -16,8 +16,8 @@ use ibc::applications::transfer::context::{
 use ibc::applications::transfer::error::Error;
 use ibc::applications::transfer::{PrefixedCoin, PrefixedDenom};
 use ibc::bigint::U256;
-use ibc::core::ics02_client::client_consensus::AnyConsensusState;
-use ibc::core::ics02_client::client_state::AnyClientState;
+use ibc::core::ics02_client::client_state::ClientState as ClientStateTrait;
+use ibc::core::ics02_client::consensus_state::ConsensusState as ConsensusStateTrait;
 use ibc::core::ics03_connection::connection::ConnectionEnd;
 use ibc::core::ics03_connection::error::Error as ConnectionError;
 use ibc::core::ics04_channel::channel::{ChannelEnd, Counterparty, Order};
@@ -171,35 +171,43 @@ impl Ics20Context for TransferModule {
 impl ChannelKeeper for TransferModule {
     fn store_packet_commitment(
         &mut self,
-        key: (PortId, ChannelId, Sequence),
+        port_id: PortId,
+        channel_id: ChannelId,
+        seq: Sequence,
         commitment: PacketCommitment,
     ) -> Result<(), ChannelError> {
         let mut commitments = self
             .commitments
-            .entry((key.0.clone(), key.1.clone()).into())?
+            .entry((port_id.clone(), channel_id.clone()).into())?
             .or_insert_default()?;
         commitments.push_back(
             PacketState {
-                port_id: key.0.to_string(),
-                channel_id: key.1.to_string(),
-                sequence: key.2.into(),
+                port_id: port_id.to_string(),
+                channel_id: channel_id.to_string(),
+                sequence: seq.into(),
                 data: commitment.clone().into_vec(),
             }
             .into(),
         )?;
-        Ok(self.lunchbox.insert_packet_commitment(key, commitment)?)
+        Ok(self
+            .lunchbox
+            .insert_packet_commitment((port_id, channel_id, seq), commitment)?)
     }
 
     fn delete_packet_commitment(
         &mut self,
-        _key: (PortId, ChannelId, Sequence),
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
+        _seq: Sequence,
     ) -> Result<(), ChannelError> {
         unimplemented!()
     }
 
     fn store_packet_receipt(
         &mut self,
-        _key: (PortId, ChannelId, Sequence),
+        _port_id: PortId,
+        _channel_id: ChannelId,
+        _seq: Sequence,
         _receipt: Receipt,
     ) -> Result<(), ChannelError> {
         unimplemented!()
@@ -207,7 +215,9 @@ impl ChannelKeeper for TransferModule {
 
     fn store_packet_acknowledgement(
         &mut self,
-        _key: (PortId, ChannelId, Sequence),
+        _port_id: PortId,
+        _channel_id: ChannelId,
+        _seq: Sequence,
         _ack: AcknowledgementCommitment,
     ) -> Result<(), ChannelError> {
         unimplemented!()
@@ -215,7 +225,9 @@ impl ChannelKeeper for TransferModule {
 
     fn delete_packet_acknowledgement(
         &mut self,
-        _key: (PortId, ChannelId, Sequence),
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
+        _seq: Sequence,
     ) -> Result<(), ChannelError> {
         unimplemented!()
     }
@@ -223,30 +235,34 @@ impl ChannelKeeper for TransferModule {
     fn store_connection_channels(
         &mut self,
         _conn_id: ConnectionId,
-        _port_channel_id: &(PortId, ChannelId),
+        _port_id: PortId,
+        _channel_id: ChannelId,
     ) -> Result<(), ChannelError> {
         unimplemented!()
     }
 
     fn store_channel(
         &mut self,
-        _port_channel_id: (PortId, ChannelId),
-        _channel_end: &ChannelEnd,
+        _port_id: PortId,
+        _channel_id: ChannelId,
+        _channel_end: ChannelEnd,
     ) -> Result<(), ChannelError> {
         unimplemented!()
     }
 
     fn store_next_sequence_send(
         &mut self,
-        ids: (PortId, ChannelId),
+        port_id: PortId,
+        channel_id: ChannelId,
         seq: Sequence,
     ) -> Result<(), ChannelError> {
-        Ok(self.lunchbox.insert_seq_send(ids, seq)?)
+        Ok(self.lunchbox.insert_seq_send((port_id, channel_id), seq)?)
     }
 
     fn store_next_sequence_recv(
         &mut self,
-        _port_channel_id: (PortId, ChannelId),
+        _port_id: PortId,
+        _channel_id: ChannelId,
         _seq: Sequence,
     ) -> Result<(), ChannelError> {
         unimplemented!()
@@ -254,7 +270,8 @@ impl ChannelKeeper for TransferModule {
 
     fn store_next_sequence_ack(
         &mut self,
-        _port_channel_id: (PortId, ChannelId),
+        _port_id: PortId,
+        _channel_id: ChannelId,
         _seq: Sequence,
     ) -> Result<(), ChannelError> {
         unimplemented!()
@@ -266,11 +283,15 @@ impl ChannelKeeper for TransferModule {
 }
 
 impl ChannelReader for TransferModule {
-    fn channel_end(&self, ids: &(PortId, ChannelId)) -> Result<ChannelEnd, ChannelError> {
+    fn channel_end(
+        &self,
+        port_id: &PortId,
+        channel_id: &ChannelId,
+    ) -> Result<ChannelEnd, ChannelError> {
         self.lunchbox
-            .read_channel(ids.clone())
+            .read_channel((port_id.clone(), channel_id.clone()))
             .map(|v| v.into_inner())
-            .map_err(|_| ChannelError::channel_not_found(ids.0.clone(), ids.1.clone()))
+            .map_err(|_| ChannelError::channel_not_found(port_id.clone(), channel_id.clone()))
     }
 
     fn connection_end(&self, conn_id: &ConnectionId) -> Result<ConnectionEnd, ChannelError> {
@@ -292,62 +313,77 @@ impl ChannelReader for TransferModule {
         unimplemented!()
     }
 
-    fn client_state(&self, client_id: &ClientId) -> Result<AnyClientState, ChannelError> {
+    fn client_state(
+        &self,
+        client_id: &ClientId,
+    ) -> Result<Box<dyn ClientStateTrait>, ChannelError> {
         Ok(self
             .lunchbox
-            .read_client_state(client_id.clone())?
-            .into_inner())
+            .read_client_state(client_id.clone())
+            .map(|v| v.clone().into_box())?)
     }
 
     fn client_consensus_state(
         &self,
         client_id: &ClientId,
         height: Height,
-    ) -> Result<AnyConsensusState, ChannelError> {
+    ) -> Result<Box<dyn ConsensusStateTrait>, ChannelError> {
         Ok(self
             .lunchbox
-            .read_client_consensus_state(client_id.clone(), height)?
-            .into_inner())
+            .read_client_consensus_state(client_id.clone(), height)
+            .map(|v| v.clone().into_box())?)
     }
 
-    fn get_next_sequence_send(&self, ids: &(PortId, ChannelId)) -> Result<Sequence, ChannelError> {
+    fn get_next_sequence_send(
+        &self,
+        port_id: &PortId,
+        channel_id: &ChannelId,
+    ) -> Result<Sequence, ChannelError> {
         Ok(self
             .lunchbox
-            .read_seq_send(ids.clone())
+            .read_seq_send((port_id.clone(), channel_id.clone()))
             .map(|v| v.into_inner())?)
     }
 
     fn get_next_sequence_recv(
         &self,
-        _port_channel_id: &(PortId, ChannelId),
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
     ) -> Result<Sequence, ChannelError> {
         unimplemented!()
     }
 
     fn get_next_sequence_ack(
         &self,
-        _port_channel_id: &(PortId, ChannelId),
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
     ) -> Result<Sequence, ChannelError> {
         unimplemented!()
     }
 
     fn get_packet_commitment(
         &self,
-        _key: &(PortId, ChannelId, Sequence),
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
+        _seq: Sequence,
     ) -> Result<PacketCommitment, ChannelError> {
         unimplemented!()
     }
 
     fn get_packet_receipt(
         &self,
-        _key: &(PortId, ChannelId, Sequence),
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
+        _seq: Sequence,
     ) -> Result<Receipt, ChannelError> {
         unimplemented!()
     }
 
     fn get_packet_acknowledgement(
         &self,
-        _key: &(PortId, ChannelId, Sequence),
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
+        _seq: Sequence,
     ) -> Result<AcknowledgementCommitment, ChannelError> {
         unimplemented!()
     }
@@ -360,11 +396,14 @@ impl ChannelReader for TransferModule {
         Height::new(0, self.height).unwrap()
     }
 
-    fn host_consensus_state(&self, _height: Height) -> Result<AnyConsensusState, ChannelError> {
+    fn host_consensus_state(
+        &self,
+        _height: Height,
+    ) -> Result<Box<dyn ConsensusStateTrait>, ChannelError> {
         unimplemented!()
     }
 
-    fn pending_host_consensus_state(&self) -> Result<AnyConsensusState, ChannelError> {
+    fn pending_host_consensus_state(&self) -> Result<Box<dyn ConsensusStateTrait>, ChannelError> {
         unimplemented!()
     }
 

@@ -27,7 +27,6 @@ use std::rc::Rc;
 impl<T, U> StakingQuery for super::GrpcServer<T, U>
 where
     T: Clone + Send + Sync + 'static,
-    // T: AsyncCall<Call = <Ibc as Call>::Call>,
     T: AsyncQuery,
     T: for<'a> AsyncQuery<Response<'a> = Rc<Ibc>>,
     T: AsyncQuery<Query = <Ibc as Query>::Query>,

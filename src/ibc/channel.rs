@@ -7,8 +7,8 @@ use crate::encoding::{Decode, Encode, LengthVec};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::{Read, Write};
-use ibc::core::ics02_client::client_consensus::AnyConsensusState;
-use ibc::core::ics02_client::client_state::AnyClientState;
+use ibc::core::ics02_client::client_state::ClientState as ClientStateTrait;
+use ibc::core::ics02_client::consensus_state::ConsensusState as ConsensusStateTrait;
 use ibc::core::ics02_client::context::ClientReader;
 use ibc::core::ics03_connection::connection::ConnectionEnd;
 use ibc::core::ics03_connection::context::ConnectionReader;
@@ -288,11 +288,11 @@ impl Lunchbox {
 }
 
 impl ChannelReader for Ibc {
-    fn channel_end(&self, ids: &(PortId, ChannelId)) -> Result<ChannelEnd, Error> {
+    fn channel_end(&self, port_id: &PortId, channel_id: &ChannelId) -> Result<ChannelEnd, Error> {
         self.lunchbox
-            .read_channel(ids.clone())
+            .read_channel((port_id.clone(), channel_id.clone()))
             .map(|v| v.into_inner())
-            .map_err(|_| Error::channel_not_found(ids.0.clone(), ids.1.clone()))
+            .map_err(|_| Error::channel_not_found(port_id.clone(), channel_id.clone()))
     }
 
     fn connection_end(&self, connection_id: &ConnectionId) -> Result<ConnectionEnd, Error> {
@@ -316,7 +316,7 @@ impl ChannelReader for Ibc {
         Ok(res)
     }
 
-    fn client_state(&self, client_id: &ClientId) -> Result<AnyClientState, Error> {
+    fn client_state(&self, client_id: &ClientId) -> Result<Box<dyn ClientStateTrait>, Error> {
         ConnectionReader::client_state(self, client_id).map_err(Error::ics03_connection)
     }
 
@@ -324,57 +324,74 @@ impl ChannelReader for Ibc {
         &self,
         client_id: &ClientId,
         height: Height,
-    ) -> Result<AnyConsensusState, Error> {
+    ) -> Result<Box<dyn ConsensusStateTrait>, Error> {
         ConnectionReader::client_consensus_state(self, client_id, height)
             .map_err(Error::ics03_connection)
     }
 
     fn get_next_sequence_send(
         &self,
-        port_channel_id: &(PortId, ChannelId),
+        port_id: &PortId,
+        channel_id: &ChannelId,
     ) -> Result<Sequence, Error> {
         Ok(self
             .lunchbox
-            .read_seq_send(port_channel_id.clone())
+            .read_seq_send((port_id.clone(), channel_id.clone()))
             .map(|v| v.into_inner())?)
     }
 
     fn get_next_sequence_recv(
         &self,
-        port_channel_id: &(PortId, ChannelId),
+        port_id: &PortId,
+        channel_id: &ChannelId,
     ) -> Result<Sequence, Error> {
         Ok(self
             .lunchbox
-            .read_seq_recv(port_channel_id.clone())
+            .read_seq_recv((port_id.clone(), channel_id.clone()))
             .map(|v| v.into_inner())?)
     }
 
     fn get_next_sequence_ack(
         &self,
-        port_channel_id: &(PortId, ChannelId),
+        port_id: &PortId,
+        channel_id: &ChannelId,
     ) -> Result<Sequence, Error> {
         Ok(self
             .lunchbox
-            .read_seq_ack(port_channel_id.clone())
+            .read_seq_ack((port_id.clone(), channel_id.clone()))
             .map(|v| v.into_inner())?)
     }
 
     fn get_packet_commitment(
         &self,
-        key: &(PortId, ChannelId, Sequence),
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        seq: Sequence,
     ) -> Result<PacketCommitment, Error> {
-        Ok(self.lunchbox.read_packet_commitment(key.clone())?)
+        Ok(self
+            .lunchbox
+            .read_packet_commitment((port_id.clone(), channel_id.clone(), seq))?)
     }
 
-    fn get_packet_receipt(&self, key: &(PortId, ChannelId, Sequence)) -> Result<Receipt, Error> {
-        self.lunchbox.read_packet_receipt(key.clone())
+    fn get_packet_receipt(
+        &self,
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        seq: Sequence,
+    ) -> Result<Receipt, Error> {
+        self.lunchbox
+            .read_packet_receipt((port_id.clone(), channel_id.clone(), seq))
     }
 
     fn get_packet_acknowledgement(
         &self,
-        key: &(PortId, ChannelId, Sequence),
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        seq: Sequence,
     ) -> Result<AcknowledgementCommitment, Error> {
-        Ok(self.lunchbox.read_packet_ack(key.clone())?)
+        Ok(self
+            .lunchbox
+            .read_packet_ack((port_id.clone(), channel_id.clone(), seq))?)
     }
 
     fn hash(&self, value: Vec<u8>) -> Vec<u8> {
@@ -389,7 +406,7 @@ impl ChannelReader for Ibc {
         Ok(self.channels.channel_counter)
     }
 
-    fn host_consensus_state(&self, height: Height) -> Result<AnyConsensusState, Error> {
+    fn host_consensus_state(&self, height: Height) -> Result<Box<dyn ConsensusStateTrait>, Error> {
         Ok(ClientReader::host_consensus_state(self, height)
             .map_err(|_| crate::Error::Ibc("Could not get host consensus state".into()))?)
     }
@@ -406,7 +423,7 @@ impl ChannelReader for Ibc {
         std::time::Duration::from_secs(8)
     }
 
-    fn pending_host_consensus_state(&self) -> Result<AnyConsensusState, Error> {
+    fn pending_host_consensus_state(&self) -> Result<Box<dyn ConsensusStateTrait>, Error> {
         ClientReader::pending_host_consensus_state(self)
             .map_err(ConnectionError::ics02_client)
             .map_err(Error::ics03_connection)
@@ -416,104 +433,129 @@ impl ChannelReader for Ibc {
 impl ChannelKeeper for Ibc {
     fn store_packet_commitment(
         &mut self,
-        key: (PortId, ChannelId, Sequence),
+        port_id: PortId,
+        channel_id: ChannelId,
+        seq: Sequence,
         commitment: PacketCommitment,
     ) -> Result<(), Error> {
         let mut commitments = self
             .channels
             .commitments
-            .entry(Adapter::new((key.0.clone(), key.1.clone())))?
+            .entry(Adapter::new((port_id.clone(), channel_id.clone())))?
             .or_insert_default()?;
 
         commitments.push_back(Adapter::new(PacketState {
-            port_id: key.0.to_string(),
-            channel_id: key.1.to_string(),
-            sequence: key.2.into(),
+            port_id: port_id.to_string(),
+            channel_id: channel_id.to_string(),
+            sequence: seq.into(),
             data: commitment.clone().into_vec(),
         }))?;
 
-        Ok(self.lunchbox.insert_packet_commitment(key, commitment)?)
+        Ok(self
+            .lunchbox
+            .insert_packet_commitment((port_id, channel_id, seq), commitment)?)
     }
 
     fn delete_packet_commitment(
         &mut self,
-        key: (PortId, ChannelId, Sequence),
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        seq: Sequence,
     ) -> Result<(), Error> {
-        Ok(self.lunchbox.delete_packet_commitment(key)?)
+        Ok(self
+            .lunchbox
+            .delete_packet_commitment((port_id.clone(), channel_id.clone(), seq))?)
     }
 
     fn store_packet_receipt(
         &mut self,
-        key: (PortId, ChannelId, Sequence),
+        port_id: PortId,
+        channel_id: ChannelId,
+        seq: Sequence,
         receipt: Receipt,
     ) -> Result<(), Error> {
-        Ok(self.lunchbox.insert_packet_receipt(key, receipt)?)
+        Ok(self
+            .lunchbox
+            .insert_packet_receipt((port_id, channel_id, seq), receipt)?)
     }
 
     fn store_packet_acknowledgement(
         &mut self,
-        key: (PortId, ChannelId, Sequence),
+        port_id: PortId,
+        channel_id: ChannelId,
+        seq: Sequence,
         ack: AcknowledgementCommitment,
     ) -> Result<(), Error> {
-        Ok(self.lunchbox.insert_packet_ack(key, ack)?)
+        Ok(self
+            .lunchbox
+            .insert_packet_ack((port_id, channel_id, seq), ack)?)
     }
 
     fn delete_packet_acknowledgement(
         &mut self,
-        key: (PortId, ChannelId, Sequence),
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        seq: Sequence,
     ) -> Result<(), Error> {
-        Ok(self.lunchbox.delete_packet_ack(key)?)
+        Ok(self
+            .lunchbox
+            .delete_packet_ack((port_id.clone(), channel_id.clone(), seq))?)
     }
 
     fn store_connection_channels(
         &mut self,
         conn_id: ConnectionId,
-        port_channel_id: &(PortId, ChannelId),
+        port_id: PortId,
+        channel_id: ChannelId,
     ) -> Result<(), Error> {
         self.channels
             .all_channels
-            .push_back(Adapter::new(port_channel_id.clone()))?;
+            .push_back(Adapter::new((port_id.clone(), channel_id.clone())))?;
 
         Ok(self
             .channels
             .connection_channels
             .entry(Adapter::new(conn_id))?
             .or_insert_default()?
-            .push_back(Adapter::new(port_channel_id.clone()))?)
+            .push_back(Adapter::new((port_id, channel_id)))?)
     }
 
     fn store_channel(
         &mut self,
-        port_channel_id: (PortId, ChannelId),
-        channel_end: &ChannelEnd,
+        port_id: PortId,
+        channel_id: ChannelId,
+        channel_end: ChannelEnd,
     ) -> Result<(), Error> {
         Ok(self
             .lunchbox
-            .insert_channel(port_channel_id, channel_end.clone())?)
+            .insert_channel((port_id, channel_id), channel_end)?)
     }
 
     fn store_next_sequence_send(
         &mut self,
-        port_channel_id: (PortId, ChannelId),
+        port_id: PortId,
+        channel_id: ChannelId,
         seq: Sequence,
     ) -> Result<(), Error> {
-        Ok(self.lunchbox.insert_seq_send(port_channel_id, seq)?)
+        Ok(self.lunchbox.insert_seq_send((port_id, channel_id), seq)?)
     }
 
     fn store_next_sequence_recv(
         &mut self,
-        port_channel_id: (PortId, ChannelId),
+        port_id: PortId,
+        channel_id: ChannelId,
         seq: Sequence,
     ) -> Result<(), Error> {
-        Ok(self.lunchbox.insert_seq_recv(port_channel_id, seq)?)
+        Ok(self.lunchbox.insert_seq_recv((port_id, channel_id), seq)?)
     }
 
     fn store_next_sequence_ack(
         &mut self,
-        port_channel_id: (PortId, ChannelId),
+        port_id: PortId,
+        channel_id: ChannelId,
         seq: Sequence,
     ) -> Result<(), Error> {
-        Ok(self.lunchbox.insert_seq_ack(port_channel_id, seq)?)
+        Ok(self.lunchbox.insert_seq_ack((port_id, channel_id), seq)?)
     }
 
     fn increase_channel_counter(&mut self) {

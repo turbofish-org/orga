@@ -15,7 +15,6 @@ use tonic::{Request, Response, Status};
 impl<T, U> TxService for super::GrpcServer<T, U>
 where
     T: Clone + Send + Sync + 'static,
-    // T: AsyncCall<Call = <Ibc as Call>::Call>,
     T: AsyncQuery,
     T: for<'a> AsyncQuery<Response<'a> = Rc<Ibc>>,
     U: Client<TendermintAdapter<U>>,
@@ -35,7 +34,6 @@ where
         &self,
         _request: Request<GetTxRequest>,
     ) -> Result<Response<GetTxResponse>, Status> {
-        dbg!("get tx");
         todo!()
     }
 
@@ -43,7 +41,6 @@ where
         &self,
         _request: Request<BroadcastTxRequest>,
     ) -> Result<Response<BroadcastTxResponse>, Status> {
-        dbg!("broadcast tx");
         todo!()
     }
 
@@ -51,7 +48,6 @@ where
         &self,
         _request: Request<GetTxsEventRequest>,
     ) -> Result<Response<GetTxsEventResponse>, Status> {
-        dbg!("get txs event");
         todo!()
     }
 
@@ -59,8 +55,6 @@ where
         &self,
         _request: Request<GetBlockWithTxsRequest>,
     ) -> Result<Response<GetBlockWithTxsResponse>, Status> {
-        dbg!("get block with txs");
-
         todo!()
     }
 }

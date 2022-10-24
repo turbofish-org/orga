@@ -13,9 +13,8 @@ use ibc::signer::Signer;
 use ibc::timestamp::Timestamp;
 use ibc::Height;
 use ibc_proto::ibc::core::channel::v1::PacketState;
-use prost::Message;
+use ibc_proto::protobuf::Protobuf;
 use serde::{Deserialize, Serialize};
-use tendermint_proto::Protobuf;
 
 #[derive(Clone, Call, Client, Query, Debug)]
 pub struct Adapter<T> {
@@ -36,8 +35,6 @@ where
     }
 
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
-        // let bytes = bincode::serialize(&self.inner).map_err(|_e|
-        // ed::Error::UnexpectedByte(0))?;
         let bytes =
             serde_json::to_string(&self.inner).map_err(|_e| ed::Error::UnexpectedByte(0))?;
         let len = bytes.len() as u16;
@@ -132,75 +129,72 @@ pub struct ProtobufAdapter<T> {
     inner: T,
 }
 
-impl<T> Encode for ProtobufAdapter<T>
-where
-    T: IbcProto,
-    T: Protobuf<<T as IbcProto>::Proto>,
-    <T as std::convert::TryFrom<<T as IbcProto>::Proto>>::Error: std::fmt::Display,
-{
-    fn encoding_length(&self) -> ed::Result<usize> {
-        Ok(self.inner.encoded_len())
-    }
+macro_rules! proto_adapter {
+    ($type:ty, $proto:ty) => {
+        impl Encode for ProtobufAdapter<$type> {
+            fn encoding_length(&self) -> ed::Result<usize> {
+                Ok(<$type as Protobuf<$proto>>::encoded_len(&self.inner))
+            }
 
-    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
-        let mut bytes = vec![];
-        self.inner
-            .encode(&mut bytes)
-            .map_err(|_e| ed::Error::UnexpectedByte(0))?;
+            fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+                let mut bytes = vec![];
+                <$type as Protobuf<$proto>>::encode(&self.inner, &mut bytes)
+                    .map_err(|_e| ed::Error::UnexpectedByte(0))?;
 
-        dest.write_all(&bytes)?;
+                dest.write_all(&bytes)?;
 
-        Ok(())
-    }
+                Ok(())
+            }
+        }
+
+        impl Decode for ProtobufAdapter<$type> {
+            fn decode<R: std::io::Read>(mut reader: R) -> ed::Result<Self> {
+                let mut bytes = vec![];
+                reader.read_to_end(&mut bytes)?;
+
+                let inner: $type = <$type as Protobuf<$proto>>::decode(bytes.as_slice())
+                    .map_err(|_e| ed::Error::UnexpectedByte(0))?;
+
+                Ok(Self { inner })
+            }
+        }
+
+        impl State for ProtobufAdapter<$type> {
+            type Encoding = Self;
+
+            fn create(_: Store, data: Self::Encoding) -> crate::Result<Self> {
+                Ok(data)
+            }
+
+            fn flush(self) -> crate::Result<Self::Encoding> {
+                Ok(self)
+            }
+        }
+
+        impl From<$type> for ProtobufAdapter<$type> {
+            fn from(inner: $type) -> Self {
+                Self { inner }
+            }
+        }
+    };
 }
 
-impl<T> Decode for ProtobufAdapter<T>
-where
-    T: IbcProto,
-    T: Protobuf<<T as IbcProto>::Proto>,
-    <T as std::convert::TryFrom<<T as IbcProto>::Proto>>::Error: std::fmt::Display,
-{
-    fn decode<R: std::io::Read>(mut reader: R) -> ed::Result<Self> {
-        let mut bytes = vec![];
-        reader.read_to_end(&mut bytes)?;
-
-        let inner: T = T::decode(bytes.as_slice()).map_err(|_e| ed::Error::UnexpectedByte(0))?;
-
-        Ok(Self { inner })
-    }
-}
-
-use ibc_proto::google::protobuf::Any;
-trait IbcProto: Sized {
-    type Proto: From<Self> + Default + Message;
-}
-
-impl IbcProto for ibc::core::ics02_client::client_consensus::AnyConsensusState {
-    type Proto = Any;
-}
-impl IbcProto for ibc::core::ics02_client::client_state::AnyClientState {
-    type Proto = Any;
-}
-impl IbcProto for ibc::core::ics03_connection::connection::ConnectionEnd {
-    type Proto = ibc_proto::ibc::core::connection::v1::ConnectionEnd;
-}
-
-impl IbcProto for ibc::clients::ics07_tendermint::consensus_state::ConsensusState {
-    type Proto = ibc_proto::ibc::lightclients::tendermint::v1::ConsensusState;
-}
-
-impl IbcProto for ibc::core::ics04_channel::channel::ChannelEnd {
-    type Proto = ibc_proto::ibc::core::channel::v1::Channel;
-}
-
-impl<T> From<T> for ProtobufAdapter<T>
-where
-    T: IbcProto,
-{
-    fn from(inner: T) -> Self {
-        Self { inner }
-    }
-}
+proto_adapter!(
+    ibc::clients::ics07_tendermint::consensus_state::ConsensusState,
+    ibc_proto::ibc::lightclients::tendermint::v1::ConsensusState
+);
+proto_adapter!(
+    ibc::core::ics03_connection::connection::ConnectionEnd,
+    ibc_proto::ibc::core::connection::v1::ConnectionEnd
+);
+proto_adapter!(
+    ibc::core::ics04_channel::channel::ChannelEnd,
+    ibc_proto::ibc::core::channel::v1::Channel
+);
+proto_adapter!(
+    ibc::clients::ics07_tendermint::client_state::ClientState,
+    ibc_proto::ibc::lightclients::tendermint::v1::ClientState
+);
 
 impl<T> ProtobufAdapter<T> {
     pub fn into_inner(self) -> T {
@@ -219,23 +213,6 @@ impl<T> std::ops::Deref for ProtobufAdapter<T> {
 impl<T> std::ops::DerefMut for ProtobufAdapter<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
-    }
-}
-
-impl<T> State for ProtobufAdapter<T>
-where
-    T: IbcProto,
-    T: Protobuf<<T as IbcProto>::Proto>,
-    <T as std::convert::TryFrom<<T as IbcProto>::Proto>>::Error: std::fmt::Display,
-{
-    type Encoding = Self;
-
-    fn create(_: Store, data: Self::Encoding) -> crate::Result<Self> {
-        Ok(data)
-    }
-
-    fn flush(self) -> crate::Result<Self::Encoding> {
-        Ok(self)
     }
 }
 

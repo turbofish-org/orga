@@ -23,7 +23,6 @@ use tonic::{Request, Response, Status};
 impl<T, U> ClientQuery for super::GrpcServer<T, U>
 where
     T: Clone + Send + Sync + 'static,
-    // T: AsyncCall<Call = <Ibc as Call>::Call>,
     T: AsyncQuery,
     T: for<'a> AsyncQuery<Response<'a> = Rc<Ibc>>,
     T: AsyncQuery<Query = <Ibc as Query>::Query>,
@@ -34,7 +33,6 @@ where
         &self,
         _request: Request<QueryClientStateRequest>,
     ) -> Result<Response<QueryClientStateResponse>, Status> {
-        println!("query client state");
         unimplemented!()
     }
 
@@ -42,7 +40,6 @@ where
         &self,
         _request: Request<QueryClientStatesRequest>,
     ) -> Result<Response<QueryClientStatesResponse>, Status> {
-        println!("query client states");
         let res = QueryClientStatesResponse {
             client_states: self.ibc.clients.query_client_states().await??,
             ..Default::default()
@@ -55,7 +52,6 @@ where
         &self,
         _request: Request<QueryConsensusStateRequest>,
     ) -> Result<Response<QueryConsensusStateResponse>, Status> {
-        println!("grpc consensus state");
         unimplemented!()
     }
 
@@ -63,7 +59,6 @@ where
         &self,
         _request: Request<QueryConsensusStateHeightsRequest>,
     ) -> Result<Response<QueryConsensusStateHeightsResponse>, Status> {
-        println!("grpc consensus state heights");
         todo!()
     }
 
@@ -71,7 +66,6 @@ where
         &self,
         request: Request<QueryConsensusStatesRequest>,
     ) -> Result<Response<QueryConsensusStatesResponse>, Status> {
-        println!("grpc consensus states");
         let client_id: ClientId = request
             .get_ref()
             .client_id
@@ -93,7 +87,6 @@ where
         &self,
         _request: Request<QueryClientStatusRequest>,
     ) -> Result<Response<QueryClientStatusResponse>, Status> {
-        println!("grpc client status");
         unimplemented!()
     }
 
@@ -101,7 +94,6 @@ where
         &self,
         _request: Request<QueryClientParamsRequest>,
     ) -> Result<Response<QueryClientParamsResponse>, Status> {
-        println!("grpc client params");
         unimplemented!()
     }
 
@@ -109,7 +101,6 @@ where
         &self,
         _request: Request<QueryUpgradedClientStateRequest>,
     ) -> Result<Response<QueryUpgradedClientStateResponse>, Status> {
-        println!("grpc upgraded client state");
         unimplemented!()
     }
 
@@ -117,7 +108,6 @@ where
         &self,
         _request: Request<QueryUpgradedConsensusStateRequest>,
     ) -> Result<Response<QueryUpgradedConsensusStateResponse>, Status> {
-        println!("grpc upgraded consensus state");
         unimplemented!()
     }
 }
