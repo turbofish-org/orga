@@ -13,8 +13,8 @@ pub const NATIVE_CALL_FLAG: u8 = 0xff;
 
 #[derive(State, Clone)]
 pub struct SdkCompatPlugin<S, T: State> {
-    symbol: PhantomData<S>,
-    inner: T,
+    pub(crate) symbol: PhantomData<S>,
+    pub(crate) inner: T,
 }
 
 impl<S, T: State> Deref for SdkCompatPlugin<S, T> {
@@ -261,14 +261,14 @@ pub mod sdk {
 
         pub fn sig_type(&self) -> Result<Option<&str>> {
             Ok(match self {
-                Tx::Amino(tx) => {
-                    let sig_type = &tx
-                        .signatures
-                        .first()
-                        .ok_or_else(|| Error::App("No signatures provided".to_string()))?
-                        .r#type;
-                }
-                Tx::Protobuf(tx) => None,
+                Tx::Amino(tx) => tx
+                    .signatures
+                    .first()
+                    .ok_or_else(|| Error::App("No signatures provided".to_string()))?
+                    .r#type
+                    .as_deref(),
+
+                Tx::Protobuf(_) => None,
             })
         }
     }

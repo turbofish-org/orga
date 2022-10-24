@@ -4,7 +4,7 @@ use super::{
 };
 use crate::call::Call;
 use crate::client::{AsyncCall, AsyncQuery, Client};
-use crate::coins::Address;
+use crate::coins::{Address, Symbol};
 use crate::context::{Context, GetContext};
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
@@ -15,7 +15,7 @@ use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
 use std::ops::Deref;
 
 pub struct SignerPlugin<T> {
-    inner: T,
+    pub(crate) inner: T,
 }
 
 impl<T> Deref for SignerPlugin<T> {
@@ -202,7 +202,7 @@ where
         let pubkey = sdk_tx.sender_pubkey()?;
         let sig_type = sdk_tx.sig_type()?;
         let inner_call = self.inner.convert(sdk_tx)?.encode()?;
-        
+
         let sdk_tx = Box::new(sdk_tx.clone());
         let sigtype = match sig_type {
             None | Some("sdk") => SigType::Sdk(sdk_tx),
@@ -602,75 +602,82 @@ mod abci {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use crate::call::Call;
-//     use crate::contexts::GetContext;
-//     use crate::state::State;
+#[derive(State, Call, Query, Client, Clone)]
+pub struct Counter {
+    pub count: u64,
+    pub last_signer: Address,
+    nonce: NonceNoop,
+}
 
-//     #[derive(State, Clone)]
-//     struct Counter {
-//         pub count: u64,
-//         pub last_signer: Option<Address>,
-//     }
+impl Counter {
+    #[call]
+    pub fn increment(&mut self) -> Result<()> {
+        self.count += 1;
+        let signer = self.context::<Signer>().unwrap().signer.unwrap();
+        self.last_signer = signer;
 
-//     impl Counter {
-//         fn increment(&mut self) -> Result<()> {
-//             self.count += 1;
-//             let signer = self.context::<Signer>().unwrap().signer.unwrap();
-//             self.last_signer.replace(signer);
+        Ok(())
+    }
+}
 
-//             Ok(())
-//         }
-//     }
+impl Deref for Counter {
+    type Target = NonceNoop;
 
-//     #[derive(Encode, Decode)]
-//     pub enum CounterCall {
-//         Increment,
-//     }
+    fn deref(&self) -> &Self::Target {
+        &self.nonce
+    }
+}
 
-//     impl Call for Counter {
-//         type Call = CounterCall;
+#[derive(State, Clone, Debug)]
+pub struct NonceNoop(());
+impl GetNonce for NonceNoop {
+    fn nonce(&self, address: Address) -> Result<u64> {
+        Ok(0)
+    }
+}
 
-//         fn call(&mut self, call: Self::Call) -> Result<()> {
-//             match call {
-//                 CounterCall::Increment => self.increment(),
-//             }
-//         }
-//     }
+#[derive(State, Clone, Debug)]
+pub struct X(());
+impl Symbol for X {
+    const INDEX: u8 = 99;
+}
 
-//     #[derive(Clone)]
-//     struct CounterClient<T> {
-//         parent: T,
-//     }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::call::Call;
+    use crate::plugins::{sdk_compat, ConvertSdkTx, SdkCompatPlugin};
 
-//     impl<T: Call<Call = CounterCall> + Clone> CounterClient<T> {
-//         pub fn increment(&mut self) -> Result<()> {
-//             self.parent.call(CounterCall::Increment)
-//         }
-//     }
+    impl ConvertSdkTx for Counter {
+        type Output = <Counter as Call>::Call;
 
-//     impl<T: Clone> Client<T> for Counter {
-//         type Client = CounterClient<T>;
+        fn convert(&self, msg: &sdk_compat::sdk::Tx) -> Result<Self::Output> {
+            Ok(<Counter as Call>::Call::MethodIncrement(vec![]))
+        }
+    }
 
-//         fn create_client(parent: T) -> Self::Client {
-//             CounterClient { parent }
-//         }
-//     }
+    #[test]
+    fn eth_personal_sign() {
+        let mut state = SdkCompatPlugin {
+            symbol: std::marker::PhantomData::<X>,
+            inner: SignerPlugin {
+                inner: Counter {
+                    count: 0,
+                    last_signer: Address::NULL,
+                    nonce: NonceNoop(()),
+                },
+            },
+        };
 
-// #[test]
-// fn signed_increment() {
-//     let state = Rc::new(RefCell::new(SignerProvider {
-//         inner: Counter {
-//             count: 0,
-//             last_signer: None,
-//         },
-//     }));
-//     let mut client = SignerProvider::<Counter>::create_client(state.clone());
-//     client.increment().unwrap();
-//     assert_eq!(state.borrow().inner.count, 1);
-//     let pub_key = load_keypair().unwrap().public.to_bytes();
-//     assert_eq!(state.borrow().inner.last_signer, Some(pub_key));
-// }
-// }
+        Context::add(ChainId("testchain"));
+
+        // sign bytes: {"account_number":"0","chain_id":"testchain","fee":{"amount":[{"amount":"0","denom":"unom"}],"gas":"10000"},"memo":"","msgs":[{"type":"x","value":{}}],"sequence":"1"}
+        // signature and pubkey taken from metamask (then converted)
+        let call_bytes = br#"{"msg":[{"type":"x","value":{}}],"fee":{"amount":[{"amount":"0","denom":"unom"}],"gas":"10000"},"memo":"","signatures":[{"pub_key":{"type":"tendermint/PubKeySecp256k1","value":"AgixpAV7cl5HPnmZC5qmJekVd5E8VZUioqrJoaj36p90"},"signature":"w+ZKyFdmhDOoqLIlhZq+yj8Z+eMOZnyjYKQ5rXr/fS4Imt4n5rTbwgHR1TmF6mGdFvZrmeJFedUjyMjnRYV4bA==","type":"eth"}]}"#;
+        let call = Decode::decode(call_bytes.as_slice()).unwrap();
+
+        SdkCompatPlugin::<_, _>::call(&mut state, call).unwrap();
+
+        assert_eq!(state.count, 1);
+    }
+}
