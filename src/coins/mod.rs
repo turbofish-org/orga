@@ -107,6 +107,18 @@ impl Address {
         Self { bytes }
     }
 
+    pub fn from_pubkey_eth(bytes: [u8; 64]) -> Self {
+        use sha3::{Digest, Keccak256};
+        let mut hasher = Keccak256::new();
+        hasher.update(&bytes);
+        let hash = hasher.finalize();
+
+        let mut bytes = [0; Address::LENGTH];
+        bytes.copy_from_slice(&hash[12..]);
+
+        Self { bytes }
+    }
+
     pub fn bytes(&self) -> [u8; Address::LENGTH] {
         self.bytes
     }

@@ -117,26 +117,38 @@ where
     }
 
     fn verify(&mut self, call: &SignerCall) -> Result<Option<Address>> {
-        match (call.pubkey, call.signature) {
+        match (call.pubkey.as_ref(), call.signature) {
             (Some(pubkey_bytes), Some(signature)) => {
                 use secp256k1::hashes::sha256;
                 let secp = Secp256k1::verification_only();
-                let pubkey = PublicKey::from_slice(&pubkey_bytes)?;
-                let address = Address::from_pubkey(pubkey_bytes);
+                let pubkey = PublicKey::from_slice(pubkey_bytes.as_slice())?;
 
-                let msg = match &call.sigtype {
-                    SigType::Native => Message::from_hashed_data::<sha256::Hash>(&call.call_bytes),
+                let (msg, addr) = match &call.sigtype {
+                    SigType::Native => {
+                        let addr = Address::from_pubkey(*pubkey_bytes);
+                        let msg = Message::from_hashed_data::<sha256::Hash>(&call.call_bytes);
+                        (msg, addr)
+                    }
                     SigType::Adr36 => {
-                        let bytes = adr36_bytes(call.call_bytes.as_slice(), address)?;
-                        Message::from_hashed_data::<sha256::Hash>(bytes.as_slice())
+                        let addr = Address::from_pubkey(*pubkey_bytes);
+                        let bytes = adr36_bytes(call.call_bytes.as_slice(), addr)?;
+                        let msg = Message::from_hashed_data::<sha256::Hash>(bytes.as_slice());
+                        (msg, addr)
                     }
                     SigType::Sdk(tx) => {
-                        let bytes = self.sdk_sign_bytes(tx, address)?;
-                        Message::from_hashed_data::<sha256::Hash>(bytes.as_slice())
+                        let addr = Address::from_pubkey(*pubkey_bytes);
+                        let bytes = self.sdk_sign_bytes(tx, addr)?;
+                        let msg = Message::from_hashed_data::<sha256::Hash>(bytes.as_slice());
+                        (msg, addr)
                     }
                     SigType::EthPersonalSign(tx) => {
+                        let pubkey_bytes = pubkey.serialize_uncompressed();
+                        let mut eth_pubkey = [0; 64];
+                        eth_pubkey.copy_from_slice(&pubkey_bytes[1..]);
+                        let addr = Address::from_pubkey_eth(eth_pubkey);
+
                         let prefix = b"\x19Ethereum Signed Message:\n";
-                        let mut sdk_bytes = self.sdk_sign_bytes(tx, address)?;
+                        let mut sdk_bytes = self.sdk_sign_bytes(tx, addr)?;
                         let mut len_bytes = sdk_bytes.len().to_string().as_bytes().to_vec();
 
                         let mut bytes = prefix.to_vec();
@@ -148,7 +160,9 @@ where
                         hasher.update(&bytes);
                         let hash = hasher.finalize();
 
-                        Message::from_slice(&hash)?
+                        let msg = Message::from_slice(&hash)?;
+
+                        (msg, addr)
                     }
                 };
 
@@ -156,7 +170,7 @@ where
                 #[cfg(not(fuzzing))]
                 secp.verify_ecdsa(&msg, &signature, &pubkey)?;
 
-                Ok(Some(address))
+                Ok(Some(addr))
             }
             (None, None) => Ok(None),
             _ => Err(Error::Signer("Malformed transaction".into())),
@@ -672,12 +686,20 @@ mod tests {
         Context::add(ChainId("testchain"));
 
         // sign bytes: {"account_number":"0","chain_id":"testchain","fee":{"amount":[{"amount":"0","denom":"unom"}],"gas":"10000"},"memo":"","msgs":[{"type":"x","value":{}}],"sequence":"1"}
-        // signature and pubkey taken from metamask (then converted)
+        // signature and pubkey taken from metamask
         let call_bytes = br#"{"msg":[{"type":"x","value":{}}],"fee":{"amount":[{"amount":"0","denom":"unom"}],"gas":"10000"},"memo":"","signatures":[{"pub_key":{"type":"tendermint/PubKeySecp256k1","value":"AgixpAV7cl5HPnmZC5qmJekVd5E8VZUioqrJoaj36p90"},"signature":"w+ZKyFdmhDOoqLIlhZq+yj8Z+eMOZnyjYKQ5rXr/fS4Imt4n5rTbwgHR1TmF6mGdFvZrmeJFedUjyMjnRYV4bA==","type":"eth"}]}"#;
         let call = Decode::decode(call_bytes.as_slice()).unwrap();
 
         SdkCompatPlugin::<_, _>::call(&mut state, call).unwrap();
 
         assert_eq!(state.count, 1);
+        assert_eq!(
+            state.last_signer,
+            [
+                147, 54, 126, 195, 164, 236, 108, 70, 107, 218, 16, 43, 121, 200, 38, 174, 234,
+                199, 157, 75
+            ]
+            .into()
+        );
     }
 }
