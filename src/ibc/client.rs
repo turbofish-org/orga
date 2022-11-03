@@ -172,7 +172,6 @@ impl ConsensusStateMap {
 pub struct ClientStore {
     host_consensus_state: Map<u64, ProtobufAdapter<ConsensusState>>,
     height: u64,
-    client_type: Map<Adapter<ClientId>, Adapter<ClientType>>,
     client_state: Map<Adapter<ClientId>, ProtobufAdapter<ClientState>>,
     client_update_time: Map<Adapter<(ClientId, Height)>, Adapter<Timestamp>>,
     client_consensus_state: Map<Adapter<ClientId>, ConsensusStateMap>,
@@ -186,10 +185,6 @@ impl ClientKeeper for Ibc {
         client_id: ClientId,
         client_type: ClientType,
     ) -> Result<(), Error> {
-        self.clients
-            .client_type
-            .insert(client_id.clone().into(), client_type.into())?;
-
         self.lunchbox.insert_client_type(client_id, client_type)?;
 
         Ok(())
@@ -266,14 +261,8 @@ impl ClientKeeper for Ibc {
 }
 
 impl ClientReader for Ibc {
-    fn client_type(&self, client_id: &ClientId) -> Result<ClientType, Error> {
-        self.clients
-            .client_type
-            .get(client_id.clone().into())
-            .map(|entry| match entry {
-                Some(v) => Ok(**v),
-                None => Err(Error::implementation_specific()),
-            })?
+    fn client_type(&self, _client_id: &ClientId) -> Result<ClientType, Error> {
+        Ok(ClientType::new("07-tendermint"))
     }
 
     fn client_state(&self, client_id: &ClientId) -> Result<Box<dyn ClientStateTrait>, Error> {
@@ -389,11 +378,12 @@ impl BeginBlock for ClientStore {
 
 impl Next for Adapter<ClientId> {
     fn next(&self) -> Option<Self> {
-        let client_type = ClientType::Tendermint;
+        let client_type = ClientType::new("07-tendermint");
+
         let counter = self
             .inner
             .as_str()
-            .strip_prefix(format!("{}-", client_type.as_str()).as_str())
+            .strip_prefix(format!("{}-", client_type).as_str())
             .unwrap()
             .parse::<u64>()
             .unwrap();
@@ -401,7 +391,6 @@ impl Next for Adapter<ClientId> {
         if counter == u64::MAX {
             return None;
         }
-
         let new_client_id = ClientId::new(client_type, counter + 1).unwrap();
 
         Some(new_client_id.into())
