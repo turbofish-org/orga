@@ -4,11 +4,11 @@ pub use ed::*;
 use derive_more::{Deref, DerefMut, Into};
 use std::convert::{TryFrom, TryInto};
 
-#[derive(Deref, DerefMut, Encode, Into, Default, Clone, Debug)]
+#[derive(Deref, DerefMut, Encode, Into, Default, Clone, Debug, State)]
 pub struct LengthVec<P, T>
 where
-    P: Encode + Terminated,
-    T: Encode + Terminated,
+    P: Encode + Decode + TryInto<usize> + Terminated + Clone,
+    T: Encode + Decode + Terminated,
 {
     len: P,
 
@@ -20,46 +20,12 @@ where
 
 impl<P, T> LengthVec<P, T>
 where
-    P: Encode + Terminated,
-    T: Encode + Terminated,
+    P: Encode + Decode + TryInto<usize> + Terminated + Clone,
+    T: Encode + Decode + Terminated,
 {
     pub fn new(len: P, values: Vec<T>) -> Self {
         LengthVec { len, values }
     }
-}
-
-impl<P, T> State for LengthVec<P, T>
-where
-    P: Encode + Decode + Terminated + TryInto<usize> + Clone,
-    T: Encode + Decode + Terminated,
-{
-    type Encoding = Self;
-
-    fn create(_: orga::store::Store, data: Self::Encoding) -> crate::Result<Self> {
-        Ok(data)
-    }
-
-    fn flush(self) -> crate::Result<Self::Encoding> {
-        Ok(self)
-    }
-}
-
-impl<P, T> From<Vec<T>> for LengthVec<P, T>
-where
-    P: Encode + Terminated + TryFrom<usize>,
-    T: Encode + Terminated,
-    <P as TryFrom<usize>>::Error: std::fmt::Debug,
-{
-    fn from(values: Vec<T>) -> Self {
-        LengthVec::new(P::try_from(values.len()).unwrap(), values)
-    }
-}
-
-impl<P, T> Terminated for LengthVec<P, T>
-where
-    P: Encode + Terminated,
-    T: Encode + Terminated,
-{
 }
 
 impl<P, T> Decode for LengthVec<P, T>

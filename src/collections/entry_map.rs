@@ -5,7 +5,7 @@ use super::map::Iter as MapIter;
 use super::map::Map;
 use super::map::ReadOnly;
 
-use crate::encoding::{Decode, Encode};
+use crate::encoding::{Decode, Encode, Terminated};
 use crate::store::DefaultBackingStore;
 use std::ops::RangeBounds;
 
@@ -15,34 +15,25 @@ use crate::query::Query;
 use crate::state::*;
 use crate::store::*;
 use crate::Result;
-use ed::*;
 
-#[derive(Query, Call)]
-pub struct EntryMap<T: Entry, S = DefaultBackingStore> {
+#[derive(Query, Call, Encode, Decode)]
+pub struct EntryMap<T: Entry, S: Default = DefaultBackingStore> {
     map: Map<T::Key, T::Value, S>,
 }
 
-impl<T: Entry, S> From<EntryMap<T, S>> for () {
-    fn from(_map: EntryMap<T, S>) {}
-}
-
-impl<T: Entry, S> State<S> for EntryMap<T, S>
+impl<T: Entry, S: Default> State<S> for EntryMap<T, S>
 where
     T::Key: Encode + Terminated,
     T::Value: State<S>,
 {
-    type Encoding = ();
-
-    fn create(store: Store<S>, _: ()) -> Result<Self>
+    fn attach(&mut self, store: Store<S>) -> Result<()>
     where
         S: Read,
     {
-        Ok(EntryMap {
-            map: Map::create(store, ())?,
-        })
+        self.map.attach(store)
     }
 
-    fn flush(self) -> Result<()>
+    fn flush(&mut self) -> Result<()>
     where
         S: Write,
     {
@@ -53,7 +44,7 @@ where
 // TODO: add a get_mut method (maybe just takes in T::Key?) so we can add
 // #[call] to it to route calls to children
 
-impl<T, S> EntryMap<T, S>
+impl<T, S: Default> EntryMap<T, S>
 where
     T: Entry,
     T::Key: Encode + Terminated,
@@ -74,7 +65,7 @@ where
     }
 }
 
-impl<T, S> EntryMap<T, S>
+impl<T, S: Default> EntryMap<T, S>
 where
     T: Entry,
     T::Key: Encode + Terminated + Clone,
@@ -90,7 +81,7 @@ where
     }
 }
 
-impl<T, S> EntryMap<T, S>
+impl<T, S: Default> EntryMap<T, S>
 where
     T: Entry,
     T::Key: Encode + Terminated + Clone,
@@ -118,7 +109,7 @@ where
     }
 }
 
-impl<'a, T: Entry, S> EntryMap<T, S>
+impl<'a, T: Entry, S: Default> EntryMap<T, S>
 where
     T::Key: Next + Decode + Encode + Terminated + Clone,
     T::Value: State<S> + Clone,
@@ -139,7 +130,7 @@ where
     }
 }
 
-pub struct Iter<'a, T: Entry, S>
+pub struct Iter<'a, T: Entry, S: Default>
 where
     T::Key: Next + Decode + Encode + Terminated + Clone,
     T::Value: State<S> + Clone,
@@ -148,7 +139,7 @@ where
     map_iter: MapIter<'a, T::Key, T::Value, S>,
 }
 
-impl<'a, T: Entry, S> Iterator for Iter<'a, T, S>
+impl<'a, T: Entry, S: Default> Iterator for Iter<'a, T, S>
 where
     T::Key: Next + Decode + Encode + Terminated + Clone,
     T::Value: State<S> + Clone,

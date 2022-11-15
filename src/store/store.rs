@@ -2,6 +2,7 @@
 use mutagen::mutate;
 
 use super::{Read, Shared, Write, KV};
+use crate::encoding::{Decode, Encode};
 use crate::state::State;
 use crate::{Error, Result};
 
@@ -23,9 +24,26 @@ pub type DefaultBackingStore = Shared<super::MapStore>;
 /// This type is how high-level state types interact with the store, since they
 /// will often need to create substores (through the `store.sub(prefix)`
 /// method).
+#[derive(Default)]
 pub struct Store<S = DefaultBackingStore> {
     prefix: Vec<u8>,
     store: Shared<S>,
+}
+
+impl<S> Encode for Store<S> {
+    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+        Ok(())
+    }
+
+    fn encoding_length(&self) -> ed::Result<usize> {
+        Ok(0)
+    }
+}
+
+impl<S: Default> Decode for Store<S> {
+    fn decode<R: std::io::Read>(input: R) -> ed::Result<Self> {
+        Ok(Self::default())
+    }
 }
 
 impl<S> Clone for Store<S> {
@@ -35,21 +53,6 @@ impl<S> Clone for Store<S> {
             store: self.store.clone(),
         }
     }
-}
-
-impl State for Store {
-    type Encoding = ();
-    fn create(store: Store, _: Self::Encoding) -> Result<Self> {
-        Ok(store)
-    }
-
-    fn flush(self) -> Result<Self::Encoding> {
-        Ok(())
-    }
-}
-
-impl<S> From<Store<S>> for () {
-    fn from(_store: Store<S>) -> Self {}
 }
 
 impl<S> Store<S> {
@@ -91,6 +94,24 @@ impl<S> Store<S> {
 
     pub fn backing_store(&self) -> Shared<S> {
         self.store.clone()
+    }
+}
+
+impl<S: Default> State<S> for Store<S> {
+    fn attach(&mut self, store: Store<S>) -> Result<()>
+    where
+        S: Read,
+    {
+        self.prefix = store.prefix;
+        self.store = store.store;
+        Ok(())
+    }
+
+    fn flush(&mut self) -> Result<()>
+    where
+        S: Write,
+    {
+        Ok(())
     }
 }
 

@@ -13,31 +13,22 @@ use crate::store::DefaultBackingStore;
 use crate::store::{Read, Store, Write};
 use crate::Result;
 
-#[derive(Query)]
-pub struct Deque<T, S = DefaultBackingStore> {
+#[derive(Query, Encode, Decode)]
+pub struct Deque<T, S: Default = DefaultBackingStore> {
     meta: Meta,
     map: Map<u64, T, S>,
 }
 
-#[cfg(feature = "abci")]
-impl<T, S, T2, S2> Migrate<v3::collections::Deque<T2, S2>, S2> for Deque<T, S>
-where
-    T2: v3::state::State<S2>,
-    S: Write,
-    S2: v3::store::Read,
-{
-    fn migrate(&mut self, legacy: v3::collections::Deque<T2, S2>) -> Result<()> {
-        let (meta, map) = legacy.explode();
-        self.meta.head = meta.head;
-        self.meta.tail = meta.tail;
-
-        self.map.migrate(map)?;
-
-        Ok(())
+impl<T, S: Default> Default for Deque<T, S> {
+    fn default() -> Self {
+        Deque {
+            meta: Meta::default(),
+            map: Map::default(),
+        }
     }
 }
 
-impl<T, S> std::fmt::Debug for Deque<T, S> {
+impl<T, S: Default> std::fmt::Debug for Deque<T, S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Deque").field("meta", &self.meta).finish()
     }
@@ -59,13 +50,13 @@ impl Default for Meta {
     }
 }
 
-impl<T, S> From<Deque<T, S>> for Meta {
+impl<T, S: Default> From<Deque<T, S>> for Meta {
     fn from(deque: Deque<T, S>) -> Meta {
         deque.meta
     }
 }
 
-impl<T: Call + State<S>, S: Write> Call for Deque<T, S> {
+impl<T: Call + State<S>, S: Write + Default> Call for Deque<T, S> {
     type Call = (u64, T::Call);
 
     fn call(&mut self, call: Self::Call) -> Result<()> {
@@ -75,29 +66,23 @@ impl<T: Call + State<S>, S: Write> Call for Deque<T, S> {
 }
 
 // TODO: use derive(State) once it supports generic parameters
-impl<T: State<S>, S: Read> State<S> for Deque<T, S> {
-    type Encoding = Meta;
-
-    fn create(store: Store<S>, meta: Self::Encoding) -> Result<Self>
+impl<T: State<S>, S: Read + Default> State<S> for Deque<T, S> {
+    fn attach(&mut self, store: Store<S>) -> Result<()>
     where
         S: Read,
     {
-        Ok(Deque {
-            meta,
-            map: Map::create(store, ())?,
-        })
+        self.map.attach(store)
     }
 
-    fn flush(self) -> Result<Self::Encoding>
+    fn flush(&mut self) -> Result<()>
     where
         S: Write,
     {
-        self.map.flush()?;
-        Ok(self.meta)
+        self.map.flush()
     }
 }
 
-impl<T: State<S>, S: Read> Deque<T, S> {
+impl<T: State<S>, S: Read + Default> Deque<T, S> {
     #[query]
     #[cfg_attr(test, mutate)]
     pub fn len(&self) -> u64 {
@@ -129,14 +114,14 @@ impl<T: State<S>, S: Read> Deque<T, S> {
     }
 }
 
-impl<T: State<S>, S: Write> Deque<T, S> {
+impl<T: State<S>, S: Write + Default> Deque<T, S> {
     #[cfg_attr(test, mutate)]
     pub fn get_mut(&mut self, index: u64) -> Result<Option<ChildMut<u64, T, S>>> {
         self.map.get_mut(index + self.meta.head)
     }
 
     #[cfg_attr(test, mutate)]
-    pub fn push_back(&mut self, value: T::Encoding) -> Result<()> {
+    pub fn push_back(&mut self, value: T) -> Result<()> {
         let index = self.meta.tail;
         self.meta.tail += 1;
         self.map.insert(index, value)?;
@@ -144,7 +129,7 @@ impl<T: State<S>, S: Write> Deque<T, S> {
     }
 
     #[cfg_attr(test, mutate)]
-    pub fn push_front(&mut self, value: T::Encoding) -> Result<()> {
+    pub fn push_front(&mut self, value: T) -> Result<()> {
         self.meta.head -= 1;
         let index = self.meta.head;
         self.map.insert(index, value)?;
@@ -183,7 +168,7 @@ impl<T: State<S>, S: Write> Deque<T, S> {
 }
 
 // TODO: use derive(Client)
-impl<T, U: Clone + Send, S> Client<U> for Deque<T, S> {
+impl<T, U: Clone + Send, S: Default> Client<U> for Deque<T, S> {
     type Client = ();
 
     fn create_client(_: U) {}

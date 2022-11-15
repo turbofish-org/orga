@@ -17,6 +17,7 @@ use std::rc::Rc;
 /// since `get`, `get_next`, `put`, and `delete` all operate atomically so there
 /// will never be more than one reference borrowing the underlying store at a
 /// time.
+#[derive(Default)]
 pub struct Shared<T>(Rc<RefCell<T>>);
 
 impl<T> Shared<T> {

@@ -19,7 +19,6 @@ pub fn derive(item: TokenStream) -> TokenStream {
     }
 
     let field_names = || struct_fields(&item).map(|field| &field.ident);
-    let field_types = || struct_fields(&item).map(|field| &field.ty);
     let seq =
         || (0..field_names().count()).map(|i| TokenStream2::from_str(&i.to_string()).unwrap());
 
@@ -28,61 +27,32 @@ pub fn derive(item: TokenStream) -> TokenStream {
     let where_clause = &generics.where_clause;
     let generic_params = gen_param_input(&generics, true);
 
-    let field_types_encoding = field_types();
     let seq_substore = seq();
-    let seq_data = seq();
-
-    let create_body = if is_tuple_struct {
+    let attach_body = if is_tuple_struct {
+        let seq_field = seq();
         quote!(
-            Ok(Self(
-                #(
-                    ::orga::state::State::create(
-                        store.sub(&[#seq_substore]),
-                        data.#seq_data,
-                    )?,
-                )*
-            ))
+            #(::orga::state::State::attach(&mut self.#seq_field, store.sub(&[#seq_substore]))?;)*
+            Ok(())
         )
     } else {
         let names = field_names();
         quote!(
-            Ok(Self {
-                #(
-                    #names: ::orga::state::State::create(
-                        store.sub(&[#seq_substore]),
-                        data.#seq_data,
-                    )?,
-                )*
-            })
+            #(::orga::state::State::attach(&mut self.#names, store.sub(&[#seq_substore]))?;)*
+            Ok(())
         )
     };
 
     let flush_body = if is_tuple_struct {
         let indexes = seq();
         quote!(
-            Ok((
-                #(::orga::state::State::<::orga::store::DefaultBackingStore>::flush(self.#indexes)?,)*
-            ))
+            #(::orga::state::State::flush(&mut self.#indexes)?;)*
+            Ok(())
         )
     } else {
         let names = field_names();
         quote!(
-            Ok((
-
-                #(::orga::state::State::<::orga::store::DefaultBackingStore>::flush(self.#names)?,)*
-            ))
-        )
-    };
-
-    let from_body = if is_tuple_struct {
-        let indexes = seq();
-        quote! (
-            #(value.#indexes.into(),)*
-        )
-    } else {
-        let names = field_names();
-        quote! (
-            #(value.#names.into(),)*
+            #(::orga::state::State::flush(&mut self.#names)?;)*
+            Ok(())
         )
     };
 
@@ -90,29 +60,18 @@ pub fn derive(item: TokenStream) -> TokenStream {
         impl#generics ::orga::state::State for #name#generic_params
         #where_clause
         {
-            type Encoding = (
-                #(
-                    <#field_types_encoding as ::orga::state::State>::Encoding,
-                )*
-            );
-
-            fn create(
+            fn attach(
+                &mut self,
                 store: ::orga::store::Store,
-                data: Self::Encoding,
-            ) -> ::orga::Result<Self> {
-                #create_body
+            ) -> ::orga::Result<()> {
+                #attach_body
             }
 
-            fn flush(self) -> ::orga::Result<Self::Encoding> {
+            fn flush(
+                &mut self,
+                store: ::orga::store::Store
+            ) -> ::orga::Result<()> {
                 #flush_body
-            }
-        }
-
-        impl#generics From<#name#generic_params> for <#name#generic_params as ::orga::state::State>::Encoding
-        #where_clause
-        {
-            fn from(value: #name#generic_params) -> Self {
-                (#from_body)
             }
         }
     };
