@@ -1,8 +1,6 @@
 use super::{Adjust, Amount, Balance, Decimal, Give, Symbol, Take};
 use crate::call::Call;
 use crate::context::GetContext;
-#[cfg(feature = "abci")]
-use crate::migrate::Migrate;
 use crate::plugins::Paid;
 use crate::state::State;
 use crate::{Error, Result};
@@ -108,15 +106,5 @@ impl<S: Symbol> From<Amount> for Coin<S> {
 impl<S: Symbol> From<u64> for Coin<S> {
     fn from(amount: u64) -> Self {
         Self::mint(amount)
-    }
-}
-
-#[cfg(feature = "abci")]
-impl<S: Symbol, T: v3::coins::Symbol> Migrate<v3::coins::Coin<T>> for Coin<S> {
-    fn migrate(&mut self, legacy: v3::coins::Coin<T>) -> Result<()> {
-        let amt: u64 = legacy.amount.into();
-        self.amount = amt.into();
-
-        Ok(())
     }
 }

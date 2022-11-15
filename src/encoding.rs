@@ -7,8 +7,8 @@ use std::convert::{TryFrom, TryInto};
 #[derive(Deref, DerefMut, Encode, Into, Default, Clone, Debug, State)]
 pub struct LengthVec<P, T>
 where
-    P: Encode + Decode + TryInto<usize> + Terminated + Clone,
-    T: Encode + Decode + Terminated,
+    P: State + Encode + Decode + TryInto<usize> + Terminated + Clone,
+    T: State + Encode + Decode + Terminated,
 {
     len: P,
 
@@ -20,8 +20,8 @@ where
 
 impl<P, T> LengthVec<P, T>
 where
-    P: Encode + Decode + TryInto<usize> + Terminated + Clone,
-    T: Encode + Decode + Terminated,
+    P: State + Encode + Decode + TryInto<usize> + Terminated + Clone,
+    T: State + Encode + Decode + Terminated,
 {
     pub fn new(len: P, values: Vec<T>) -> Self {
         LengthVec { len, values }
@@ -30,8 +30,8 @@ where
 
 impl<P, T> Decode for LengthVec<P, T>
 where
-    P: Encode + Decode + Terminated + TryInto<usize> + Clone,
-    T: Encode + Decode + Terminated,
+    P: State + Encode + Decode + Terminated + TryInto<usize> + Clone,
+    T: State + Encode + Decode + Terminated,
 {
     fn decode<R: std::io::Read>(mut input: R) -> Result<Self> {
         let len = P::decode(&mut input)?;

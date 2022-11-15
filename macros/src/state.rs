@@ -69,7 +69,6 @@ pub fn derive(item: TokenStream) -> TokenStream {
 
             fn flush(
                 &mut self,
-                store: ::orga::store::Store
             ) -> ::orga::Result<()> {
                 #flush_body
             }

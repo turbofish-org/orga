@@ -53,7 +53,6 @@ tokio = { version = "1.18.1", optional = true }
 tonic = { version = "0.7", optional = true }
 cosmrs = "0.7.0"
 derive_more = "0.99.17"
-v3 = { git = "https://github.com/nomic-io/orga", branch="v3-legacy", features = ["merk-full", "abci"], package = "orga", optional = true }
 
 [dev-dependencies]
 tempdir = "0.3.7"
@@ -64,7 +63,7 @@ serial_test = "0.5.1"
 features = ["abci", "merk/full"]
 
 [features]
-abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto", "prost", "is_executable", "home", "secp256k1/rand-std", "tokio", "tonic", "ibc-proto/server", "v3"]
+abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto", "prost", "is_executable", "home", "secp256k1/rand-std", "tokio", "tonic", "ibc-proto/server"]
 merk-verify = ["merk/verify"]
 merk-full = ["merk/full", "ics23"]
 state-sync = []

@@ -59,9 +59,6 @@ pub mod coins;
 
 pub mod context;
 
-#[cfg(feature = "abci")]
-pub mod migrate;
-
 #[cfg(feature = "feat-ibc")]
 pub mod ibc;
 
