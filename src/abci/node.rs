@@ -213,8 +213,8 @@ impl<A: App> InternalApp<ABCIPlugin<A>> {
         let mut state: ABCIPlugin<A> = Decode::decode(state_bytes.as_slice())?;
         state.attach(store.clone())?;
         let res = op(&mut state);
-        let flushed = state.flush()?;
-        store.put(vec![], flushed.encode()?)?;
+        state.flush()?;
+        store.put(vec![], state.encode()?)?;
 
         Ok(res)
     }
