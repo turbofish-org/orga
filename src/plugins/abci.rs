@@ -322,6 +322,7 @@ mod full {
             }
 
             self.build_updates()?;
+            Context::remove::<Validators>();
             Ok(())
         }
     }
