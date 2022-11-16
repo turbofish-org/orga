@@ -10,7 +10,7 @@ use crate::{Error, Result};
 use std::marker::PhantomData;
 use std::ops::Deref;
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Default)]
 pub struct ChainCommitmentPlugin<T, const ID: &'static str> {
     inner: T,
 }

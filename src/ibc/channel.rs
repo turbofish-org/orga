@@ -36,7 +36,7 @@ impl From<crate::Error> for Error {
     }
 }
 
-#[derive(State, Call, Query, Client, Encode, Decode)]
+#[derive(State, Call, Query, Client, Encode, Decode, Default)]
 pub struct ChannelStore {
     channel_counter: u64,
     connection_channels: Map<Adapter<ConnectionId>, Deque<Adapter<(PortId, ChannelId)>>>,

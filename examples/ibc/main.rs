@@ -8,7 +8,7 @@
 use orga::ibc::{start_grpc, Ibc, IbcTx};
 use orga::prelude::*;
 
-#[derive(State, Query, Client, Call, Encode, Decode)]
+#[derive(State, Query, Client, Call, Encode, Decode, Default)]
 pub struct Counter {
     count: u64,
     #[call]

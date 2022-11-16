@@ -14,7 +14,7 @@ use std::ops::{Deref, DerefMut};
 
 pub const MIN_FEE: u64 = 10_000;
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Default)]
 pub struct FeePlugin<S, T> {
     _symbol: PhantomData<S>,
     inner: T,

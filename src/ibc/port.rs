@@ -7,7 +7,7 @@ use ibc::core::{ics05_port::error::Error, ics24_host::identifier::PortId};
 
 use super::{Adapter, Ibc};
 
-#[derive(State, Encode, Decode)]
+#[derive(State, Encode, Decode, Default)]
 pub struct PortStore {
     module_by_port: Map<Adapter<PortId>, Adapter<ModuleId>>,
 }

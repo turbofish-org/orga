@@ -37,7 +37,7 @@ use ripemd::Digest;
 
 use super::{Adapter, Lunchbox};
 
-#[derive(State, Call, Query, Client, Encode, Decode)]
+#[derive(State, Call, Query, Client, Encode, Decode, Default)]
 pub struct TransferModule {
     lunchbox: Lunchbox,
     commitments: Map<Adapter<(PortId, ChannelId)>, Deque<Adapter<PacketState>>>,
@@ -571,7 +571,7 @@ impl FromStr for Dynom {
     }
 }
 
-#[derive(State, Call, Query, Client, Encode, Decode)]
+#[derive(State, Call, Query, Client, Encode, Decode, Default)]
 pub struct Bank {
     #[call]
     pub balances: Map<Dynom, Map<Address, Amount>>,

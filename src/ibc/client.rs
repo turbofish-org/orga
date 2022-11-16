@@ -165,7 +165,7 @@ impl ConsensusStateMap {
     }
 }
 
-#[derive(State, Call, Query, Client, Encode, Decode)]
+#[derive(State, Call, Query, Client, Encode, Decode, Default)]
 pub struct ClientStore {
     host_consensus_state: Map<u64, ProtobufAdapter<ConsensusState>>,
     height: u64,

@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::ops::{Deref, DerefMut};
 
-#[derive(State, Encode, Decode)]
+#[derive(State, Encode, Decode, Default)]
 pub struct PayablePlugin<T: State> {
     inner: T,
 }

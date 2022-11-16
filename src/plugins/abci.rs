@@ -45,6 +45,7 @@ mod full {
 
     type UpdateMap = Map<[u8; 32], Adapter<ValidatorUpdate>>;
 
+    #[derive(Default)]
     pub struct ABCIPlugin<T> {
         inner: T,
         pub(crate) validator_updates: Option<HashMap<[u8; 32], ValidatorUpdate>>,
@@ -186,7 +187,7 @@ mod full {
                 .borrow_mut()
                 .as_mut()
                 .unwrap()
-                .insert(op_addr, pub_key.into())
+                .insert(op_addr, pub_key)
         }
 
         pub fn consensus_key<A: Into<[u8; 20]>>(&self, op_key: A) -> Result<Option<[u8; 32]>> {
