@@ -59,7 +59,7 @@ use self::port::PortStore;
 pub use self::routing::{IbcMessage, IbcTx};
 use self::transfer::{Dynom, TransferModule};
 
-#[derive(State, Call, Client, Query)]
+#[derive(State, Call, Client, Query, Encode, Decode)]
 pub struct Ibc {
     pub clients: ClientStore,
     pub connections: ConnectionStore,
@@ -71,15 +71,16 @@ pub struct Ibc {
     pub(super) lunchbox: Lunchbox,
 }
 
+#[derive(Encode, Decode)]
 pub struct Lunchbox(pub(super) Store);
 
 impl State for Lunchbox {
-    type Encoding = ();
-    fn create(store: Store, _data: Self::Encoding) -> Result<Self> {
-        Ok(unsafe { Self(store.with_prefix(vec![])) })
+    fn attach(&mut self, store: Store) -> Result<()> {
+        self.0 = unsafe { store.with_prefix(vec![]) };
+        Ok(())
     }
 
-    fn flush(self) -> Result<Self::Encoding> {
+    fn flush(&mut self) -> Result<()> {
         Ok(())
     }
 }

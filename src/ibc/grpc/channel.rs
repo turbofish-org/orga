@@ -216,7 +216,7 @@ where
                     .channels
                     .query_unreceived_packets(
                         (port_id, channel_id).into(),
-                        sequences_to_check.into(),
+                        sequences_to_check.try_into()?,
                     )
                     .await
             })
@@ -246,7 +246,10 @@ where
             .ibc_with_height(async move |client| {
                 Fn::call(&self.ibc_provider, (client,))
                     .channels
-                    .query_unreceived_acks((port_id, channel_id).into(), sequences_to_check.into())
+                    .query_unreceived_acks(
+                        (port_id, channel_id).into(),
+                        sequences_to_check.try_into()?,
+                    )
                     .await
             })
             .await?;

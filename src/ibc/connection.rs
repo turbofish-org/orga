@@ -61,7 +61,7 @@ impl Lunchbox {
     }
 }
 
-#[derive(State, Call, Query, Client)]
+#[derive(State, Call, Query, Client, Encode, Decode)]
 pub struct ConnectionStore {
     count: u64,
     ends: Map<Adapter<ConnectionId>, ProtobufAdapter<ConnectionEnd>>,

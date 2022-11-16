@@ -8,7 +8,7 @@
 use orga::ibc::{start_grpc, Ibc, IbcTx};
 use orga::prelude::*;
 
-#[derive(State, Query, Client, Call)]
+#[derive(State, Query, Client, Call, Encode, Decode)]
 pub struct Counter {
     count: u64,
     #[call]
@@ -35,7 +35,7 @@ impl Counter {
     }
 }
 
-#[derive(State, Debug, Clone)]
+#[derive(State, Debug, Clone, Default, Encode, Decode)]
 pub struct Simp(());
 
 impl Symbol for Simp {
@@ -52,18 +52,6 @@ impl BeginBlock for Counter {
         self.ibc.begin_block(ctx)
     }
 }
-
-// impl EndBlock for Counter {
-//     fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
-//         Ok(())
-//     }
-// }
-
-// impl InitChain for Counter {
-//     fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
-//         Ok(())
-//     }
-// }
 
 impl ConvertSdkTx for Counter {
     type Output = PaidCall<<Counter as Call>::Call>;
@@ -96,21 +84,21 @@ fn app_client() -> TendermintClient<MyApp> {
 
 #[tokio::main]
 async fn main() {
-    println!("Running IBC example");
-    std::thread::spawn(|| {
-        Node::<MyApp>::new("ibc-example", Default::default())
-            .reset()
-            .run()
-            .unwrap();
-    });
-    let app_client = app_client();
-    std::thread::sleep(std::time::Duration::from_secs(4));
-    start_grpc(
-        app_client.clone(),
-        app_client.ibc.clone(),
-        &|client| client.ibc.clone(),
-        9001,
-    )
-    .await;
-    std::thread::sleep(std::time::Duration::from_secs(1000));
+    // println!("Running IBC example");
+    // std::thread::spawn(|| {
+    //     Node::<MyApp>::new("ibc-example", Default::default())
+    //         .reset()
+    //         .run()
+    //         .unwrap();
+    // });
+    // let app_client = app_client();
+    // std::thread::sleep(std::time::Duration::from_secs(4));
+    // start_grpc(
+    //     app_client.clone(),
+    //     app_client.ibc.clone(),
+    //     &|client| client.ibc.clone(),
+    //     9001,
+    // )
+    // .await;
+    // std::thread::sleep(std::time::Duration::from_secs(1000));
 }

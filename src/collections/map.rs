@@ -110,6 +110,8 @@ impl<K, V, S: Default> Decode for Map<K, V, S> {
     }
 }
 
+impl<K, V, S> Terminated for Map<K, V, S> {}
+
 impl<K, V, S: Default> State<S> for Map<K, V, S>
 where
     K: Encode + Terminated,
@@ -137,6 +139,14 @@ where
 impl<K, V, S: Default> Map<K, V, S> {
     pub fn new() -> Self {
         Self::default()
+    }
+}
+
+impl<K: Encode + Decode + Terminated, V: State<S>, S: Read + Default> Map<K, V, S> {
+    pub fn with_store(store: Store<S>) -> Result<Self> {
+        let mut map = Map::new();
+        map.attach(store)?;
+        Ok(map)
     }
 }
 
@@ -1025,10 +1035,16 @@ mod tests {
         n.encode().unwrap()
     }
 
+    fn setup() -> (Store<MapStore>, Map<u32, u32>) {
+        let store = Store::new(MapStore::new());
+        let mut map: Map<u32, u32> = Default::default();
+        map.attach(store.clone()).unwrap();
+        (store, map)
+    }
+
     #[test]
     fn nonexistent() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut map) = setup();
         assert!(map.get(3).unwrap().is_none());
         assert!(map.get_mut(3).unwrap().is_none());
         assert!(store.get(&enc(3)).unwrap().is_none());
@@ -1036,9 +1052,8 @@ mod tests {
 
     #[test]
     fn store_only() {
-        let mut store = Store::new(MapStore::new());
+        let (mut store, mut map) = setup();
         store.put(enc(1), enc(2)).unwrap();
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
 
         assert_eq!(*map.get(1).unwrap().unwrap(), 2);
         let mut v = map.get_mut(1).unwrap().unwrap();
@@ -1051,8 +1066,7 @@ mod tests {
 
     #[test]
     fn mem_unmodified() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut map) = setup();
 
         map.entry(4).unwrap().or_create(5).unwrap();
         assert!(map.get(4).unwrap().is_none());
@@ -1063,8 +1077,7 @@ mod tests {
 
     #[test]
     fn mem_modified() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut map) = setup();
 
         let mut v = map.entry(6).unwrap().or_create(7).unwrap();
         *v = 8;
@@ -1079,8 +1092,7 @@ mod tests {
 
     #[test]
     fn or_insert() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut map) = setup();
 
         map.entry(9).unwrap().or_insert(10).unwrap();
         assert_eq!(*map.get(9).unwrap().unwrap(), 10);
@@ -1094,8 +1106,7 @@ mod tests {
 
     #[test]
     fn or_insert_default() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut map) = setup();
 
         map.entry(11).unwrap().or_insert_default().unwrap();
         assert_eq!(*map.get(11).unwrap().unwrap(), u32::default());
@@ -1109,8 +1120,7 @@ mod tests {
 
     #[test]
     fn remove() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(13).unwrap();
         map.entry(14).unwrap().or_insert(15).unwrap();
@@ -1124,7 +1134,7 @@ mod tests {
         assert!(store.get(&enc(12)).unwrap().is_none());
 
         // Remove a value that was in the store before map's creation
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut map: Map<u32, u32> = Map::with_store(store.clone()).unwrap();
         assert_eq!(*map.get(14).unwrap().unwrap(), 15);
         assert_eq!(*map.get(16).unwrap().unwrap(), 17);
         map.remove(14).unwrap();
@@ -1138,8 +1148,7 @@ mod tests {
 
     #[test]
     fn iter_merge_next_map_only() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1187,8 +1196,7 @@ mod tests {
 
     #[test]
     fn iter_merge_next_store_only() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(12).unwrap().or_insert(24).unwrap();
         edit_map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1196,7 +1204,7 @@ mod tests {
 
         edit_map.flush().unwrap();
 
-        let read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let read_map: Map<u32, u32> = Map::with_store(store.clone()).unwrap();
 
         let map_iter = read_map.children.range(..).peekable();
         let store_iter = StoreNextIter::new(&store, ..).unwrap().peekable();
@@ -1225,14 +1233,13 @@ mod tests {
 
     #[test]
     fn iter_merge_next_store_update() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(12).unwrap().or_insert(24).unwrap();
 
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::with_store(store.clone()).unwrap();
 
         read_map.insert(12, 26).unwrap();
 
@@ -1257,14 +1264,13 @@ mod tests {
 
     #[test]
     fn iter_merge_next_mem_remove() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(12).unwrap().or_insert(24).unwrap();
 
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::with_store(store.clone()).unwrap();
 
         read_map.remove(12).unwrap();
 
@@ -1283,14 +1289,13 @@ mod tests {
 
     #[test]
     fn iter_merge_next_out_of_store_range() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(12).unwrap().or_insert(24).unwrap();
 
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::with_store(store.clone()).unwrap();
 
         read_map.entry(14).unwrap().or_insert(28).unwrap();
 
@@ -1326,14 +1331,13 @@ mod tests {
 
     #[test]
     fn iter_merge_next_store_key_in_map_range() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(13).unwrap().or_insert(26).unwrap();
 
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::with_store(store.clone()).unwrap();
 
         read_map.entry(12).unwrap().or_insert(24).unwrap();
         read_map.entry(14).unwrap().or_insert(28).unwrap();
@@ -1370,8 +1374,7 @@ mod tests {
 
     #[test]
     fn iter_merge_next_map_key_none() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1399,14 +1402,13 @@ mod tests {
 
     #[test]
     fn iter_merge_next_map_key_none_store_non_empty() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(13).unwrap().or_insert(26).unwrap();
 
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::with_store(store.clone()).unwrap();
 
         read_map.entry(12).unwrap().or_insert(24).unwrap();
         read_map.remove(12).unwrap();
@@ -1432,8 +1434,7 @@ mod tests {
 
     #[test]
     fn map_iter_map_only() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let (store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1453,8 +1454,7 @@ mod tests {
 
     #[test]
     fn map_iter_store_only() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(12).unwrap().or_insert(24).unwrap();
         edit_map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1462,7 +1462,7 @@ mod tests {
 
         edit_map.flush().unwrap();
 
-        let read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let read_map: Map<u32, u32> = Map::with_store(store).unwrap();
 
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
         read_map
@@ -1478,14 +1478,13 @@ mod tests {
 
     #[test]
     fn map_iter_mem_remove() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(12).unwrap().or_insert(24).unwrap();
 
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::with_store(store).unwrap();
 
         read_map.remove(12).unwrap();
 
@@ -1503,14 +1502,13 @@ mod tests {
 
     #[test]
     fn map_iter_out_of_store_range() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(12).unwrap().or_insert(24).unwrap();
 
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::with_store(store).unwrap();
 
         read_map.entry(14).unwrap().or_insert(28).unwrap();
 
@@ -1528,14 +1526,13 @@ mod tests {
 
     #[test]
     fn map_iter_store_key_in_map_range() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(13).unwrap().or_insert(26).unwrap();
 
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::with_store(store).unwrap();
 
         read_map.entry(12).unwrap().or_insert(24).unwrap();
         read_map.entry(14).unwrap().or_insert(28).unwrap();
@@ -1554,8 +1551,7 @@ mod tests {
 
     #[test]
     fn map_iter_map_key_none() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let (store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1575,14 +1571,13 @@ mod tests {
 
     #[test]
     fn map_iter_map_key_none_store_non_empty() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(13).unwrap().or_insert(26).unwrap();
 
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::with_store(store.clone()).unwrap();
 
         read_map.entry(12).unwrap().or_insert(24).unwrap();
         read_map.remove(12).unwrap();
@@ -1601,8 +1596,7 @@ mod tests {
 
     #[test]
     fn map_range_map_only_unbounded() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let (store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1622,8 +1616,7 @@ mod tests {
 
     #[test]
     fn map_range_map_only_start_bounded() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let (store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1643,8 +1636,7 @@ mod tests {
 
     #[test]
     fn map_range_map_only_end_bounded_non_inclusive() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let (store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1664,8 +1656,7 @@ mod tests {
 
     #[test]
     fn map_range_map_only_end_bounded_inclusive() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let (store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1685,8 +1676,7 @@ mod tests {
 
     #[test]
     fn map_range_map_only_bounded_non_inclusive() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let (store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1706,8 +1696,7 @@ mod tests {
 
     #[test]
     fn map_range_map_only_bounded_inclusive() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let (store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1727,8 +1716,7 @@ mod tests {
 
     #[test]
     fn map_range_store_only_bounded_non_inclusive() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(12).unwrap().or_insert(24).unwrap();
         edit_map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1736,7 +1724,7 @@ mod tests {
 
         edit_map.flush().unwrap();
 
-        let read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let read_map: Map<u32, u32> = Map::with_store(store).unwrap();
 
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
 
@@ -1753,8 +1741,7 @@ mod tests {
 
     #[test]
     fn map_range_store_only_bounded_inclusive() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(12).unwrap().or_insert(24).unwrap();
         edit_map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1762,7 +1749,7 @@ mod tests {
 
         edit_map.flush().unwrap();
 
-        let read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let read_map: Map<u32, u32> = Map::with_store(store).unwrap();
 
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
 
@@ -1779,15 +1766,15 @@ mod tests {
 
     #[test]
     fn map_range_bounded() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(12).unwrap().or_insert(24).unwrap();
         edit_map.entry(14).unwrap().or_insert(28).unwrap();
 
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let mut read_map: Map<u32, u32> = Default::default();
+        read_map.attach(store).unwrap();
         read_map.entry(13).unwrap().or_insert(26).unwrap();
 
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
@@ -1805,8 +1792,7 @@ mod tests {
 
     #[test]
     fn map_range_empty() {
-        let store = Store::new(MapStore::new());
-        let map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let (store, map) = setup();
 
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
 
@@ -1823,9 +1809,10 @@ mod tests {
     #[test]
     fn map_of_map() {
         let store = Store::new(MapStore::new());
-        let mut map: Map<u32, Map<u32, u32>> = Map::create(store, ()).unwrap();
+        let mut map: Map<u32, Map<u32, u32>> = Default::default();
+        map.attach(store).unwrap();
 
-        map.entry(42).unwrap().or_insert(()).unwrap();
+        map.entry(42).unwrap().or_insert(Map::new()).unwrap();
 
         let mut sub_map = map.get_mut(42).unwrap().unwrap();
         sub_map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1839,16 +1826,17 @@ mod tests {
     #[test]
     fn map_of_map_from_store() {
         let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, Map<u32, u32>> = Map::create(store.clone(), ()).unwrap();
+        let mut edit_map: Map<u32, Map<u32, u32>> = Default::default();
+        edit_map.attach(store.clone()).unwrap();
 
-        edit_map.entry(42).unwrap().or_insert(()).unwrap();
+        edit_map.entry(42).unwrap().or_insert(Map::new()).unwrap();
 
         let mut sub_map = edit_map.get_mut(42).unwrap().unwrap();
         sub_map.entry(13).unwrap().or_insert(26).unwrap();
 
         edit_map.flush().unwrap();
 
-        let read_map: Map<u32, Map<u32, u32>> = Map::create(store, ()).unwrap();
+        let mut read_map: Map<u32, Map<u32, u32>> = Map::with_store(store.clone()).unwrap();
         let inner_map = read_map.get(42).unwrap().unwrap();
         let actual = inner_map.get(13).unwrap().unwrap();
 
@@ -1858,12 +1846,13 @@ mod tests {
     #[test]
     fn map_of_deque() {
         let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, Deque<u32>> = Map::create(store.clone(), ()).unwrap();
+        let mut edit_map: Map<u32, Deque<u32>> = Default::default();
+        edit_map.attach(store.clone()).unwrap();
 
         edit_map
             .entry(42)
             .unwrap()
-            .or_insert(Meta::default())
+            .or_insert(Default::default())
             .unwrap();
 
         let mut deque = edit_map.get_mut(42).unwrap().unwrap();
@@ -1871,7 +1860,7 @@ mod tests {
 
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, Deque<u32>> = Map::create(store, ()).unwrap();
+        let mut read_map: Map<u32, Deque<u32>> = Map::with_store(store.clone()).unwrap();
         let actual = read_map
             .get_mut(42)
             .unwrap()
@@ -1886,7 +1875,8 @@ mod tests {
     #[test]
     fn map_of_map_iter() {
         let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, Map<u32, u32>> = Map::create(store.clone(), ()).unwrap();
+        let mut edit_map: Map<u32, Map<u32, u32>> = Default::default();
+        edit_map.attach(store.clone()).unwrap();
 
         edit_map.entry(42).unwrap().or_insert_default().unwrap();
         let mut sub_map = edit_map.get_mut(42).unwrap().unwrap();
@@ -1902,7 +1892,8 @@ mod tests {
 
         edit_map.flush().unwrap();
 
-        let read_map: Map<u32, Map<u32, u32>> = Map::create(store, ()).unwrap();
+        let mut read_map: Map<u32, Map<u32, u32>> = Default::default();
+        read_map.attach(store).unwrap();
 
         let mut iter = read_map.iter().unwrap();
 
@@ -1922,8 +1913,7 @@ mod tests {
 
     #[test]
     fn map_insert() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let (store, mut map) = setup();
 
         map.insert(12, 24).unwrap();
         map.insert(13, 26).unwrap();
@@ -1943,9 +1933,10 @@ mod tests {
     #[test]
     fn map_insert_complex_type() {
         let store = Store::new(MapStore::new());
-        let mut map: Map<u32, Deque<u32>> = Map::create(store, ()).unwrap();
+        let mut map: Map<u32, Deque<u32>> = Default::default();
+        map.attach(store).unwrap();
 
-        map.insert(12, Meta::default()).unwrap();
+        map.insert(12, Default::default()).unwrap();
 
         let mut deque = map.get_mut(12).unwrap().unwrap();
         deque.push_front(12).unwrap();
@@ -1956,14 +1947,16 @@ mod tests {
     #[test]
     fn map_insert_with_flush() {
         let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut edit_map: Map<u32, u32> = Default::default();
+        edit_map.attach(store.clone()).unwrap();
 
         edit_map.insert(12, 24).unwrap();
         edit_map.insert(13, 26).unwrap();
 
         edit_map.flush().unwrap();
 
-        let read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let mut read_map: Map<u32, u32> = Default::default();
+        read_map.attach(store).unwrap();
 
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(2);
 
@@ -1981,12 +1974,14 @@ mod tests {
     #[test]
     fn map_insert_store_overwrite() {
         let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut edit_map: Map<u32, u32> = Default::default();
+        edit_map.attach(store.clone()).unwrap();
 
         edit_map.insert(12, 24).unwrap();
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let mut read_map: Map<u32, u32> = Default::default();
+        read_map.attach(store).unwrap();
         read_map.insert(12, 26).unwrap();
 
         assert_eq!(26, *read_map.get(12).unwrap().unwrap());
@@ -1995,12 +1990,14 @@ mod tests {
     #[test]
     fn map_insert_store_overwrite_get_entry() {
         let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut edit_map: Map<u32, u32> = Default::default();
+        edit_map.attach(store.clone()).unwrap();
 
         edit_map.insert(12, 24).unwrap();
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let mut read_map: Map<u32, u32> = Default::default();
+        read_map.attach(store).unwrap();
         read_map.insert(12, 26).unwrap();
 
         let actual = read_map.entry(12).unwrap().or_insert(28).unwrap();

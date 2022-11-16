@@ -1,7 +1,7 @@
 #[cfg(test)]
 use mutagen::mutate;
 
-use super::{decimal::DecimalEncoding, Amount, Balance, Coin, Decimal, Give, Symbol};
+use super::{Amount, Balance, Coin, Decimal, Give, Symbol};
 use crate::collections::map::{ChildMut as MapChildMut, Ref as MapRef};
 use crate::collections::{Map, Next};
 use crate::encoding::{Decode, Encode, Terminated};
@@ -9,12 +9,12 @@ use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::{Error, Result};
-use std::cell::UnsafeCell;
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Drop, RangeBounds};
 
-#[derive(Query)]
+#[derive(Query, Encode, Decode, Default)]
 pub struct Pool<K, V, S>
 where
     K: Terminated + Encode,
@@ -25,10 +25,10 @@ where
     rewards: Map<u8, Decimal>,
     symbol: PhantomData<S>,
     shares_issued: Decimal,
-    map: Map<K, UnsafeCell<Entry<V>>>,
+    map: Map<K, RefCell<Entry<V>>>,
     rewards_this_period: Map<u8, Decimal>,
     last_period_entry: Map<u8, Decimal>,
-    maybe_drop_err: Option<Error>,
+    drop_errored: bool,
 }
 
 impl<K, V, S> State for Pool<K, V, S>
@@ -37,62 +37,23 @@ where
     V: State,
     S: Symbol,
 {
-    type Encoding = PoolEncoding;
-
-    fn create(store: Store, data: Self::Encoding) -> Result<Self> {
-        Ok(Self {
-            contributions: Decimal::create(store.sub(&[0]), data.contributions)?,
-            rewards: State::create(store.sub(&[1]), ())?,
-            symbol: PhantomData,
-            shares_issued: Decimal::create(store.sub(&[2]), data.shares_issued)?,
-            map: Map::<_, _, _>::create(store.sub(&[3]), ())?,
-            rewards_this_period: State::create(store.sub(&[4]), ())?,
-            last_period_entry: State::create(store.sub(&[5]), ())?,
-            maybe_drop_err: None,
-        })
+    fn attach(&mut self, store: Store) -> Result<()> {
+        self.contributions.attach(store.sub(&[0]))?;
+        self.rewards.attach(store.sub(&[1]))?;
+        self.shares_issued.attach(store.sub(&[2]))?;
+        self.map.attach(store.sub(&[3]))?;
+        self.rewards_this_period.attach(store.sub(&[4]))?;
+        self.last_period_entry.attach(store.sub(&[5]))
     }
 
-    fn flush(self) -> Result<Self::Encoding> {
+    fn flush(&mut self) -> Result<()> {
         self.assert_no_unhandled_drop_err()?;
         self.map.flush()?;
         self.rewards.flush()?;
         self.rewards_this_period.flush()?;
         self.last_period_entry.flush()?;
-        Ok(Self::Encoding {
-            contributions: self.contributions.flush()?,
-            shares_issued: self.shares_issued.flush()?,
-        })
-    }
-}
-
-#[derive(Encode, Decode)]
-pub struct PoolEncoding {
-    contributions: DecimalEncoding,
-    shares_issued: DecimalEncoding,
-}
-
-impl Default for PoolEncoding {
-    fn default() -> Self {
-        let contributions: Decimal = 0.into();
-        let shares_issued: Decimal = 0.into();
-        PoolEncoding {
-            contributions: contributions.into(),
-            shares_issued: shares_issued.into(),
-        }
-    }
-}
-
-impl<K, V, S> From<Pool<K, V, S>> for PoolEncoding
-where
-    K: Terminated + Encode,
-    V: State,
-    S: Symbol,
-{
-    fn from(pool: Pool<K, V, S>) -> Self {
-        PoolEncoding {
-            contributions: pool.contributions.into(),
-            shares_issued: pool.shares_issued.into(),
-        }
+        self.contributions.flush()?;
+        self.shares_issued.flush()
     }
 }
 
@@ -107,7 +68,7 @@ where
     }
 }
 
-#[derive(State)]
+#[derive(State, Encode, Decode, Default)]
 pub struct Entry<T>
 where
     T: State,
@@ -138,10 +99,8 @@ where
     S: Symbol,
 {
     fn assert_no_unhandled_drop_err(&self) -> Result<()> {
-        if let Some(err) = &self.maybe_drop_err {
-            return Err(Error::Coins(
-                "Unhandled pool child drop error: ".to_string() + err.to_string().as_str(),
-            ));
+        if self.drop_errored {
+            return Err(Error::Coins("Unhandled pool child drop error".into()));
         }
         Ok(())
     }
@@ -150,8 +109,7 @@ where
 impl<K, V, S> Pool<K, V, S>
 where
     K: Encode + Terminated + Clone,
-    V: State + Balance<S, Decimal> + Give<(u8, Amount)>,
-    V::Encoding: Default,
+    V: State + Balance<S, Decimal> + Give<(u8, Amount)> + Default,
     S: Symbol,
 {
     pub fn get_mut(&mut self, key: K) -> Result<ChildMut<K, V, S>> {
@@ -200,7 +158,7 @@ where
         Ok(ChildMut {
             parent_num_tokens: &mut self.contributions,
             parent_shares_issued: &mut self.shares_issued,
-            maybe_drop_err: &mut self.maybe_drop_err,
+            drop_errored: &mut self.drop_errored,
             entry: child,
             initial_balance,
             _symbol: PhantomData,
@@ -259,13 +217,15 @@ where
             }
         }
         let entry = self.map.get_or_default(key)?;
-        let entry_mut = unsafe { &mut *entry.get() };
-        Self::adjust_entry(
-            self.contributions,
-            self.shares_issued,
-            period_entry_hashmap,
-            entry_mut,
-        )?;
+        {
+            let mut entry_mut = entry.borrow_mut();
+            Self::adjust_entry(
+                self.contributions,
+                self.shares_issued,
+                period_entry_hashmap,
+                &mut *entry_mut,
+            )?;
+        }
 
         Child::new(entry)
     }
@@ -277,8 +237,7 @@ impl<K, V, S> Pool<K, V, S>
 where
     S: Symbol,
     K: Encode + Decode + Terminated + Clone + Next,
-    V: State + Balance<S, Decimal> + Give<(u8, Amount)>,
-    V::Encoding: Default,
+    V: State + Balance<S, Decimal> + Give<(u8, Amount)> + Default,
 {
     pub fn range<B>(&self, bounds: B) -> Result<impl Iterator<Item = IterEntry<K, V, S>>>
     where
@@ -339,12 +298,11 @@ where
     S: Symbol,
     K: Encode + Clone,
     V: State + Balance<S, Decimal>,
-    V::Encoding: Default,
 {
     parent_num_tokens: &'a mut Decimal,
     parent_shares_issued: &'a mut Decimal,
-    maybe_drop_err: &'a mut Option<Error>,
-    entry: MapChildMut<'a, K, UnsafeCell<Entry<V>>>,
+    drop_errored: &'a mut bool,
+    entry: MapChildMut<'a, K, RefCell<Entry<V>>>,
     initial_balance: Decimal,
     _symbol: PhantomData<S>,
 }
@@ -354,21 +312,20 @@ where
     S: Symbol,
     K: Encode + Clone,
     V: State + Balance<S, Decimal>,
-    V::Encoding: Default,
 {
     fn drop(&mut self) {
         let start_balance = self.initial_balance;
         let end_balance = match self.entry.get_mut().balance() {
             Ok(bal) => bal,
-            Err(err) => {
-                self.maybe_drop_err.replace(err);
+            Err(_err) => {
+                *self.drop_errored = true;
                 return;
             }
         };
         let balance_change: Decimal = match (end_balance - start_balance).result() {
             Ok(bal) => bal,
-            Err(err) => {
-                self.maybe_drop_err.replace(err);
+            Err(_err) => {
+                *self.drop_errored = true;
                 return;
             }
         };
@@ -385,8 +342,8 @@ where
                     .result()
                 {
                     Ok(value) => value,
-                    Err(err) => {
-                        self.maybe_drop_err.replace(err);
+                    Err(_err) => {
+                        *self.drop_errored = true;
                         return;
                     }
                 }
@@ -396,24 +353,24 @@ where
 
             entry.shares = match (entry.shares + new_shares).result() {
                 Ok(value) => value,
-                Err(err) => {
-                    self.maybe_drop_err.replace(err);
+                Err(_err) => {
+                    *self.drop_errored = true;
                     return;
                 }
             };
 
             *self.parent_num_tokens = match (*self.parent_num_tokens + balance_change).result() {
                 Ok(value) => value,
-                Err(err) => {
-                    self.maybe_drop_err.replace(err);
+                Err(_err) => {
+                    *self.drop_errored = true;
                     return;
                 }
             };
 
             *self.parent_shares_issued = match (*self.parent_shares_issued + new_shares).result() {
                 Ok(value) => value,
-                Err(err) => {
-                    self.maybe_drop_err.replace(err);
+                Err(_err) => {
+                    *self.drop_errored = true;
                     return;
                 }
             };
@@ -426,12 +383,11 @@ where
     S: Symbol,
     K: Encode + Clone,
     V: State + Balance<S, Decimal>,
-    V::Encoding: Default,
 {
     type Target = V;
 
     fn deref(&self) -> &Self::Target {
-        let v = self.entry.get();
+        let v = self.entry.as_ptr();
         &unsafe { &*v }.inner
     }
 }
@@ -441,7 +397,6 @@ where
     S: Symbol,
     K: Encode + Clone,
     V: State + Balance<S, Decimal>,
-    V::Encoding: Default,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.entry.get_mut()
@@ -457,9 +412,8 @@ mod child {
     where
         S: Symbol,
         V: State + Balance<S, Decimal>,
-        V::Encoding: Default,
     {
-        entry: MapRef<'a, UnsafeCell<Entry<V>>>,
+        entry: MapRef<'a, RefCell<Entry<V>>>,
         _symbol: PhantomData<S>,
     }
 
@@ -467,10 +421,9 @@ mod child {
     where
         S: Symbol,
         V: State + Balance<S, Decimal>,
-        V::Encoding: Default,
     {
         #[cfg_attr(test, mutate)]
-        pub fn new(entry_ref: MapRef<'a, UnsafeCell<Entry<V>>>) -> Result<Self> {
+        pub fn new(entry_ref: MapRef<'a, RefCell<Entry<V>>>) -> Result<Self> {
             Ok(Child {
                 entry: entry_ref,
                 _symbol: PhantomData,
@@ -482,12 +435,11 @@ mod child {
     where
         S: Symbol,
         V: State + Balance<S, Decimal>,
-        V::Encoding: Default,
     {
         type Target = V;
 
         fn deref(&self) -> &Self::Target {
-            let v = self.entry.get();
+            let v = self.entry.as_ptr();
             &unsafe { &*v }.inner
         }
     }
@@ -501,29 +453,25 @@ mod tests {
     use crate::encoding::{Decode, Encode};
     use crate::store::{MapStore, Shared, Store};
 
-    #[derive(Encode, Decode, Debug, Clone)]
+    #[derive(Encode, Decode, Debug, Clone, Default)]
     struct Simp;
     impl Symbol for Simp {
         const INDEX: u8 = 0;
     }
 
     impl State for Simp {
-        type Encoding = Self;
-
-        fn create(_: Store, data: Self::Encoding) -> Result<Self> {
-            Ok(data)
+        fn attach(&mut self, store: Store) -> Result<()> {
+            Ok(())
         }
 
-        fn flush(self) -> Result<Self::Encoding> {
-            Ok(self)
+        fn flush(&mut self) -> Result<()> {
+            Ok(())
         }
     }
 
     #[test]
     fn order_a() -> Result<()> {
-        let store = Store::new(Shared::new(MapStore::new()).into());
-        let enc = Default::default();
-        let mut pool = Pool::<Address, Share<Simp>, Simp>::create(store, enc)?;
+        let mut pool: Pool<Address, Share<Simp>, Simp> = Default::default();
 
         let alice = Address::from_pubkey([0; 33]);
         let bob = Address::from_pubkey([1; 33]);
@@ -543,9 +491,7 @@ mod tests {
 
     #[test]
     fn order_b() -> Result<()> {
-        let store = Store::new(Shared::new(MapStore::new()).into());
-        let enc = Default::default();
-        let mut pool = Pool::<Address, Share<Simp>, Simp>::create(store, enc)?;
+        let mut pool: Pool<Address, Share<Simp>, Simp> = Default::default();
 
         let alice = Address::from_pubkey([0; 33]);
         let bob = Address::from_pubkey([1; 33]);
@@ -563,7 +509,7 @@ mod tests {
         Ok(())
     }
 
-    #[derive(State)]
+    #[derive(State, Encode, Decode, Default)]
     struct SimpAccount {
         liquid: Decimal,
         locked: Decimal,
@@ -590,9 +536,7 @@ mod tests {
 
     #[test]
     fn dividends() -> Result<()> {
-        let store = Store::new(Shared::new(MapStore::new()).into());
-        let enc = Default::default();
-        let mut pool = Pool::<Address, SimpAccount, Simp>::create(store, enc)?;
+        let mut pool: Pool<Address, SimpAccount, Simp> = Default::default();
 
         let alice = Address::from_pubkey([0; 33]);
         let bob = Address::from_pubkey([1; 33]);
@@ -620,9 +564,7 @@ mod tests {
     #[test]
     fn emptied_pool() -> Result<()> {
         use crate::coins::Take;
-        let store = Store::new(Shared::new(MapStore::new()).into());
-        let enc = Default::default();
-        let mut pool = Pool::<Address, Share<Simp>, Simp>::create(store, enc)?;
+        let mut pool: Pool<Address, Share<Simp>, Simp> = Default::default();
 
         let alice = Address::from_pubkey([0; 33]);
 

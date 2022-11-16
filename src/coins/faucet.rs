@@ -1,12 +1,13 @@
 use super::{Amount, Coin, Decimal, Symbol};
 use crate::context::GetContext;
+use crate::encoding::{Decode, Encode};
 use crate::plugins::Time;
 use crate::state::State;
 use crate::{Error, Result};
 use std::marker::PhantomData;
 use std::time::Duration;
 
-#[derive(State)]
+#[derive(State, Encode, Decode, Default)]
 pub struct Faucet<S: Symbol> {
     _symbol: PhantomData<S>,
     configured: bool,
@@ -111,29 +112,26 @@ mod tests {
     use crate::store::{MapStore, Shared, Store};
     use serial_test::serial;
 
-    #[derive(Encode, Decode, Debug, Clone)]
+    #[derive(Encode, Decode, Debug, Clone, Default)]
     struct Simp;
     impl Symbol for Simp {
         const INDEX: u8 = 0;
     }
 
     impl State for Simp {
-        type Encoding = Self;
-
-        fn create(_: Store, data: Self::Encoding) -> Result<Self> {
-            Ok(data)
+        fn attach(&mut self, store: Store) -> Result<()> {
+            Ok(())
         }
 
-        fn flush(self) -> Result<Self::Encoding> {
-            Ok(self)
+        fn flush(&mut self) -> Result<()> {
+            Ok(())
         }
     }
 
     #[test]
     #[serial]
     fn halvenings() -> Result<()> {
-        let store = Store::new(Shared::new(MapStore::new()).into());
-        let mut faucet = Faucet::<Simp>::create(store, Default::default())?;
+        let mut faucet: Faucet<Simp> = Faucet::default();
 
         let _ = faucet
             .mint()
@@ -176,8 +174,7 @@ mod tests {
     #[test]
     #[serial]
     fn thirdenings() -> Result<()> {
-        let store = Store::new(Shared::new(MapStore::new()).into());
-        let mut faucet = Faucet::<Simp>::create(store, Default::default())?;
+        let mut faucet: Faucet<Simp> = Faucet::default();
 
         let _ = faucet
             .mint()

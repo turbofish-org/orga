@@ -9,8 +9,10 @@ use crate::{
 };
 use rust_decimal_macros::dec;
 use serial_test::serial;
+use std::cell::RefCell;
+use std::rc::Rc;
 
-#[derive(State, Debug, Clone)]
+#[derive(State, Encode, Decode, Debug, Clone, Default)]
 struct Simp(());
 impl Symbol for Simp {
     const INDEX: u8 = 0;
@@ -25,14 +27,20 @@ fn alt_balance(multishare: &MultiShare) -> Amount {
 }
 
 fn setup_state() -> Result<Staking<Simp>> {
-    let store = Store::new(Shared::new(MapStore::new()).into());
-    let mut staking: Staking<Simp> = Staking::create(store, Default::default())?;
+    let mut staking: Staking<Simp> = Default::default();
     staking.downtime_jail_seconds = 5;
+    staking.unbonding_seconds = UNBONDING_SECONDS;
+    staking.max_validators = MAX_VALIDATORS;
+    staking.max_offline_blocks = MAX_OFFLINE_BLOCKS;
     staking.slash_fraction_downtime = (Amount::new(1) / Amount::new(2))?;
     staking.slash_fraction_double_sign = (Amount::new(1) / Amount::new(2))?;
     staking.min_self_delegation_min = 1;
 
-    Context::add(Validators::default());
+    let val_ctx = Validators::new(
+        Rc::new(RefCell::new(Some(EntryMap::new()))),
+        Rc::new(RefCell::new(Some(Default::default()))),
+    );
+    Context::add(val_ctx);
     Context::add(Time::from_seconds(0));
 
     Ok(staking)
@@ -42,8 +50,7 @@ fn setup_state() -> Result<Staking<Simp>> {
 #[test]
 #[serial]
 fn staking() -> Result<()> {
-    let store = Store::new(Shared::new(MapStore::new()).into());
-    let mut staking: Staking<Simp> = Staking::create(store, Default::default())?;
+    let mut staking: Staking<Simp> = Default::default();
     staking.downtime_jail_seconds = 5;
     staking.slash_fraction_downtime = (Amount::new(1) / Amount::new(2))?;
 
@@ -55,7 +62,11 @@ fn staking() -> Result<()> {
     let dave = Address::from_pubkey([3; 33]);
     let dave_con = [6; 32];
 
-    Context::add(Validators::default());
+    let val_ctx = Validators::new(
+        Rc::new(RefCell::new(Some(EntryMap::new()))),
+        Rc::new(RefCell::new(Some(Default::default()))),
+    );
+    Context::add(val_ctx);
     Context::add(Time::from_seconds(0));
 
     staking
@@ -328,10 +339,13 @@ fn staking() -> Result<()> {
 #[test]
 #[serial]
 fn val_size_limit() -> Result<()> {
-    let store = Store::new(Shared::new(MapStore::new()).into());
-    let mut staking: Staking<Simp> = Staking::create(store, Default::default())?;
+    let mut staking: Staking<Simp> = Default::default();
 
-    Context::add(Validators::default());
+    Context::add(Validators::new(
+        Rc::new(RefCell::new(Some(EntryMap::new()))),
+        Rc::new(RefCell::new(Some(Default::default()))),
+    ));
+
     Context::add(Time::from_seconds(0));
     let ctx = Context::resolve::<Validators>().unwrap();
     staking.max_validators = 2;
@@ -1493,7 +1507,7 @@ fn redelegate_from_to_two_stakers() {
         .unwrap();
 }
 
-#[derive(State, Debug, Clone)]
+#[derive(State, Debug, Encode, Decode, Clone, Default)]
 struct Alt(());
 impl Symbol for Alt {
     const INDEX: u8 = 1;

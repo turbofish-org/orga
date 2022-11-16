@@ -31,13 +31,13 @@ pub fn derive(item: TokenStream) -> TokenStream {
     let attach_body = if is_tuple_struct {
         let seq_field = seq();
         quote!(
-            #(::orga::state::State::attach(&mut self.#seq_field, store.sub(&[#seq_substore]))?;)*
+            #(::orga::state::State::<::orga::store::DefaultBackingStore>::attach(&mut self.#seq_field, store.sub(&[#seq_substore]))?;)*
             Ok(())
         )
     } else {
         let names = field_names();
         quote!(
-            #(::orga::state::State::attach(&mut self.#names, store.sub(&[#seq_substore]))?;)*
+            #(::orga::state::State::<::orga::store::DefaultBackingStore>::attach(&mut self.#names, store.sub(&[#seq_substore]))?;)*
             Ok(())
         )
     };
@@ -45,13 +45,13 @@ pub fn derive(item: TokenStream) -> TokenStream {
     let flush_body = if is_tuple_struct {
         let indexes = seq();
         quote!(
-            #(::orga::state::State::flush(&mut self.#indexes)?;)*
+            #(::orga::state::State::<::orga::store::DefaultBackingStore>::flush(&mut self.#indexes)?;)*
             Ok(())
         )
     } else {
         let names = field_names();
         quote!(
-            #(::orga::state::State::flush(&mut self.#names)?;)*
+            #(::orga::state::State::<::orga::store::DefaultBackingStore>::flush(&mut self.#names)?;)*
             Ok(())
         )
     };

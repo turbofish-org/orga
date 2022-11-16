@@ -8,14 +8,12 @@ use std::io::{Error as IOError, ErrorKind as IOErrorKind, Read, Write};
 pub struct Adapter<T: Message + Default>(pub(crate) T);
 
 impl<T: Message + Default> State for Adapter<T> {
-    type Encoding = Self;
-
-    fn create(_: Store, data: Self::Encoding) -> crate::Result<Self> {
-        Ok(data)
+    fn attach(&mut self, _: Store) -> crate::Result<()> {
+        Ok(())
     }
 
-    fn flush(self) -> crate::Result<Self::Encoding> {
-        Ok(self)
+    fn flush(&mut self) -> crate::Result<()> {
+        Ok(())
     }
 }
 

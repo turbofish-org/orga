@@ -37,7 +37,7 @@ use ripemd::Digest;
 
 use super::{Adapter, Lunchbox};
 
-#[derive(State, Call, Query, Client)]
+#[derive(State, Call, Query, Client, Encode, Decode)]
 pub struct TransferModule {
     lunchbox: Lunchbox,
     commitments: Map<Adapter<(PortId, ChannelId)>, Deque<Adapter<PacketState>>>,
@@ -567,11 +567,11 @@ impl FromStr for Dynom {
             return Err(crate::Error::Ibc("Denom name is too long".into()));
         }
 
-        Ok(Self(bytes.into()))
+        Ok(Self(bytes.try_into()?))
     }
 }
 
-#[derive(State, Call, Query, Client)]
+#[derive(State, Call, Query, Client, Encode, Decode)]
 pub struct Bank {
     #[call]
     pub balances: Map<Dynom, Map<Address, Amount>>,

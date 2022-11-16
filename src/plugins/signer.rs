@@ -14,6 +14,7 @@ use crate::{Error, Result};
 use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
 use std::ops::Deref;
 
+#[derive(Default, Encode, Decode)]
 pub struct SignerPlugin<T> {
     inner: T,
 }
@@ -301,28 +302,13 @@ impl<T: Client<SignerClient<T, U>>, U: Clone> Client<U> for SignerPlugin<T> {
     }
 }
 
-impl<T> State for SignerPlugin<T>
-where
-    T: State,
-{
-    type Encoding = (T::Encoding,);
-    fn create(store: Store, data: Self::Encoding) -> Result<Self> {
-        Ok(Self {
-            inner: T::create(store, data.0)?,
-        })
+impl<T: State> State for SignerPlugin<T> {
+    fn attach(&mut self, store: Store) -> Result<()> {
+        self.inner.attach(store)
     }
 
-    fn flush(self) -> Result<Self::Encoding> {
-        Ok((self.inner.flush()?,))
-    }
-}
-
-impl<T> From<SignerPlugin<T>> for (T::Encoding,)
-where
-    T: State,
-{
-    fn from(provider: SignerPlugin<T>) -> Self {
-        (provider.inner.into(),)
+    fn flush(&mut self) -> Result<()> {
+        self.inner.flush()
     }
 }
 

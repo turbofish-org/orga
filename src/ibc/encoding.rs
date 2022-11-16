@@ -116,14 +116,12 @@ where
     T: Serialize + for<'de> Deserialize<'de>,
     T: std::fmt::Debug,
 {
-    type Encoding = Self;
-
-    fn create(_: Store, data: Self::Encoding) -> crate::Result<Self> {
-        Ok(data)
+    fn attach(&mut self, _: Store) -> crate::Result<()> {
+        Ok(())
     }
 
-    fn flush(self) -> crate::Result<Self::Encoding> {
-        Ok(self)
+    fn flush(&mut self) -> crate::Result<()> {
+        Ok(())
     }
 }
 
@@ -228,14 +226,12 @@ where
     T: Protobuf<<T as IbcProto>::Proto>,
     <T as std::convert::TryFrom<<T as IbcProto>::Proto>>::Error: std::fmt::Display,
 {
-    type Encoding = Self;
-
-    fn create(_: Store, data: Self::Encoding) -> crate::Result<Self> {
-        Ok(data)
+    fn attach(&mut self, _: Store) -> crate::Result<()> {
+        Ok(())
     }
 
-    fn flush(self) -> crate::Result<Self::Encoding> {
-        Ok(self)
+    fn flush(&mut self) -> crate::Result<()> {
+        Ok(())
     }
 }
 

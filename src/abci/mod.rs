@@ -571,8 +571,5 @@ impl<S: State> AbciQuery for S {
     }
 }
 
-pub trait App: BeginBlock + EndBlock + InitChain + AbciQuery + State + Call + Query {}
-impl<T: BeginBlock + EndBlock + InitChain + AbciQuery + State + Call + Query> App for T where
-    <T as State>::Encoding: Default
-{
-}
+pub trait App: BeginBlock + EndBlock + InitChain + State + Call + Query + Default {}
+impl<T: Default + BeginBlock + EndBlock + InitChain + State + Call + Query> App for T {}

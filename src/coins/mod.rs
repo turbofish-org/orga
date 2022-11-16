@@ -39,11 +39,11 @@ pub use adjust::*;
 pub mod balance;
 pub use balance::*;
 
-pub mod ratio;
-pub use ratio::*;
-
 pub mod decimal;
 pub use decimal::Decimal;
+
+pub mod ratio;
+pub use ratio::*;
 
 pub mod math;
 pub use math::*;
@@ -81,6 +81,7 @@ use sha2::Sha256;
     Copy,
     Client,
     Call,
+    Default,
 )]
 pub struct Address {
     bytes: [u8; Address::LENGTH],

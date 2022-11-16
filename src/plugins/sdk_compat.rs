@@ -11,7 +11,7 @@ use std::ops::{Deref, DerefMut};
 pub const MAX_CALL_SIZE: usize = 65_535;
 pub const NATIVE_CALL_FLAG: u8 = 0xff;
 
-#[derive(State, Clone)]
+#[derive(State, Clone, Encode, Decode)]
 pub struct SdkCompatPlugin<S, T: State> {
     symbol: PhantomData<S>,
     inner: T,
@@ -28,12 +28,6 @@ impl<S, T: State> Deref for SdkCompatPlugin<S, T> {
 impl<S, T: State> DerefMut for SdkCompatPlugin<S, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
-    }
-}
-
-impl<S, T: State> From<SdkCompatPlugin<S, T>> for (T::Encoding,) {
-    fn from(plugin: SdkCompatPlugin<S, T>) -> Self {
-        (plugin.inner.into(),)
     }
 }
 

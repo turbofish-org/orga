@@ -49,3 +49,26 @@ where
         Ok(LengthVec { len, values })
     }
 }
+
+impl<P, T> Terminated for LengthVec<P, T>
+where
+    P: State + Encode + Decode + TryInto<usize> + Terminated + Clone,
+    T: State + Encode + Decode + Terminated,
+{
+}
+
+impl<P, T> TryFrom<Vec<T>> for LengthVec<P, T>
+where
+    P: State + Encode + Decode + TryInto<usize> + TryFrom<usize> + Terminated + Clone,
+    T: State + Encode + Decode + Terminated,
+{
+    type Error = crate::Error;
+
+    fn try_from(values: Vec<T>) -> crate::Result<Self> {
+        let len = values
+            .len()
+            .try_into()
+            .map_err(|_| crate::Error::Overflow)?;
+        Ok(Self { len, values })
+    }
+}

@@ -2,7 +2,7 @@
 use mutagen::mutate;
 
 use super::{Read, Shared, Write, KV};
-use crate::encoding::{Decode, Encode};
+use crate::encoding::{Decode, Encode, Terminated};
 use crate::state::State;
 use crate::{Error, Result};
 
@@ -45,6 +45,8 @@ impl<S: Default> Decode for Store<S> {
         Ok(Self::default())
     }
 }
+
+impl<S> Terminated for Store<S> {}
 
 impl<S> Clone for Store<S> {
     fn clone(&self) -> Self {

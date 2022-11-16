@@ -4,6 +4,7 @@ use crate::call::Call;
 use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Coin, Symbol};
 use crate::context::GetContext;
+use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
@@ -13,9 +14,10 @@ use std::ops::{Deref, DerefMut};
 
 pub const MIN_FEE: u64 = 10_000;
 
+#[derive(Encode, Decode)]
 pub struct FeePlugin<S, T> {
-    inner: T,
     _symbol: PhantomData<S>,
+    inner: T,
 }
 
 impl<S, T> State for FeePlugin<S, T>
@@ -23,25 +25,12 @@ where
     S: Symbol,
     T: State,
 {
-    type Encoding = (T::Encoding,);
-    fn create(store: Store, data: Self::Encoding) -> Result<Self> {
-        Ok(Self {
-            inner: T::create(store, data.0)?,
-            _symbol: PhantomData,
-        })
+    fn attach(&mut self, store: Store) -> Result<()> {
+        self.inner.attach(store)
     }
 
-    fn flush(self) -> Result<Self::Encoding> {
-        Ok((self.inner.flush()?,))
-    }
-}
-
-impl<S, T> From<FeePlugin<S, T>> for (T::Encoding,)
-where
-    T: State,
-{
-    fn from(provider: FeePlugin<S, T>) -> Self {
-        (provider.inner.into(),)
+    fn flush(&mut self) -> Result<()> {
+        self.inner.flush()
     }
 }
 
