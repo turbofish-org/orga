@@ -57,12 +57,13 @@ impl ConvertSdkTx for Counter {
     type Output = PaidCall<<Counter as Call>::Call>;
     fn convert(&self, msg: &sdk_compat::sdk::Tx) -> Result<Self::Output> {
         type AppCall = <Counter as Call>::Call;
+        type IbcCall = <Ibc as Call>::Call;
 
         let tx_bytes = msg.encode()?;
-        let _ibc_tx = IbcTx::decode(tx_bytes.as_slice())?;
-        let deliver_msg_call_bytes = [vec![5], tx_bytes].concat();
+        let ibc_tx = IbcTx::decode(tx_bytes.as_slice())?;
 
-        let paid_call = AppCall::FieldIbc(deliver_msg_call_bytes);
+        let ibc_call = IbcCall::MethodDeliverTx(ibc_tx, vec![]);
+        let paid_call = AppCall::FieldIbc(ibc_call.encode()?);
         Ok(PaidCall {
             payer: AppCall::MethodNoop(vec![]),
             paid: paid_call,
@@ -84,21 +85,21 @@ fn app_client() -> TendermintClient<MyApp> {
 
 #[tokio::main]
 async fn main() {
-    // println!("Running IBC example");
-    // std::thread::spawn(|| {
-    //     Node::<MyApp>::new("ibc-example", Default::default())
-    //         .reset()
-    //         .run()
-    //         .unwrap();
-    // });
-    // let app_client = app_client();
-    // std::thread::sleep(std::time::Duration::from_secs(4));
-    // start_grpc(
-    //     app_client.clone(),
-    //     app_client.ibc.clone(),
-    //     &|client| client.ibc.clone(),
-    //     9001,
-    // )
-    // .await;
-    // std::thread::sleep(std::time::Duration::from_secs(1000));
+    println!("Running IBC example");
+    std::thread::spawn(|| {
+        Node::<MyApp>::new("ibc-example", Default::default())
+            .reset()
+            .run()
+            .unwrap();
+    });
+    let app_client = app_client();
+    std::thread::sleep(std::time::Duration::from_secs(4));
+    start_grpc(
+        app_client.clone(),
+        app_client.ibc.clone(),
+        &|client| client.ibc.clone(),
+        9001,
+    )
+    .await;
+    std::thread::sleep(std::time::Duration::from_secs(1000));
 }
