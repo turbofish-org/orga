@@ -1,10 +1,12 @@
+use crate::client::Client;
+use crate::query::Query;
 use crate::state::State;
 pub use ed::*;
 
 use derive_more::{Deref, DerefMut, Into};
 use std::convert::{TryFrom, TryInto};
 
-#[derive(Deref, DerefMut, Encode, Into, Default, Clone, Debug, State)]
+#[derive(Deref, DerefMut, Encode, Into, Default, Clone, Debug, State, Query, Client)]
 pub struct LengthVec<P, T>
 where
     P: State + Encode + Decode + TryInto<usize> + Terminated + Clone,
