@@ -232,7 +232,8 @@ pub mod sdk {
         }
 
         pub fn sender_address(&self) -> Result<Address> {
-            Ok(Address::from_pubkey(self.sender_pubkey()?))
+            let signer_call = super::super::signer::sdk_to_signercall(self)?;
+            signer_call.address()
         }
 
         pub fn signature(&self) -> Result<[u8; 64]> {

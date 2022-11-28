@@ -38,6 +38,24 @@ pub struct SignerCall {
     pub call_bytes: Vec<u8>,
 }
 
+impl SignerCall {
+    pub fn address(&self) -> Result<Address> {
+        let pubkey_bytes = self
+            .pubkey
+            .ok_or_else(|| Error::Signer("No pubkey specified".to_string()))?;
+        match &self.sigtype {
+            SigType::EthPersonalSign(_) => {
+                let pubkey = PublicKey::from_slice(pubkey_bytes.as_slice())?;
+                let pubkey_bytes = pubkey.serialize_uncompressed();
+                let mut eth_pubkey = [0; 64];
+                eth_pubkey.copy_from_slice(&pubkey_bytes[1..]);
+                Ok(Address::from_pubkey_eth(eth_pubkey))
+            }
+            _ => Ok(Address::from_pubkey(pubkey_bytes)),
+        }
+    }
+}
+
 #[derive(Debug, Encode, Decode)]
 pub enum SigType {
     Native,
@@ -205,6 +223,26 @@ impl<T: Query> Query for SignerPlugin<T> {
     }
 }
 
+pub(crate) fn sdk_to_signercall(sdk_tx: &SdkTx) -> Result<SignerCall> {
+    let signature = sdk_tx.signature()?;
+    let pubkey = sdk_tx.sender_pubkey()?;
+    let sig_type = sdk_tx.sig_type()?;
+
+    let sdk_tx = Box::new(sdk_tx.clone());
+    let sigtype = match sig_type {
+        None | Some("sdk") => SigType::Sdk(sdk_tx),
+        Some("eth") => SigType::EthPersonalSign(sdk_tx),
+        Some(_) => return Err(Error::App("Unknown signature type".to_string())),
+    };
+
+    Ok(SignerCall {
+        signature: Some(signature),
+        pubkey: Some(pubkey),
+        sigtype,
+        call_bytes: vec![],
+    })
+}
+
 impl<T> ConvertSdkTx for SignerPlugin<T>
 where
     T: State + ConvertSdkTx<Output = T::Call> + Call,
@@ -212,24 +250,9 @@ where
     type Output = SignerCall;
 
     fn convert(&self, sdk_tx: &SdkTx) -> Result<SignerCall> {
-        let signature = sdk_tx.signature()?;
-        let pubkey = sdk_tx.sender_pubkey()?;
-        let sig_type = sdk_tx.sig_type()?;
-        let inner_call = self.inner.convert(sdk_tx)?.encode()?;
-
-        let sdk_tx = Box::new(sdk_tx.clone());
-        let sigtype = match sig_type {
-            None | Some("sdk") => SigType::Sdk(sdk_tx),
-            Some("eth") => SigType::EthPersonalSign(sdk_tx),
-            Some(_) => return Err(Error::App("Unknown signature type".to_string())),
-        };
-
-        Ok(SignerCall {
-            signature: Some(signature),
-            pubkey: Some(pubkey),
-            sigtype,
-            call_bytes: inner_call,
-        })
+        let mut signer_call = sdk_to_signercall(sdk_tx)?;
+        signer_call.call_bytes = self.inner.convert(sdk_tx)?.encode()?;
+        Ok(signer_call)
     }
 }
 
