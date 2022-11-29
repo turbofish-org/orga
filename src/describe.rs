@@ -1,11 +1,15 @@
 use crate::{
     encoding::{Decode, Encode},
+    state::State,
+    store::Store,
     Result,
 };
+use js_sys::Array;
 use std::{
     any::Any,
     fmt::{Debug, Display},
 };
+use wasm_bindgen::prelude::*;
 
 mod builder;
 
@@ -15,41 +19,83 @@ pub trait Describe {
     fn describe() -> Descriptor;
 }
 
+#[wasm_bindgen(getter_with_clone)]
 #[derive(Clone)]
 pub struct Descriptor {
     pub type_name: String,
-    pub children: Children,
+    children: Children,
     decode: DecodeFn,
+}
+
+impl Debug for Descriptor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Descriptor")
+            .field("type_name", &self.type_name)
+            .field("children", &self.children)
+            .finish()
+    }
+}
+
+#[wasm_bindgen]
+impl Descriptor {
+    #[wasm_bindgen(js_name = children)]
+    pub fn children_js(&self) -> JsValue {
+        use Children::*;
+
+        match &self.children {
+            None => JsValue::NULL,
+            Named(children) => children
+                .iter()
+                .cloned()
+                .map(JsValue::from)
+                .collect::<Array>()
+                .into(),
+            Dynamic(child) => child.clone().into(),
+        }
+    }
 }
 
 pub type DecodeFn = fn(&[u8]) -> Result<Value>;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Children {
+    None,
     Named(Vec<NamedChild>),
     Dynamic(DynamicChild),
 }
 
 impl Default for Children {
     fn default() -> Self {
-        Children::Named(vec![])
+        Children::None
     }
 }
 
+#[wasm_bindgen(getter_with_clone)]
 #[derive(Clone)]
 pub struct NamedChild {
     pub name: String,
-    pub store_key: KeyOp,
     pub desc: Descriptor,
+    store_key: KeyOp,
     access: AccessFn,
 }
 
 pub type AccessFn = fn(&Value) -> Result<Value>;
 
-#[derive(Clone)]
+impl Debug for NamedChild {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NamedChild")
+            .field("name", &self.name)
+            .field("desc", &self.desc)
+            .field("store_key", &self.store_key)
+            .finish()
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Clone, Debug)]
 pub struct DynamicChild {
-    pub key_desc: Box<Descriptor>,
-    pub value_desc: Box<Descriptor>,
+    key_desc: Box<Descriptor>,
+    value_desc: Box<Descriptor>,
 }
 
 #[derive(Clone, Debug)]
@@ -58,11 +104,16 @@ pub enum KeyOp {
     Absolute(Vec<u8>),
 }
 
+#[wasm_bindgen]
 pub struct Value(Box<dyn Inspect>);
 
 impl Value {
     pub fn new<T: Inspect + 'static>(instance: T) -> Self {
         Value(Box::new(instance))
+    }
+
+    pub fn to_any(&self) -> Result<Box<dyn Any>> {
+        self.0.to_any()
     }
 }
 
@@ -81,6 +132,9 @@ pub trait Inspect {
     // TODO: should this be a maybe impl?
     fn describe(&self) -> Descriptor;
 
+    // TODO: should this be a maybe impl?
+    fn attach(&mut self, store: Store) -> Result<()>;
+
     fn to_any(&self) -> Result<Box<dyn Any>>;
 
     // TODO: maybe_to_object
@@ -88,13 +142,17 @@ pub trait Inspect {
     // TODO: call
 }
 
-impl<T: Encode + Decode + Describe + 'static> Inspect for T {
+impl<T: State + Describe + 'static> Inspect for T {
     fn encode(&self) -> Result<Vec<u8>> {
-        Ok(self.encode()?)
+        Ok(Encode::encode(self)?)
     }
 
     fn describe(&self) -> Descriptor {
         Self::describe()
+    }
+
+    fn attach(&mut self, store: Store) -> Result<()> {
+        State::attach(self, store)
     }
 
     fn to_any(&self) -> Result<Box<dyn Any>> {

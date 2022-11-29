@@ -1,4 +1,7 @@
-use crate::encoding::{Decode, Encode};
+use crate::{
+    encoding::{Decode, Encode},
+    Result,
+};
 use std::any::type_name;
 
 use super::{
@@ -63,5 +66,39 @@ impl Builder {
             decode: self.decode,
             children: self.children.unwrap_or_default(),
         }
+    }
+
+    pub fn access<T: 'static, U: Encode + Decode + Inspect + 'static>(
+        value: &Value,
+        access: fn(T) -> U,
+    ) -> Result<Value> {
+        let cloned = value.to_any()?;
+        let parent: T = *cloned.downcast().unwrap();
+        let child = access(parent);
+        Ok(Value::new(child))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::State;
+
+    #[derive(State, Encode, Decode)]
+    struct Foo {
+        bar: u32,
+    }
+
+    impl Describe for Foo {
+        fn describe() -> Descriptor {
+            Builder::new::<Foo>()
+                .named_child::<u32>("bar", &[0], |v| Builder::access(v, |v: Foo| v.bar))
+                .build()
+        }
+    }
+
+    #[test]
+    fn builder() {
+        dbg!(<Foo as Describe>::describe());
     }
 }
