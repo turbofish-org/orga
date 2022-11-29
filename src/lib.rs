@@ -26,6 +26,8 @@ pub mod client;
 /// trait.
 pub mod collections;
 
+pub mod descriptor;
+
 /// Traits for deterministic encoding and decoding.
 ///
 /// This module is actually just a re-export of the [ed](https://docs.rs/ed)
