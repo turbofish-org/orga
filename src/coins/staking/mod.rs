@@ -6,7 +6,7 @@ use crate::call::Call;
 use crate::client::Client;
 use crate::collections::{Deque, Entry, EntryMap, Map};
 use crate::context::GetContext;
-use crate::encoding::{Decode, Encode};
+use crate::encoding::{Decode, Encode, Terminated};
 #[cfg(feature = "abci")]
 use crate::plugins::{BeginBlockCtx, EndBlockCtx, Validators};
 use crate::plugins::{Paid, Signer, Time};
@@ -36,7 +36,7 @@ const MIN_SELF_DELEGATION_MIN: u64 = 0;
 const DOWNTIME_JAIL_SECONDS: u64 = 60 * 60 * 24; // 1 day
 const EDIT_INTERVAL_SECONDS: u64 = 60 * 60 * 24; // 1 day
 
-#[derive(Call, Query, Client, Encode, Decode, Default)]
+#[derive(Call, Query, Client, Default)]
 pub struct Staking<S: Symbol> {
     validators: Pool<Address, Validator<S>, S>,
     consensus_keys: Map<Address, [u8; 32]>,
@@ -63,6 +63,70 @@ pub struct Staking<S: Symbol> {
     redelegation_queue: Deque<RedelegationEntry>,
     delegation_index: Map<Address, Map<Address, ()>>,
 }
+
+impl<S: Symbol> Encode for Staking<S> {
+    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+        dest.write(self.max_validators.encode()?.as_slice())?;
+        dest.write(self.min_self_delegation_min.encode()?.as_slice())?;
+        dest.write(self.unbonding_seconds.encode()?.as_slice())?;
+        dest.write(self.max_offline_blocks.encode()?.as_slice())?;
+        dest.write(self.slash_fraction_double_sign.encode()?.as_slice())?;
+        dest.write(self.slash_fraction_downtime.encode()?.as_slice())?;
+        dest.write(self.downtime_jail_seconds.encode()?.as_slice())?;
+        dest.write(self.validators.encode()?.as_slice())?;
+        dest.write(self.unbonding_delegation_queue.encode()?.as_slice())?;
+        dest.write(self.redelegation_queue.encode()?.as_slice())?;
+
+        Ok(())
+    }
+
+    fn encoding_length(&self) -> ed::Result<usize> {
+        let mut len = 0;
+        len += self.max_validators.encoding_length()?;
+        len += self.min_self_delegation_min.encoding_length()?;
+        len += self.unbonding_seconds.encoding_length()?;
+        len += self.max_offline_blocks.encoding_length()?;
+        len += self.slash_fraction_double_sign.encoding_length()?;
+        len += self.slash_fraction_downtime.encoding_length()?;
+        len += self.downtime_jail_seconds.encoding_length()?;
+        len += self.validators.encoding_length()?;
+        len += self.unbonding_delegation_queue.encoding_length()?;
+        len += self.redelegation_queue.encoding_length()?;
+
+        Ok(len)
+    }
+}
+
+impl<S: Symbol> Decode for Staking<S> {
+    fn decode<R: std::io::Read>(mut input: R) -> ed::Result<Self> {
+        let max_validators = u64::decode(&mut input)?;
+        let min_self_delegation_min = u64::decode(&mut input)?;
+        let unbonding_seconds = u64::decode(&mut input)?;
+        let max_offline_blocks = u64::decode(&mut input)?;
+        let slash_fraction_double_sign = Decimal::decode(&mut input)?;
+        let slash_fraction_downtime = Decimal::decode(&mut input)?;
+        let downtime_jail_seconds = u64::decode(&mut input)?;
+        let validators = Pool::decode(&mut input)?;
+        let unbonding_delegation_queue = Deque::decode(&mut input)?;
+        let redelegation_queue = Deque::decode(&mut input)?;
+
+        Ok(Staking {
+            max_validators,
+            min_self_delegation_min,
+            unbonding_seconds,
+            max_offline_blocks,
+            slash_fraction_double_sign,
+            slash_fraction_downtime,
+            downtime_jail_seconds,
+            validators,
+            unbonding_delegation_queue,
+            redelegation_queue,
+            ..Default::default()
+        })
+    }
+}
+
+impl<S: Symbol> Terminated for Staking<S> {}
 
 #[derive(Entry, Clone)]
 struct ValidatorQueueEntry {
