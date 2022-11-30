@@ -7,6 +7,7 @@ use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 use super::Next;
 use crate::call::Call;
 use crate::client::{AsyncCall, Client as ClientTrait};
+use crate::describe::{Describe, Inspect};
 use crate::query::Query;
 use crate::state::*;
 use crate::store::*;
@@ -142,7 +143,7 @@ impl<K, V, S: Default> Map<K, V, S> {
 impl<K: Encode + Decode + Terminated, V: State<S>, S: Read + Default> Map<K, V, S> {
     pub fn with_store(store: Store<S>) -> Result<Self> {
         let mut map = Map::new();
-        map.attach(store)?;
+        State::<S>::attach(&mut map, store)?;
         Ok(map)
     }
 }
@@ -153,6 +154,18 @@ impl<K, V, S: Default> Default for Map<K, V, S> {
             store: Store::default(),
             children: BTreeMap::default(),
         }
+    }
+}
+
+impl<K: Describe + 'static, V: Describe + 'static> Describe for Map<K, V, DefaultBackingStore>
+where
+    K: Encode + Terminated,
+    V: State,
+{
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>()
+            .dynamic_child::<K, V>()
+            .build()
     }
 }
 
@@ -1013,7 +1026,7 @@ mod tests {
     type Deque<T> = OrgaDeque<T, MapStore>;
 
     fn enc(n: u32) -> Vec<u8> {
-        n.encode().unwrap()
+        Encode::encode(&n).unwrap()
     }
 
     fn setup() -> (Store<MapStore>, Map<u32, u32>) {
