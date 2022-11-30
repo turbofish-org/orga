@@ -317,8 +317,10 @@ primitive_impl!(());
 mod tests {
     use super::{Builder, Describe, Descriptor, Value};
     use crate::{
+        collections::Map,
         encoding::{Decode, Encode},
         state::State,
+        store::{DefaultBackingStore, MapStore, Shared, Store},
     };
 
     #[derive(State, Encode, Decode, Debug)]
@@ -329,9 +331,24 @@ mod tests {
 
     impl Describe for Foo {
         fn describe() -> Descriptor {
-            Builder::new::<Foo>()
-                .named_child::<u32>("bar", &[0], |v| Builder::access(v, |v: Foo| v.bar))
-                .named_child::<u32>("baz", &[1], |v| Builder::access(v, |v: Foo| v.baz))
+            Builder::new::<Self>()
+                .named_child::<u32>("bar", &[0], |v| Builder::access(v, |v: Self| v.bar))
+                .named_child::<u32>("baz", &[1], |v| Builder::access(v, |v: Self| v.baz))
+                .build()
+        }
+    }
+
+    #[derive(State, Encode, Decode, Default)]
+    struct Bar {
+        bar: u32,
+        baz: Map<u32, u32>,
+    }
+
+    impl Describe for Bar {
+        fn describe() -> Descriptor {
+            Builder::new::<Self>()
+                .named_child::<u32>("bar", &[0], |v| Builder::access(v, |v: Self| v.bar))
+                .named_child::<Map<u32, u32>>("baz", &[1], |v| Builder::access(v, |v: Self| v.baz))
                 .build()
         }
     }
@@ -361,5 +378,23 @@ mod tests {
         let baz: u32 = value.child("baz").unwrap().downcast().unwrap();
         assert_eq!(bar, 420);
         assert_eq!(baz, 69);
+    }
+
+    #[test]
+    fn complex_child() {
+        let store = Store::new(DefaultBackingStore::MapStore(Shared::new(MapStore::new())));
+        let mut bar = Bar::default();
+        bar.attach(store.clone()).unwrap();
+        bar.baz.insert(123, 456).unwrap();
+        bar.flush().unwrap();
+
+        let mut value = Value::new(bar);
+        value.attach(store).unwrap();
+
+        let bar: u32 = value.child("bar").unwrap().downcast().unwrap();
+        assert_eq!(bar, 0);
+
+        let baz: Map<u32, u32> = value.child("baz").unwrap().downcast().unwrap();
+        assert_eq!(*baz.get(123).unwrap().unwrap(), 456);
     }
 }

@@ -91,8 +91,8 @@ mod tests {
 
     impl Describe for Foo {
         fn describe() -> Descriptor {
-            Builder::new::<Foo>()
-                .named_child::<u32>("bar", &[0], |v| Builder::access(v, |v: Foo| v.bar))
+            Builder::new::<Self>()
+                .named_child::<u32>("bar", &[0], |v| Builder::access(v, |v: Self| v.bar))
                 .build()
         }
     }
