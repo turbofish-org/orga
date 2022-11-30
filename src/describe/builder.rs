@@ -1,17 +1,18 @@
 use crate::{
     encoding::{Decode, Encode},
-    Result,
+    Error, Result,
 };
-use std::any::type_name;
+use std::{any::type_name, marker::PhantomData, str::FromStr};
 
 use super::{
     AccessFn, Children, DecodeFn, Describe, Descriptor, DynamicChild, Inspect, KeyOp, NamedChild,
-    Value,
+    ParseFn, Value,
 };
 
 pub struct Builder {
     type_name: String,
     decode: DecodeFn,
+    parse: ParseFn,
     children: Option<Children>,
 }
 
@@ -20,6 +21,7 @@ impl Builder {
         Builder {
             type_name: type_name::<T>().to_string(),
             decode: |bytes| Ok(Value::new(T::decode(bytes)?)),
+            parse: |s| maybe_from_str::<T>(s),
             children: None,
         }
     }
@@ -64,6 +66,7 @@ impl Builder {
         Descriptor {
             type_name: self.type_name,
             decode: self.decode,
+            parse: self.parse,
             children: self.children.unwrap_or_default(),
         }
     }
@@ -76,6 +79,32 @@ impl Builder {
         let parent: T = *cloned.downcast().unwrap();
         let child = access(parent);
         Ok(Value::new(child))
+    }
+}
+
+fn maybe_from_str<T>(s: &str) -> Result<Option<Value>> {
+    FromStrWrapper::<T>::maybe_from_str(s)
+}
+
+trait MaybeFromStr {
+    // TODO: Result
+    fn maybe_from_str(s: &str) -> Result<Option<Value>>;
+}
+
+struct FromStrWrapper<T>(PhantomData<T>);
+
+impl<T> MaybeFromStr for FromStrWrapper<T> {
+    default fn maybe_from_str(_s: &str) -> Result<Option<Value>> {
+        Ok(None)
+    }
+}
+
+impl<T: FromStr + Inspect + 'static> MaybeFromStr for FromStrWrapper<T>
+where
+    Error: From<<T as FromStr>::Err>,
+{
+    fn maybe_from_str(s: &str) -> Result<Option<Value>> {
+        Ok(Some(Value::new(T::from_str(s)?)))
     }
 }
 

@@ -26,6 +26,7 @@ pub struct Descriptor {
     pub type_name: String,
     children: Children,
     decode: DecodeFn,
+    parse: ParseFn,
 }
 
 impl Debug for Descriptor {
@@ -40,6 +41,10 @@ impl Debug for Descriptor {
 impl Descriptor {
     pub fn decode(&self, bytes: &[u8]) -> Result<Value> {
         (self.decode)(bytes)
+    }
+
+    pub fn from_str(&self, string: &str) -> Result<Option<Value>> {
+        (self.parse)(string)
     }
 }
 
@@ -67,6 +72,7 @@ impl Descriptor {
 }
 
 pub type DecodeFn = fn(&[u8]) -> Result<Value>;
+pub type ParseFn = fn(&str) -> Result<Option<Value>>;
 
 #[derive(Clone, Debug)]
 pub enum Children {
@@ -166,7 +172,15 @@ impl Value {
                 child.attach(substore)?;
                 Ok(child)
             }
-            Children::Dynamic(child) => todo!(),
+            Children::Dynamic(child) => {
+                // TODO: fix unwraps
+                let key = child.key_desc.from_str(name)?.unwrap();
+                let key_bytes = key.encode()?;
+                use crate::store::Read;
+                let value_bytes = self.store.get(key_bytes.as_slice())?.unwrap();
+                let value = child.value_desc.decode(value_bytes.as_slice())?;
+                Ok(value)
+            }
         }
     }
 }
@@ -391,10 +405,7 @@ mod tests {
         let mut value = Value::new(bar);
         value.attach(store).unwrap();
 
-        let bar: u32 = value.child("bar").unwrap().downcast().unwrap();
-        assert_eq!(bar, 0);
-
-        let baz: Map<u32, u32> = value.child("baz").unwrap().downcast().unwrap();
-        assert_eq!(*baz.get(123).unwrap().unwrap(), 456);
+        let baz = value.child("baz").unwrap();
+        assert_eq!(baz.child("123").unwrap().downcast::<u32>().unwrap(), 456);
     }
 }
