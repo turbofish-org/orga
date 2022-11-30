@@ -4,7 +4,7 @@ use crate::{
     store::Store,
     Error, Result,
 };
-use js_sys::Array;
+use js_sys::{Array, Uint8Array};
 use std::{
     any::Any,
     fmt::{Debug, Display},
@@ -141,7 +141,7 @@ impl Value {
             Children::Named(children) => children
                 .iter()
                 .find(|c| c.name == name)
-                .map(|c| (c.access)(&self))
+                .map(|c| (c.access)(self))
                 .ok_or_else(|| Error::Downcast(format!("No child called '{}'", name)))?,
             Children::Dynamic(child) => todo!(),
         }
@@ -165,6 +165,12 @@ impl Value {
     pub fn child_js(&self, name: &str) -> Value {
         // TODO: return Result
         self.child(name).unwrap()
+    }
+
+    #[wasm_bindgen(js_name = encode)]
+    pub fn encode_js(&self) -> Uint8Array {
+        // TODO: return Result
+        self.encode().unwrap().as_slice().into()
     }
 }
 
