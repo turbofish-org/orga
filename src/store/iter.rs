@@ -1,6 +1,3 @@
-#[cfg(test)]
-use mutagen::mutate;
-
 use crate::store::{Read, KV};
 use crate::Result;
 use std::ops::{Bound, RangeBounds};
@@ -28,7 +25,6 @@ pub struct Iter<'a, S: ?Sized> {
 impl<'a, S: Read + ?Sized> Iter<'a, S> {
     /// Creates a new iterator over entries in `parent` in the given range
     /// bounds.
-    #[cfg_attr(test, mutate)]
     pub fn new(parent: &'a S, bounds: (Bound<Vec<u8>>, Bound<Vec<u8>>)) -> Self {
         Iter {
             parent,

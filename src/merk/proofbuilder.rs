@@ -1,6 +1,3 @@
-#[cfg(test)]
-use mutagen::mutate;
-
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -21,7 +18,6 @@ pub struct ProofBuilder {
 impl ProofBuilder {
     /// Constructs a `ProofBuilder` which provides read access to data in the
     /// given `MerkStore`.
-    #[cfg_attr(test, mutate)]
     pub fn new(store: Shared<MerkStore>) -> Self {
         ProofBuilder {
             store,
@@ -31,7 +27,6 @@ impl ProofBuilder {
 
     /// Builds a Merk proof including all the data accessed during the life of
     /// the `ProofBuilder`.
-    #[cfg_attr(test, mutate)]
     pub fn build(self) -> Result<Vec<u8>> {
         let store = self.store.borrow();
         let query = self.query.take();

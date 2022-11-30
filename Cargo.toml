@@ -56,7 +56,6 @@ derive_more = "0.99.17"
 
 [dev-dependencies]
 tempdir = "0.3.7"
-mutagen = {git = "https://github.com/llogiq/mutagen"}
 serial_test = "0.5.1"
 
 [package.metadata.docs.rs]

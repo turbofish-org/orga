@@ -1,6 +1,3 @@
-#[cfg(test)]
-use mutagen::mutate;
-
 use super::{Amount, Balance, Coin, Decimal, Give, Symbol};
 use crate::collections::map::{ChildMut as MapChildMut, Ref as MapRef};
 use crate::collections::{Map, Next};
@@ -422,7 +419,6 @@ mod child {
         S: Symbol,
         V: State + Balance<S, Decimal>,
     {
-        #[cfg_attr(test, mutate)]
         pub fn new(entry_ref: MapRef<'a, RefCell<Entry<V>>>) -> Result<Self> {
             Ok(Child {
                 entry: entry_ref,

@@ -1,6 +1,3 @@
-#[cfg(test)]
-use mutagen::mutate;
-
 use crate::state::State;
 use std::any::TypeId;
 use std::collections::HashMap;
@@ -17,7 +14,6 @@ pub struct Context<I> {
 }
 
 impl Context<()> {
-    #[cfg_attr(test, mutate)]
     pub fn add<T: 'static>(ctx: T) {
         let mut context_store = CONTEXT_MAP.lock().unwrap();
         let id = TypeId::of::<T>();
@@ -29,7 +25,6 @@ impl Context<()> {
         }
     }
 
-    #[cfg_attr(test, mutate)]
     pub fn resolve<'a, T: 'static>() -> Option<&'a mut T> {
         let mut context_store = CONTEXT_MAP.lock().unwrap();
         let id = TypeId::of::<T>();
@@ -40,7 +35,6 @@ impl Context<()> {
         }
     }
 
-    #[cfg_attr(test, mutate)]
     pub fn remove<T: 'static>() {
         let mut context_store = CONTEXT_MAP.lock().unwrap();
         if let Some(replaced) = context_store.remove(&TypeId::of::<T>()) {

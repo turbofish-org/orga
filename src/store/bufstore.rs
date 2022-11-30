@@ -1,6 +1,3 @@
-#[cfg(test)]
-use mutagen::mutate;
-
 use std::cmp::Ordering;
 use std::collections::{btree_map, BTreeMap};
 
@@ -23,7 +20,6 @@ impl<S: Read + Default> BufStore<S> {
     /// Constructs a `BufStore` which wraps the default value of the inner
     /// store.
     #[inline]
-    #[cfg_attr(test, mutate)]
     pub fn new() -> Self {
         Default::default()
     }
@@ -45,7 +41,6 @@ impl<S> BufStore<S> {
     /// Calls to get will first check the `BufStore` map, and if no entry is
     /// found will be passed to the underlying store.
     #[inline]
-    #[cfg_attr(test, mutate)]
     pub fn wrap(store: S) -> Self {
         BufStore {
             store,
@@ -56,7 +51,6 @@ impl<S> BufStore<S> {
     /// Creates a `BufStore` by wrapping the given store, using a pre-populated
     /// in-memory buffer of key/value entries.
     #[inline]
-    #[cfg_attr(test, mutate)]
     pub fn wrap_with_map(store: S, map: Map) -> Self {
         BufStore { store, map }
     }
@@ -64,13 +58,11 @@ impl<S> BufStore<S> {
     /// Consumes the `BufStore` and returns its in-memory buffer of key/value
     /// entries.
     #[inline]
-    #[cfg_attr(test, mutate)]
     pub fn into_map(self) -> Map {
         self.map
     }
 
     #[inline]
-    #[cfg_attr(test, mutate)]
     pub fn store(&self) -> &S {
         &self.store
     }
@@ -81,7 +73,6 @@ impl<S> BufStore<S> {
     /// After calling `flush`, the `BufStore` will still be valid and wrap the
     /// underlying store, but its in-memory buffer will be empty.
     #[inline]
-    #[cfg_attr(test, mutate)]
     pub fn flush(&mut self) -> Result<()>
     where
         S: Write,

@@ -1,6 +1,3 @@
-#[cfg(test)]
-use mutagen::mutate;
-
 use super::{Read, Shared, Write, KV};
 use crate::encoding::{Decode, Encode, Terminated};
 use crate::state::State;
@@ -61,7 +58,6 @@ impl<S> Store<S> {
     /// Creates a new `Store` with no prefix, with `backing` as its backing
     /// store.
     #[inline]
-    #[cfg_attr(test, mutate)]
     pub fn new(backing: S) -> Self {
         Store {
             prefix: vec![],
@@ -72,7 +68,6 @@ impl<S> Store<S> {
     /// Creates a substore of this store by concatenating `prefix` to this
     /// store's own prefix, and pointing to the same backing store.
     #[inline]
-    #[cfg_attr(test, mutate)]
     #[must_use]
     pub fn sub(&self, prefix: &[u8]) -> Self {
         Store {

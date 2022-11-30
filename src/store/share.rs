@@ -1,6 +1,3 @@
-#[cfg(test)]
-use mutagen::mutate;
-
 use super::{Read, Write, KV};
 use crate::Result;
 use std::cell::{Ref, RefCell, RefMut};
@@ -23,12 +20,10 @@ pub struct Shared<T>(Rc<RefCell<T>>);
 impl<T> Shared<T> {
     /// Constructs a `Shared` by wrapping the given store.
     #[inline]
-    #[cfg_attr(test, mutate)]
     pub fn new(inner: T) -> Self {
         Shared(Rc::new(RefCell::new(inner)))
     }
 
-    #[cfg_attr(test, mutate)]
     pub fn into_inner(self) -> T {
         match Rc::try_unwrap(self.0) {
             Ok(inner) => inner.into_inner(),
@@ -36,12 +31,10 @@ impl<T> Shared<T> {
         }
     }
 
-    #[cfg_attr(test, mutate)]
     pub fn borrow_mut(&mut self) -> RefMut<T> {
         self.0.borrow_mut()
     }
 
-    #[cfg_attr(test, mutate)]
     pub fn borrow(&self) -> Ref<T> {
         self.0.borrow()
     }
