@@ -119,17 +119,32 @@ pub enum KeyOp {
 pub struct WrappedStore(Store);
 
 #[wasm_bindgen]
-pub struct Value(Box<dyn Inspect>);
+pub struct Value {
+    instance: Box<dyn Inspect>,
+    store: Store,
+}
 
 impl Value {
     pub fn new<T: Inspect + 'static>(instance: T) -> Self {
-        Value(Box::new(instance))
+        Value {
+            instance: Box::new(instance),
+            store: Store::default(),
+        }
     }
 
-    pub fn downcast<T: 'static>(&self) -> Option<T> {
-        let any = self.0.to_any().unwrap();
-        match any.downcast() {
-            Ok(boxed) => Some(*boxed),
+    pub fn attach(&mut self, store: Store) -> Result<()> {
+        self.store = store.clone();
+        self.instance.attach(store)
+    }
+
+    pub fn downcast<T: Inspect + 'static>(&self) -> Option<T> {
+        let any = self.instance.to_any().unwrap();
+        match any.downcast::<T>() {
+            Ok(mut boxed) => {
+                // TODO: return Result
+                boxed.attach(self.store.clone()).unwrap();
+                Some(*boxed)
+            }
             Err(_) => None,
         }
     }
@@ -138,11 +153,19 @@ impl Value {
         let desc = self.describe();
         match desc.children {
             Children::None => Err(Error::Downcast("Value does not have children".to_string())),
-            Children::Named(children) => children
-                .iter()
-                .find(|c| c.name == name)
-                .map(|c| (c.access)(self))
-                .ok_or_else(|| Error::Downcast(format!("No child called '{}'", name)))?,
+            Children::Named(children) => {
+                let cdesc = children
+                    .iter()
+                    .find(|c| c.name == name)
+                    .ok_or_else(|| Error::Downcast(format!("No child called '{}'", name)))?;
+                let substore = match &cdesc.store_key {
+                    KeyOp::Absolute(prefix) => unsafe { self.store.with_prefix(prefix.clone()) },
+                    KeyOp::Append(prefix) => self.store.sub(prefix.as_slice()),
+                };
+                let mut child = (cdesc.access)(self)?;
+                child.attach(substore)?;
+                Ok(child)
+            }
             Children::Dynamic(child) => todo!(),
         }
     }
@@ -178,7 +201,7 @@ impl Deref for Value {
     type Target = dyn Inspect;
 
     fn deref(&self) -> &Self::Target {
-        &*self.0
+        &*self.instance
     }
 }
 
