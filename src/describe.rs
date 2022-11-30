@@ -283,3 +283,54 @@ primitive_impl!(i64);
 primitive_impl!(i128);
 primitive_impl!(bool);
 primitive_impl!(());
+
+#[cfg(test)]
+mod tests {
+    use super::{Builder, Describe, Descriptor, Value};
+    use crate::{
+        encoding::{Decode, Encode},
+        state::State,
+    };
+
+    #[derive(State, Encode, Decode, Debug)]
+    struct Foo {
+        bar: u32,
+        baz: u32,
+    }
+
+    impl Describe for Foo {
+        fn describe() -> Descriptor {
+            Builder::new::<Foo>()
+                .named_child::<u32>("bar", &[0], |v| Builder::access(v, |v: Foo| v.bar))
+                .named_child::<u32>("baz", &[1], |v| Builder::access(v, |v: Foo| v.baz))
+                .build()
+        }
+    }
+
+    #[test]
+    fn decode() {
+        let desc = Foo::describe();
+        let value = desc.decode(&[0, 0, 1, 164, 0, 0, 0, 69]).unwrap();
+        assert_eq!(
+            value.maybe_debug(false).unwrap(),
+            "Foo { bar: 420, baz: 69 }"
+        );
+    }
+
+    #[test]
+    fn downcast() {
+        let value = Value::new(Foo { bar: 420, baz: 69 });
+        let foo: Foo = value.downcast().unwrap();
+        assert_eq!(foo.bar, 420);
+        assert_eq!(foo.baz, 69);
+    }
+
+    #[test]
+    fn child() {
+        let value = Value::new(Foo { bar: 420, baz: 69 });
+        let bar: u32 = value.child("bar").unwrap().downcast().unwrap();
+        let baz: u32 = value.child("baz").unwrap().downcast().unwrap();
+        assert_eq!(bar, 420);
+        assert_eq!(baz, 69);
+    }
+}
