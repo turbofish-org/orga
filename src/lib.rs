@@ -26,7 +26,7 @@ pub mod client;
 /// trait.
 pub mod collections;
 
-pub mod descriptor;
+pub mod describe;
 
 /// Traits for deterministic encoding and decoding.
 ///

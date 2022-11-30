@@ -2,12 +2,13 @@ use crate::{
     encoding::{Decode, Encode},
     state::State,
     store::Store,
-    Result,
+    Error, Result,
 };
 use js_sys::Array;
 use std::{
     any::Any,
     fmt::{Debug, Display},
+    ops::Deref,
 };
 use wasm_bindgen::prelude::*;
 
@@ -19,7 +20,7 @@ pub trait Describe {
     fn describe() -> Descriptor;
 }
 
-#[wasm_bindgen(getter_with_clone)]
+#[wasm_bindgen(getter_with_clone, inspectable)]
 #[derive(Clone)]
 pub struct Descriptor {
     pub type_name: String,
@@ -36,22 +37,32 @@ impl Debug for Descriptor {
     }
 }
 
+impl Descriptor {
+    pub fn decode(&self, bytes: &[u8]) -> Result<Value> {
+        (self.decode)(bytes)
+    }
+}
+
 #[wasm_bindgen]
 impl Descriptor {
     #[wasm_bindgen(js_name = children)]
     pub fn children_js(&self) -> JsValue {
-        use Children::*;
-
         match &self.children {
-            None => JsValue::NULL,
-            Named(children) => children
+            Children::None => JsValue::NULL,
+            Children::Named(children) => children
                 .iter()
                 .cloned()
                 .map(JsValue::from)
                 .collect::<Array>()
                 .into(),
-            Dynamic(child) => child.clone().into(),
+            Children::Dynamic(child) => child.clone().into(),
         }
+    }
+
+    #[wasm_bindgen(js_name = decode)]
+    pub fn decode_js(&self, bytes: js_sys::Uint8Array) -> Value {
+        // TODO: return Result
+        self.decode(bytes.to_vec().as_slice()).unwrap()
     }
 }
 
@@ -70,7 +81,7 @@ impl Default for Children {
     }
 }
 
-#[wasm_bindgen(getter_with_clone)]
+#[wasm_bindgen(getter_with_clone, inspectable)]
 #[derive(Clone)]
 pub struct NamedChild {
     pub name: String,
@@ -91,7 +102,7 @@ impl Debug for NamedChild {
     }
 }
 
-#[wasm_bindgen]
+#[wasm_bindgen(inspectable)]
 #[derive(Clone, Debug)]
 pub struct DynamicChild {
     key_desc: Box<Descriptor>,
@@ -105,6 +116,9 @@ pub enum KeyOp {
 }
 
 #[wasm_bindgen]
+pub struct WrappedStore(Store);
+
+#[wasm_bindgen]
 pub struct Value(Box<dyn Inspect>);
 
 impl Value {
@@ -112,14 +126,59 @@ impl Value {
         Value(Box::new(instance))
     }
 
-    pub fn to_any(&self) -> Result<Box<dyn Any>> {
-        self.0.to_any()
+    pub fn downcast<T: 'static>(&self) -> Option<T> {
+        let any = self.0.to_any().unwrap();
+        match any.downcast() {
+            Ok(boxed) => Some(*boxed),
+            Err(_) => None,
+        }
+    }
+
+    pub fn child(&self, name: &str) -> Result<Value> {
+        let desc = self.describe();
+        match desc.children {
+            Children::None => Err(Error::Downcast("Value does not have children".to_string())),
+            Children::Named(children) => children
+                .iter()
+                .find(|c| c.name == name)
+                .map(|c| (c.access)(&self))
+                .ok_or_else(|| Error::Downcast(format!("No child called '{}'", name)))?,
+            Children::Dynamic(child) => todo!(),
+        }
+    }
+}
+
+#[wasm_bindgen]
+impl Value {
+    #[wasm_bindgen(js_name = toString)]
+    pub fn to_string_js(&self) -> Option<String> {
+        self.maybe_to_string()
+    }
+
+    #[wasm_bindgen(js_name = debug)]
+    pub fn maybe_debug_js(&self, alternate: Option<bool>) -> Option<String> {
+        let alternate = alternate.unwrap_or_default();
+        self.maybe_debug(alternate)
+    }
+
+    #[wasm_bindgen(js_name = child)]
+    pub fn child_js(&self, name: &str) -> Value {
+        // TODO: return Result
+        self.child(name).unwrap()
+    }
+}
+
+impl Deref for Value {
+    type Target = dyn Inspect;
+
+    fn deref(&self) -> &Self::Target {
+        &*self.0
     }
 }
 
 pub trait Inspect {
-    fn maybe_display(&self) -> Option<String> {
-        MaybeDisplay::maybe_display(&DisplayWrapper(&self))
+    fn maybe_to_string(&self) -> Option<String> {
+        MaybeDisplay::maybe_to_string(&DisplayWrapper(&self))
     }
 
     fn maybe_debug(&self, alternate: bool) -> Option<String> {
@@ -163,19 +222,19 @@ impl<T: State + Describe + 'static> Inspect for T {
 }
 
 trait MaybeDisplay {
-    fn maybe_display(&self) -> Option<String>;
+    fn maybe_to_string(&self) -> Option<String>;
 }
 
 struct DisplayWrapper<'a, T>(&'a T);
 
 impl<'a, T> MaybeDisplay for DisplayWrapper<'a, T> {
-    default fn maybe_display(&self) -> Option<String> {
+    default fn maybe_to_string(&self) -> Option<String> {
         None
     }
 }
 
 impl<'a, T: Display> MaybeDisplay for DisplayWrapper<'a, T> {
-    fn maybe_display(&self) -> Option<String> {
+    fn maybe_to_string(&self) -> Option<String> {
         Some(format!("{}", self.0))
     }
 }
