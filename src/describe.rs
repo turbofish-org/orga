@@ -121,6 +121,15 @@ pub enum KeyOp {
     Absolute(Vec<u8>),
 }
 
+impl KeyOp {
+    pub fn apply(&self, store: &Store) -> Store {
+        match self {
+            KeyOp::Absolute(prefix) => unsafe { store.with_prefix(prefix.clone()) },
+            KeyOp::Append(prefix) => store.sub(prefix.as_slice()),
+        }
+    }
+}
+
 #[wasm_bindgen]
 pub struct WrappedStore(Store);
 
@@ -164,21 +173,32 @@ impl Value {
                     .iter()
                     .find(|c| c.name == name)
                     .ok_or_else(|| Error::Downcast(format!("No child called '{}'", name)))?;
-                let substore = match &cdesc.store_key {
-                    KeyOp::Absolute(prefix) => unsafe { self.store.with_prefix(prefix.clone()) },
-                    KeyOp::Append(prefix) => self.store.sub(prefix.as_slice()),
-                };
+
+                let substore = cdesc.store_key.apply(&self.store);
                 let mut child = (cdesc.access)(self)?;
                 child.attach(substore)?;
                 Ok(child)
             }
             Children::Dynamic(child) => {
-                // TODO: fix unwraps
-                let key = child.key_desc.from_str(name)?.unwrap();
-                let key_bytes = key.encode()?;
                 use crate::store::Read;
-                let value_bytes = self.store.get(key_bytes.as_slice())?.unwrap();
-                let value = child.value_desc.decode(value_bytes.as_slice())?;
+
+                let key_bytes = child
+                    .key_desc
+                    .from_str(name)?
+                    .ok_or_else(|| {
+                        Error::Downcast(
+                            "Dynamic child key can not be parsed from string".to_string(),
+                        )
+                    })?
+                    .encode()?;
+                let value_bytes = self
+                    .store
+                    .get(key_bytes.as_slice())?
+                    .ok_or_else(|| Error::Store(format!("No value found for key '{name}'")))?;
+
+                let substore = self.store.sub(&key_bytes);
+                let mut value = child.value_desc.decode(value_bytes.as_slice())?;
+                value.attach(substore)?;
                 Ok(value)
             }
         }
