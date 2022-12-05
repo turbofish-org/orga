@@ -397,6 +397,8 @@ primitive_impl!(());
 
 #[cfg(test)]
 mod tests {
+    use serde::{Deserialize, Serialize};
+
     use super::{Builder, Describe, Descriptor, Value};
     use crate::{
         collections::Map,
@@ -405,7 +407,7 @@ mod tests {
         store::{DefaultBackingStore, MapStore, Shared, Store},
     };
 
-    #[derive(State, Encode, Decode, Debug)]
+    #[derive(State, Encode, Decode, Debug, Serialize, Deserialize, PartialEq)]
     struct Foo {
         bar: u32,
         baz: u32,
@@ -475,5 +477,24 @@ mod tests {
 
         let baz = value.child("baz").unwrap();
         assert_eq!(baz.child("123").unwrap().downcast::<u32>().unwrap(), 456);
+    }
+
+    #[test]
+    fn json() {
+        let value = Value::new(Foo { bar: 420, baz: 69 });
+        assert_eq!(
+            value.maybe_to_json().unwrap().unwrap().to_string(),
+            "{\"bar\":420,\"baz\":69}".to_string(),
+        );
+        #[cfg(target_arch = "wasm32")]
+        assert_eq!(
+            serde_wasm_bindgen::from_value::<Foo>(value.maybe_to_wasm().unwrap().unwrap()).unwrap(),
+            Foo { bar: 420, baz: 69 },
+        );
+
+        let value = Value::new(Bar::default());
+        assert!(value.maybe_to_json().unwrap().is_none());
+        #[cfg(target_arch = "wasm32")]
+        assert!(value.maybe_to_wasm().unwrap().is_none());
     }
 }
