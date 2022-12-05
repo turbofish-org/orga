@@ -53,6 +53,7 @@ tokio = { version = "1.18.1", optional = true }
 tonic = { version = "0.7", optional = true }
 cosmrs = "0.7.0"
 derive_more = "0.99.17"
+serde-wasm-bindgen = "0.4.5"
 
 [dev-dependencies]
 tempdir = "0.3.7"

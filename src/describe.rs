@@ -5,6 +5,7 @@ use crate::{
     Error, Result,
 };
 use js_sys::{Array, Uint8Array};
+use serde::Serialize;
 use std::{
     any::Any,
     fmt::{Debug, Display},
@@ -133,7 +134,7 @@ impl KeyOp {
 #[wasm_bindgen]
 pub struct WrappedStore(Store);
 
-#[wasm_bindgen]
+#[wasm_bindgen(inspectable)]
 pub struct Value {
     instance: Box<dyn Inspect>,
     store: Store,
@@ -203,6 +204,10 @@ impl Value {
             }
         }
     }
+
+    pub fn maybe_to_json(&self) -> Result<Option<serde_json::Value>> {
+        self.instance.maybe_to_json()
+    }
 }
 
 #[wasm_bindgen]
@@ -210,6 +215,11 @@ impl Value {
     #[wasm_bindgen(js_name = toString)]
     pub fn to_string_js(&self) -> Option<String> {
         self.maybe_to_string()
+    }
+
+    #[wasm_bindgen(js_name = toJSON)]
+    pub fn to_json_js(&self) -> WasmResult<JsValue> {
+        self.maybe_to_wasm().map(|opt| opt.unwrap_or(JsValue::NULL))
     }
 
     #[wasm_bindgen(js_name = debug)]
@@ -246,6 +256,14 @@ pub trait Inspect {
 
     fn maybe_debug(&self, alternate: bool) -> Option<String> {
         MaybeDebug::maybe_debug(&DebugWrapper(&self), alternate)
+    }
+
+    fn maybe_to_json(&self) -> Result<Option<serde_json::Value>> {
+        MaybeToJson::maybe_to_json(&ToJsonWrapper(&self))
+    }
+
+    fn maybe_to_wasm(&self) -> WasmResult<Option<JsValue>> {
+        MaybeToJson::maybe_to_wasm(&ToJsonWrapper(&self))
     }
 
     // TODO: should this be a maybe impl?
@@ -321,6 +339,36 @@ impl<'a, T: Debug> MaybeDebug for DebugWrapper<'a, T> {
         } else {
             format!("{:?}", self.0)
         })
+    }
+}
+
+trait MaybeToJson {
+    fn maybe_to_json(&self) -> Result<Option<serde_json::Value>>;
+
+    fn maybe_to_wasm(&self) -> WasmResult<Option<JsValue>>;
+}
+
+type WasmResult<T> = std::result::Result<T, JsValue>;
+
+struct ToJsonWrapper<T>(T);
+
+impl<T> MaybeToJson for ToJsonWrapper<T> {
+    default fn maybe_to_json(&self) -> Result<Option<serde_json::Value>> {
+        Ok(None)
+    }
+
+    default fn maybe_to_wasm(&self) -> WasmResult<Option<JsValue>> {
+        Ok(None)
+    }
+}
+
+impl<T: Serialize> MaybeToJson for ToJsonWrapper<T> {
+    fn maybe_to_json(&self) -> Result<Option<serde_json::Value>> {
+        Ok(Some(serde_json::to_value(&self.0)?))
+    }
+
+    fn maybe_to_wasm(&self) -> WasmResult<Option<JsValue>> {
+        Ok(Some(serde_wasm_bindgen::to_value(&self.0)?))
     }
 }
 
