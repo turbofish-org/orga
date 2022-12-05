@@ -88,29 +88,13 @@ impl Decimal {
     }
 }
 
-#[derive(Encode, Decode)]
-pub struct DecimalEncoding(pub(crate) [u8; 16]);
-
-impl Default for DecimalEncoding {
-    fn default() -> Self {
-        Decimal(0.into()).into()
-    }
-}
-
 impl State for Decimal {
-    type Encoding = DecimalEncoding;
-    fn create(_store: Store, data: Self::Encoding) -> Result<Self> {
-        Ok(Self(NumDecimal::deserialize(data.0)))
+    fn attach(&mut self, store: Store) -> Result<()> {
+        Ok(())
     }
 
-    fn flush(self) -> Result<Self::Encoding> {
-        Ok(self.into())
-    }
-}
-
-impl From<Decimal> for DecimalEncoding {
-    fn from(decimal: Decimal) -> Self {
-        DecimalEncoding(decimal.0.serialize())
+    fn flush(&mut self) -> Result<()> {
+        Ok(())
     }
 }
 

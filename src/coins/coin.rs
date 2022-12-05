@@ -1,16 +1,16 @@
 use super::{Adjust, Amount, Balance, Decimal, Give, Symbol, Take};
 use crate::call::Call;
 use crate::context::GetContext;
-#[cfg(feature = "abci")]
-use crate::migrate::Migrate;
+use crate::encoding::{Decode, Encode};
 use crate::plugins::Paid;
 use crate::state::State;
 use crate::{Error, Result};
 use std::marker::PhantomData;
 
 #[must_use = "If these coins are meant to be discarded, explicitly call the `burn` method"]
-#[derive(State, Call, Debug)]
+#[derive(State, Call, Debug, Encode, Decode)]
 pub struct Coin<S: Symbol> {
+    #[call]
     pub amount: Amount,
     symbol: PhantomData<S>,
 }
@@ -107,15 +107,5 @@ impl<S: Symbol> From<Amount> for Coin<S> {
 impl<S: Symbol> From<u64> for Coin<S> {
     fn from(amount: u64) -> Self {
         Self::mint(amount)
-    }
-}
-
-#[cfg(feature = "abci")]
-impl<S: Symbol, T: v2::coins::Symbol> Migrate<v2::coins::Coin<T>> for Coin<S> {
-    fn migrate(&mut self, legacy: v2::coins::Coin<T>) -> Result<()> {
-        let amt: u64 = legacy.amount.into();
-        self.amount = amt.into();
-
-        Ok(())
     }
 }

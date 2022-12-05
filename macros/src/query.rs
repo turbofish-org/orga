@@ -1,3 +1,4 @@
+use super::utils::parse_parent;
 use heck::{CamelCase, SnakeCase};
 use proc_macro::TokenStream;
 use proc_macro2::{Literal, Span, TokenStream as TokenStream2};
@@ -111,6 +112,25 @@ pub(crate) fn create_query_impl(
         })
         .map(|t| quote!(#t: ::orga::query::Query,));
     let query_bounds = quote!(#(#query_bounds)*);
+
+    let parameter_bounds = relevant_methods(name, "query", source)
+        .into_iter()
+        .flat_map(|(method, _)| {
+            let inputs: Vec<_> = method
+                .sig
+                .inputs
+                .iter()
+                .skip(1)
+                .map(|input| match input {
+                    FnArg::Typed(input) => *input.ty.clone(),
+                    _ => panic!("unexpected input"),
+                })
+                .collect();
+            inputs
+        })
+        .map(|t| quote!(#t: std::fmt::Debug,))
+        .collect::<Vec<_>>();
+    let parameter_bounds = quote!(#(#parameter_bounds)*);
 
     let fields = match &item.data {
         Data::Struct(data) => data.fields.iter(),
@@ -238,7 +258,7 @@ pub(crate) fn create_query_impl(
 
     let impl_output = quote! {
         impl#generics_sanitized ::orga::query::Query for #name#generic_params
-        where #where_preds #encoding_bounds #query_bounds
+        where #where_preds #encoding_bounds #query_bounds #parameter_bounds
         {
             type Query = #query_type#query_generics;
 
@@ -345,7 +365,7 @@ pub(crate) fn create_query_enum(item: &DeriveInput, source: &File) -> (TokenStre
     let query_preds = quote!(#(#query_params: ::orga::query::Query),*);
 
     let item_output = quote! {
-        #[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
+        #[derive(::orga::encoding::Encode, ::orga::encoding::Decode, std::fmt::Debug)]
         pub enum Query#generic_params
         where #query_preds
         {
@@ -372,12 +392,6 @@ pub(crate) fn create_query_enum(item: &DeriveInput, source: &File) -> (TokenStre
     };
 
     (output, query_enum)
-}
-
-fn parse_parent() -> File {
-    let path = proc_macro::Span::call_site().source_file().path();
-    let source = std::fs::read_to_string(path).unwrap();
-    parse_file(source.as_str()).unwrap()
 }
 
 fn get_generic_requirements<I, J>(inputs: I, params: J) -> Vec<Ident>

@@ -2,6 +2,8 @@
 use mutagen::mutate;
 
 use super::{Read, Shared, Write, KV};
+use crate::encoding::{Decode, Encode, Terminated};
+use crate::state::State;
 use crate::{Error, Result};
 
 // TODO: figure out how to let users set DefaultBackingStore, similar to setting
@@ -22,10 +24,29 @@ pub type DefaultBackingStore = Shared<super::MapStore>;
 /// This type is how high-level state types interact with the store, since they
 /// will often need to create substores (through the `store.sub(prefix)`
 /// method).
+#[derive(Default)]
 pub struct Store<S = DefaultBackingStore> {
     prefix: Vec<u8>,
     store: Shared<S>,
 }
+
+impl<S> Encode for Store<S> {
+    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+        Ok(())
+    }
+
+    fn encoding_length(&self) -> ed::Result<usize> {
+        Ok(0)
+    }
+}
+
+impl<S: Default> Decode for Store<S> {
+    fn decode<R: std::io::Read>(input: R) -> ed::Result<Self> {
+        Ok(Self::default())
+    }
+}
+
+impl<S> Terminated for Store<S> {}
 
 impl<S> Clone for Store<S> {
     fn clone(&self) -> Self {
@@ -58,6 +79,41 @@ impl<S> Store<S> {
             prefix: concat(self.prefix.as_slice(), prefix),
             store: self.store.clone(),
         }
+    }
+
+    pub fn prefix(&self) -> &[u8] {
+        self.prefix.as_slice()
+    }
+
+    /// # Safety
+    /// Overrides the store's prefix, potentially causing key collisions.
+    pub unsafe fn with_prefix(&self, prefix: Vec<u8>) -> Self {
+        let mut store = self.clone();
+        store.prefix = prefix;
+
+        store
+    }
+
+    pub fn backing_store(&self) -> Shared<S> {
+        self.store.clone()
+    }
+}
+
+impl<S: Default> State<S> for Store<S> {
+    fn attach(&mut self, store: Store<S>) -> Result<()>
+    where
+        S: Read,
+    {
+        self.prefix = store.prefix;
+        self.store = store.store;
+        Ok(())
+    }
+
+    fn flush(&mut self) -> Result<()>
+    where
+        S: Write,
+    {
+        Ok(())
     }
 }
 

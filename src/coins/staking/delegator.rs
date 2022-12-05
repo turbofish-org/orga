@@ -9,20 +9,20 @@ use crate::{Error, Result};
 
 use super::UNBONDING_SECONDS;
 
-#[derive(State)]
+#[derive(State, Encode, Decode)]
 pub struct Unbond<S: Symbol> {
     pub(super) coins: Share<S>,
     pub(super) start_seconds: i64,
 }
 
-#[derive(State, Clone)]
+#[derive(State, Clone, Encode, Decode)]
 pub struct Redelegation {
     pub(super) amount: Amount,
     pub(super) address: Address,
     pub(super) start_seconds: i64,
 }
 
-#[derive(State)]
+#[derive(State, Encode, Decode, Default)]
 pub struct Delegator<S: Symbol> {
     pub(super) liquid: MultiShare,
     pub(super) staked: Share<S>,

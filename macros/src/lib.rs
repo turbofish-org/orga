@@ -30,7 +30,7 @@ pub fn query(args: TokenStream, input: TokenStream) -> TokenStream {
     query::attr(args, input)
 }
 
-#[proc_macro_derive(Call)]
+#[proc_macro_derive(Call, attributes(call))]
 pub fn derive_call(item: TokenStream) -> TokenStream {
     call::derive(item)
 }

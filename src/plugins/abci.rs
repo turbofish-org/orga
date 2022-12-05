@@ -14,7 +14,7 @@ impl Time {
 #[cfg(feature = "abci")]
 mod full {
     use super::Time;
-    use crate::abci::{prost::Adapter, App};
+    use crate::abci::{prost::Adapter, AbciQuery, App};
     use crate::call::Call;
     use crate::collections::{Entry, EntryMap, Map};
     use crate::context::Context;
@@ -27,6 +27,7 @@ mod full {
     use std::collections::HashMap;
     use std::convert::TryInto;
     use std::rc::Rc;
+    use tendermint_proto::abci::{Event, RequestQuery, ResponseQuery};
     use tendermint_proto::abci::{
         Evidence, LastCommitInfo, RequestBeginBlock, RequestEndBlock, RequestInitChain,
         ValidatorUpdate,
@@ -43,11 +44,14 @@ mod full {
     }
 
     type UpdateMap = Map<[u8; 32], Adapter<ValidatorUpdate>>;
+
+    #[derive(Default)]
     pub struct ABCIPlugin<T> {
         inner: T,
         pub(crate) validator_updates: Option<HashMap<[u8; 32], ValidatorUpdate>>,
         updates: UpdateMap,
         time: Option<Timestamp>,
+        pub(crate) events: Option<Vec<Event>>,
         current_vp: Rc<RefCell<Option<EntryMap<ValidatorEntry>>>>,
         cons_key_by_op_addr: Rc<RefCell<Option<OperatorMap>>>,
     }
@@ -137,25 +141,8 @@ mod full {
         cons_key_by_op_addr: Rc<RefCell<Option<OperatorMap>>>,
     }
 
-    #[cfg(test)]
-    impl Default for Validators {
-        fn default() -> Self {
-            use crate::store::{MapStore, Shared};
-            let store = Store::new(Shared::new(MapStore::new()).into());
-            Self {
-                updates: HashMap::new(),
-                current_vp: Rc::new(RefCell::new(Some(
-                    State::create(store.sub(&[0]), ()).unwrap(),
-                ))),
-                cons_key_by_op_addr: Rc::new(RefCell::new(Some(
-                    State::create(store.sub(&[1]), ()).unwrap(),
-                ))),
-            }
-        }
-    }
-
     impl Validators {
-        fn new(
+        pub fn new(
             current_vp: Rc<RefCell<Option<EntryMap<ValidatorEntry>>>>,
             cons_key_by_op_addr: Rc<RefCell<Option<OperatorMap>>>,
         ) -> Self {
@@ -171,6 +158,15 @@ mod full {
 
             let sum = Some(Sum::Ed25519(pub_key.to_vec()));
             let key = PublicKey { sum };
+            self.current_vp
+                .borrow_mut()
+                .as_mut()
+                .unwrap() // TODO: return a result instead
+                .insert(ValidatorEntry {
+                    power,
+                    pubkey: pub_key,
+                })
+                .unwrap();
             self.updates.insert(
                 pub_key,
                 Adapter(tendermint_proto::abci::ValidatorUpdate {
@@ -191,7 +187,7 @@ mod full {
                 .borrow_mut()
                 .as_mut()
                 .unwrap()
-                .insert(op_addr, pub_key.into())
+                .insert(op_addr, pub_key)
         }
 
         pub fn consensus_key<A: Into<[u8; 20]>>(&self, op_key: A) -> Result<Option<[u8; 32]>> {
@@ -210,7 +206,18 @@ mod full {
         }
     }
 
-    #[derive(Encode, Decode)]
+    #[derive(Default)]
+    pub struct Events {
+        pub(crate) events: Vec<Event>,
+    }
+
+    impl Events {
+        pub fn add(&mut self, event: Event) {
+            self.events.push(event);
+        }
+    }
+
+    #[derive(Debug, Encode, Decode)]
     pub enum ABCICall<C> {
         InitChain(Adapter<RequestInitChain>),
         BeginBlock(Box<Adapter<RequestBeginBlock>>), // Boxed because this variant is much larger than the others
@@ -255,32 +262,46 @@ mod full {
             };
             create_time_ctx(&self.time);
 
-            let res = match call {
+            match call {
                 InitChain(req) => {
                     let ctx: InitChainCtx = req.into_inner().into();
                     self.time = ctx.time.clone();
                     create_time_ctx(&self.time);
                     self.inner.init_chain(&ctx)?;
-
-                    Ok(())
                 }
                 BeginBlock(req) => {
                     let ctx: BeginBlockCtx = req.into_inner().into();
                     self.time = ctx.header.clone().time;
                     create_time_ctx(&self.time);
                     self.inner.begin_block(&ctx)?;
-
-                    Ok(())
                 }
                 EndBlock(req) => {
                     let ctx = req.into_inner().into();
                     self.inner.end_block(&ctx)?;
-
-                    Ok(())
                 }
-                DeliverTx(inner_call) => self.inner.call(inner_call),
-                CheckTx(inner_call) => self.inner.call(inner_call),
-            }?;
+                DeliverTx(inner_call) => {
+                    Context::add(Events::default());
+                    self.events.replace(vec![]);
+                    let res = self.inner.call(inner_call);
+                    if res.is_ok() {
+                        self.events
+                            .replace(Context::resolve::<Events>().unwrap().events.clone());
+                    }
+                    Context::remove::<Events>();
+                    res?;
+                }
+                CheckTx(inner_call) => {
+                    Context::add(Events::default());
+                    self.events.replace(vec![]);
+                    let res = self.inner.call(inner_call);
+                    if res.is_ok() {
+                        self.events
+                            .replace(Context::resolve::<Events>().unwrap().events.clone());
+                    }
+                    Context::remove::<Events>();
+                    res?;
+                }
+            };
 
             let validators = Context::resolve::<Validators>().unwrap();
             let mut current_vp_ref = validators.current_vp.borrow_mut();
@@ -301,7 +322,8 @@ mod full {
             }
 
             self.build_updates()?;
-            Ok(res)
+            Context::remove::<Validators>();
+            Ok(())
         }
     }
 
@@ -335,45 +357,54 @@ mod full {
         }
     }
 
-    impl<T> State for ABCIPlugin<T>
-    where
-        T: State,
-        T::Encoding: From<T>,
-    {
-        type Encoding = (T::Encoding,);
-        fn create(store: Store, data: Self::Encoding) -> Result<Self> {
-            Ok(Self {
-                inner: T::create(store.sub(&[0]), data.0)?,
-                validator_updates: None,
-                updates: UpdateMap::create(store.sub(&[1]), ())?,
-                time: None,
-                current_vp: Rc::new(RefCell::new(Some(State::create(store.sub(&[2]), ())?))),
-                cons_key_by_op_addr: Rc::new(RefCell::new(Some(State::create(
-                    store.sub(&[3]),
-                    (),
-                )?))),
-            })
+    impl<T: State> Encode for ABCIPlugin<T> {
+        fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+            self.inner.encode_into(dest)
         }
 
-        fn flush(self) -> Result<Self::Encoding> {
-            self.updates.flush()?;
-            self.current_vp.borrow_mut().take().unwrap().flush()?;
-            self.cons_key_by_op_addr
-                .borrow_mut()
-                .take()
-                .unwrap()
-                .flush()?;
-            Ok((self.inner.flush()?,))
+        fn encoding_length(&self) -> ed::Result<usize> {
+            self.inner.encoding_length()
         }
     }
 
-    impl<T> From<ABCIPlugin<T>> for (T::Encoding,)
+    impl<T: State> Decode for ABCIPlugin<T> {
+        fn decode<R: std::io::Read>(input: R) -> ed::Result<Self> {
+            Ok(Self {
+                inner: T::decode(input)?,
+                validator_updates: None,
+                updates: UpdateMap::new(),
+                time: None,
+                events: None,
+                current_vp: Rc::new(RefCell::new(Some(EntryMap::new()))),
+                cons_key_by_op_addr: Rc::new(RefCell::new(Some(Map::new()))),
+            })
+        }
+    }
+
+    impl<T: State> State for ABCIPlugin<T> {
+        fn attach(&mut self, store: Store) -> Result<()> {
+            self.inner.attach(store.sub(&[0]))?;
+            self.updates.attach(store.sub(&[1]))?;
+            self.current_vp.borrow_mut().attach(store.sub(&[2]))?;
+            self.cons_key_by_op_addr
+                .borrow_mut()
+                .attach(store.sub(&[3]))
+        }
+
+        fn flush(&mut self) -> Result<()> {
+            self.updates.flush()?;
+            self.current_vp.borrow_mut().flush()?;
+            self.cons_key_by_op_addr.borrow_mut().flush()?;
+            self.inner.flush()
+        }
+    }
+
+    impl<T> AbciQuery for ABCIPlugin<T>
     where
-        T: State,
-        T::Encoding: From<T>,
+        T: State + AbciQuery,
     {
-        fn from(provider: ABCIPlugin<T>) -> Self {
-            (provider.inner.into(),)
+        fn abci_query(&self, req: &RequestQuery) -> Result<ResponseQuery> {
+            self.inner.abci_query(req)
         }
     }
 }

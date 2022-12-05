@@ -39,11 +39,11 @@ pub use adjust::*;
 pub mod balance;
 pub use balance::*;
 
-pub mod ratio;
-pub use ratio::*;
-
 pub mod decimal;
 pub use decimal::Decimal;
+
+pub mod ratio;
+pub use ratio::*;
 
 pub mod math;
 pub use math::*;
@@ -63,7 +63,7 @@ use crate::macros::State;
 use crate::query::Query;
 use ed::{Decode, Encode};
 use ripemd::{Digest as _, Ripemd160};
-use sha2::{Digest as _, Sha256};
+use sha2::Sha256;
 
 #[derive(
     Encode,
@@ -81,6 +81,7 @@ use sha2::{Digest as _, Sha256};
     Copy,
     Client,
     Call,
+    Default,
 )]
 pub struct Address {
     bytes: [u8; Address::LENGTH],

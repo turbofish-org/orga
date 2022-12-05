@@ -8,30 +8,34 @@ use orga::call::Call;
 use orga::collections::Deque;
 use orga::query::Query;
 
-#[derive(Query, Call)]
+#[derive(Query, Call, Debug)]
 struct Foo<T> {
+    #[call]
     pub a: u8,
     _a2: u8,
+    #[call]
     pub b: Option<T>,
+    #[call]
     pub bar: Bar,
 }
 
-#[derive(Query, Call)]
+#[derive(Query, Call, Debug)]
 pub struct Bar {
     deque: Deque<u32>,
 }
 
-#[derive(Query, Call)]
+#[derive(Query, Call, Debug)]
 pub struct Baz<T: Clone>
 where
     T: Add,
 {
-    pub deque: Deque<u32>,
+    #[call]
+    deque: Deque<u32>,
     _marker: std::marker::PhantomData<T>,
 }
 
 #[derive(Query, Call)]
-pub struct TupleStruct(pub u32);
+pub struct TupleStruct(#[call] u32);
 
 impl<T> Foo<T> {
     pub fn _no_attr(&self) {}
@@ -152,4 +156,13 @@ fn _exhaustive_match_call<T: Call>(call: foo_call::Call<T>) {
         Call::MethodComplexTypeCall(subcall) => _assert_type::<Vec<u8>>(subcall),
         Call::MethodGenericOutputCall(subcall) => _assert_type::<Vec<u8>>(subcall),
     }
+}
+
+#[test]
+fn query_call_debug() {
+    let query = <Foo<i32> as orga::query::Query>::Query::MethodGenericInput(123, vec![42]);
+    println!("{:?}", query);
+
+    let call = <Foo<i32> as orga::call::Call>::Call::MethodGenericInputCall(234, vec![42]);
+    println!("{:?}", call);
 }

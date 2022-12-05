@@ -10,6 +10,7 @@ use crate::{Error, Result};
 use std::marker::PhantomData;
 use std::ops::Deref;
 
+#[derive(Encode, Decode, Default)]
 pub struct ChainCommitmentPlugin<T, const ID: &'static str> {
     inner: T,
 }
@@ -163,27 +164,14 @@ impl<T, const ID: &'static str> State for ChainCommitmentPlugin<T, ID>
 where
     T: State,
 {
-    type Encoding = (T::Encoding,);
-
-    fn create(store: Store, data: Self::Encoding) -> Result<Self> {
+    fn attach(&mut self, store: Store) -> Result<()> {
         Context::add(ChainId(ID));
 
-        Ok(Self {
-            inner: T::create(store, data.0)?,
-        })
+        self.inner.attach(store)
     }
 
-    fn flush(self) -> Result<Self::Encoding> {
-        Ok((self.inner.flush()?,))
-    }
-}
-
-impl<T, const ID: &'static str> From<ChainCommitmentPlugin<T, ID>> for (T::Encoding,)
-where
-    T: State,
-{
-    fn from(provider: ChainCommitmentPlugin<T, ID>) -> Self {
-        (provider.inner.into(),)
+    fn flush(&mut self) -> Result<()> {
+        self.inner.flush()
     }
 }
 
@@ -221,6 +209,18 @@ mod abci {
     {
         fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
             self.inner.init_chain(ctx)
+        }
+    }
+
+    impl<T, const ID: &'static str> crate::abci::AbciQuery for ChainCommitmentPlugin<T, ID>
+    where
+        T: crate::abci::AbciQuery + State,
+    {
+        fn abci_query(
+            &self,
+            request: &tendermint_proto::abci::RequestQuery,
+        ) -> Result<tendermint_proto::abci::ResponseQuery> {
+            self.inner.abci_query(request)
         }
     }
 }

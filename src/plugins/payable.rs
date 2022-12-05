@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::ops::{Deref, DerefMut};
 
-#[derive(State, Encode, Decode)]
+#[derive(State, Encode, Decode, Default)]
 pub struct PayablePlugin<T: State> {
     inner: T,
 }
@@ -72,6 +72,7 @@ impl Paid {
     }
 }
 
+#[derive(Debug)]
 pub struct PaidCall<T> {
     pub payer: T,
     pub paid: T,
@@ -118,7 +119,7 @@ impl<T: Decode> Decode for PaidCall<T> {
     }
 }
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode)]
 pub enum PayableCall<T> {
     Paid(PaidCall<T>),
     Unpaid(T),
@@ -147,8 +148,8 @@ where
 
                 let ctx = self.context::<Paid>().unwrap();
                 ctx.running_payer = false;
-                let res = self.inner.call(calls.paid)?;
-                Ok(res)
+                self.inner.call(calls.paid)?;
+                Ok(())
             }
         }
     }
@@ -453,6 +454,18 @@ mod abci {
     {
         fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
             self.inner.init_chain(ctx)
+        }
+    }
+
+    impl<T> crate::abci::AbciQuery for PayablePlugin<T>
+    where
+        T: crate::abci::AbciQuery + State + Call,
+    {
+        fn abci_query(
+            &self,
+            request: &tendermint_proto::abci::RequestQuery,
+        ) -> Result<tendermint_proto::abci::ResponseQuery> {
+            self.inner.abci_query(request)
         }
     }
 }

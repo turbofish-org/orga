@@ -1,9 +1,10 @@
 use super::sdk_compat::{sdk::Tx as SdkTx, ConvertSdkTx};
+use super::Paid;
 use crate::call::Call;
-use crate::client::{Client, AsyncCall, AsyncQuery};
+use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Coin, Symbol};
 use crate::context::GetContext;
-use crate::plugins::Paid;
+use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
@@ -13,9 +14,10 @@ use std::ops::{Deref, DerefMut};
 
 pub const MIN_FEE: u64 = 10_000;
 
+#[derive(Encode, Decode, Default)]
 pub struct FeePlugin<S, T> {
-    inner: T,
     _symbol: PhantomData<S>,
+    inner: T,
 }
 
 impl<S, T> State for FeePlugin<S, T>
@@ -23,25 +25,12 @@ where
     S: Symbol,
     T: State,
 {
-    type Encoding = (T::Encoding,);
-    fn create(store: Store, data: Self::Encoding) -> Result<Self> {
-        Ok(Self {
-            inner: T::create(store, data.0)?,
-            _symbol: PhantomData,
-        })
+    fn attach(&mut self, store: Store) -> Result<()> {
+        self.inner.attach(store)
     }
 
-    fn flush(self) -> Result<Self::Encoding> {
-        Ok((self.inner.flush()?,))
-    }
-}
-
-impl<S, T> From<FeePlugin<S, T>> for (T::Encoding,)
-where
-    T: State,
-{
-    fn from(provider: FeePlugin<S, T>) -> Self {
-        (provider.inner.into(),)
+    fn flush(&mut self) -> Result<()> {
+        self.inner.flush()
     }
 }
 
@@ -108,15 +97,29 @@ where
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Query + State, U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = std::rc::Rc<FeePlugin<S, T>>> + Clone, S> AsyncQuery for FeeAdapter<T, U, S> {
+impl<
+        T: Query + State,
+        U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = std::rc::Rc<FeePlugin<S, T>>> + Clone,
+        S,
+    > AsyncQuery for FeeAdapter<T, U, S>
+{
     type Query = T::Query;
     type Response<'a> = std::rc::Rc<T>;
 
     async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
     where
-        F: FnMut(Self::Response<'_>) -> Result<R>
+        F: FnMut(Self::Response<'_>) -> Result<R>,
     {
-        self.parent.query(query, |plugin| check(std::rc::Rc::new(std::rc::Rc::try_unwrap(plugin).map_err(|_| ()).unwrap().inner))).await
+        self.parent
+            .query(query, |plugin| {
+                check(std::rc::Rc::new(
+                    std::rc::Rc::try_unwrap(plugin)
+                        .map_err(|_| ())
+                        .unwrap()
+                        .inner,
+                ))
+            })
+            .await
     }
 }
 
@@ -179,6 +182,19 @@ mod abci {
     {
         fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
             self.inner.init_chain(ctx)
+        }
+    }
+
+    impl<S, T> crate::abci::AbciQuery for FeePlugin<S, T>
+    where
+        S: Symbol,
+        T: crate::abci::AbciQuery + State + Call,
+    {
+        fn abci_query(
+            &self,
+            request: &tendermint_proto::abci::RequestQuery,
+        ) -> Result<tendermint_proto::abci::ResponseQuery> {
+            self.inner.abci_query(request)
         }
     }
 }

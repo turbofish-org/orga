@@ -3,7 +3,7 @@ use mutagen::mutate;
 
 #[cfg(feature = "merk-full")]
 use super::{MerkStore, ProofBuilder};
-use crate::store::{BufStore, MapStore, Read, Shared, Write, KV};
+use crate::store::{BufStore, MapStore, NullStore, Read, Shared, Write, KV};
 use crate::{Error, Result};
 use merk::proofs::query::Map as ProofMap;
 use std::ops::Bound;
@@ -17,8 +17,17 @@ pub enum BackingStore {
     WrappedMerk(WrappedMerkStore),
     #[cfg(feature = "merk-full")]
     ProofBuilder(ProofBuilder),
+    #[cfg(feature = "merk-full")]
+    Merk(Shared<MerkStore>),
     MapStore(Shared<MapStore>),
     ProofMap(Shared<ABCIPrefixedProofStore>),
+    Null(NullStore),
+}
+
+impl Default for BackingStore {
+    fn default() -> Self {
+        BackingStore::Null(NullStore)
+    }
 }
 
 impl Read for BackingStore {
@@ -28,8 +37,11 @@ impl Read for BackingStore {
             BackingStore::WrappedMerk(ref store) => store.get(key),
             #[cfg(feature = "merk-full")]
             BackingStore::ProofBuilder(ref builder) => builder.get(key),
+            #[cfg(feature = "merk-full")]
+            BackingStore::Merk(ref store) => store.get(key),
             BackingStore::MapStore(ref store) => store.get(key),
             BackingStore::ProofMap(ref map) => map.get(key),
+            BackingStore::Null(ref null) => null.get(key),
         }
     }
 
@@ -39,8 +51,11 @@ impl Read for BackingStore {
             BackingStore::WrappedMerk(ref store) => store.get_next(key),
             #[cfg(feature = "merk-full")]
             BackingStore::ProofBuilder(ref builder) => builder.get_next(key),
+            #[cfg(feature = "merk-full")]
+            BackingStore::Merk(ref store) => store.get_next(key),
             BackingStore::MapStore(ref store) => store.get_next(key),
             BackingStore::ProofMap(ref map) => map.get_next(key),
+            BackingStore::Null(ref null) => null.get_next(key),
         }
     }
 }
@@ -51,6 +66,8 @@ impl Write for BackingStore {
             #[cfg(feature = "merk-full")]
             BackingStore::WrappedMerk(ref mut store) => store.put(key, value),
             #[cfg(feature = "merk-full")]
+            BackingStore::Merk(ref mut store) => store.put(key, value),
+            #[cfg(feature = "merk-full")]
             BackingStore::ProofBuilder(_) => {
                 panic!("put() is not implemented for ProofBuilder")
             }
@@ -58,12 +75,16 @@ impl Write for BackingStore {
             BackingStore::ProofMap(_) => {
                 panic!("put() is not implemented for ProofMap")
             }
+            BackingStore::Null(ref mut store) => store.put(key, value),
         }
     }
     fn delete(&mut self, key: &[u8]) -> Result<()> {
         match self {
             #[cfg(feature = "merk-full")]
             BackingStore::WrappedMerk(ref mut store) => store.delete(key),
+            #[cfg(feature = "merk-full")]
+            BackingStore::Merk(ref mut store) => store.delete(key),
+            #[cfg(feature = "merk-full")]
             #[cfg(feature = "merk-full")]
             BackingStore::ProofBuilder(_) => {
                 panic!("delete() is not implemented for ProofBuilder")
@@ -72,6 +93,7 @@ impl Write for BackingStore {
             BackingStore::ProofMap(_) => {
                 panic!("delete() is not implemented for ProofMap")
             }
+            BackingStore::Null(ref mut store) => store.delete(key),
         }
     }
 }
@@ -119,6 +141,19 @@ impl BackingStore {
                 "Failed to downcast backing store to ABCI-prefixed proof map".into(),
             )),
         }
+    }
+
+    #[cfg(feature = "merk-full")]
+    pub fn use_merkstore<F: FnOnce(&MerkStore) -> T, T>(&self, f: F) -> T {
+        let wrapped_store = match self {
+            BackingStore::WrappedMerk(_store) => todo!(),
+            BackingStore::Merk(store) => store,
+            _ => panic!("Cannot get MerkStore from BackingStore variant"),
+        };
+
+        let store = wrapped_store.borrow();
+
+        f(&*store)
     }
 }
 
@@ -173,6 +208,9 @@ impl ABCIPrefixedProofStore {
     }
 
     fn prefix_key(key: &[u8]) -> Vec<u8> {
+        if !key.is_empty() && key[0] > 3 {
+            return key.to_vec();
+        }
         let mut prefixed_key = Vec::with_capacity(key.len() + 1);
         prefixed_key.push(0);
         prefixed_key.extend_from_slice(key);
@@ -180,7 +218,10 @@ impl ABCIPrefixedProofStore {
     }
 
     fn deprefix_key(mut key: Vec<u8>) -> Vec<u8> {
-        key.remove(0);
+        if !key.is_empty() && key[0] == 0 {
+            key.remove(0);
+        }
+
         key
     }
 }

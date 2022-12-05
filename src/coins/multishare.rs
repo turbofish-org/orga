@@ -1,9 +1,10 @@
 use super::{Amount, Balance, Coin, Decimal, Give, Symbol, Take};
 use crate::collections::Map;
+use crate::encoding::{Decode, Encode};
 use crate::state::State;
 use crate::{Error, Result};
 
-#[derive(State)]
+#[derive(State, Decode, Encode, Default)]
 pub struct MultiShare {
     pub shares: Map<u8, Decimal>,
 }

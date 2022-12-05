@@ -1,7 +1,10 @@
+use std::cell::Cell;
 use std::convert::TryInto;
 use std::ops::{Deref, DerefMut};
+use std::sync::{Arc, Mutex};
 
 use tendermint_rpc as tm;
+use tm::endpoint::abci_query::AbciQuery;
 use tm::Client as _;
 
 use crate::call::Call;
@@ -20,17 +23,61 @@ pub struct TendermintClient<T: Client<TendermintAdapter<T>>> {
     tm_client: tm::HttpClient,
 }
 
+impl<T> Clone for TendermintClient<T>
+where
+    T: Client<TendermintAdapter<T>>,
+{
+    fn clone(&self) -> Self {
+        let state_client = T::create_client(TendermintAdapter {
+            marker: std::marker::PhantomData,
+            client: self.tm_client.clone(),
+            res_store: None,
+        });
+
+        Self {
+            state_client,
+            tm_client: self.tm_client.clone(),
+        }
+    }
+}
+
 impl<T: Client<TendermintAdapter<T>>> TendermintClient<T> {
     pub fn new(addr: &str) -> Result<Self> {
         let tm_client = tm::HttpClient::new(addr)?;
         let state_client = T::create_client(TendermintAdapter {
             marker: std::marker::PhantomData,
             client: tm_client.clone(),
+            res_store: None,
         });
         Ok(TendermintClient {
             state_client,
             tm_client,
         })
+    }
+
+    //this should await something
+    pub async fn with_response<F, R, X: std::future::Future<Output = Result<R>>>(
+        &self,
+        f: F,
+    ) -> Result<(R, AbciQuery)>
+    where
+        F: FnOnce(T::Client) -> X,
+    {
+        let res_store = Arc::new(Mutex::new(Cell::new(None)));
+        let state_client = T::create_client(TendermintAdapter {
+            marker: std::marker::PhantomData,
+            client: self.tm_client.clone(),
+            res_store: Some(res_store.clone()),
+        });
+
+        let query_res = f(state_client).await?;
+
+        let response = res_store
+            .lock()
+            .map_err(|e| Error::Poison(e.to_string()))?
+            .take()
+            .ok_or_else(|| Error::Query("No query preformed in closure".to_string()))?;
+        Ok((query_res, response))
     }
 }
 
@@ -82,9 +129,9 @@ impl<T: Client<TendermintAdapter<T>> + Query + State> TendermintClient<T> {
             Some(root_value) => root_value,
             None => return Err(Error::ABCI("Missing root value".into())),
         };
-        let encoding = T::Encoding::decode(root_value)?;
+        let mut state = T::decode(root_value)?;
         let store: Shared<ABCIPrefixedProofStore> = Shared::new(ABCIPrefixedProofStore::new(map));
-        let state = T::create(Store::new(store.into()), encoding)?;
+        state.attach(Store::new(store.into()))?;
 
         // TODO: retry logic
         check(&state)
@@ -94,6 +141,7 @@ impl<T: Client<TendermintAdapter<T>> + Query + State> TendermintClient<T> {
 pub struct TendermintAdapter<T> {
     marker: std::marker::PhantomData<fn() -> T>,
     client: tm::HttpClient,
+    res_store: Option<Arc<Mutex<Cell<Option<AbciQuery>>>>>,
 }
 
 impl<T> Clone for TendermintAdapter<T> {
@@ -101,6 +149,7 @@ impl<T> Clone for TendermintAdapter<T> {
         TendermintAdapter {
             marker: self.marker,
             client: self.client.clone(),
+            res_store: self.res_store.clone(),
         }
     }
 }
@@ -151,6 +200,13 @@ impl<T: Query + State> AsyncQuery for TendermintAdapter<T> {
             .abci_query(None, query_bytes, None, true)
             .await?;
 
+        if let Some(res_store) = &self.res_store {
+            res_store
+                .lock()
+                .map_err(|e| Error::Poison(e.to_string()))?
+                .replace(Some(res.clone()));
+        }
+
         if let tendermint::abci::Code::Err(code) = res.code {
             let msg = format!("code {}: {}", code, res.log);
             return Err(Error::Query(msg));
@@ -175,13 +231,12 @@ impl<T: Query + State> AsyncQuery for TendermintAdapter<T> {
             Some(root_value) => root_value,
             None => return Err(Error::ABCI("Missing root value".into())),
         };
-        let encoding = T::Encoding::decode(root_value)?;
+        let mut state = T::decode(root_value)?;
 
         // TODO: remove need for ABCI prefix layer since that should come from
         // ABCIPlugin Client impl and should be part of app type
         let store: Shared<ABCIPrefixedProofStore> = Shared::new(ABCIPrefixedProofStore::new(map));
-
-        let state = T::create(Store::new(store.into()), encoding)?;
+        state.attach(Store::new(store.into()))?;
 
         // TODO: retry logic
         check(std::rc::Rc::new(state))

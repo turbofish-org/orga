@@ -14,6 +14,7 @@ use crate::{Error, Result};
 use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
 use std::ops::Deref;
 
+#[derive(Default, Encode, Decode)]
 pub struct SignerPlugin<T> {
     inner: T,
 }
@@ -30,7 +31,7 @@ pub struct Signer {
     pub signer: Option<Address>,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode)]
 pub struct SignerCall {
     pub signature: Option<[u8; 64]>,
     pub pubkey: Option<[u8; 33]>,
@@ -38,12 +39,12 @@ pub struct SignerCall {
     pub call_bytes: Vec<u8>,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode)]
 pub enum SigType {
     Native,
     Adr36,
     #[skip]
-    Sdk(sdk_compat::sdk::Tx),
+    Sdk(Box<sdk_compat::sdk::Tx>),
 }
 
 use serde::Serialize;
@@ -182,7 +183,7 @@ where
         Ok(SignerCall {
             signature: Some(signature),
             pubkey: Some(pubkey),
-            sigtype: SigType::Sdk(sdk_tx.clone()),
+            sigtype: SigType::Sdk(Box::new(sdk_tx.clone())),
             call_bytes: inner_call,
         })
     }
@@ -301,28 +302,13 @@ impl<T: Client<SignerClient<T, U>>, U: Clone> Client<U> for SignerPlugin<T> {
     }
 }
 
-impl<T> State for SignerPlugin<T>
-where
-    T: State,
-{
-    type Encoding = (T::Encoding,);
-    fn create(store: Store, data: Self::Encoding) -> Result<Self> {
-        Ok(Self {
-            inner: T::create(store, data.0)?,
-        })
+impl<T: State> State for SignerPlugin<T> {
+    fn attach(&mut self, store: Store) -> Result<()> {
+        self.inner.attach(store)
     }
 
-    fn flush(self) -> Result<Self::Encoding> {
-        Ok((self.inner.flush()?,))
-    }
-}
-
-impl<T> From<SignerPlugin<T>> for (T::Encoding,)
-where
-    T: State,
-{
-    fn from(provider: SignerPlugin<T>) -> Self {
-        (provider.inner.into(),)
+    fn flush(&mut self) -> Result<()> {
+        self.inner.flush()
     }
 }
 
@@ -351,7 +337,7 @@ pub mod keplr {
             unsafe {
                 let window = web_sys::window().expect("no global `window` exists");
                 let keplr = window.get("keplr").expect("no `keplr` in global `window`");
-                
+
                 let storage = window
                     .local_storage()
                     .expect("no `localStorage` in global `window`")
@@ -468,7 +454,8 @@ pub mod keplr {
 
                 let handle = self.handle();
 
-                let sign_amino: Function = get(&handle.keplr, &"signAmino".to_string().into())?.into();
+                let sign_amino: Function =
+                    get(&handle.keplr, &"signAmino".to_string().into())?.into();
                 let sign_promise: Promise =
                     apply(&sign_amino, &handle.keplr, &args).unwrap().into();
                 let res = JsFuture::from(sign_promise).await.unwrap();
@@ -554,6 +541,18 @@ mod abci {
     {
         fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
             self.inner.init_chain(ctx)
+        }
+    }
+
+    impl<T> crate::abci::AbciQuery for SignerPlugin<T>
+    where
+        T: crate::abci::AbciQuery + State + Call,
+    {
+        fn abci_query(
+            &self,
+            request: &tendermint_proto::abci::RequestQuery,
+        ) -> Result<tendermint_proto::abci::ResponseQuery> {
+            self.inner.abci_query(request)
         }
     }
 }

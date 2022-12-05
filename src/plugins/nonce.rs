@@ -13,7 +13,7 @@ use std::ops::{Deref, DerefMut};
 
 const NONCE_INCREASE_LIMIT: u64 = 1000;
 
-#[derive(State)]
+#[derive(State, Encode, Decode, Default)]
 pub struct NoncePlugin<T: State> {
     map: Map<Address, u64>,
     inner: T,
@@ -61,14 +61,14 @@ where
     }
 }
 
-#[derive(Encode, Decode)]
-pub enum NonceQuery<T: Query> {
+#[derive(Encode, Decode, Debug)]
+pub enum NonceQuery<T> {
     Nonce(Address),
-    Inner(T::Query),
+    Inner(T),
 }
 
 impl<T: State + Query> Query for NoncePlugin<T> {
-    type Query = NonceQuery<T>;
+    type Query = NonceQuery<T::Query>;
 
     fn query(&self, query: Self::Query) -> Result<()> {
         match query {
@@ -81,7 +81,7 @@ impl<T: State + Query> Query for NoncePlugin<T> {
     }
 }
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode)]
 pub struct NonceCall<T> {
     pub nonce: Option<u64>,
     pub inner_call: T,
@@ -178,8 +178,13 @@ where
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Query + State, U: for<'a> AsyncQuery<Query = NonceQuery<T>, Response<'a> = std::rc::Rc<NoncePlugin<T>>> + Clone>
-    AsyncQuery for NonceAdapter<T, U>
+impl<
+        T: Query + State,
+        U: for<'a> AsyncQuery<
+                Query = NonceQuery<T::Query>,
+                Response<'a> = std::rc::Rc<NoncePlugin<T>>,
+            > + Clone,
+    > AsyncQuery for NonceAdapter<T, U>
 {
     type Query = T::Query;
     type Response<'a> = std::rc::Rc<T>;
@@ -189,7 +194,14 @@ impl<T: Query + State, U: for<'a> AsyncQuery<Query = NonceQuery<T>, Response<'a>
         F: FnMut(Self::Response<'_>) -> Result<R>,
     {
         self.parent
-            .query(NonceQuery::Inner(query), |plugin| check(std::rc::Rc::new(std::rc::Rc::try_unwrap(plugin).map_err(|_| ()).unwrap().inner)))
+            .query(NonceQuery::Inner(query), |plugin| {
+                check(std::rc::Rc::new(
+                    std::rc::Rc::try_unwrap(plugin)
+                        .map_err(|_| ())
+                        .unwrap()
+                        .inner,
+                ))
+            })
             .await
     }
 }
@@ -197,6 +209,18 @@ impl<T: Query + State, U: for<'a> AsyncQuery<Query = NonceQuery<T>, Response<'a>
 pub struct NonceClient<T: Client<NonceAdapter<T, U>> + State, U: Clone> {
     inner: T::Client,
     parent: U,
+}
+
+impl<T: Client<NonceAdapter<T, U>> + State, U: Clone> Clone for NonceClient<T, U>
+where
+    T::Client: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            parent: self.parent.clone(),
+        }
+    }
 }
 
 impl<T: Client<NonceAdapter<T, U>> + State, U: Clone> Deref for NonceClient<T, U> {
@@ -215,7 +239,11 @@ impl<T: Client<NonceAdapter<T, U>> + State, U: Clone> DerefMut for NonceClient<T
 
 impl<
         T: Client<NonceAdapter<T, U>> + State + Query,
-        U: Clone + for<'a> AsyncQuery<Query = NonceQuery<T>, Response<'a> = std::rc::Rc<NoncePlugin<T>>>,
+        U: Clone
+            + for<'a> AsyncQuery<
+                Query = NonceQuery<T::Query>,
+                Response<'a> = std::rc::Rc<NoncePlugin<T>>,
+            >,
     > NonceClient<T, U>
 {
     pub async fn nonce(&self, address: Address) -> Result<u64> {
@@ -330,6 +358,18 @@ mod abci {
             self.inner.init_chain(ctx)
         }
     }
+
+    impl<T> crate::abci::AbciQuery for NoncePlugin<T>
+    where
+        T: crate::abci::AbciQuery + State + Call,
+    {
+        fn abci_query(
+            &self,
+            request: &tendermint_proto::abci::RequestQuery,
+        ) -> Result<tendermint_proto::abci::ResponseQuery> {
+            self.inner.abci_query(request)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -337,9 +377,8 @@ mod tests {
     use super::super::Signer;
     use super::*;
     use crate::context::Context;
-    use crate::store::{MapStore, Shared, Store};
 
-    #[derive(State)]
+    #[derive(State, Encode, Decode, Default)]
     struct Counter {
         pub count: u64,
     }
@@ -352,7 +391,7 @@ mod tests {
         }
     }
 
-    #[derive(Encode, Decode)]
+    #[derive(Debug, Encode, Decode)]
     enum CounterCall {
         Increment,
     }
@@ -381,9 +420,7 @@ mod tests {
 
     #[test]
     fn nonced_calls() {
-        let store = Shared::new(MapStore::new());
-        let mut state =
-            NoncePlugin::<Counter>::create(Store::new(store.into()), Default::default()).unwrap();
+        let mut state: NoncePlugin<Counter> = Default::default();
 
         // Fails if the signer context isn't available.
         assert!(state.call(unnonced_call()).is_err());

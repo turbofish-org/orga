@@ -1,4 +1,4 @@
-use super::{ABCIStateMachine, ABCIStore, App, Application, WrappedMerk};
+use super::{ABCIStateMachine, ABCIStore, AbciQuery, App, Application, WrappedMerk};
 use crate::call::Call;
 use crate::encoding::{Decode, Encode};
 use crate::merk::{BackingStore, MerkStore};
@@ -51,10 +51,7 @@ pub struct DefaultConfig {
     pub timeout_commit: Option<String>,
 }
 
-impl<A: App> Node<A>
-where
-    <A as State>::Encoding: Default,
-{
+impl<A: App> Node<A> {
     pub fn new(name: &str, cfg_defaults: DefaultConfig) -> Self {
         let home = Node::home(name);
         let merk_home = home.join("merk");
@@ -201,37 +198,29 @@ where
     }
 }
 
-impl<A> InternalApp<ABCIPlugin<A>>
-where
-    A: App,
-    <A as State>::Encoding: Default,
-{
+impl<A: App> InternalApp<ABCIPlugin<A>> {
     fn run<T, F: FnOnce(&mut ABCIPlugin<A>) -> T>(&self, store: WrappedMerk, op: F) -> Result<T> {
         let mut store = Store::new(store.into());
         let state_bytes = match store.get(&[])? {
             Some(inner) => inner,
             None => {
-                let default_encoding: A::Encoding = Default::default();
-                let encoded_bytes = Encode::encode(&default_encoding).unwrap();
+                let default: A = Default::default();
+                let encoded_bytes = Encode::encode(&default).unwrap();
                 store.put(vec![], encoded_bytes.clone())?;
                 encoded_bytes
             }
         };
-        let data: <ABCIPlugin<A> as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
-        let mut state = <ABCIPlugin<A> as State>::create(store.clone(), data)?;
+        let mut state: ABCIPlugin<A> = Decode::decode(state_bytes.as_slice())?;
+        state.attach(store.clone())?;
         let res = op(&mut state);
-        let flushed = state.flush()?;
-        store.put(vec![], flushed.encode()?)?;
+        state.flush()?;
+        store.put(vec![], state.encode()?)?;
 
         Ok(res)
     }
 }
 
-impl<A> Application for InternalApp<ABCIPlugin<A>>
-where
-    A: App,
-    <A as State>::Encoding: Default,
-{
+impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
     fn init_chain(&self, store: WrappedMerk, req: RequestInitChain) -> Result<ResponseInitChain> {
         let mut updates = self.run(store, move |state| -> Result<_> {
             state.call(req.into())?;
@@ -279,13 +268,21 @@ where
     fn deliver_tx(&self, store: WrappedMerk, req: RequestDeliverTx) -> Result<ResponseDeliverTx> {
         let run_res = self.run(store, move |state| -> Result<_> {
             let inner_call = Decode::decode(req.tx.as_slice())?;
-            state.call(ABCICall::DeliverTx(inner_call))
+            state.call(ABCICall::DeliverTx(inner_call))?;
+
+            Ok(state.events.take().unwrap_or_default())
         })?;
 
         let mut deliver_tx_res = ResponseDeliverTx::default();
-        if let Err(err) = run_res {
-            deliver_tx_res.code = 1;
-            deliver_tx_res.log = err.to_string();
+        match run_res {
+            Ok(events) => {
+                deliver_tx_res.events = events;
+                deliver_tx_res.log = "success".to_string();
+            }
+            Err(err) => {
+                deliver_tx_res.code = 1;
+                deliver_tx_res.log = err.to_string();
+            }
         }
 
         Ok(deliver_tx_res)
@@ -294,36 +291,56 @@ where
     fn check_tx(&self, store: WrappedMerk, req: RequestCheckTx) -> Result<ResponseCheckTx> {
         let run_res = self.run(store, move |state| -> Result<_> {
             let inner_call = Decode::decode(req.tx.as_slice())?;
-            state.call(ABCICall::CheckTx(inner_call))
+            state.call(ABCICall::DeliverTx(inner_call))?;
+
+            Ok(state.events.take().unwrap_or_default())
         })?;
+
         let mut check_tx_res = ResponseCheckTx::default();
-        if let Err(err) = run_res {
-            check_tx_res.code = 1;
-            check_tx_res.log = err.to_string();
+
+        match run_res {
+            Ok(events) => {
+                check_tx_res.events = events;
+            }
+            Err(err) => {
+                check_tx_res.code = 1;
+                check_tx_res.log = err.to_string();
+            }
         }
 
         Ok(check_tx_res)
     }
 
     fn query(&self, merk_store: Shared<MerkStore>, req: RequestQuery) -> Result<ResponseQuery> {
-        let query_bytes = req.data;
+        let create_state = |store| -> Result<ABCIPlugin<A>> {
+            let store = Store::new(store);
+            let state_bytes = store
+                .get(&[])?
+                .ok_or_else(|| crate::Error::Query("Store is empty".to_string()))?;
+            let mut state: ABCIPlugin<A> = Decode::decode(state_bytes.as_slice())?;
+            state.attach(store)?;
+            Ok(state)
+        };
+
+        if !req.path.is_empty() {
+            let store = BackingStore::Merk(merk_store);
+            let state = create_state(store)?;
+            return state.abci_query(&req);
+        }
+
         let backing_store: BackingStore = merk_store.clone().into();
         let store_height = merk_store.borrow().height()?;
-        let store = Store::new(backing_store.clone());
-        let state_bytes = store
-            .get(&[])?
-            .ok_or_else(|| crate::Error::Query("Store is empty".to_string()))?;
-        let data: <ABCIPlugin<A> as State>::Encoding = Decode::decode(state_bytes.as_slice())?;
-        let state = <ABCIPlugin<A> as State>::create(store, data)?;
+        let state = create_state(backing_store.clone())?;
 
         // Check which keys are accessed by the query and build a proof
+        let query_bytes = req.data;
         let query_decode_res = Decode::decode(query_bytes.as_slice());
         let query = query_decode_res?;
 
         state.query(query)?;
 
         let proof_builder = backing_store.into_proof_builder()?;
-        let root_hash = merk_store.borrow().root_hash()?;
+        let root_hash = merk_store.borrow().merk().root_hash();
         let proof_bytes = proof_builder.build()?;
 
         // TODO: we shouldn't need to include the root hash in the response
@@ -337,7 +354,6 @@ where
             value,
             ..Default::default()
         };
-
         Ok(res)
     }
 }
@@ -346,10 +362,7 @@ struct InternalApp<A> {
     _app: PhantomData<A>,
 }
 
-impl<A: App> InternalApp<ABCIPlugin<A>>
-where
-    <A as State>::Encoding: Default,
-{
+impl<A: App> InternalApp<ABCIPlugin<A>> {
     pub fn new() -> Self {
         Self { _app: PhantomData }
     }
