@@ -24,7 +24,6 @@ where
     rewards: Map<u8, Decimal>,
     symbol: PhantomData<S>,
     shares_issued: Decimal,
-    #[serde(skip)]
     map: Map<K, RefCell<Entry<V>>>,
     rewards_this_period: Map<u8, Decimal>,
     last_period_entry: Map<u8, Decimal>,

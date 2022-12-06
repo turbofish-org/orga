@@ -11,7 +11,6 @@ use super::{Adapter, Ibc};
 
 #[derive(State, Encode, Decode, Default, Serialize, Deserialize, Describe)]
 pub struct PortStore {
-    #[serde(skip)]
     module_by_port: Map<Adapter<PortId>, Adapter<ModuleId>>,
 }
 

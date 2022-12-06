@@ -170,17 +170,12 @@ impl ConsensusStateMap {
 
 #[derive(State, Call, Query, Client, Encode, Decode, Default, Serialize, Deserialize)]
 pub struct ClientStore {
-    #[serde(skip)]
     host_consensus_state: Map<u64, ProtobufAdapter<ConsensusState>>,
     height: u64,
-    #[serde(skip)]
     client_type: Map<Adapter<ClientId>, Adapter<ClientType>>,
-    #[serde(skip)]
     client_state: Map<Adapter<ClientId>, ProtobufAdapter<AnyClientState>>,
-    #[serde(skip)]
     client_update_time: Map<Adapter<(ClientId, Height)>, Adapter<Timestamp>>,
     client_consensus_state: Map<Adapter<ClientId>, ConsensusStateMap>,
-    #[serde(skip)]
     client_update_height: Map<Adapter<(ClientId, Height)>, Adapter<Height>>,
     client_counter: u64,
 }

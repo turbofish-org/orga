@@ -14,7 +14,6 @@ use serde::{Deserialize, Serialize};
 #[serde(bound = "")]
 pub struct Deque<T, S: Default = DefaultBackingStore> {
     meta: Meta,
-    #[serde(skip)]
     map: Map<u64, T, S>,
 }
 

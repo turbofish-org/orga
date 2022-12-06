@@ -576,7 +576,6 @@ impl FromStr for Dynom {
 #[derive(State, Call, Query, Client, Encode, Decode, Default, Serialize, Deserialize, Describe)]
 pub struct Bank {
     #[call]
-    #[serde(skip)]
     pub balances: Map<Dynom, Map<Address, Amount>>,
 }
 
