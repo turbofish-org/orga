@@ -10,8 +10,9 @@ use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
+use crate::describe::Describe;
 
-#[derive(State, Encode, Decode, Call, Query, Client, Default, Serialize, Deserialize)]
+#[derive(State, Encode, Decode, Call, Query, Client, Default, Serialize, Deserialize, Describe)]
 pub struct Accounts<S: Symbol> {
     transfers_allowed: bool,
     transfer_exceptions: Map<Address, ()>,

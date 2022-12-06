@@ -2,6 +2,7 @@ use super::{sdk_compat::sdk::Tx as SdkTx, ConvertSdkTx};
 use crate::call::Call as CallTrait;
 use crate::client::{AsyncCall, AsyncQuery, Client as ClientTrait};
 use crate::context::Context;
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
@@ -10,7 +11,7 @@ use crate::{Error, Result};
 use std::marker::PhantomData;
 use std::ops::Deref;
 
-#[derive(Encode, Decode, Default)]
+#[derive(Encode, Decode, Default, Describe)]
 pub struct ChainCommitmentPlugin<T, const ID: &'static str> {
     inner: T,
 }

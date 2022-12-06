@@ -5,6 +5,7 @@ use crate::client::{AsyncCall, AsyncQuery};
 use crate::coins::Address;
 use crate::collections::Map;
 use crate::context::GetContext;
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
@@ -13,7 +14,7 @@ use std::ops::{Deref, DerefMut};
 
 const NONCE_INCREASE_LIMIT: u64 = 1000;
 
-#[derive(State, Encode, Decode, Default)]
+#[derive(State, Encode, Decode, Default, Describe)]
 pub struct NoncePlugin<T: State> {
     map: Map<Address, u64>,
     inner: T,

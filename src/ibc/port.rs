@@ -1,4 +1,5 @@
 use crate::collections::Map;
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::state::State;
 use ibc::core::ics05_port::context::PortReader;
@@ -8,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{Adapter, Ibc};
 
-#[derive(State, Encode, Decode, Default, Serialize, Deserialize)]
+#[derive(State, Encode, Decode, Default, Serialize, Deserialize, Describe)]
 pub struct PortStore {
     #[serde(skip)]
     module_by_port: Map<Adapter<PortId>, Adapter<ModuleId>>,

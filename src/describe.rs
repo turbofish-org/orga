@@ -526,10 +526,7 @@ mod tests {
     }
 
     #[derive(State, Encode, Decode, Describe, Default)]
-    struct Baz<T: State> {
-        bar: u32,
-        baz: Map<u32, T>,
-    }
+    struct Baz<T: State>(Map<u32, T>);
 
     fn create_bar_value() -> Value {
         let store = Store::new(DefaultBackingStore::MapStore(Shared::new(MapStore::new())));

@@ -6,6 +6,7 @@ use crate::call::Call;
 use crate::client::Client;
 use crate::collections::{Deque, Entry, EntryMap, Map};
 use crate::context::GetContext;
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, Terminated};
 #[cfg(feature = "abci")]
 use crate::plugins::{BeginBlockCtx, EndBlockCtx, Validators};
@@ -36,7 +37,7 @@ const MIN_SELF_DELEGATION_MIN: u64 = 0;
 const DOWNTIME_JAIL_SECONDS: u64 = 60 * 60 * 24; // 1 day
 const EDIT_INTERVAL_SECONDS: u64 = 60 * 60 * 24; // 1 day
 
-#[derive(Call, Query, Client, Default, Serialize, Deserialize)]
+#[derive(Call, Query, Client, Default, Serialize, Deserialize, Describe)]
 pub struct Staking<S: Symbol> {
     validators: Pool<Address, Validator<S>, S>,
     consensus_keys: Map<Address, [u8; 32]>,
@@ -128,7 +129,7 @@ impl<S: Symbol> Decode for Staking<S> {
 
 impl<S: Symbol> Terminated for Staking<S> {}
 
-#[derive(Entry, Clone)]
+#[derive(Entry, Clone, Serialize, Deserialize)]
 struct ValidatorQueueEntry {
     #[key]
     start_seconds: i64,
@@ -152,14 +153,14 @@ impl EntryMap<ValidatorQueueEntry> {
     }
 }
 
-#[derive(State, Encode, Decode, Serialize, Deserialize, Default)]
+#[derive(State, Encode, Decode, Serialize, Deserialize, Default, Describe)]
 pub struct UnbondingDelegationEntry {
     validator_address: Address,
     delegator_address: Address,
     start_seconds: i64,
 }
 
-#[derive(State, Encode, Decode, Serialize, Deserialize, Default)]
+#[derive(State, Encode, Decode, Serialize, Deserialize, Default, Describe)]
 pub struct RedelegationEntry {
     src_validator_address: Address,
     dst_validator_address: Address,
@@ -1059,7 +1060,7 @@ pub struct Declaration {
     pub validator_info: ValidatorInfo,
 }
 
-#[derive(State, Default, Debug, Encode, Decode, Clone, Copy, Serialize, Deserialize)]
+#[derive(State, Default, Debug, Encode, Decode, Clone, Copy, Serialize, Deserialize, Describe)]
 pub struct Commission {
     pub rate: Decimal,
     pub max: Decimal,

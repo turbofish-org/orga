@@ -10,12 +10,13 @@ use std::ops::RangeBounds;
 
 use super::{Entry, Next};
 use crate::call::Call;
+use crate::describe::Describe;
 use crate::query::Query;
 use crate::state::*;
 use crate::store::*;
 use crate::Result;
 
-#[derive(Query, Call, Encode, Decode, Serialize, Deserialize)]
+#[derive(Query, Call, Encode, Decode, Serialize, Deserialize, Describe)]
 pub struct EntryMap<T: Entry, S: Default = DefaultBackingStore> {
     #[serde(skip)]
     map: Map<T::Key, T::Value, S>,

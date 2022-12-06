@@ -2,6 +2,7 @@ use super::{Adapter, Ibc, Lunchbox, ProtobufAdapter};
 use crate::call::Call;
 use crate::client::Client;
 use crate::collections::{Deque, Map};
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
@@ -62,7 +63,7 @@ impl Lunchbox {
     }
 }
 
-#[derive(State, Call, Query, Client, Encode, Decode, Default, Serialize, Deserialize)]
+#[derive(State, Call, Query, Client, Encode, Decode, Default, Serialize, Deserialize, Describe)]
 pub struct ConnectionStore {
     count: u64,
     ends: Map<Adapter<ConnectionId>, ProtobufAdapter<ConnectionEnd>>,

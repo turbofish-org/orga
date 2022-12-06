@@ -1,6 +1,7 @@
 use crate::call::Call as CallTrait;
 use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Address, Symbol};
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
@@ -11,7 +12,7 @@ use std::ops::{Deref, DerefMut};
 pub const MAX_CALL_SIZE: usize = 65_535;
 pub const NATIVE_CALL_FLAG: u8 = 0xff;
 
-#[derive(State, Clone, Encode, Decode, Default)]
+#[derive(State, Clone, Encode, Decode, Default, Describe)]
 pub struct SdkCompatPlugin<S, T: State> {
     symbol: PhantomData<S>,
     inner: T,

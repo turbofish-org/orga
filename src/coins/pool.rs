@@ -1,6 +1,7 @@
 use super::{Amount, Balance, Coin, Decimal, Give, Symbol};
 use crate::collections::map::{ChildMut as MapChildMut, Ref as MapRef};
 use crate::collections::{Map, Next};
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, Terminated};
 use crate::query::Query;
 use crate::state::State;
@@ -12,7 +13,7 @@ use std::collections::BTreeMap;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Drop, RangeBounds};
 
-#[derive(Query, Default, Serialize, Deserialize)]
+#[derive(Query, Default, Serialize, Deserialize, Describe)]
 pub struct Pool<K, V, S>
 where
     K: Terminated + Encode,

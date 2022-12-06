@@ -4,6 +4,7 @@ use crate::call::Call;
 use crate::client::Client;
 use crate::coins::{Address, Amount};
 use crate::collections::{Deque, Map};
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, LengthVec};
 use crate::query::Query;
 use crate::state::State;
@@ -38,7 +39,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{Adapter, Lunchbox};
 
-#[derive(State, Call, Query, Client, Encode, Decode, Default, Serialize, Deserialize)]
+#[derive(State, Call, Query, Client, Encode, Decode, Default, Serialize, Deserialize, Describe)]
 pub struct TransferModule {
     lunchbox: Lunchbox,
     commitments: Map<Adapter<(PortId, ChannelId)>, Deque<Adapter<PacketState>>>,
@@ -556,7 +557,7 @@ impl TransferModule {
     }
 }
 
-#[derive(State, Encode, Decode, Clone, Debug)]
+#[derive(State, Encode, Decode, Clone, Debug, Serialize, Deserialize, Describe)]
 pub struct Dynom(pub LengthVec<u8, u8>);
 
 impl FromStr for Dynom {
@@ -572,7 +573,7 @@ impl FromStr for Dynom {
     }
 }
 
-#[derive(State, Call, Query, Client, Encode, Decode, Default, Serialize, Deserialize)]
+#[derive(State, Call, Query, Client, Encode, Decode, Default, Serialize, Deserialize, Describe)]
 pub struct Bank {
     #[call]
     #[serde(skip)]

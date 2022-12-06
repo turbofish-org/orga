@@ -1,6 +1,7 @@
 use crate::call::Call;
 use crate::client::Client;
 use crate::collections::Next;
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, Terminated};
 use crate::query::Query;
 use crate::state::State;
@@ -65,6 +66,16 @@ where
 
 impl<T> Terminated for Adapter<T> {}
 
+impl<T> Describe for Adapter<T>
+where
+    for<'de> T: Deserialize<'de>,
+    T: Serialize + std::fmt::Debug + 'static,
+{
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>().build()
+    }
+}
+
 macro_rules! from_impl {
     ($type:ty) => {
         impl From<$type> for Adapter<$type> {
@@ -125,7 +136,7 @@ where
     }
 }
 
-#[derive(Call, Query, Client, Default)]
+#[derive(Call, Query, Client, Default, Serialize, Deserialize)]
 pub struct ProtobufAdapter<T> {
     inner: T,
 }
@@ -165,6 +176,17 @@ where
         let inner: T = T::decode(bytes.as_slice()).map_err(|_e| ed::Error::UnexpectedByte(0))?;
 
         Ok(Self { inner })
+    }
+}
+
+impl<T: 'static> Describe for ProtobufAdapter<T>
+where
+    T: IbcProto,
+    T: Protobuf<<T as IbcProto>::Proto>,
+    <T as std::convert::TryFrom<<T as IbcProto>::Proto>>::Error: std::fmt::Display,
+{
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>().build()
     }
 }
 

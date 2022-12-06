@@ -1,6 +1,7 @@
 use super::map::{ChildMut, Map, ReadOnly, Ref};
 use crate::call::Call;
 use crate::client::Client;
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
@@ -9,7 +10,7 @@ use crate::store::{Read, Store, Write};
 use crate::Result;
 use serde::{Deserialize, Serialize};
 
-#[derive(Query, Encode, Decode, Serialize, Deserialize)]
+#[derive(Query, Encode, Decode, Serialize, Deserialize, Describe)]
 #[serde(bound = "")]
 pub struct Deque<T, S: Default = DefaultBackingStore> {
     meta: Meta,

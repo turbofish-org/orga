@@ -4,6 +4,7 @@ use crate::call::Call;
 use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Coin, Symbol};
 use crate::context::GetContext;
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
@@ -14,7 +15,7 @@ use std::ops::{Deref, DerefMut};
 
 pub const MIN_FEE: u64 = 10_000;
 
-#[derive(Encode, Decode, Default)]
+#[derive(Encode, Decode, Default, Describe)]
 pub struct FeePlugin<S, T> {
     _symbol: PhantomData<S>,
     inner: T,

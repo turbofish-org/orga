@@ -8,6 +8,7 @@ use crate::call::Call;
 use crate::client::Client;
 use crate::collections::Map;
 use crate::collections::Next;
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 #[cfg(feature = "abci")]
 use crate::plugins::BeginBlockCtx;
@@ -107,7 +108,7 @@ impl Lunchbox {
     }
 }
 
-#[derive(State, Encode, Decode, Default)]
+#[derive(State, Encode, Decode, Default, Describe)]
 pub struct ConsensusStateMap {
     states: Map<Adapter<Height>, ProtobufAdapter<AnyConsensusState>>,
     prev_height: Map<Adapter<Height>, Adapter<Height>>,

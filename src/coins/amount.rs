@@ -1,4 +1,5 @@
 use crate::client::Client;
+use crate::describe::Describe;
 use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
@@ -7,7 +8,18 @@ use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
 #[derive(
-    State, Encode, Decode, Debug, Default, Clone, Copy, Query, Client, Serialize, Deserialize,
+    State,
+    Encode,
+    Decode,
+    Debug,
+    Default,
+    Clone,
+    Copy,
+    Query,
+    Client,
+    Serialize,
+    Deserialize,
+    Describe,
 )]
 pub struct Amount(pub(crate) u64);
 

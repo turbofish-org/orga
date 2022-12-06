@@ -1,5 +1,6 @@
 use super::{Amount, Coin, Decimal, Symbol};
 use crate::context::GetContext;
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::plugins::Time;
 use crate::state::State;
@@ -8,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::time::Duration;
 
-#[derive(State, Encode, Decode, Default, Serialize, Deserialize)]
+#[derive(State, Encode, Decode, Default, Serialize, Deserialize, Describe)]
 pub struct Faucet<S: Symbol> {
     _symbol: PhantomData<S>,
     configured: bool,
