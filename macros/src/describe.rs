@@ -1,21 +1,32 @@
 use super::utils::gen_param_input;
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
-use quote::quote;
+use quote::{quote, ToTokens};
 use std::str::FromStr;
 use syn::*;
 
 pub fn derive(item: TokenStream) -> TokenStream {
     let item = parse_macro_input!(item as DeriveInput);
 
-    let names = struct_fields(&item).map(|field| &field.ident);
+    let num_to_token = |n: usize| TokenStream2::from_str(&n.to_string()).unwrap();
+    let names = struct_fields(&item).enumerate().map(|(i, field)| {
+        field
+            .ident
+            .clone()
+            .map(|name| name.into_token_stream())
+            .unwrap_or_else(|| num_to_token(i))
+    });
     let types = struct_fields(&item).map(|field| &field.ty);
     let types_where = struct_fields(&item).map(|field| &field.ty);
-    let indexes =
-        (0..struct_fields(&item).count()).map(|i| TokenStream2::from_str(&i.to_string()).unwrap());
+    let indexes = (0..struct_fields(&item).count()).map(num_to_token);
 
     let name = &item.ident;
-    let generics = &item.generics;
+    let mut generics = item.generics.clone();
+    generics.params.iter_mut().for_each(|p| {
+        if let GenericParam::Type(tp) = p {
+            tp.default.take();
+        }
+    });
     let where_clause = generics
         .where_clause
         .clone()
@@ -26,7 +37,8 @@ pub fn derive(item: TokenStream) -> TokenStream {
     let output = quote! {
         impl#generics ::orga::describe::Describe for #name#generic_params
         where
-            #(#types_where: ::orga::describe::Describe + 'static,)*
+            Self: ::orga::state::State + 'static,
+            #(#types_where: ::orga::state::State + ::orga::describe::Describe + 'static,)*
             #where_clause
         {
             fn describe() -> ::orga::describe::Descriptor {
