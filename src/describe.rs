@@ -1,7 +1,7 @@
 use crate::{
     encoding::{Decode, Encode},
     state::State,
-    store::Store,
+    store::{DefaultBackingStore, Iter, Read, Store},
     Error, Result,
 };
 use js_sys::{Array, Uint8Array};
@@ -85,6 +85,29 @@ pub enum Children {
 impl Default for Children {
     fn default() -> Self {
         Children::None
+    }
+}
+
+impl Children {
+    fn get_dynamic_child(&self, key_bytes: Vec<u8>, store: &Store) -> Result<Value> {
+        let value_desc = match self {
+            Children::Dynamic(desc) => &desc.value_desc,
+            _ => {
+                return Err(Error::Downcast(
+                    "Value does not have dynamic children".to_string(),
+                ))
+            }
+        };
+
+        let value_bytes = store
+            .get(key_bytes.as_slice())?
+            .ok_or_else(|| Error::Store("Value not found".to_string()))?;
+
+        let substore = store.sub(&key_bytes);
+        let mut value = value_desc.decode(value_bytes.as_slice())?;
+        value.attach(substore)?;
+
+        Ok(value)
     }
 }
 
@@ -180,9 +203,7 @@ impl Value {
                 child.attach(substore)?;
                 Ok(child)
             }
-            Children::Dynamic(child) => {
-                use crate::store::Read;
-
+            Children::Dynamic(ref child) => {
                 let key_bytes = child
                     .key_desc
                     .from_str(name)?
@@ -192,16 +213,19 @@ impl Value {
                         )
                     })?
                     .encode()?;
-                let value_bytes = self
-                    .store
-                    .get(key_bytes.as_slice())?
-                    .ok_or_else(|| Error::Store(format!("No value found for key '{name}'")))?;
-
-                let substore = self.store.sub(&key_bytes);
-                let mut value = child.value_desc.decode(value_bytes.as_slice())?;
-                value.attach(substore)?;
-                Ok(value)
+                desc.children.get_dynamic_child(key_bytes, &self.store)
             }
+        }
+    }
+
+    pub fn entries(&self) -> Option<EntryIter> {
+        let desc = self.describe();
+        match desc.children {
+            Children::Dynamic(kv_desc) => Some(EntryIter {
+                kv_desc,
+                store_iter: self.store.range(..),
+            }),
+            _ => None,
         }
     }
 
@@ -372,6 +396,25 @@ impl<T: Serialize> MaybeToJson for ToJsonWrapper<T> {
     }
 }
 
+pub struct EntryIter<'a> {
+    kv_desc: DynamicChild,
+    store_iter: Iter<'a, Store>,
+}
+
+impl<'a> Iterator for EntryIter<'a> {
+    type Item = Result<(Value, Value)>;
+
+    fn next(&mut self) -> Option<Result<(Value, Value)>> {
+        self.store_iter.next().map(|res| {
+            res.map(|(key_bytes, value_bytes)| {
+                let key = self.kv_desc.key_desc.decode(&key_bytes)?;
+                let value = self.kv_desc.value_desc.decode(&value_bytes)?;
+                Ok((key, value))
+            })?
+        })
+    }
+}
+
 macro_rules! primitive_impl {
     ($ty:ty) => {
         impl Describe for $ty {
@@ -437,6 +480,24 @@ mod tests {
         }
     }
 
+    fn create_bar_value() -> Value {
+        let store = Store::new(DefaultBackingStore::MapStore(Shared::new(MapStore::new())));
+
+        let mut bar = Bar::default();
+        bar.attach(store.clone()).unwrap();
+
+        bar.baz.insert(123, 456).unwrap();
+        bar.baz.insert(789, 1).unwrap();
+        bar.baz.insert(1000, 2).unwrap();
+        bar.baz.insert(1001, 3).unwrap();
+        bar.flush().unwrap();
+
+        let mut value = Value::new(bar);
+        value.attach(store.clone()).unwrap();
+
+        value
+    }
+
     #[test]
     fn decode() {
         let desc = Foo::describe();
@@ -466,14 +527,7 @@ mod tests {
 
     #[test]
     fn complex_child() {
-        let store = Store::new(DefaultBackingStore::MapStore(Shared::new(MapStore::new())));
-        let mut bar = Bar::default();
-        bar.attach(store.clone()).unwrap();
-        bar.baz.insert(123, 456).unwrap();
-        bar.flush().unwrap();
-
-        let mut value = Value::new(bar);
-        value.attach(store).unwrap();
+        let mut value = create_bar_value();
 
         let baz = value.child("baz").unwrap();
         assert_eq!(baz.child("123").unwrap().downcast::<u32>().unwrap(), 456);
@@ -496,5 +550,24 @@ mod tests {
         assert!(value.maybe_to_json().unwrap().is_none());
         #[cfg(target_arch = "wasm32")]
         assert!(value.maybe_to_wasm().unwrap().is_none());
+    }
+
+    #[test]
+    fn entries() {
+        let bar = create_bar_value();
+        assert!(bar.entries().is_none());
+
+        let map = bar.child("baz").unwrap();
+        let mut iter = map.entries().unwrap();
+        let mut assert_entry = |expected_key, expected_value| {
+            let (actual_key, actual_value) = iter.next().unwrap().unwrap();
+            assert_eq!(actual_key.downcast::<u32>().unwrap(), expected_key);
+            assert_eq!(actual_value.downcast::<u32>().unwrap(), expected_value);
+        };
+        assert_entry(123, 456);
+        assert_entry(789, 1);
+        assert_entry(1000, 2);
+        assert_entry(1001, 3);
+        assert!(iter.next().is_none());
     }
 }
