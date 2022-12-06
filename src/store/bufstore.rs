@@ -103,7 +103,7 @@ impl<S: Read> Read for BufStore<S> {
         // TODO: optimize by retaining previously used iterator(s) so we don't
         // have to recreate them each iteration (if it makes a difference)
         let mut map_iter = self.map.range(exclusive_range_from(key));
-        let mut store_iter = self.store.range(exclusive_range_from(key));
+        let mut store_iter = (&self.store).into_iter(exclusive_range_from(key));
         iter_merge_next(&mut map_iter, &mut store_iter)
     }
 }
@@ -228,7 +228,7 @@ mod tests {
         buf.delete(&[2]).unwrap();
         buf.put(vec![3], vec![1]).unwrap();
 
-        let mut iter = buf.range(..);
+        let mut iter = buf.into_iter(..);
         assert_eq!(iter.next().unwrap().unwrap(), (vec![0], vec![0]));
         assert_eq!(iter.next().unwrap().unwrap(), (vec![1], vec![1]));
         assert_eq!(iter.next().unwrap().unwrap(), (vec![3], vec![1]));

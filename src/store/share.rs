@@ -105,7 +105,7 @@ mod tests {
         store.put(vec![2], vec![20]).unwrap();
         store.put(vec![3], vec![30]).unwrap();
 
-        let mut iter = store.range(..);
+        let mut iter = store.into_iter(..);
         assert_eq!(iter.next().unwrap().unwrap(), (vec![1], vec![10]));
         assert_eq!(iter.next().unwrap().unwrap(), (vec![2], vec![20]));
         assert_eq!(iter.next().unwrap().unwrap(), (vec![3], vec![30]));
@@ -121,7 +121,7 @@ mod tests {
         store.put(vec![2], vec![20]).unwrap();
         store.put(vec![3], vec![30]).unwrap();
 
-        let mut iter = store.range(..);
+        let mut iter = store.into_iter(..);
         assert_eq!(iter.next().unwrap().unwrap(), (vec![1], vec![10]));
         assert_eq!(store2.get(&[2]).unwrap(), Some(vec![20]));
         assert_eq!(iter.next().unwrap().unwrap(), (vec![2], vec![20]));

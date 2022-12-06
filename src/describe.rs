@@ -396,12 +396,12 @@ impl<T: Serialize> MaybeToJson for ToJsonWrapper<T> {
     }
 }
 
-pub struct EntryIter<'a> {
+pub struct EntryIter {
     kv_desc: DynamicChild,
-    store_iter: Iter<'a, Store>,
+    store_iter: Iter<Store>,
 }
 
-impl<'a> Iterator for EntryIter<'a> {
+impl Iterator for EntryIter {
     type Item = Result<(Value, Value)>;
 
     fn next(&mut self) -> Option<Result<(Value, Value)>> {

@@ -1,4 +1,8 @@
-use super::{Read, Shared, Write, KV};
+use std::ops::RangeBounds;
+
+use serde::{Deserialize, Serialize};
+
+use super::{Iter, Read, Shared, Write, KV};
 use crate::encoding::{Decode, Encode, Terminated};
 use crate::state::State;
 use crate::{Error, Result};
@@ -91,6 +95,13 @@ impl<S> Store<S> {
 
     pub fn backing_store(&self) -> Shared<S> {
         self.store.clone()
+    }
+
+    pub fn range<B: RangeBounds<Vec<u8>>>(&self, bounds: B) -> Iter<Self>
+    where
+        Self: Read,
+    {
+        Read::into_iter(self.clone(), bounds)
     }
 }
 
