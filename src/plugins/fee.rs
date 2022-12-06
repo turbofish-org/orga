@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use super::sdk_compat::{sdk::Tx as SdkTx, ConvertSdkTx};
 use super::Paid;
 use crate::call::Call;
@@ -15,8 +17,10 @@ use std::ops::{Deref, DerefMut};
 
 pub const MIN_FEE: u64 = 10_000;
 
-#[derive(Encode, Decode, Default, Describe)]
+#[derive(Encode, Decode, Default, Describe, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct FeePlugin<S, T> {
+    #[serde(skip)]
     _symbol: PhantomData<S>,
     inner: T,
 }

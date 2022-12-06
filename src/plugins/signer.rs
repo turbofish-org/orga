@@ -6,15 +6,18 @@ use crate::call::Call;
 use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::Address;
 use crate::context::{Context, GetContext};
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::{Error, Result};
 use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
+use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 
-#[derive(Default, Encode, Decode)]
+#[derive(Default, Encode, Decode, Serialize, Deserialize, Describe)]
+#[serde(transparent)]
 pub struct SignerPlugin<T> {
     inner: T,
 }
@@ -46,8 +49,6 @@ pub enum SigType {
     #[skip]
     Sdk(Box<sdk_compat::sdk::Tx>),
 }
-
-use serde::Serialize;
 
 #[derive(Serialize)]
 struct Adr36Msg {

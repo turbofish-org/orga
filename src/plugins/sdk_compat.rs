@@ -12,8 +12,10 @@ use std::ops::{Deref, DerefMut};
 pub const MAX_CALL_SIZE: usize = 65_535;
 pub const NATIVE_CALL_FLAG: u8 = 0xff;
 
-#[derive(State, Clone, Encode, Decode, Default, Describe)]
+#[derive(State, Clone, Encode, Decode, Default, Describe, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct SdkCompatPlugin<S, T: State> {
+    #[serde(skip)]
     symbol: PhantomData<S>,
     inner: T,
 }
@@ -432,6 +434,7 @@ impl<T: Client<SdkCompatAdapter<T, U, S>>, U: Clone, S> DerefMut for SdkCompatCl
     }
 }
 
+use serde::{Deserialize, Serialize};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsValue;
 
