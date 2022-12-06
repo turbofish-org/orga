@@ -63,6 +63,7 @@ use crate::macros::State;
 use crate::query::Query;
 use ed::{Decode, Encode};
 use ripemd::{Digest as _, Ripemd160};
+use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
 #[derive(
@@ -82,6 +83,8 @@ use sha2::Sha256;
     Client,
     Call,
     Default,
+    Serialize,
+    Deserialize,
 )]
 pub struct Address {
     bytes: [u8; Address::LENGTH],

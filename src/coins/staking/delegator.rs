@@ -6,23 +6,24 @@ use crate::encoding::{Decode, Encode};
 use crate::plugins::Time;
 use crate::state::State;
 use crate::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::UNBONDING_SECONDS;
 
-#[derive(State, Encode, Decode)]
+#[derive(State, Encode, Decode, Serialize, Deserialize, Default)]
 pub struct Unbond<S: Symbol> {
     pub(super) coins: Share<S>,
     pub(super) start_seconds: i64,
 }
 
-#[derive(State, Clone, Encode, Decode)]
+#[derive(State, Clone, Encode, Decode, Serialize, Deserialize, Default)]
 pub struct Redelegation {
     pub(super) amount: Amount,
     pub(super) address: Address,
     pub(super) start_seconds: i64,
 }
 
-#[derive(State, Encode, Decode, Default)]
+#[derive(State, Encode, Decode, Default, Serialize, Deserialize)]
 pub struct Delegator<S: Symbol> {
     pub(super) liquid: MultiShare,
     pub(super) staked: Share<S>,
@@ -265,13 +266,13 @@ impl<S: Symbol> Give<(u8, Amount)> for Delegator<S> {
     }
 }
 
-#[derive(Encode, Decode, Debug)]
+#[derive(Encode, Decode, Debug, Serialize, Deserialize)]
 pub struct UnbondInfo {
     pub start_seconds: i64,
     pub amount: Amount,
 }
 
-#[derive(Encode, Decode, Debug)]
+#[derive(Encode, Decode, Debug, Serialize, Deserialize)]
 pub struct DelegationInfo {
     pub unbonding: Vec<UnbondInfo>,
     pub staked: Amount,

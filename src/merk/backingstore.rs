@@ -6,6 +6,7 @@ use super::{MerkStore, ProofBuilder};
 use crate::store::{BufStore, MapStore, NullStore, Read, Shared, Write, KV};
 use crate::{Error, Result};
 use merk::proofs::query::Map as ProofMap;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::Bound;
 
 #[cfg(feature = "merk-full")]
