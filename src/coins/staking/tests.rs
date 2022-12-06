@@ -12,7 +12,7 @@ use serial_test::serial;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-#[derive(State, Encode, Decode, Debug, Clone, Default)]
+#[derive(State, Encode, Decode, Debug, Clone, Default, Serialize, Deserialize)]
 struct Simp(());
 impl Symbol for Simp {
     const INDEX: u8 = 0;
@@ -25,7 +25,6 @@ fn simp_balance(multishare: &MultiShare) -> Amount {
 fn alt_balance(multishare: &MultiShare) -> Amount {
     Balance::<Alt, Amount>::balance(multishare).unwrap()
 }
-
 fn setup_state() -> Result<Staking<Simp>> {
     let mut staking: Staking<Simp> = Default::default();
     staking.downtime_jail_seconds = 5;

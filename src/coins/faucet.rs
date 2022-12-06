@@ -4,10 +4,11 @@ use crate::encoding::{Decode, Encode};
 use crate::plugins::Time;
 use crate::state::State;
 use crate::{Error, Result};
+use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::time::Duration;
 
-#[derive(State, Encode, Decode, Default)]
+#[derive(State, Encode, Decode, Default, Serialize, Deserialize)]
 pub struct Faucet<S: Symbol> {
     _symbol: PhantomData<S>,
     configured: bool,
@@ -112,7 +113,7 @@ mod tests {
     use crate::store::{MapStore, Shared, Store};
     use serial_test::serial;
 
-    #[derive(Encode, Decode, Debug, Clone, Default)]
+    #[derive(Encode, Decode, Debug, Clone, Default, Serialize, Deserialize)]
     struct Simp;
     impl Symbol for Simp {
         const INDEX: u8 = 0;

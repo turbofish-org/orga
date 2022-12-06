@@ -1,5 +1,7 @@
 #[cfg(test)]
 use mutagen::mutate;
+use serde::Deserialize;
+use serde::Serialize;
 
 use super::map::Iter as MapIter;
 use super::map::Map;
@@ -16,8 +18,9 @@ use crate::state::*;
 use crate::store::*;
 use crate::Result;
 
-#[derive(Query, Call, Encode, Decode)]
+#[derive(Query, Call, Encode, Decode, Serialize, Deserialize)]
 pub struct EntryMap<T: Entry, S: Default = DefaultBackingStore> {
+    #[serde(skip)]
     map: Map<T::Key, T::Value, S>,
 }
 

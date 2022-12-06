@@ -4,9 +4,23 @@ use crate::state::State;
 pub use ed::*;
 
 use derive_more::{Deref, DerefMut, Into};
+use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 
-#[derive(Deref, DerefMut, Encode, Into, Default, Clone, Debug, State, Query, Client)]
+#[derive(
+    Deref,
+    DerefMut,
+    Encode,
+    Into,
+    Default,
+    Clone,
+    Debug,
+    State,
+    Query,
+    Client,
+    Serialize,
+    Deserialize,
+)]
 pub struct LengthVec<P, T>
 where
     P: State + Encode + Decode + TryInto<usize> + Terminated + Clone,

@@ -1,5 +1,6 @@
 #[cfg(test)]
 use mutagen::mutate;
+use serde::{Deserialize, Serialize};
 
 use super::{Read, Shared, Write, KV};
 use crate::encoding::{Decode, Encode, Terminated};
@@ -24,9 +25,11 @@ pub type DefaultBackingStore = Shared<super::MapStore>;
 /// This type is how high-level state types interact with the store, since they
 /// will often need to create substores (through the `store.sub(prefix)`
 /// method).
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct Store<S = DefaultBackingStore> {
+    #[serde(skip)]
     prefix: Vec<u8>,
+    #[serde(skip)]
     store: Shared<S>,
 }
 

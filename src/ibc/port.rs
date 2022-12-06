@@ -4,11 +4,13 @@ use crate::state::State;
 use ibc::core::ics05_port::context::PortReader;
 use ibc::core::ics26_routing::context::ModuleId;
 use ibc::core::{ics05_port::error::Error, ics24_host::identifier::PortId};
+use serde::{Deserialize, Serialize};
 
 use super::{Adapter, Ibc};
 
-#[derive(State, Encode, Decode, Default)]
+#[derive(State, Encode, Decode, Default, Serialize, Deserialize)]
 pub struct PortStore {
+    #[serde(skip)]
     module_by_port: Map<Adapter<PortId>, Adapter<ModuleId>>,
 }
 

@@ -9,12 +9,13 @@ use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::{Error, Result};
+use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Drop, RangeBounds};
 
-#[derive(Query, Default)]
+#[derive(Query, Default, Serialize, Deserialize)]
 pub struct Pool<K, V, S>
 where
     K: Terminated + Encode,
@@ -25,6 +26,7 @@ where
     rewards: Map<u8, Decimal>,
     symbol: PhantomData<S>,
     shares_issued: Decimal,
+    #[serde(skip)]
     map: Map<K, RefCell<Entry<V>>>,
     rewards_this_period: Map<u8, Decimal>,
     last_period_entry: Map<u8, Decimal>,
@@ -61,8 +63,8 @@ where
         Ok(self.contributions.encoding_length()? + self.shares_issued.encoding_length()?)
     }
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
-        dest.write(self.contributions.encode()?.as_slice())?;
-        dest.write(self.shares_issued.encode()?.as_slice())?;
+        dest.write_all(self.contributions.encode()?.as_slice())?;
+        dest.write_all(self.shares_issued.encode()?.as_slice())?;
 
         Ok(())
     }

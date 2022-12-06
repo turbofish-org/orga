@@ -14,7 +14,7 @@ use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::{Error, Result};
-use rust_decimal_macros::dec;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::convert::TryInto;
 #[cfg(feature = "abci")]
@@ -36,7 +36,7 @@ const MIN_SELF_DELEGATION_MIN: u64 = 0;
 const DOWNTIME_JAIL_SECONDS: u64 = 60 * 60 * 24; // 1 day
 const EDIT_INTERVAL_SECONDS: u64 = 60 * 60 * 24; // 1 day
 
-#[derive(Call, Query, Client, Default)]
+#[derive(Call, Query, Client, Default, Serialize, Deserialize)]
 pub struct Staking<S: Symbol> {
     validators: Pool<Address, Validator<S>, S>,
     consensus_keys: Map<Address, [u8; 32]>,
@@ -66,16 +66,16 @@ pub struct Staking<S: Symbol> {
 
 impl<S: Symbol> Encode for Staking<S> {
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
-        dest.write(self.max_validators.encode()?.as_slice())?;
-        dest.write(self.min_self_delegation_min.encode()?.as_slice())?;
-        dest.write(self.unbonding_seconds.encode()?.as_slice())?;
-        dest.write(self.max_offline_blocks.encode()?.as_slice())?;
-        dest.write(self.slash_fraction_double_sign.encode()?.as_slice())?;
-        dest.write(self.slash_fraction_downtime.encode()?.as_slice())?;
-        dest.write(self.downtime_jail_seconds.encode()?.as_slice())?;
-        dest.write(self.validators.encode()?.as_slice())?;
-        dest.write(self.unbonding_delegation_queue.encode()?.as_slice())?;
-        dest.write(self.redelegation_queue.encode()?.as_slice())?;
+        dest.write_all(self.max_validators.encode()?.as_slice())?;
+        dest.write_all(self.min_self_delegation_min.encode()?.as_slice())?;
+        dest.write_all(self.unbonding_seconds.encode()?.as_slice())?;
+        dest.write_all(self.max_offline_blocks.encode()?.as_slice())?;
+        dest.write_all(self.slash_fraction_double_sign.encode()?.as_slice())?;
+        dest.write_all(self.slash_fraction_downtime.encode()?.as_slice())?;
+        dest.write_all(self.downtime_jail_seconds.encode()?.as_slice())?;
+        dest.write_all(self.validators.encode()?.as_slice())?;
+        dest.write_all(self.unbonding_delegation_queue.encode()?.as_slice())?;
+        dest.write_all(self.redelegation_queue.encode()?.as_slice())?;
 
         Ok(())
     }
@@ -152,14 +152,14 @@ impl EntryMap<ValidatorQueueEntry> {
     }
 }
 
-#[derive(State, Encode, Decode)]
+#[derive(State, Encode, Decode, Serialize, Deserialize, Default)]
 pub struct UnbondingDelegationEntry {
     validator_address: Address,
     delegator_address: Address,
     start_seconds: i64,
 }
 
-#[derive(State, Encode, Decode)]
+#[derive(State, Encode, Decode, Serialize, Deserialize, Default)]
 pub struct RedelegationEntry {
     src_validator_address: Address,
     dst_validator_address: Address,
@@ -167,7 +167,7 @@ pub struct RedelegationEntry {
     start_seconds: i64,
 }
 
-#[derive(Entry)]
+#[derive(Entry, Serialize, Deserialize)]
 struct ValidatorPowerEntry {
     #[key]
     inverted_power: u64,
@@ -1059,7 +1059,7 @@ pub struct Declaration {
     pub validator_info: ValidatorInfo,
 }
 
-#[derive(State, Default, Debug, Encode, Decode, Clone, Copy)]
+#[derive(State, Default, Debug, Encode, Decode, Clone, Copy, Serialize, Deserialize)]
 pub struct Commission {
     pub rate: Decimal,
     pub max: Decimal,

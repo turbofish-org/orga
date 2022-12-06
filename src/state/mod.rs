@@ -2,6 +2,7 @@ use crate::encoding::{Decode, Encode, Terminated};
 use crate::store::*;
 use crate::{Error, Result};
 pub use orga_macros::State;
+use serde::{Deserialize, Serialize};
 use std::cell::{RefCell, UnsafeCell};
 use std::convert::TryInto;
 use std::marker::PhantomData;

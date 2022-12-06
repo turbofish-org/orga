@@ -1,5 +1,6 @@
 #[cfg(test)]
 use mutagen::mutate;
+use serde::{Deserialize, Serialize};
 
 use std::cmp::Ordering;
 use std::collections::btree_map::Entry::{Occupied, Vacant};
@@ -88,13 +89,15 @@ impl<K> Eq for MapKey<K> {}
 /// When values in the map are mutated, inserted, or deleted, they are retained
 /// in an in-memory map until the call to `State::flush` which writes the
 /// changes to the backing store.
-#[derive(Query, Call)]
-pub struct Map<K, V, S = DefaultBackingStore> {
+#[derive(Query, Call, Serialize, Deserialize)]
+#[serde(bound = "")]
+pub struct Map<K, V, S: Default = DefaultBackingStore> {
+    #[serde(skip)]
     store: Store<S>,
+    #[serde(skip)]
     children: BTreeMap<MapKey<K>, Option<V>>,
 }
-
-impl<K, V, S> Encode for Map<K, V, S> {
+impl<K, V, S: Default> Encode for Map<K, V, S> {
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
         Ok(())
     }
@@ -110,7 +113,7 @@ impl<K, V, S: Default> Decode for Map<K, V, S> {
     }
 }
 
-impl<K, V, S> Terminated for Map<K, V, S> {}
+impl<K, V, S: Default> Terminated for Map<K, V, S> {}
 
 impl<K, V, S: Default> State<S> for Map<K, V, S>
 where
@@ -958,7 +961,7 @@ pub struct Client<K, V, U: Clone> {
     _marker: std::marker::PhantomData<V>,
 }
 
-impl<K, V, S, U: Clone> ClientTrait<U> for Map<K, V, S> {
+impl<K, V, S: Default, U: Clone> ClientTrait<U> for Map<K, V, S> {
     type Client = Client<K, V, U>;
 
     fn create_client(parent: U) -> Self::Client {
@@ -1025,11 +1028,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::super::deque::{Deque as OrgaDeque, *};
+    use super::super::deque::Deque as OrgaDeque;
     use super::{Map as OrgaMap, *};
     use crate::store::{MapStore, Store};
     type Map<K, V> = OrgaMap<K, V, MapStore>;
-    type Deque<T> = OrgaDeque<T, MapStore>;
+    type Deque<V> = OrgaDeque<V, MapStore>;
 
     fn enc(n: u32) -> Vec<u8> {
         n.encode().unwrap()

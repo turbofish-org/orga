@@ -3,9 +3,12 @@ use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
 use ed::{Decode, Encode};
+use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
-#[derive(State, Encode, Decode, Debug, Default, Clone, Copy, Query, Client)]
+#[derive(
+    State, Encode, Decode, Debug, Default, Clone, Copy, Query, Client, Serialize, Deserialize,
+)]
 pub struct Amount(pub(crate) u64);
 
 impl std::fmt::Display for Amount {
