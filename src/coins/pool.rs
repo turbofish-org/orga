@@ -6,12 +6,13 @@ use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::{Error, Result};
+use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Drop, RangeBounds};
 
-#[derive(Query, Encode, Decode, Default)]
+#[derive(Query, Default, Serialize, Deserialize)]
 pub struct Pool<K, V, S>
 where
     K: Terminated + Encode,
@@ -22,10 +23,56 @@ where
     rewards: Map<u8, Decimal>,
     symbol: PhantomData<S>,
     shares_issued: Decimal,
+    #[serde(skip)]
     map: Map<K, RefCell<Entry<V>>>,
     rewards_this_period: Map<u8, Decimal>,
     last_period_entry: Map<u8, Decimal>,
     drop_errored: bool,
+}
+
+impl<K, V, S> Decode for Pool<K, V, S>
+where
+    K: Terminated + Encode,
+    V: State,
+    S: Symbol,
+{
+    fn decode<R: std::io::Read>(mut input: R) -> ed::Result<Self> {
+        Ok(Self {
+            contributions: Decode::decode(&mut input)?,
+            rewards: Default::default(),
+            symbol: Default::default(),
+            shares_issued: Decode::decode(&mut input)?,
+            map: Default::default(),
+            rewards_this_period: Default::default(),
+            last_period_entry: Default::default(),
+            drop_errored: false,
+        })
+    }
+}
+
+impl<K, V, S> Encode for Pool<K, V, S>
+where
+    K: Terminated + Encode,
+    V: State,
+    S: Symbol,
+{
+    fn encoding_length(&self) -> ed::Result<usize> {
+        Ok(self.contributions.encoding_length()? + self.shares_issued.encoding_length()?)
+    }
+    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+        dest.write_all(self.contributions.encode()?.as_slice())?;
+        dest.write_all(self.shares_issued.encode()?.as_slice())?;
+
+        Ok(())
+    }
+}
+
+impl<K, V, S> Terminated for Pool<K, V, S>
+where
+    K: Terminated + Encode,
+    V: State,
+    S: Symbol,
+{
 }
 
 impl<K, V, S> State for Pool<K, V, S>
@@ -327,10 +374,6 @@ where
             }
         };
 
-        debug_assert_eq!(
-            self.parent_num_tokens.0.is_sign_positive(),
-            self.parent_num_tokens.0.is_sign_positive()
-        );
         if !balance_change.0.is_zero() {
             let new_shares = if self.parent_num_tokens.0.is_zero() {
                 balance_change

@@ -1,6 +1,8 @@
 use super::map::Iter as MapIter;
 use super::map::Map;
 use super::map::ReadOnly;
+use serde::Deserialize;
+use serde::Serialize;
 
 use crate::encoding::{Decode, Encode, Terminated};
 use crate::store::DefaultBackingStore;
@@ -13,8 +15,9 @@ use crate::state::*;
 use crate::store::*;
 use crate::Result;
 
-#[derive(Query, Call, Encode, Decode)]
+#[derive(Query, Call, Encode, Decode, Serialize, Deserialize)]
 pub struct EntryMap<T: Entry, S: Default = DefaultBackingStore> {
+    #[serde(skip)]
     map: Map<T::Key, T::Value, S>,
 }
 

@@ -28,6 +28,7 @@ use ibc::timestamp::Timestamp;
 use ibc::Height;
 use ibc_proto::ibc::core::channel::v1::{Channel, IdentifiedChannel, PacketState};
 use ripemd::Digest;
+use serde::{Deserialize, Serialize};
 
 impl From<crate::Error> for Error {
     fn from(_err: crate::Error) -> Error {
@@ -36,7 +37,7 @@ impl From<crate::Error> for Error {
     }
 }
 
-#[derive(State, Call, Query, Client, Encode, Decode, Default)]
+#[derive(State, Call, Query, Client, Encode, Decode, Default, Serialize, Deserialize)]
 pub struct ChannelStore {
     channel_counter: u64,
     connection_channels: Map<Adapter<ConnectionId>, Deque<Adapter<(PortId, ChannelId)>>>,

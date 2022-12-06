@@ -7,10 +7,13 @@ use crate::state::State;
 use crate::store::DefaultBackingStore;
 use crate::store::{Read, Store, Write};
 use crate::Result;
+use serde::{Deserialize, Serialize};
 
-#[derive(Query, Encode, Decode)]
+#[derive(Query, Encode, Decode, Serialize, Deserialize)]
+#[serde(bound = "")]
 pub struct Deque<T, S: Default = DefaultBackingStore> {
     meta: Meta,
+    #[serde(skip)]
     map: Map<u64, T, S>,
 }
 
@@ -44,7 +47,7 @@ impl<T, S: Default> std::fmt::Debug for Deque<T, S> {
     }
 }
 
-#[derive(Encode, Decode, Clone, Debug)]
+#[derive(Encode, Decode, Clone, Debug, Serialize, Deserialize)]
 pub struct Meta {
     head: u64,
     tail: u64,

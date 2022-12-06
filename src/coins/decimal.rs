@@ -7,10 +7,11 @@ use crate::state::State;
 use crate::store::Store;
 use crate::{Error, Result};
 use rust_decimal::prelude::{Decimal as NumDecimal, *};
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::convert::TryFrom;
 
-#[derive(Clone, Copy, Debug, Query, Client, Call)]
+#[derive(Clone, Copy, Debug, Query, Client, Call, Serialize, Deserialize)]
 pub struct Decimal(pub(crate) NumDecimal);
 
 impl std::fmt::Display for Decimal {

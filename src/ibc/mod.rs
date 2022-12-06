@@ -33,6 +33,7 @@ pub use ibc_proto as proto;
 use ibc_proto::cosmos::base::v1beta1::Coin;
 use ibc_proto::ibc::core::channel::v1::PacketState;
 use ics23::LeafOp;
+use serde::{Deserialize, Serialize};
 use tendermint_proto::abci::{EventAttribute, RequestQuery, ResponseQuery};
 use tendermint_proto::Protobuf;
 
@@ -59,7 +60,7 @@ use self::port::PortStore;
 pub use self::routing::{IbcMessage, IbcTx};
 use self::transfer::{Dynom, TransferModule};
 
-#[derive(State, Call, Client, Query, Encode, Decode, Default)]
+#[derive(State, Call, Client, Query, Encode, Decode, Default, Serialize, Deserialize)]
 pub struct Ibc {
     pub clients: ClientStore,
     pub connections: ConnectionStore,
@@ -71,7 +72,7 @@ pub struct Ibc {
     pub(super) lunchbox: Lunchbox,
 }
 
-#[derive(Encode, Decode, Default)]
+#[derive(Encode, Decode, Default, Serialize, Deserialize)]
 pub struct Lunchbox(pub(super) Store);
 
 impl State for Lunchbox {

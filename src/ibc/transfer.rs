@@ -34,10 +34,11 @@ use ibc::timestamp::Timestamp;
 use ibc::Height;
 use ibc_proto::ibc::core::channel::v1::PacketState;
 use ripemd::Digest;
+use serde::{Deserialize, Serialize};
 
 use super::{Adapter, Lunchbox};
 
-#[derive(State, Call, Query, Client, Encode, Decode, Default)]
+#[derive(State, Call, Query, Client, Encode, Decode, Default, Serialize, Deserialize)]
 pub struct TransferModule {
     lunchbox: Lunchbox,
     commitments: Map<Adapter<(PortId, ChannelId)>, Deque<Adapter<PacketState>>>,
@@ -571,9 +572,10 @@ impl FromStr for Dynom {
     }
 }
 
-#[derive(State, Call, Query, Client, Encode, Decode, Default)]
+#[derive(State, Call, Query, Client, Encode, Decode, Default, Serialize, Deserialize)]
 pub struct Bank {
     #[call]
+    #[serde(skip)]
     pub balances: Map<Dynom, Map<Address, Amount>>,
 }
 

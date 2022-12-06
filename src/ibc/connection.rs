@@ -28,6 +28,7 @@ use ibc::{
     Height,
 };
 use ibc_proto::ibc::core::connection::v1::IdentifiedConnection as RawIdentifiedConnection;
+use serde::{Deserialize, Serialize};
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -61,7 +62,7 @@ impl Lunchbox {
     }
 }
 
-#[derive(State, Call, Query, Client, Encode, Decode, Default)]
+#[derive(State, Call, Query, Client, Encode, Decode, Default, Serialize, Deserialize)]
 pub struct ConnectionStore {
     count: u64,
     ends: Map<Adapter<ConnectionId>, ProtobufAdapter<ConnectionEnd>>,

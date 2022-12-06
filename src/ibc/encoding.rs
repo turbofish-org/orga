@@ -17,7 +17,7 @@ use prost::Message;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
 
-#[derive(Clone, Call, Client, Query, Debug)]
+#[derive(Clone, Call, Client, Query, Debug, Serialize, Deserialize, Default)]
 pub struct Adapter<T> {
     pub(crate) inner: T,
 }
@@ -125,7 +125,7 @@ where
     }
 }
 
-#[derive(Call, Query, Client)]
+#[derive(Call, Query, Client, Default)]
 pub struct ProtobufAdapter<T> {
     inner: T,
 }
