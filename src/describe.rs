@@ -263,6 +263,25 @@ impl Value {
         // TODO: return Result
         self.encode().unwrap().as_slice().into()
     }
+
+    #[wasm_bindgen(js_name = entries)]
+    pub fn entries_js(&self) -> JsValue {
+        // TODO: needs to return object with Symbol.iterator property
+        self.entries()
+            .map(|iter| {
+                JsIter::new(iter.map(|res| match res {
+                    Ok(kv) => {
+                        let arr = js_sys::Array::new();
+                        arr.push(&kv.0.into());
+                        arr.push(&kv.1.into());
+                        Ok(arr.into())
+                    }
+                    Err(err) => Err(err_to_js(err)),
+                }))
+                .into()
+            })
+            .unwrap_or(JsValue::NULL)
+    }
 }
 
 impl Deref for Value {
@@ -412,6 +431,49 @@ impl Iterator for EntryIter {
                 Ok((key, value))
             })?
         })
+    }
+}
+
+pub fn err_to_js<E: std::error::Error>(err: E) -> JsValue {
+    js_sys::Error::new(err.to_string().as_str()).into()
+}
+
+#[wasm_bindgen]
+pub struct JsIter(Box<dyn Iterator<Item = WasmResult<JsValue>>>);
+
+impl JsIter {
+    pub fn new<T>(iter: T) -> Self
+    where
+        T: Iterator<Item = WasmResult<JsValue>> + 'static,
+    {
+        Self(Box::new(iter))
+    }
+}
+
+#[wasm_bindgen]
+impl JsIter {
+    #[wasm_bindgen(js_name = next)]
+    pub fn next_js(&mut self) -> WasmResult<JsIterNext> {
+        let next = self.0.next();
+
+        Ok(JsIterNext {
+            done: next.is_none(),
+            value: next.transpose()?,
+        })
+    }
+}
+
+#[wasm_bindgen]
+pub struct JsIterNext {
+    pub done: bool,
+    value: Option<JsValue>,
+}
+
+#[wasm_bindgen]
+impl JsIterNext {
+    #[wasm_bindgen(method, getter)]
+    pub fn value(&mut self) -> JsValue {
+        self.value.take().unwrap_or_default()
     }
 }
 
