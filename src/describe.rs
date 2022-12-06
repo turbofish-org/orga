@@ -15,6 +15,7 @@ use wasm_bindgen::prelude::*;
 
 mod builder;
 
+pub use crate::macros::Describe;
 pub use builder::Builder;
 
 pub trait Describe {
@@ -512,34 +513,22 @@ mod tests {
         store::{DefaultBackingStore, MapStore, Shared, Store},
     };
 
-    #[derive(State, Encode, Decode, Debug, Serialize, Deserialize, PartialEq)]
+    #[derive(State, Encode, Decode, Describe, Debug, Serialize, Deserialize, PartialEq)]
     struct Foo {
         bar: u32,
         baz: u32,
     }
 
-    impl Describe for Foo {
-        fn describe() -> Descriptor {
-            Builder::new::<Self>()
-                .named_child::<u32>("bar", &[0], |v| Builder::access(v, |v: Self| v.bar))
-                .named_child::<u32>("baz", &[1], |v| Builder::access(v, |v: Self| v.baz))
-                .build()
-        }
-    }
-
-    #[derive(State, Encode, Decode, Default)]
+    #[derive(State, Encode, Decode, Describe, Default)]
     struct Bar {
         bar: u32,
         baz: Map<u32, u32>,
     }
 
-    impl Describe for Bar {
-        fn describe() -> Descriptor {
-            Builder::new::<Self>()
-                .named_child::<u32>("bar", &[0], |v| Builder::access(v, |v: Self| v.bar))
-                .named_child::<Map<u32, u32>>("baz", &[1], |v| Builder::access(v, |v: Self| v.baz))
-                .build()
-        }
+    #[derive(State, Encode, Decode, Describe, Default)]
+    struct Baz<T: State> {
+        bar: u32,
+        baz: Map<u32, T>,
     }
 
     fn create_bar_value() -> Value {
@@ -555,7 +544,7 @@ mod tests {
         bar.flush().unwrap();
 
         let mut value = Value::new(bar);
-        value.attach(store.clone()).unwrap();
+        value.attach(store).unwrap();
 
         value
     }

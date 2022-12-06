@@ -4,6 +4,7 @@ use proc_macro::TokenStream;
 
 mod call;
 mod client;
+mod describe;
 mod entry;
 mod next;
 mod query;
@@ -48,4 +49,9 @@ pub fn derive_client(item: TokenStream) -> TokenStream {
 #[proc_macro_derive(Next)]
 pub fn derive_next(item: TokenStream) -> TokenStream {
     next::derive(item)
+}
+
+#[proc_macro_derive(Describe)]
+pub fn derive_describe(item: TokenStream) -> TokenStream {
+    describe::derive(item)
 }
