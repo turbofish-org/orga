@@ -3,6 +3,7 @@ use std::convert::TryInto;
 use crate::coins::pool::{Child as PoolChild, ChildMut as PoolChildMut};
 use crate::coins::{Address, Amount, Balance, Coin, Decimal, Give, Pool, Symbol};
 use crate::context::GetContext;
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::plugins::Time;
 use crate::state::State;
@@ -15,7 +16,7 @@ use super::{Commission, Delegator, Redelegation};
 
 type Delegators<S> = Pool<Address, Delegator<S>, S>;
 
-#[derive(State, Encode, Decode, Default, Serialize, Deserialize)]
+#[derive(State, Encode, Decode, Default, Serialize, Deserialize, Describe)]
 pub struct Validator<S: Symbol> {
     pub(super) jailed_until: Option<i64>,
     pub(super) tombstoned: bool,
@@ -46,7 +47,7 @@ pub struct ValidatorQueryInfo {
     pub amount_staked: Amount,
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, Describe)]
 pub struct ValidatorInfo {
     pub bytes: Vec<u8>,
 }

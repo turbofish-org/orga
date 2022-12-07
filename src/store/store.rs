@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::ops::RangeBounds;
 
 use super::{Iter, Read, Shared, Write, KV};
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, Terminated};
 use crate::state::State;
 use crate::{Error, Result};
@@ -30,6 +31,15 @@ pub struct Store<S = DefaultBackingStore> {
     prefix: Vec<u8>,
     #[serde(skip)]
     store: Shared<S>,
+}
+
+impl<S> Describe for Store<S>
+where
+    Self: State + 'static,
+{
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>().build()
+    }
 }
 
 impl<S> Encode for Store<S> {

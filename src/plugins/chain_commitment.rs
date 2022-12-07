@@ -13,7 +13,7 @@ use crate::{Error, Result};
 use std::marker::PhantomData;
 use std::ops::Deref;
 
-#[derive(Encode, Decode, Default, Describe, Serialize, Deserialize)]
+#[derive(Encode, Decode, Default, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ChainCommitmentPlugin<T, const ID: &'static str> {
     inner: T,
@@ -176,6 +176,19 @@ where
 
     fn flush(&mut self) -> Result<()> {
         self.inner.flush()
+    }
+}
+
+impl<T, const ID: &'static str> Describe for ChainCommitmentPlugin<T, ID>
+where
+    T: State + Describe + 'static,
+{
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>()
+            .named_child::<T>("inner", &[], |v| {
+                crate::describe::Builder::access(v, |v: Self| v.inner)
+            })
+            .build()
     }
 }
 

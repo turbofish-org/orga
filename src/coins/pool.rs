@@ -1,7 +1,7 @@
 use super::{Amount, Balance, Coin, Decimal, Give, Symbol};
 use crate::collections::map::{ChildMut as MapChildMut, Ref as MapRef};
 use crate::collections::{Map, Next};
-use crate::describe::Describe;
+use crate::describe::{Builder, Describe, Descriptor};
 use crate::encoding::{Decode, Encode, Terminated};
 use crate::query::Query;
 use crate::state::State;
@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Drop, RangeBounds};
 
-#[derive(Query, Default, Serialize, Deserialize, Describe)]
+#[derive(Query, Default, Serialize, Deserialize)]
 pub struct Pool<K, V, S>
 where
     K: Terminated + Encode,
@@ -101,6 +101,36 @@ where
     }
 }
 
+impl<K, V, S> Describe for Pool<K, V, S>
+where
+    K: Terminated + Encode + Describe + 'static,
+    V: State + Describe + 'static,
+    S: Symbol,
+{
+    fn describe() -> Descriptor {
+        Builder::new::<Self>()
+            .named_child::<Decimal>("contributions", &[0], |v| {
+                Builder::access(v, |v: Self| v.contributions)
+            })
+            .named_child::<Map<u8, Decimal>>("rewards", &[1], |v| {
+                Builder::access(v, |v: Self| v.rewards)
+            })
+            .named_child::<Decimal>("shares_issued", &[2], |v| {
+                Builder::access(v, |v: Self| v.shares_issued)
+            })
+            .named_child::<Map<K, RefCell<Entry<V>>>>("map", &[3], |v| {
+                Builder::access(v, |v: Self| v.map)
+            })
+            .named_child::<Map<u8, Decimal>>("rewards_this_period", &[4], |v| {
+                Builder::access(v, |v: Self| v.rewards_this_period)
+            })
+            .named_child::<Map<u8, Decimal>>("last_period_entry", &[5], |v| {
+                Builder::access(v, |v: Self| v.last_period_entry)
+            })
+            .build()
+    }
+}
+
 impl<K, V, S> Balance<S, Decimal> for Pool<K, V, S>
 where
     K: Terminated + Encode,
@@ -112,7 +142,7 @@ where
     }
 }
 
-#[derive(State, Encode, Decode, Default)]
+#[derive(State, Encode, Decode, Default, Serialize, Deserialize, Describe)]
 pub struct Entry<T>
 where
     T: State,

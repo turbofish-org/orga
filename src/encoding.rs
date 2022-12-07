@@ -1,6 +1,6 @@
-use crate::client::Client;
 use crate::query::Query;
 use crate::state::State;
+use crate::{client::Client, describe::Describe};
 pub use ed::*;
 
 use derive_more::{Deref, DerefMut, Into};
@@ -71,6 +71,16 @@ where
     P: State + Encode + Decode + TryInto<usize> + Terminated + Clone,
     T: State + Encode + Decode + Terminated,
 {
+}
+
+impl<P, T> Describe for LengthVec<P, T>
+where
+    P: State + Encode + Decode + TryInto<usize> + Terminated + Clone + 'static,
+    T: State + Encode + Decode + Terminated + 'static,
+{
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>().build()
+    }
 }
 
 impl<P, T> TryFrom<Vec<T>> for LengthVec<P, T>

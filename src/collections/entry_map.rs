@@ -16,7 +16,7 @@ use crate::state::*;
 use crate::store::*;
 use crate::Result;
 
-#[derive(Query, Call, Encode, Decode, Serialize, Deserialize, Describe)]
+#[derive(Query, Call, Encode, Decode, Serialize, Deserialize)]
 #[serde(bound = "")]
 pub struct EntryMap<T: Entry, S: Default = DefaultBackingStore> {
     map: Map<T::Key, T::Value, S>,
@@ -39,6 +39,20 @@ where
         S: Write,
     {
         self.map.flush()
+    }
+}
+
+impl<T: Entry + 'static> Describe for EntryMap<T>
+where
+    T::Key: Encode + Terminated + Describe + 'static,
+    T::Value: State + Describe + 'static,
+{
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>()
+            .named_child::<Map<T::Key, T::Value>>("map", &[], |v| {
+                crate::describe::Builder::access(v, |v: Self| v.map)
+            })
+            .build()
     }
 }
 

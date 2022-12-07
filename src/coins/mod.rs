@@ -59,6 +59,7 @@ use bech32::{self, encode_to_fmt, FromBase32, ToBase32, Variant};
 use crate::call::Call;
 use crate::client::Client;
 use crate::collections::Next;
+use crate::describe::Describe;
 use crate::macros::State;
 use crate::query::Query;
 use ed::{Decode, Encode};
@@ -85,7 +86,9 @@ use sha2::Sha256;
     Default,
     Serialize,
     Deserialize,
+    Describe,
 )]
+#[serde(transparent)]
 pub struct Address {
     bytes: [u8; Address::LENGTH],
 }

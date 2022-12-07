@@ -37,7 +37,7 @@ const MIN_SELF_DELEGATION_MIN: u64 = 0;
 const DOWNTIME_JAIL_SECONDS: u64 = 60 * 60 * 24; // 1 day
 const EDIT_INTERVAL_SECONDS: u64 = 60 * 60 * 24; // 1 day
 
-#[derive(Call, Query, Client, Default, Serialize, Deserialize, Describe)]
+#[derive(Call, Query, Client, Default, Serialize, Deserialize)]
 pub struct Staking<S: Symbol> {
     validators: Pool<Address, Validator<S>, S>,
     consensus_keys: Map<Address, [u8; 32]>,
@@ -223,6 +223,69 @@ impl<S: Symbol> State for Staking<S> {
         self.validators.flush()?;
         self.unbonding_delegation_queue.flush()?;
         self.redelegation_queue.flush()
+    }
+}
+
+impl<S: Symbol> Describe for Staking<S> {
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>()
+            .named_child::<Pool<Address, Validator<S>, S>>("validators", &[0], |v| {
+                crate::describe::Builder::access(v, |v: Self| v.validators)
+            })
+            .named_child::<u64>("min_self_delegation_min", &[1], |v| {
+                crate::describe::Builder::access(v, |v: Self| v.min_self_delegation_min)
+            })
+            .named_child::<Map<Address, [u8; 32]>>("consensus_keys", &[2], |v| {
+                crate::describe::Builder::access(v, |v: Self| v.consensus_keys)
+            })
+            .named_child::<Map<[u8; 20], u64>>("last_signed_block", &[3], |v| {
+                crate::describe::Builder::access(v, |v: Self| v.last_signed_block)
+            })
+            .named_child::<EntryMap<ValidatorPowerEntry>>("validators_by_power", &[4], |v| {
+                crate::describe::Builder::access(v, |v: Self| v.validators_by_power)
+            })
+            .named_child::<Map<Address, u64>>("last_validator_powers", &[5], |v| {
+                crate::describe::Builder::access(v, |v: Self| v.last_validator_powers)
+            })
+            .named_child::<u64>("max_validators", &[6], |v| {
+                crate::describe::Builder::access(v, |v: Self| v.max_validators)
+            })
+            .named_child::<Map<Address, u64>>("last_indexed_power", &[7], |v| {
+                crate::describe::Builder::access(v, |v: Self| v.last_indexed_power)
+            })
+            .named_child::<Map<[u8; 20], Address>>("address_for_tm_hash", &[8], |v| {
+                crate::describe::Builder::access(v, |v: Self| v.address_for_tm_hash)
+            })
+            .named_child::<u64>("unbonding_seconds", &[9], |v| {
+                crate::describe::Builder::access(v, |v: Self| v.unbonding_seconds)
+            })
+            .named_child::<u64>("max_offline_blocks", &[10], |v| {
+                crate::describe::Builder::access(v, |v: Self| v.max_offline_blocks)
+            })
+            .named_child::<Decimal>("slash_fraction_double_sign", &[11], |v| {
+                crate::describe::Builder::access(v, |v: Self| v.slash_fraction_double_sign)
+            })
+            .named_child::<Decimal>("slash_fraction_downtime", &[12], |v| {
+                crate::describe::Builder::access(v, |v: Self| v.slash_fraction_downtime)
+            })
+            .named_child::<u64>("downtime_jail_seconds", &[13], |v| {
+                crate::describe::Builder::access(v, |v: Self| v.downtime_jail_seconds)
+            })
+            .named_child::<EntryMap<ValidatorQueueEntry>>("validator_queue", &[14], |v| {
+                crate::describe::Builder::access(v, |v: Self| v.validator_queue)
+            })
+            .named_child::<Deque<UnbondingDelegationEntry>>(
+                "unbonding_delegation_queue",
+                &[15],
+                |v| crate::describe::Builder::access(v, |v: Self| v.unbonding_delegation_queue),
+            )
+            .named_child::<Deque<RedelegationEntry>>("redelegation_queue", &[16], |v| {
+                crate::describe::Builder::access(v, |v: Self| v.redelegation_queue)
+            })
+            .named_child::<Map<Address, Map<Address, ()>>>("delegation_index", &[17], |v| {
+                crate::describe::Builder::access(v, |v: Self| v.delegation_index)
+            })
+            .build()
     }
 }
 

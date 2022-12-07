@@ -108,7 +108,7 @@ impl Lunchbox {
     }
 }
 
-#[derive(State, Encode, Decode, Default, Describe)]
+#[derive(State, Encode, Decode, Default, Describe, Serialize, Deserialize)]
 pub struct ConsensusStateMap {
     states: Map<Adapter<Height>, ProtobufAdapter<AnyConsensusState>>,
     prev_height: Map<Adapter<Height>, Adapter<Height>>,
@@ -168,7 +168,7 @@ impl ConsensusStateMap {
     }
 }
 
-#[derive(State, Call, Query, Client, Encode, Decode, Default, Serialize, Deserialize)]
+#[derive(State, Call, Query, Client, Encode, Decode, Default, Serialize, Deserialize, Describe)]
 pub struct ClientStore {
     host_consensus_state: Map<u64, ProtobufAdapter<ConsensusState>>,
     height: u64,

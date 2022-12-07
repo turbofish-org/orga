@@ -14,6 +14,7 @@ use std::marker::PhantomData;
 pub struct Coin<S: Symbol> {
     #[call]
     pub amount: Amount,
+    #[serde(skip)]
     symbol: PhantomData<S>,
 }
 

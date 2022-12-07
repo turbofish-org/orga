@@ -1,7 +1,7 @@
 use super::Amount;
 use crate::call::Call;
 use crate::client::Client;
-use crate::describe::Describe;
+use crate::describe::{Builder, Describe};
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
@@ -12,8 +12,14 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::convert::TryFrom;
 
-#[derive(Clone, Copy, Debug, Query, Client, Call, Serialize, Deserialize, Describe)]
+#[derive(Clone, Copy, Debug, Query, Client, Call, Serialize, Deserialize)]
 pub struct Decimal(pub(crate) NumDecimal);
+
+impl Describe for Decimal {
+    fn describe() -> crate::describe::Descriptor {
+        Builder::new::<Self>().build()
+    }
+}
 
 impl std::fmt::Display for Decimal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

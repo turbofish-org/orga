@@ -17,7 +17,7 @@ use std::ops::{Deref, DerefMut};
 
 pub const MIN_FEE: u64 = 10_000;
 
-#[derive(Encode, Decode, Default, Describe, Serialize, Deserialize)]
+#[derive(Encode, Decode, Default, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct FeePlugin<S, T> {
     #[serde(skip)]
@@ -36,6 +36,20 @@ where
 
     fn flush(&mut self) -> Result<()> {
         self.inner.flush()
+    }
+}
+
+impl<S, T> Describe for FeePlugin<S, T>
+where
+    S: Symbol,
+    T: State + Describe + 'static,
+{
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>()
+            .named_child::<T>("inner", &[], |v| {
+                crate::describe::Builder::access(v, |v: Self| v.inner)
+            })
+            .build()
     }
 }
 

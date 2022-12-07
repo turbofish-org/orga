@@ -16,7 +16,7 @@ use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 
-#[derive(Default, Encode, Decode, Serialize, Deserialize, Describe)]
+#[derive(Default, Encode, Decode, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct SignerPlugin<T> {
     inner: T,
@@ -310,6 +310,19 @@ impl<T: State> State for SignerPlugin<T> {
 
     fn flush(&mut self) -> Result<()> {
         self.inner.flush()
+    }
+}
+
+impl<T> Describe for SignerPlugin<T>
+where
+    T: State + Describe + 'static,
+{
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>()
+            .named_child::<T>("inner", &[], |v| {
+                crate::describe::Builder::access(v, |v: Self| v.inner)
+            })
+            .build()
     }
 }
 

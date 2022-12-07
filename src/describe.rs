@@ -4,6 +4,7 @@ use crate::{
     store::{DefaultBackingStore, Iter, Read, Store},
     Error, Result,
 };
+use ed::Terminated;
 use js_sys::{Array, Uint8Array};
 use serde::Serialize;
 use std::{
@@ -500,6 +501,86 @@ primitive_impl!(i64);
 primitive_impl!(i128);
 primitive_impl!(bool);
 primitive_impl!(());
+
+impl<T: 'static> Describe for std::marker::PhantomData<T> {
+    fn describe() -> Descriptor {
+        Builder::new::<Self>().build()
+    }
+}
+
+impl<T> Describe for std::cell::RefCell<T>
+where
+    T: State + Encode + Decode + Describe + 'static,
+{
+    fn describe() -> Descriptor {
+        Builder::new::<Self>()
+            .named_child::<T>("inner", &[], |v| {
+                Builder::access(v, |v: Self| v.into_inner())
+            })
+            .build()
+    }
+}
+
+impl<T, const N: usize> Describe for [T; N]
+where
+    T: State + Encode + Decode + Terminated + Describe + 'static,
+{
+    fn describe() -> Descriptor {
+        // TODO: add child descriptors
+        Builder::new::<Self>().build()
+    }
+}
+
+impl<T> Describe for Vec<T>
+where
+    T: State + Encode + Decode + Terminated + Describe + 'static,
+{
+    fn describe() -> Descriptor {
+        // TODO: add child descriptors
+        Builder::new::<Self>().build()
+    }
+}
+
+impl<T> Describe for Option<T>
+where
+    T: State + Encode + Decode + Terminated + Describe + 'static,
+{
+    fn describe() -> Descriptor {
+        Builder::new::<Self>()
+            // .named_child::<T>("inner", &[], |v| Builder::maybe_access(v, Self::take))
+            .build()
+    }
+}
+
+macro_rules! tuple_impl {
+    ($($type:ident),*; $last_type:ident; $($indices:tt),*; $last_index:tt) => {
+        impl<$($type,)* $last_type> Describe for ($($type,)* $last_type)
+        where
+            $($type: State + Encode + Decode + Terminated + Describe + 'static,)*
+            $last_type: State + Encode + Decode + Describe + 'static,
+        {
+            fn describe() -> Descriptor {
+                // TODO: add child descriptors
+                Builder::new::<Self>()
+                    $(.named_child::<$type>(stringify!($indices), &[$indices as u8], |v| Builder::access(v, |v: Self| v.$indices)))*
+                    .named_child::<$last_type>(stringify!($last_index), &[$last_index as u8], |v| Builder::access(v, |v: Self| v.$last_index))
+                    .build()
+            }
+        }
+    }
+}
+
+tuple_impl!(A; B; 0; 1);
+tuple_impl!(A, B; C; 0, 1; 2);
+tuple_impl!(A, B, C; D; 0, 1, 2; 3);
+tuple_impl!(A, B, C, D; E; 0, 1, 2, 3; 4);
+tuple_impl!(A, B, C, D, E; F; 0, 1, 2, 3, 4; 5);
+tuple_impl!(A, B, C, D, E, F; G; 0, 1, 2, 3, 4, 5; 6);
+tuple_impl!(A, B, C, D, E, F, G; H; 0, 1, 2, 3, 4, 5, 6; 7);
+tuple_impl!(A, B, C, D, E, F, G, H; I; 0, 1, 2, 3, 4, 5, 6, 7; 8);
+tuple_impl!(A, B, C, D, E, F, G, H, I; J; 0, 1, 2, 3, 4, 5, 6, 7, 8; 9);
+tuple_impl!(A, B, C, D, E, F, G, H, I, J; K; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9; 10);
+tuple_impl!(A, B, C, D, E, F, G, H, I, J, K; L; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10; 11);
 
 #[cfg(test)]
 mod tests {

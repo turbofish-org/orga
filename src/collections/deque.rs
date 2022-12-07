@@ -10,7 +10,7 @@ use crate::store::{Read, Store, Write};
 use crate::Result;
 use serde::{Deserialize, Serialize};
 
-#[derive(Query, Encode, Decode, Serialize, Deserialize, Describe)]
+#[derive(Query, Encode, Decode, Serialize, Deserialize)]
 #[serde(bound = "")]
 pub struct Deque<T, S: Default = DefaultBackingStore> {
     meta: Meta,
@@ -47,7 +47,7 @@ impl<T, S: Default> std::fmt::Debug for Deque<T, S> {
     }
 }
 
-#[derive(Encode, Decode, Clone, Debug, Serialize, Deserialize)]
+#[derive(State, Encode, Decode, Clone, Debug, Serialize, Deserialize, Describe)]
 pub struct Meta {
     head: u64,
     tail: u64,
@@ -92,6 +92,16 @@ impl<T: State<S>, S: Read + Default> State<S> for Deque<T, S> {
         S: Write,
     {
         self.map.flush()
+    }
+}
+
+impl<T: State + Describe + 'static> Describe for Deque<T> {
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>()
+            .named_child::<Map<u64, T>>("map", &[], |v| {
+                crate::describe::Builder::access(v, |v: Self| v.map)
+            })
+            .build()
     }
 }
 
