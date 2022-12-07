@@ -49,6 +49,10 @@ impl Descriptor {
     pub fn from_str(&self, string: &str) -> Result<Option<Value>> {
         (self.parse)(string)
     }
+
+    pub fn children(&self) -> &Children {
+        &self.children
+    }
 }
 
 #[wasm_bindgen]
@@ -139,6 +143,16 @@ impl Debug for NamedChild {
 pub struct DynamicChild {
     key_desc: Box<Descriptor>,
     value_desc: Box<Descriptor>,
+}
+
+impl DynamicChild {
+    pub fn key_desc(&self) -> &Descriptor {
+        &self.key_desc
+    }
+
+    pub fn value_desc(&self) -> &Descriptor {
+        &self.value_desc
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -233,6 +247,19 @@ impl Value {
 
     pub fn maybe_to_json(&self) -> Result<Option<serde_json::Value>> {
         self.instance.maybe_to_json()
+    }
+
+    pub fn to_json(&self) -> Result<serde_json::Value> {
+        self.maybe_to_json()?
+            .ok_or_else(|| Error::App(format!("Could not convert '{}' to JSON", self.type_name())))
+    }
+
+    pub fn type_name(&self) -> String {
+        self.describe().type_name
+    }
+
+    pub fn store(&self) -> &Store {
+        &self.store
     }
 }
 
