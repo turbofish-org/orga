@@ -73,7 +73,7 @@ pub struct Ibc {
     pub(super) lunchbox: Lunchbox,
 }
 
-#[derive(Encode, Decode, Default, Serialize, Deserialize, Describe)]
+#[derive(Encode, Decode, Default, Serialize, Deserialize)]
 pub struct Lunchbox(pub(super) Store);
 
 impl State for Lunchbox {
@@ -84,6 +84,16 @@ impl State for Lunchbox {
 
     fn flush(&mut self) -> Result<()> {
         Ok(())
+    }
+}
+
+impl Describe for Lunchbox {
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>()
+            .named_child_keyop::<Store>("0", crate::describe::KeyOp::Absolute(vec![]), |v| {
+                crate::describe::Builder::access(v, |v: Self| v.0)
+            })
+            .build()
     }
 }
 

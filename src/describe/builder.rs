@@ -26,15 +26,15 @@ impl Builder {
         }
     }
 
-    pub fn named_child<T: Describe>(
+    pub fn named_child_keyop<T: Describe>(
         mut self,
         name: &'static str,
-        store_suffix: &[u8],
+        keyop: KeyOp,
         access: AccessFn,
     ) -> Self {
         let child = NamedChild {
             name: name.to_string(),
-            store_key: KeyOp::Append(store_suffix.to_vec()),
+            store_key: keyop,
             desc: T::describe(),
             access: Some(access),
         };
@@ -46,6 +46,15 @@ impl Builder {
         };
 
         self
+    }
+
+    pub fn named_child<T: Describe>(
+        mut self,
+        name: &'static str,
+        store_suffix: &[u8],
+        access: AccessFn,
+    ) -> Self {
+        self.named_child_keyop::<T>(name, KeyOp::Append(store_suffix.to_vec()), access)
     }
 
     pub fn dynamic_child<K: Describe, V: Describe>(mut self) -> Self {
