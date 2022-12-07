@@ -36,7 +36,7 @@ impl Builder {
             name: name.to_string(),
             store_key: KeyOp::Append(store_suffix.to_vec()),
             desc: T::describe(),
-            access,
+            access: Some(access),
         };
 
         match self.children {
@@ -65,8 +65,8 @@ impl Builder {
     pub fn build(self) -> Descriptor {
         Descriptor {
             type_name: self.type_name,
-            decode: self.decode,
-            parse: self.parse,
+            decode: Some(self.decode),
+            parse: Some(self.parse),
             children: self.children.unwrap_or_default(),
         }
     }

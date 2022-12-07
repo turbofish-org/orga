@@ -6,7 +6,7 @@ use crate::{
 };
 use ed::Terminated;
 use js_sys::{Array, Uint8Array};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     any::Any,
     fmt::{Debug, Display},
@@ -24,12 +24,14 @@ pub trait Describe {
 }
 
 #[wasm_bindgen(getter_with_clone, inspectable)]
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Descriptor {
     pub type_name: String,
     children: Children,
-    decode: DecodeFn,
-    parse: ParseFn,
+    #[serde(skip)]
+    decode: Option<DecodeFn>,
+    #[serde(skip)]
+    parse: Option<ParseFn>,
 }
 
 impl Debug for Descriptor {
@@ -43,11 +45,19 @@ impl Debug for Descriptor {
 
 impl Descriptor {
     pub fn decode(&self, bytes: &[u8]) -> Result<Value> {
-        (self.decode)(bytes)
+        (self
+            .decode
+            .ok_or_else(|| Error::App("Decode function is not available".to_string()))?)(
+            bytes
+        )
     }
 
     pub fn from_str(&self, string: &str) -> Result<Option<Value>> {
-        (self.parse)(string)
+        (self
+            .parse
+            .ok_or_else(|| Error::App("Decode function is not available".to_string()))?)(
+            string
+        )
     }
 
     pub fn children(&self) -> &Children {
@@ -81,7 +91,7 @@ impl Descriptor {
 pub type DecodeFn = fn(&[u8]) -> Result<Value>;
 pub type ParseFn = fn(&str) -> Result<Option<Value>>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Children {
     None,
     Named(Vec<NamedChild>),
@@ -118,12 +128,13 @@ impl Children {
 }
 
 #[wasm_bindgen(getter_with_clone, inspectable)]
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct NamedChild {
     pub name: String,
     pub desc: Descriptor,
     store_key: KeyOp,
-    access: AccessFn,
+    #[serde(skip)]
+    access: Option<AccessFn>,
 }
 
 pub type AccessFn = fn(&Value) -> Result<Option<Value>>;
@@ -139,7 +150,7 @@ impl Debug for NamedChild {
 }
 
 #[wasm_bindgen(inspectable)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DynamicChild {
     key_desc: Box<Descriptor>,
     value_desc: Box<Descriptor>,
@@ -155,7 +166,7 @@ impl DynamicChild {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum KeyOp {
     Append(Vec<u8>),
     Absolute(Vec<u8>),
@@ -215,12 +226,16 @@ impl Value {
                     .ok_or_else(|| Error::Downcast(format!("No child called '{}'", name)))?;
 
                 let substore = cdesc.store_key.apply(&self.store);
-                (cdesc.access)(self)?
-                    .map(|mut child| {
-                        child.attach(substore)?;
-                        Ok(child)
-                    })
-                    .transpose()
+                (cdesc
+                    .access
+                    .ok_or_else(|| Error::App("access function is not available".to_string()))?)(
+                    self,
+                )?
+                .map(|mut child| {
+                    child.attach(substore)?;
+                    Ok(child)
+                })
+                .transpose()
             }
             Children::Dynamic(ref child) => {
                 let key_bytes = child
@@ -737,5 +752,13 @@ mod tests {
         assert_entry(1000, 2);
         assert_entry(1001, 3);
         assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn descriptor_json() {
+        assert_eq!(
+            serde_json::to_string(&<Bar as Describe>::describe()).unwrap(),
+            "{\"type_name\":\"orga::describe::tests::Bar\",\"children\":{\"Named\":[{\"name\":\"bar\",\"desc\":{\"type_name\":\"u32\",\"children\":\"None\"},\"store_key\":{\"Append\":[0]}},{\"name\":\"baz\",\"desc\":{\"type_name\":\"orga::collections::map::Map<u32, u32>\",\"children\":{\"Dynamic\":{\"key_desc\":{\"type_name\":\"u32\",\"children\":\"None\"},\"value_desc\":{\"type_name\":\"u32\",\"children\":\"None\"}}}},\"store_key\":{\"Append\":[1]}}]}}"
+        );
     }
 }
