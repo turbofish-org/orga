@@ -126,7 +126,7 @@ pub struct NamedChild {
     access: AccessFn,
 }
 
-pub type AccessFn = fn(&Value) -> Result<Value>;
+pub type AccessFn = fn(&Value) -> Result<Option<Value>>;
 
 impl Debug for NamedChild {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -204,7 +204,7 @@ impl Value {
         }
     }
 
-    pub fn child(&self, name: &str) -> Result<Value> {
+    pub fn child(&self, name: &str) -> Result<Option<Value>> {
         let desc = self.describe();
         match desc.children {
             Children::None => Err(Error::Downcast("Value does not have children".to_string())),
@@ -215,9 +215,12 @@ impl Value {
                     .ok_or_else(|| Error::Downcast(format!("No child called '{}'", name)))?;
 
                 let substore = cdesc.store_key.apply(&self.store);
-                let mut child = (cdesc.access)(self)?;
-                child.attach(substore)?;
-                Ok(child)
+                (cdesc.access)(self)?
+                    .map(|mut child| {
+                        child.attach(substore)?;
+                        Ok(child)
+                    })
+                    .transpose()
             }
             Children::Dynamic(ref child) => {
                 let key_bytes = child
@@ -229,7 +232,9 @@ impl Value {
                         )
                     })?
                     .encode()?;
-                desc.children.get_dynamic_child(key_bytes, &self.store)
+                Ok(Some(
+                    desc.children.get_dynamic_child(key_bytes, &self.store)?,
+                ))
             }
         }
     }
@@ -282,7 +287,7 @@ impl Value {
     }
 
     #[wasm_bindgen(js_name = child)]
-    pub fn child_js(&self, name: &str) -> Value {
+    pub fn child_js(&self, name: &str) -> Option<Value> {
         // TODO: return Result
         self.child(name).unwrap()
     }
@@ -675,8 +680,8 @@ mod tests {
     #[test]
     fn child() {
         let value = Value::new(Foo { bar: 420, baz: 69 });
-        let bar: u32 = value.child("bar").unwrap().downcast().unwrap();
-        let baz: u32 = value.child("baz").unwrap().downcast().unwrap();
+        let bar: u32 = value.child("bar").unwrap().unwrap().downcast().unwrap();
+        let baz: u32 = value.child("baz").unwrap().unwrap().downcast().unwrap();
         assert_eq!(bar, 420);
         assert_eq!(baz, 69);
     }
@@ -685,8 +690,15 @@ mod tests {
     fn complex_child() {
         let mut value = create_bar_value();
 
-        let baz = value.child("baz").unwrap();
-        assert_eq!(baz.child("123").unwrap().downcast::<u32>().unwrap(), 456);
+        let baz = value.child("baz").unwrap().unwrap();
+        assert_eq!(
+            baz.child("123")
+                .unwrap()
+                .unwrap()
+                .downcast::<u32>()
+                .unwrap(),
+            456
+        );
     }
 
     #[test]
@@ -713,7 +725,7 @@ mod tests {
         let bar = create_bar_value();
         assert!(bar.entries().is_none());
 
-        let map = bar.child("baz").unwrap();
+        let map = bar.child("baz").unwrap().unwrap();
         let mut iter = map.entries().unwrap();
         let mut assert_entry = |expected_key, expected_value| {
             let (actual_key, actual_value) = iter.next().unwrap().unwrap();

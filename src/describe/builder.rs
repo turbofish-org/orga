@@ -74,11 +74,20 @@ impl Builder {
     pub fn access<T: 'static, U: Encode + Decode + Inspect + 'static>(
         value: &Value,
         access: fn(T) -> U,
-    ) -> Result<Value> {
+    ) -> Result<Option<Value>> {
         let cloned = value.to_any()?;
         let parent: T = *cloned.downcast().unwrap();
         let child = access(parent);
-        Ok(Value::new(child))
+        Ok(Some(Value::new(child)))
+    }
+
+    pub fn maybe_access<T: 'static, U: Encode + Decode + Inspect + 'static>(
+        value: &Value,
+        access: fn(T) -> Option<U>,
+    ) -> Result<Option<Value>> {
+        let cloned = value.to_any()?;
+        let parent: T = *cloned.downcast().unwrap();
+        Ok(access(parent).map(|child| Value::new(child)))
     }
 }
 
@@ -121,7 +130,7 @@ mod tests {
     impl Describe for Foo {
         fn describe() -> Descriptor {
             Builder::new::<Self>()
-                .named_child::<u32>("bar", &[0], |v| Builder::access(v, |v: Self| v.bar))
+                .named_child::<u32>("bar", &[0], |v| Builder::access(v, |v: Self| Some(v.bar)))
                 .build()
         }
     }
