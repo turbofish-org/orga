@@ -53,6 +53,8 @@ pub mod store;
 #[cfg(feature = "abci")]
 pub mod tendermint;
 
+pub mod migrate;
+
 #[cfg(any(target_arch = "wasm32", feature = "abci"))]
 pub mod plugins;
 
