@@ -130,13 +130,23 @@ mod tests {
     impl Describe for Foo {
         fn describe() -> Descriptor {
             Builder::new::<Self>()
-                .named_child::<u32>("bar", &[0], |v| Builder::access(v, |v: Self| Some(v.bar)))
+                .named_child::<u32>("bar", &[0], |v| Builder::access(v, |v: Self| v.bar))
                 .build()
         }
     }
 
     #[test]
-    fn builder() {
-        dbg!(<Foo as Describe>::describe());
+    fn builder_named() {
+        let desc = <Foo as Describe>::describe();
+        assert_eq!(&desc.type_name, "orga::describe::builder::tests::Foo");
+        match &desc.children {
+            Children::Named(children) => {
+                assert_eq!(children.len(), 1);
+                assert_eq!(&children[0].name, "bar");
+                assert_eq!(&children[0].store_key, &KeyOp::Append(vec![0]));
+                assert_eq!(&children[0].desc.type_name, "u32");
+            }
+            _ => panic!("Incorrect children"),
+        }
     }
 }

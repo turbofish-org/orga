@@ -155,7 +155,7 @@ impl DynamicChild {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum KeyOp {
     Append(Vec<u8>),
     Absolute(Vec<u8>),
