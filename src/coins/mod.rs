@@ -84,11 +84,8 @@ use sha2::Sha256;
     Client,
     Call,
     Default,
-    Serialize,
-    Deserialize,
     Describe,
 )]
-#[serde(transparent)]
 pub struct Address {
     bytes: [u8; Address::LENGTH],
 }
@@ -148,6 +145,48 @@ impl FromStr for Address {
         bytes.copy_from_slice(&data);
 
         Ok(Address { bytes })
+    }
+}
+
+impl Serialize for Address {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.to_string().as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for Address {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct AddressVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for AddressVisitor {
+            type Value = Address;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a bech32-encoded string")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                value.parse().map_err(serde::de::Error::custom)
+            }
+
+            fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                value.parse().map_err(serde::de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(AddressVisitor)
     }
 }
 
