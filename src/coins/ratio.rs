@@ -4,7 +4,6 @@ use crate::state::State;
 use crate::store::Store;
 use crate::{Error, Result};
 use num_rational::Ratio as NumRatio;
-use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::ops::{Deref, DerefMut};
@@ -94,7 +93,7 @@ impl Ratio {
 }
 
 impl State for Ratio {
-    fn attach(&mut self, store: Store) -> Result<()> {
+    fn attach(&mut self, _store: Store) -> Result<()> {
         Ok(())
     }
 

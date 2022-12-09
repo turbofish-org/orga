@@ -520,7 +520,7 @@ mod tests {
     use super::*;
     use crate::coins::{Address, Amount, Share};
     use crate::encoding::{Decode, Encode};
-    use crate::store::{MapStore, Shared, Store};
+    use crate::store::Store;
 
     #[derive(Encode, Decode, Debug, Clone, Default)]
     struct Simp;
@@ -529,7 +529,7 @@ mod tests {
     }
 
     impl State for Simp {
-        fn attach(&mut self, store: Store) -> Result<()> {
+        fn attach(&mut self, _store: Store) -> Result<()> {
             Ok(())
         }
 

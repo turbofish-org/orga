@@ -166,7 +166,6 @@ mod tests {
 
     #[ignore]
     #[test]
-    #[ignore]
     fn nonexistence_proof() {
         let path = "/tmp/ics23-proof-test2";
         let mut store = MerkStore::new(path.into());

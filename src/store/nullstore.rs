@@ -19,10 +19,10 @@ impl Read for NullStore {
 }
 
 impl Write for NullStore {
-    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
+    fn put(&mut self, _key: Vec<u8>, _value: Vec<u8>) -> Result<()> {
         unimplemented!()
     }
-    fn delete(&mut self, key: &[u8]) -> Result<()> {
+    fn delete(&mut self, _key: &[u8]) -> Result<()> {
         unimplemented!()
     }
 }

@@ -43,7 +43,7 @@ where
 }
 
 impl<S> Encode for Store<S> {
-    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+    fn encode_into<W: std::io::Write>(&self, _dest: &mut W) -> ed::Result<()> {
         Ok(())
     }
 
@@ -53,7 +53,7 @@ impl<S> Encode for Store<S> {
 }
 
 impl<S: Default> Decode for Store<S> {
-    fn decode<R: std::io::Read>(input: R) -> ed::Result<Self> {
+    fn decode<R: std::io::Read>(_input: R) -> ed::Result<Self> {
         Ok(Self::default())
     }
 }
