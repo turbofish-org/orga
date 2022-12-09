@@ -97,7 +97,7 @@ impl Decimal {
 }
 
 impl State for Decimal {
-    fn attach(&mut self, store: Store) -> Result<()> {
+    fn attach(&mut self, _store: Store) -> Result<()> {
         Ok(())
     }
 

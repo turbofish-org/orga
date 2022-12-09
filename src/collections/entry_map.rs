@@ -5,7 +5,6 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::encoding::{Decode, Encode, Terminated};
-use crate::store::DefaultBackingStore;
 use std::ops::RangeBounds;
 
 use super::{Entry, Next};
@@ -211,7 +210,7 @@ mod tests {
 
     #[test]
     fn insert() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         let entry = MapEntry { key: 42, value: 84 };
         entry_map.insert(entry).unwrap();
@@ -238,7 +237,7 @@ mod tests {
 
     #[test]
     fn delete_map() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         let entry = MapEntry { key: 42, value: 84 };
         entry_map.insert(entry).unwrap();
@@ -264,7 +263,7 @@ mod tests {
 
     #[test]
     fn iter() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
         entry_map.insert(MapEntry { key: 13, value: 26 }).unwrap();
@@ -288,7 +287,7 @@ mod tests {
 
     #[test]
     fn range_full() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
         entry_map.insert(MapEntry { key: 13, value: 26 }).unwrap();
@@ -312,7 +311,7 @@ mod tests {
 
     #[test]
     fn range_exclusive_upper() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
         entry_map.insert(MapEntry { key: 13, value: 26 }).unwrap();
@@ -335,7 +334,7 @@ mod tests {
 
     #[test]
     fn range_bounded_exclusive() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
         entry_map.insert(MapEntry { key: 13, value: 26 }).unwrap();
@@ -355,7 +354,7 @@ mod tests {
 
     #[test]
     fn contains_wrong_entry() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
 
@@ -364,7 +363,7 @@ mod tests {
 
     #[test]
     fn contains_removed_entry() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
         entry_map.delete(MapEntry { key: 12, value: 24 }).unwrap();
@@ -374,7 +373,7 @@ mod tests {
 
     #[test]
     fn contains_entry_key() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
 
@@ -385,7 +384,7 @@ mod tests {
 
     #[test]
     fn contains_entry_key_value_non_match() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
 
@@ -396,7 +395,7 @@ mod tests {
 
     #[test]
     fn iter_tuple_struct() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         entry_map.insert(TupleMapEntry(12, 24)).unwrap();
         entry_map.insert(TupleMapEntry(13, 26)).unwrap();
@@ -420,7 +419,7 @@ mod tests {
 
     #[test]
     fn range_full_tuple_struct() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         entry_map.insert(TupleMapEntry(12, 24)).unwrap();
         entry_map.insert(TupleMapEntry(13, 26)).unwrap();
@@ -455,7 +454,7 @@ mod tests {
 
     #[test]
     fn insert_multi_key() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         let entry = MultiKeyMapEntry {
             key_1: 42,
@@ -478,7 +477,7 @@ mod tests {
 
     #[test]
     fn delete_multi_key() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         let entry = MultiKeyMapEntry {
             key_1: 42,
@@ -558,7 +557,7 @@ mod tests {
             },
         ];
 
-        let entry_map: EntryMap<MultiKeyMapEntry> = EntryMap::with_store(store.clone()).unwrap();
+        let entry_map: EntryMap<MultiKeyMapEntry> = EntryMap::with_store(store).unwrap();
         let result: bool = entry_map
             .iter()
             .unwrap()

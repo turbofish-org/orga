@@ -564,7 +564,7 @@ impl<S: State> AbciQuery for S {
     default fn abci_query(&self, request: &RequestQuery) -> Result<ResponseQuery> {
         Ok(ResponseQuery {
             code: 1,
-            height: request.height as i64,
+            height: request.height,
             log: format!("Query path not handled: {}", request.path),
             ..Default::default()
         })

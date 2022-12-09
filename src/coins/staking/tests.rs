@@ -1,12 +1,9 @@
 use super::*;
 use crate::coins::MultiShare;
+use crate::context::Context;
 #[cfg(feature = "abci")]
 use crate::plugins::Time;
 use crate::Result;
-use crate::{
-    context::Context,
-    store::{MapStore, Shared, Store},
-};
 use rust_decimal_macros::dec;
 use serial_test::serial;
 use std::cell::RefCell;
@@ -26,14 +23,16 @@ fn alt_balance(multishare: &MultiShare) -> Amount {
     Balance::<Alt, Amount>::balance(multishare).unwrap()
 }
 fn setup_state() -> Result<Staking<Simp>> {
-    let mut staking: Staking<Simp> = Default::default();
-    staking.downtime_jail_seconds = 5;
-    staking.unbonding_seconds = UNBONDING_SECONDS;
-    staking.max_validators = MAX_VALIDATORS;
-    staking.max_offline_blocks = MAX_OFFLINE_BLOCKS;
-    staking.slash_fraction_downtime = (Amount::new(1) / Amount::new(2))?;
-    staking.slash_fraction_double_sign = (Amount::new(1) / Amount::new(2))?;
-    staking.min_self_delegation_min = 1;
+    let staking: Staking<Simp> = Staking {
+        downtime_jail_seconds: 5,
+        unbonding_seconds: UNBONDING_SECONDS,
+        max_validators: 100,
+        max_offline_blocks: 50_000,
+        slash_fraction_downtime: (Amount::new(1) / Amount::new(2))?,
+        slash_fraction_double_sign: (Amount::new(1) / Amount::new(2))?,
+        min_self_delegation_min: 1,
+        ..Default::default()
+    };
 
     let val_ctx = Validators::new(
         Rc::new(RefCell::new(Some(EntryMap::new()))),
@@ -49,9 +48,11 @@ fn setup_state() -> Result<Staking<Simp>> {
 #[test]
 #[serial]
 fn staking() -> Result<()> {
-    let mut staking: Staking<Simp> = Default::default();
-    staking.downtime_jail_seconds = 5;
-    staking.slash_fraction_downtime = (Amount::new(1) / Amount::new(2))?;
+    let mut staking = Staking::<Simp> {
+        downtime_jail_seconds: 5,
+        slash_fraction_downtime: (Amount::new(1) / Amount::new(2))?,
+        ..Default::default()
+    };
 
     let alice = Address::from_pubkey([0; 33]);
     let alice_con = [4; 32];

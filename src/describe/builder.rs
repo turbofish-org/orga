@@ -49,7 +49,7 @@ impl Builder {
     }
 
     pub fn named_child<T: Describe>(
-        mut self,
+        self,
         name: &'static str,
         store_suffix: &[u8],
         access: AccessFn,

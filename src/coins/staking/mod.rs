@@ -31,10 +31,6 @@ pub use validator::*;
 const UNBONDING_SECONDS: u64 = 10; // 10 seconds
 #[cfg(not(test))]
 const UNBONDING_SECONDS: u64 = 60 * 60 * 24 * 14; // 2 weeks
-const MAX_OFFLINE_BLOCKS: u64 = 50_000; // ~14 hours for 1s blocks
-const MAX_VALIDATORS: u64 = 100;
-const MIN_SELF_DELEGATION_MIN: u64 = 0;
-const DOWNTIME_JAIL_SECONDS: u64 = 60 * 60 * 24; // 1 day
 const EDIT_INTERVAL_SECONDS: u64 = 60 * 60 * 24; // 1 day
 
 #[derive(Call, Query, Client, Default, Serialize, Deserialize)]
@@ -299,8 +295,7 @@ impl<S: Symbol> BeginBlock for Staking<S> {
                 .votes
                 .iter()
                 .filter(|vote_info| vote_info.signed_last_block)
-                .filter(|vote_info| vote_info.validator.is_some())
-                .map(|vote_info| vote_info.validator.as_ref().unwrap())
+                .filter_map(|vote_info| vote_info.validator.as_ref())
                 .try_for_each(|validator| {
                     self.last_signed_block.insert(
                         validator.address[..].try_into().map_err(|_| {
@@ -462,11 +457,9 @@ impl<S: Symbol> Staking<S> {
             ));
         }
 
-        self.consensus_keys
-            .insert(val_address, consensus_key.into())?;
+        self.consensus_keys.insert(val_address, consensus_key)?;
 
-        self.address_for_tm_hash
-            .insert(tm_hash, val_address.into())?;
+        self.address_for_tm_hash.insert(tm_hash, val_address)?;
 
         #[cfg(feature = "abci")]
         let val_ctx = self
@@ -614,14 +607,12 @@ impl<S: Symbol> Staking<S> {
         };
 
         if let Some(start_seconds) = start_seconds {
-            self.unbonding_delegation_queue.push_back(
-                UnbondingDelegationEntry {
+            self.unbonding_delegation_queue
+                .push_back(UnbondingDelegationEntry {
                     delegator_address,
                     validator_address,
                     start_seconds,
-                }
-                .into(),
-            )?;
+                })?;
         }
 
         self.update_vp(validator_address)
@@ -678,15 +669,12 @@ impl<S: Symbol> Staking<S> {
         }
 
         if let Some(start_seconds) = start_seconds {
-            self.redelegation_queue.push_back(
-                RedelegationEntry {
-                    src_validator_address,
-                    dst_validator_address,
-                    delegator_address,
-                    start_seconds,
-                }
-                .into(),
-            )?;
+            self.redelegation_queue.push_back(RedelegationEntry {
+                src_validator_address,
+                dst_validator_address,
+                delegator_address,
+                start_seconds,
+            })?;
         }
 
         self.index_delegation(dst_validator_address, delegator_address)?;

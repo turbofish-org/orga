@@ -90,7 +90,7 @@ impl Decode for ValidatorInfo {
 }
 
 impl State for ValidatorInfo {
-    fn attach(&mut self, store: Store) -> Result<()> {
+    fn attach(&mut self, _store: Store) -> Result<()> {
         Ok(())
     }
 

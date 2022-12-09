@@ -5,8 +5,7 @@ use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
-use crate::store::DefaultBackingStore;
-use crate::store::{Read, Store, Write};
+use crate::store::Store;
 use crate::Result;
 use serde::{Deserialize, Serialize};
 

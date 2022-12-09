@@ -1,7 +1,7 @@
 use crate::{
     encoding::{Decode, Encode},
     state::State,
-    store::{DefaultBackingStore, Iter, Read, Store},
+    store::{Iter, Read, Store},
     Error, Result,
 };
 use ed::Terminated;
@@ -520,7 +520,7 @@ pub struct JsIterNext {
 
 #[wasm_bindgen]
 impl JsIterNext {
-    #[wasm_bindgen(method, getter)]
+    #[wasm_bindgen(getter)]
     pub fn value(&mut self) -> JsValue {
         self.value.take().unwrap_or_default()
     }
@@ -633,7 +633,7 @@ tuple_impl!(A, B, C, D, E, F, G, H, I, J, K; L; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
 mod tests {
     use serde::{Deserialize, Serialize};
 
-    use super::{Builder, Describe, Descriptor, Value};
+    use super::{Describe, Value};
     use crate::{
         collections::Map,
         encoding::{Decode, Encode},
@@ -703,7 +703,7 @@ mod tests {
 
     #[test]
     fn complex_child() {
-        let mut value = create_bar_value();
+        let value = create_bar_value();
 
         let baz = value.child("baz").unwrap().unwrap();
         assert_eq!(
