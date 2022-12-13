@@ -5,26 +5,25 @@ use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
-use crate::store::DefaultBackingStore;
-use crate::store::{Read, Store, Write};
+use crate::store::Store;
 use crate::Result;
 use serde::{Deserialize, Serialize};
 
 #[derive(Query, Encode, Decode, Serialize, Deserialize)]
 #[serde(bound = "")]
-pub struct Deque<T, S: Default = DefaultBackingStore> {
+pub struct Deque<T> {
     meta: Meta,
-    map: Map<u64, T, S>,
+    map: Map<u64, T>,
 }
 
-impl<T, S: Default> Deque<T, S> {
+impl<T> Deque<T> {
     pub fn new() -> Self {
         Self::default()
     }
 }
 
-impl<T: State<S>, S: Default + Read> Deque<T, S> {
-    pub fn with_store(store: Store<S>) -> Result<Self> {
+impl<T: State> Deque<T> {
+    pub fn with_store(store: Store) -> Result<Self> {
         Ok(Self {
             meta: Meta::default(),
             map: Map::with_store(store)?,
@@ -32,7 +31,7 @@ impl<T: State<S>, S: Default + Read> Deque<T, S> {
     }
 }
 
-impl<T, S: Default> Default for Deque<T, S> {
+impl<T> Default for Deque<T> {
     fn default() -> Self {
         Deque {
             meta: Meta::default(),
@@ -41,7 +40,7 @@ impl<T, S: Default> Default for Deque<T, S> {
     }
 }
 
-impl<T, S: Default> std::fmt::Debug for Deque<T, S> {
+impl<T> std::fmt::Debug for Deque<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Deque").field("meta", &self.meta).finish()
     }
@@ -63,13 +62,13 @@ impl Default for Meta {
     }
 }
 
-impl<T, S: Default> From<Deque<T, S>> for Meta {
-    fn from(deque: Deque<T, S>) -> Meta {
+impl<T> From<Deque<T>> for Meta {
+    fn from(deque: Deque<T>) -> Meta {
         deque.meta
     }
 }
 
-impl<T: Call + State<S>, S: Write + Default> Call for Deque<T, S> {
+impl<T: Call + State> Call for Deque<T> {
     type Call = (u64, T::Call);
 
     fn call(&mut self, call: Self::Call) -> Result<()> {
@@ -79,18 +78,12 @@ impl<T: Call + State<S>, S: Write + Default> Call for Deque<T, S> {
 }
 
 // TODO: use derive(State) once it supports generic parameters
-impl<T: State<S>, S: Read + Default> State<S> for Deque<T, S> {
-    fn attach(&mut self, store: Store<S>) -> Result<()>
-    where
-        S: Read,
-    {
+impl<T: State> State for Deque<T> {
+    fn attach(&mut self, store: Store) -> Result<()> {
         self.map.attach(store)
     }
 
-    fn flush(&mut self) -> Result<()>
-    where
-        S: Write,
-    {
+    fn flush(&mut self) -> Result<()> {
         self.map.flush()
     }
 }
@@ -105,7 +98,7 @@ impl<T: State + Describe + 'static> Describe for Deque<T> {
     }
 }
 
-impl<T: State<S>, S: Read + Default> Deque<T, S> {
+impl<T: State> Deque<T> {
     #[query]
     pub fn len(&self) -> u64 {
         self.meta.tail - self.meta.head
@@ -132,8 +125,8 @@ impl<T: State<S>, S: Read + Default> Deque<T, S> {
     }
 }
 
-impl<T: State<S>, S: Write + Default> Deque<T, S> {
-    pub fn get_mut(&mut self, index: u64) -> Result<Option<ChildMut<u64, T, S>>> {
+impl<T: State> Deque<T> {
+    pub fn get_mut(&mut self, index: u64) -> Result<Option<ChildMut<u64, T>>> {
         self.map.get_mut(index + self.meta.head)
     }
 
@@ -169,17 +162,17 @@ impl<T: State<S>, S: Write + Default> Deque<T, S> {
         self.map.remove(self.meta.tail)
     }
 
-    pub fn front_mut(&mut self) -> Result<Option<ChildMut<u64, T, S>>> {
+    pub fn front_mut(&mut self) -> Result<Option<ChildMut<u64, T>>> {
         self.get_mut(0)
     }
 
-    pub fn back_mut(&mut self) -> Result<Option<ChildMut<u64, T, S>>> {
+    pub fn back_mut(&mut self) -> Result<Option<ChildMut<u64, T>>> {
         self.get_mut(self.len() - 1)
     }
 }
 
 // TODO: use derive(Client)
-impl<T, U: Clone + Send, S: Default> Client<U> for Deque<T, S> {
+impl<T, U: Clone + Send> Client<U> for Deque<T> {
     type Client = ();
 
     fn create_client(_: U) {}
@@ -187,12 +180,8 @@ impl<T, U: Clone + Send, S: Default> Client<U> for Deque<T, S> {
 
 #[allow(unused_imports)]
 mod test {
-    use super::{Deque as OrgaDeque, Map as OrgaMap, *};
+    use super::{Deque, Map};
     use crate::store::MapStore;
-    #[allow(dead_code)]
-    type Deque<T> = OrgaDeque<T, MapStore>;
-    #[allow(dead_code)]
-    type Map<K, V> = OrgaMap<K, V, MapStore>;
 
     #[test]
     fn deque_u32_push_front() {

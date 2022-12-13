@@ -1,6 +1,6 @@
 use orga::{
     collections::Map,
-    describe::{Builder, Describe, Descriptor},
+    describe::{Describe, Descriptor},
     encoding::{Decode, Encode},
     state::State,
 };

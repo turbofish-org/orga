@@ -325,7 +325,7 @@ fn write_nonce(nonce: u64) -> Result<()> {
 #[cfg(not(target_arch = "wasm32"))]
 fn write_nonce(nonce: u64) -> Result<()> {
     let nonce_path = nonce_path()?;
-    Ok(std::fs::write(&nonce_path, nonce.encode()?)?)
+    Ok(std::fs::write(nonce_path, nonce.encode()?)?)
 }
 
 // TODO: Remove dependency on ABCI for this otherwise-pure plugin.

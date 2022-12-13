@@ -5,7 +5,6 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::encoding::{Decode, Encode, Terminated};
-use crate::store::DefaultBackingStore;
 use std::ops::RangeBounds;
 
 use super::{Entry, Next};
@@ -18,26 +17,20 @@ use crate::Result;
 
 #[derive(Query, Call, Encode, Decode, Serialize, Deserialize)]
 #[serde(bound = "")]
-pub struct EntryMap<T: Entry, S: Default = DefaultBackingStore> {
-    map: Map<T::Key, T::Value, S>,
+pub struct EntryMap<T: Entry> {
+    map: Map<T::Key, T::Value>,
 }
 
-impl<T: Entry, S: Default> State<S> for EntryMap<T, S>
+impl<T: Entry> State for EntryMap<T>
 where
     T::Key: Encode + Terminated,
-    T::Value: State<S>,
+    T::Value: State,
 {
-    fn attach(&mut self, store: Store<S>) -> Result<()>
-    where
-        S: Read,
-    {
+    fn attach(&mut self, store: Store) -> Result<()> {
         self.map.attach(store)
     }
 
-    fn flush(&mut self) -> Result<()>
-    where
-        S: Write,
-    {
+    fn flush(&mut self) -> Result<()> {
         self.map.flush()
     }
 }
@@ -56,7 +49,7 @@ where
     }
 }
 
-impl<T: Entry, S: Default> Default for EntryMap<T, S> {
+impl<T: Entry> Default for EntryMap<T> {
     fn default() -> Self {
         Self {
             map: Map::default(),
@@ -64,18 +57,18 @@ impl<T: Entry, S: Default> Default for EntryMap<T, S> {
     }
 }
 
-impl<T: Entry, S: Default> EntryMap<T, S> {
+impl<T: Entry> EntryMap<T> {
     pub fn new() -> Self {
         Self::default()
     }
 }
 
-impl<T: Entry, S: Default + Read> EntryMap<T, S>
+impl<T: Entry> EntryMap<T>
 where
     T::Key: Encode + Terminated,
-    T::Value: State<S>,
+    T::Value: State,
 {
-    pub fn with_store(store: Store<S>) -> Result<Self> {
+    pub fn with_store(store: Store) -> Result<Self> {
         Ok(Self {
             map: Map::with_store(store)?,
         })
@@ -85,12 +78,11 @@ where
 // TODO: add a get_mut method (maybe just takes in T::Key?) so we can add
 // #[call] to it to route calls to children
 
-impl<T, S: Default> EntryMap<T, S>
+impl<T> EntryMap<T>
 where
     T: Entry,
     T::Key: Encode + Terminated,
-    T::Value: State<S>,
-    S: Read,
+    T::Value: State,
 {
     pub fn insert(&mut self, entry: T) -> Result<()> {
         let (key, value) = entry.into_entry();
@@ -104,12 +96,11 @@ where
     }
 }
 
-impl<T, S: Default> EntryMap<T, S>
+impl<T> EntryMap<T>
 where
     T: Entry,
     T::Key: Encode + Terminated + Clone,
-    T::Value: State<S>,
-    S: Read,
+    T::Value: State,
 {
     pub fn delete(&mut self, entry: T) -> Result<()> {
         let (key, _) = entry.into_entry();
@@ -119,12 +110,11 @@ where
     }
 }
 
-impl<T, S: Default> EntryMap<T, S>
+impl<T> EntryMap<T>
 where
     T: Entry,
     T::Key: Encode + Terminated + Clone,
-    T::Value: State<S> + Eq,
-    S: Read,
+    T::Value: State + Eq,
 {
     #[query]
     pub fn contains(&self, entry: T) -> Result<bool> {
@@ -146,39 +136,36 @@ where
     }
 }
 
-impl<'a, T: Entry, S: Default> EntryMap<T, S>
+impl<'a, T: Entry> EntryMap<T>
 where
     T::Key: Next + Decode + Encode + Terminated + Clone,
-    T::Value: State<S> + Clone,
-    S: Read,
+    T::Value: State + Clone,
 {
-    pub fn iter(&'a self) -> Result<Iter<'a, T, S>> {
+    pub fn iter(&'a self) -> Result<Iter<'a, T>> {
         Ok(Iter {
             map_iter: self.map.iter()?,
         })
     }
 
-    pub fn range<B: RangeBounds<T::Key>>(&'a self, range: B) -> Result<Iter<'a, T, S>> {
+    pub fn range<B: RangeBounds<T::Key>>(&'a self, range: B) -> Result<Iter<'a, T>> {
         Ok(Iter {
             map_iter: self.map.range(range)?,
         })
     }
 }
 
-pub struct Iter<'a, T: Entry, S: Default>
+pub struct Iter<'a, T: Entry>
 where
     T::Key: Next + Decode + Encode + Terminated + Clone,
-    T::Value: State<S> + Clone,
-    S: Read,
+    T::Value: State + Clone,
 {
-    map_iter: MapIter<'a, T::Key, T::Value, S>,
+    map_iter: MapIter<'a, T::Key, T::Value>,
 }
 
-impl<'a, T: Entry, S: Default> Iterator for Iter<'a, T, S>
+impl<'a, T: Entry> Iterator for Iter<'a, T>
 where
     T::Key: Next + Decode + Encode + Terminated + Clone,
-    T::Value: State<S> + Clone,
-    S: Read,
+    T::Value: State + Clone,
 {
     type Item = Result<ReadOnly<T>>;
 
@@ -223,7 +210,7 @@ mod tests {
 
     #[test]
     fn insert() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         let entry = MapEntry { key: 42, value: 84 };
         entry_map.insert(entry).unwrap();
@@ -250,7 +237,7 @@ mod tests {
 
     #[test]
     fn delete_map() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         let entry = MapEntry { key: 42, value: 84 };
         entry_map.insert(entry).unwrap();
@@ -276,7 +263,7 @@ mod tests {
 
     #[test]
     fn iter() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
         entry_map.insert(MapEntry { key: 13, value: 26 }).unwrap();
@@ -300,7 +287,7 @@ mod tests {
 
     #[test]
     fn range_full() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
         entry_map.insert(MapEntry { key: 13, value: 26 }).unwrap();
@@ -324,7 +311,7 @@ mod tests {
 
     #[test]
     fn range_exclusive_upper() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
         entry_map.insert(MapEntry { key: 13, value: 26 }).unwrap();
@@ -347,7 +334,7 @@ mod tests {
 
     #[test]
     fn range_bounded_exclusive() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
         entry_map.insert(MapEntry { key: 13, value: 26 }).unwrap();
@@ -367,7 +354,7 @@ mod tests {
 
     #[test]
     fn contains_wrong_entry() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
 
@@ -376,7 +363,7 @@ mod tests {
 
     #[test]
     fn contains_removed_entry() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
         entry_map.delete(MapEntry { key: 12, value: 24 }).unwrap();
@@ -386,7 +373,7 @@ mod tests {
 
     #[test]
     fn contains_entry_key() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
 
@@ -397,7 +384,7 @@ mod tests {
 
     #[test]
     fn contains_entry_key_value_non_match() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         entry_map.insert(MapEntry { key: 12, value: 24 }).unwrap();
 
@@ -408,7 +395,7 @@ mod tests {
 
     #[test]
     fn iter_tuple_struct() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         entry_map.insert(TupleMapEntry(12, 24)).unwrap();
         entry_map.insert(TupleMapEntry(13, 26)).unwrap();
@@ -432,7 +419,7 @@ mod tests {
 
     #[test]
     fn range_full_tuple_struct() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         entry_map.insert(TupleMapEntry(12, 24)).unwrap();
         entry_map.insert(TupleMapEntry(13, 26)).unwrap();
@@ -467,7 +454,7 @@ mod tests {
 
     #[test]
     fn insert_multi_key() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         let entry = MultiKeyMapEntry {
             key_1: 42,
@@ -490,7 +477,7 @@ mod tests {
 
     #[test]
     fn delete_multi_key() {
-        let (store, mut entry_map) = setup();
+        let (_store, mut entry_map) = setup();
 
         let entry = MultiKeyMapEntry {
             key_1: 42,
@@ -570,7 +557,7 @@ mod tests {
             },
         ];
 
-        let entry_map: EntryMap<MultiKeyMapEntry> = EntryMap::with_store(store.clone()).unwrap();
+        let entry_map: EntryMap<MultiKeyMapEntry> = EntryMap::with_store(store).unwrap();
         let result: bool = entry_map
             .iter()
             .unwrap()

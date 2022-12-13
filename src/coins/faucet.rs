@@ -81,7 +81,7 @@ impl<S: Symbol> Faucet<S> {
                 let seconds_into_period =
                     seconds_since_start - (i as i64) * self.seconds_per_period as i64;
                 let period_fraction = (Amount::new(seconds_into_period as u64)
-                    / Amount::new(self.seconds_per_period as u64))?;
+                    / Amount::new(self.seconds_per_period))?;
                 total = (total + period_fraction * total_to_mint_this_period)?;
                 break;
             }
@@ -111,7 +111,7 @@ mod tests {
     use super::*;
     use crate::context::Context;
     use crate::encoding::{Decode, Encode};
-    use crate::store::{MapStore, Shared, Store};
+    use crate::store::Store;
     use serial_test::serial;
 
     #[derive(Encode, Decode, Debug, Clone, Default, Serialize, Deserialize)]
@@ -121,7 +121,7 @@ mod tests {
     }
 
     impl State for Simp {
-        fn attach(&mut self, store: Store) -> Result<()> {
+        fn attach(&mut self, _store: Store) -> Result<()> {
             Ok(())
         }
 

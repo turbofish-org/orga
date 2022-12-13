@@ -46,7 +46,7 @@ impl<S: Symbol> Delegator<S> {
                 coins,
                 start_seconds,
             };
-            self.unbonding.push_back(unbond.into())
+            self.unbonding.push_back(unbond)
         } else {
             self.liquid.give(S::mint(amount))
         }
@@ -204,14 +204,11 @@ impl<S: Symbol> Delegator<S> {
 
         let redelegated_coins = self.staked.take(amount)?;
         if let Some(start_seconds) = start_seconds {
-            self.redelegations_out.push_back(
-                Redelegation {
-                    amount,
-                    address: dst_val_address,
-                    start_seconds,
-                }
-                .into(),
-            )?;
+            self.redelegations_out.push_back(Redelegation {
+                amount,
+                address: dst_val_address,
+                start_seconds,
+            })?;
         }
 
         Ok(redelegated_coins)
@@ -224,14 +221,11 @@ impl<S: Symbol> Delegator<S> {
         start_seconds: Option<i64>,
     ) -> Result<()> {
         if let Some(start_seconds) = start_seconds {
-            self.redelegations_in.push_back(
-                Redelegation {
-                    address: src_val_address,
-                    amount: coins.amount,
-                    start_seconds,
-                }
-                .into(),
-            )?;
+            self.redelegations_in.push_back(Redelegation {
+                address: src_val_address,
+                amount: coins.amount,
+                start_seconds,
+            })?;
         }
 
         self.add_stake(coins)

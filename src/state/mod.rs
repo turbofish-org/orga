@@ -1,10 +1,8 @@
 use crate::encoding::{Decode, Encode, Terminated};
 use crate::store::*;
-use crate::{Error, Result};
+use crate::Result;
 pub use orga_macros::State;
-use serde::{Deserialize, Serialize};
-use std::cell::{RefCell, UnsafeCell};
-use std::convert::TryInto;
+use std::cell::RefCell;
 use std::marker::PhantomData;
 
 /// A trait for types which provide a higher-level API for data stored within a

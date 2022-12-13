@@ -8,7 +8,7 @@ use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 use super::Next;
 use crate::call::Call;
 use crate::client::{AsyncCall, Client as ClientTrait};
-use crate::describe::{Describe, Inspect};
+use crate::describe::Describe;
 use crate::query::Query;
 use crate::state::*;
 use crate::store::*;
@@ -89,14 +89,14 @@ impl<K> Eq for MapKey<K> {}
 /// changes to the backing store.
 #[derive(Query, Call, Serialize, Deserialize)]
 #[serde(bound = "")]
-pub struct Map<K, V, S: Default = DefaultBackingStore> {
+pub struct Map<K, V> {
     #[serde(skip)]
-    store: Store<S>,
+    store: Store,
     #[serde(skip)]
     children: BTreeMap<MapKey<K>, Option<V>>,
 }
-impl<K, V, S: Default> Encode for Map<K, V, S> {
-    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+impl<K, V> Encode for Map<K, V> {
+    fn encode_into<W: std::io::Write>(&self, _dest: &mut W) -> ed::Result<()> {
         Ok(())
     }
 
@@ -105,30 +105,24 @@ impl<K, V, S: Default> Encode for Map<K, V, S> {
     }
 }
 
-impl<K, V, S: Default> Decode for Map<K, V, S> {
-    fn decode<R: std::io::Read>(input: R) -> ed::Result<Self> {
+impl<K, V> Decode for Map<K, V> {
+    fn decode<R: std::io::Read>(_input: R) -> ed::Result<Self> {
         Ok(Map::new())
     }
 }
 
-impl<K, V, S: Default> Terminated for Map<K, V, S> {}
+impl<K, V> Terminated for Map<K, V> {}
 
-impl<K, V, S: Default> State<S> for Map<K, V, S>
+impl<K, V> State for Map<K, V>
 where
     K: Encode + Terminated,
-    V: State<S>,
+    V: State,
 {
-    fn attach(&mut self, store: Store<S>) -> Result<()>
-    where
-        S: Read,
-    {
+    fn attach(&mut self, store: Store) -> Result<()> {
         self.store.attach(store)
     }
 
-    fn flush(&mut self) -> Result<()>
-    where
-        S: Write,
-    {
+    fn flush(&mut self) -> Result<()> {
         while let Some((key, maybe_value)) = self.children.pop_first() {
             Self::apply_change(&mut self.store, &key.inner, maybe_value)?;
         }
@@ -137,21 +131,21 @@ where
     }
 }
 
-impl<K, V, S: Default> Map<K, V, S> {
+impl<K, V> Map<K, V> {
     pub fn new() -> Self {
         Self::default()
     }
 }
 
-impl<K: Encode + Decode + Terminated, V: State<S>, S: Read + Default> Map<K, V, S> {
-    pub fn with_store(store: Store<S>) -> Result<Self> {
+impl<K: Encode + Decode + Terminated, V: State> Map<K, V> {
+    pub fn with_store(store: Store) -> Result<Self> {
         let mut map = Map::new();
-        State::<S>::attach(&mut map, store)?;
+        State::attach(&mut map, store)?;
         Ok(map)
     }
 }
 
-impl<K, V, S: Default> Default for Map<K, V, S> {
+impl<K, V> Default for Map<K, V> {
     fn default() -> Self {
         Map {
             store: Store::default(),
@@ -160,7 +154,7 @@ impl<K, V, S: Default> Default for Map<K, V, S> {
     }
 }
 
-impl<K: Describe + 'static, V: Describe + 'static> Describe for Map<K, V, DefaultBackingStore>
+impl<K: Describe + 'static, V: Describe + 'static> Describe for Map<K, V>
 where
     K: Encode + Terminated,
     V: State,
@@ -172,11 +166,10 @@ where
     }
 }
 
-impl<K, V, S: Default> Map<K, V, S>
+impl<K, V> Map<K, V>
 where
     K: Encode + Terminated,
-    V: State<S>,
-    S: Read,
+    V: State,
 {
     #[query]
     pub fn contains_key(&self, key: K) -> Result<bool> {
@@ -245,11 +238,10 @@ where
     }
 }
 
-impl<K, V, S: Default> Map<K, V, S>
+impl<K, V> Map<K, V>
 where
     K: Encode + Terminated,
-    V: State<S> + Default,
-    S: Read,
+    V: State + Default,
 {
     pub fn get_or_default(&self, key: K) -> Result<Ref<V>> {
         let key_bytes = key.encode()?;
@@ -269,11 +261,10 @@ where
     }
 }
 
-impl<K, V, S: Default> Map<K, V, S>
+impl<K, V> Map<K, V>
 where
     K: Encode + Terminated + Clone,
-    V: State<S>,
-    S: Read,
+    V: State,
 {
     /// Gets a mutable reference to the value in the map for the given key, or
     /// `None` if the key has no value.
@@ -285,12 +276,12 @@ where
     /// the value was inserted, modified, or deleted since the last time the map
     /// was flushed.
     #[call]
-    pub fn get_mut(&mut self, key: K) -> Result<Option<ChildMut<K, V, S>>> {
+    pub fn get_mut(&mut self, key: K) -> Result<Option<ChildMut<K, V>>> {
         Ok(self.entry(key)?.into())
     }
 
     /// Returns a mutable reference to the key/value entry for the given key.
-    pub fn entry(&mut self, key: K) -> Result<Entry<K, V, S>> {
+    pub fn entry(&mut self, key: K) -> Result<Entry<K, V>> {
         let map_key = MapKey::<K>::new(key)?;
         Ok(if self.children.contains_key(&map_key) {
             // value is already retained in memory (was modified)
@@ -335,17 +326,16 @@ where
     }
 }
 
-impl<'a, 'b, K, V, S: Default> Map<K, V, S>
+impl<'a, K, V> Map<K, V>
 where
     K: Encode + Decode + Terminated + Next + Clone,
-    V: State<S>,
-    S: Read,
+    V: State,
 {
-    pub fn iter(&'a self) -> Result<Iter<'a, K, V, S>> {
+    pub fn iter(&'a self) -> Result<Iter<'a, K, V>> {
         self.range(..)
     }
 
-    pub fn range<B: RangeBounds<K>>(&'a self, range: B) -> Result<Iter<'a, K, V, S>> {
+    pub fn range<B: RangeBounds<K>>(&'a self, range: B) -> Result<Iter<'a, K, V>> {
         let map_start = range
             .start_bound()
             .map(|inner| MapKey::<K>::new(inner.clone()).unwrap());
@@ -372,11 +362,10 @@ fn encode_bound<K: Encode>(bound: Bound<&K>) -> Result<Bound<Vec<u8>>> {
     }
 }
 
-impl<K, V, S: Default> Map<K, V, S>
+impl<K, V> Map<K, V>
 where
     K: Encode + Terminated,
-    V: State<S>,
-    S: Write,
+    V: State,
 {
     /// Removes all values with the given prefix from the key/value store.
     /// Iterates until reaching the first key that does not have the given
@@ -384,7 +373,7 @@ where
     ///
     /// This method is used to delete a child value and all of its child entries
     /// (if any).
-    fn remove_from_store(store: &mut Store<S>, prefix: &[u8]) -> Result<bool> {
+    fn remove_from_store(store: &mut Store, prefix: &[u8]) -> Result<bool> {
         let mut to_delete = vec![];
         for entry in store.range(prefix.to_vec()..) {
             let (key, _) = entry?;
@@ -407,7 +396,7 @@ where
     /// called then its binary encoding is written to `key`. If `maybe_value` is
     /// `None`, the value is removed by deleting all entries which start with
     /// `key`.
-    fn apply_change(store: &mut Store<S>, key: &K, maybe_value: Option<V>) -> Result<()> {
+    fn apply_change(store: &mut Store, key: &K, maybe_value: Option<V>) -> Result<()> {
         let key_bytes = key.encode()?;
 
         match maybe_value {
@@ -427,22 +416,20 @@ where
     }
 }
 
-pub struct Iter<'a, K, V, S: Default>
+pub struct Iter<'a, K, V>
 where
     K: Next + Decode + Encode + Terminated,
-    V: State<S>,
-    S: Read,
+    V: State,
 {
-    parent_store: &'a Store<S>,
+    parent_store: &'a Store,
     map_iter: Peekable<btree_map::Range<'a, MapKey<K>, Option<V>>>,
-    store_iter: Peekable<StoreNextIter<'a, K, Store<S>>>,
+    store_iter: Peekable<StoreNextIter<'a, K, Store>>,
 }
 
-impl<'a, K, V, S: Default> Iter<'a, K, V, S>
+impl<'a, K, V> Iter<'a, K, V>
 where
     K: Encode + Decode + Terminated + Next,
-    V: State<S>,
-    S: Read,
+    V: State,
 {
     fn iter_merge_next(&mut self) -> Result<Option<(Ref<'a, K>, Ref<'a, V>)>> {
         loop {
@@ -530,11 +517,10 @@ where
     }
 }
 
-impl<'a, K, V, S: Default> Iterator for Iter<'a, K, V, S>
+impl<'a, K, V> Iterator for Iter<'a, K, V>
 where
     K: Next + Decode + Encode + Terminated,
-    V: State<S>,
-    S: Read,
+    V: State,
 {
     type Item = Result<(Ref<'a, K>, Ref<'a, V>)>;
 
@@ -742,20 +728,19 @@ impl<'a, T: ClientTrait<U>, U: Clone> ClientTrait<U> for Ref<'a, T> {
 ///
 /// If the value is mutated, it will be retained in memory until the parent
 /// collection is flushed.
-pub enum ChildMut<'a, K, V, S: Default = DefaultBackingStore> {
+pub enum ChildMut<'a, K, V> {
     /// An existing value which was loaded from the store.
-    Unmodified(Option<(K, V, &'a mut Map<K, V, S>)>),
+    Unmodified(Option<(K, V, &'a mut Map<K, V>)>),
 
     /// A mutable reference to an existing value which is being retained in
     /// memory because it was modified.
     Modified(btree_map::OccupiedEntry<'a, MapKey<K>, Option<V>>),
 }
 
-impl<'a, K, V, S: Default> ChildMut<'a, K, V, S>
+impl<'a, K, V> ChildMut<'a, K, V>
 where
     K: Encode + Terminated + Clone,
-    V: State<S>,
-    S: Read,
+    V: State,
 {
     /// Removes the value and all of its child key/value entries (if any) from
     /// the parent collection.
@@ -774,7 +759,7 @@ where
     }
 }
 
-impl<'a, K, V: Call, S: Default> Call for ChildMut<'a, K, V, S>
+impl<'a, K, V: Call> Call for ChildMut<'a, K, V>
 where
     K: Encode + Clone,
 {
@@ -785,7 +770,7 @@ where
     }
 }
 
-impl<'a, K, V, S: Default, U> ClientTrait<U> for ChildMut<'a, K, V, S>
+impl<'a, K, V, U> ClientTrait<U> for ChildMut<'a, K, V>
 where
     V: ClientTrait<U>,
     K: Encode,
@@ -798,7 +783,7 @@ where
     }
 }
 
-impl<'a, K: Encode, V, S: Default> Deref for ChildMut<'a, K, V, S> {
+impl<'a, K: Encode, V> Deref for ChildMut<'a, K, V> {
     type Target = V;
 
     fn deref(&self) -> &V {
@@ -809,7 +794,7 @@ impl<'a, K: Encode, V, S: Default> Deref for ChildMut<'a, K, V, S> {
     }
 }
 
-impl<'a, K, V, S: Default> DerefMut for ChildMut<'a, K, V, S>
+impl<'a, K, V> DerefMut for ChildMut<'a, K, V>
 where
     K: Clone + Encode,
 {
@@ -838,22 +823,18 @@ where
 
 /// A mutable reference to a key/value entry in a collection, which may be
 /// empty.
-pub enum Entry<'a, K: Encode, V, S: Default> {
+pub enum Entry<'a, K: Encode, V> {
     /// References an entry in the collection which does not have a value.
-    Vacant {
-        key: K,
-        parent: &'a mut Map<K, V, S>,
-    },
+    Vacant { key: K, parent: &'a mut Map<K, V> },
 
     /// References an entry in the collection which has a value.
-    Occupied { child: ChildMut<'a, K, V, S> },
+    Occupied { child: ChildMut<'a, K, V> },
 }
 
-impl<'a, K, V, S: Default> Entry<'a, K, V, S>
+impl<'a, K, V> Entry<'a, K, V>
 where
     K: Encode + Terminated + Clone,
-    V: State<S>,
-    S: Read,
+    V: State,
 {
     /// If the `Entry` is empty, this method creates a new instance based on the
     /// given data. If not empty, this method returns a mutable reference to the
@@ -863,7 +844,7 @@ where
     /// store during the flush step unless the value gets modified. See
     /// `or_insert` for a variation which will always write the newly created
     /// value.
-    pub fn or_create(self, mut value: V) -> Result<ChildMut<'a, K, V, S>> {
+    pub fn or_create(self, mut value: V) -> Result<ChildMut<'a, K, V>> {
         Ok(match self {
             Entry::Vacant { key, parent } => {
                 let key_bytes = key.encode()?;
@@ -883,18 +864,17 @@ where
     /// store during the flush step even if the value never gets modified. See
     /// `or_create` for a variation which will only write the newly created
     /// value if it gets modified.
-    pub fn or_insert(self, value: V) -> Result<ChildMut<'a, K, V, S>> {
+    pub fn or_insert(self, value: V) -> Result<ChildMut<'a, K, V>> {
         let mut child = self.or_create(value)?;
         child.deref_mut();
         Ok(child)
     }
 }
 
-impl<'a, K, V, S: Default> Entry<'a, K, V, S>
+impl<'a, K, V> Entry<'a, K, V>
 where
     K: Encode + Terminated + Clone,
-    V: State<S>,
-    S: Write,
+    V: State,
 {
     /// Removes the value for the `Entry` if it exists. Returns a boolean which
     /// is `true` if a value previously existed for the entry, `false`
@@ -910,11 +890,10 @@ where
     }
 }
 
-impl<'a, K, V, S: Default> Entry<'a, K, V, S>
+impl<'a, K, V> Entry<'a, K, V>
 where
     K: Encode + Terminated + Clone,
-    V: State<S> + Default,
-    S: Read,
+    V: State + Default,
 {
     /// If the `Entry` is empty, this method creates a new instance based on the
     /// default for the value's data encoding. If not empty, this method returns
@@ -924,7 +903,7 @@ where
     /// store during the flush step unless the value gets modified. See
     /// `or_insert_default` for a variation which will always write the newly
     /// created value.
-    pub fn or_default(self) -> Result<ChildMut<'a, K, V, S>> {
+    pub fn or_default(self) -> Result<ChildMut<'a, K, V>> {
         self.or_create(V::default())
     }
 
@@ -936,13 +915,14 @@ where
     /// store during the flush step even if the value never gets modified. See
     /// `or_default` for a variation which will only write the newly created
     /// value if it gets modified.
-    pub fn or_insert_default(self) -> Result<ChildMut<'a, K, V, S>> {
+    pub fn or_insert_default(self) -> Result<ChildMut<'a, K, V>> {
+        #[allow(clippy::or_fun_call)]
         self.or_insert(V::default())
     }
 }
 
-impl<'a, K: Encode, V, S: Default> From<Entry<'a, K, V, S>> for Option<ChildMut<'a, K, V, S>> {
-    fn from(entry: Entry<'a, K, V, S>) -> Self {
+impl<'a, K: Encode, V> From<Entry<'a, K, V>> for Option<ChildMut<'a, K, V>> {
+    fn from(entry: Entry<'a, K, V>) -> Self {
         match entry {
             Entry::Vacant { .. } => None,
             Entry::Occupied { child } => Some(child),
@@ -956,7 +936,7 @@ pub struct Client<K, V, U: Clone> {
     _marker: std::marker::PhantomData<V>,
 }
 
-impl<K, V, S: Default, U: Clone> ClientTrait<U> for Map<K, V, S> {
+impl<K, V, U: Clone> ClientTrait<U> for Map<K, V> {
     type Client = Client<K, V, U>;
 
     fn create_client(parent: U) -> Self::Client {
@@ -1022,21 +1002,24 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::super::deque::Deque as OrgaDeque;
-    use super::{Map as OrgaMap, *};
+    use super::super::deque::Deque;
+    use super::{Map, *};
     use crate::store::{MapStore, Store};
-    type Map<K, V> = OrgaMap<K, V, MapStore>;
-    type Deque<V> = OrgaDeque<V, MapStore>;
 
     fn enc(n: u32) -> Vec<u8> {
         Encode::encode(&n).unwrap()
     }
 
-    fn setup() -> (Store<MapStore>, Map<u32, u32>) {
-        let store = Store::new(MapStore::new());
+    fn setup() -> (Store, Map<u32, u32>) {
+        let store = mapstore();
         let mut map: Map<u32, u32> = Default::default();
         map.attach(store.clone()).unwrap();
         (store, map)
+    }
+
+    // TODO: move this to store, backingstore, or testutils
+    fn mapstore() -> Store {
+        Store::new(Shared::new(MapStore::new()).into())
     }
 
     #[test]
@@ -1431,7 +1414,7 @@ mod tests {
 
     #[test]
     fn map_iter_map_only() {
-        let (store, mut map) = setup();
+        let (_store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1548,7 +1531,7 @@ mod tests {
 
     #[test]
     fn map_iter_map_key_none() {
-        let (store, mut map) = setup();
+        let (_store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1574,7 +1557,7 @@ mod tests {
 
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::with_store(store.clone()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::with_store(store).unwrap();
 
         read_map.entry(12).unwrap().or_insert(24).unwrap();
         read_map.remove(12).unwrap();
@@ -1593,7 +1576,7 @@ mod tests {
 
     #[test]
     fn map_range_map_only_unbounded() {
-        let (store, mut map) = setup();
+        let (_store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1613,7 +1596,7 @@ mod tests {
 
     #[test]
     fn map_range_map_only_start_bounded() {
-        let (store, mut map) = setup();
+        let (_store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1633,7 +1616,7 @@ mod tests {
 
     #[test]
     fn map_range_map_only_end_bounded_non_inclusive() {
-        let (store, mut map) = setup();
+        let (_store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1653,7 +1636,7 @@ mod tests {
 
     #[test]
     fn map_range_map_only_end_bounded_inclusive() {
-        let (store, mut map) = setup();
+        let (_store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1673,7 +1656,7 @@ mod tests {
 
     #[test]
     fn map_range_map_only_bounded_non_inclusive() {
-        let (store, mut map) = setup();
+        let (_store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1693,7 +1676,7 @@ mod tests {
 
     #[test]
     fn map_range_map_only_bounded_inclusive() {
-        let (store, mut map) = setup();
+        let (_store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1789,7 +1772,7 @@ mod tests {
 
     #[test]
     fn map_range_empty() {
-        let (store, map) = setup();
+        let (_store, map) = setup();
 
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
 
@@ -1805,11 +1788,11 @@ mod tests {
 
     #[test]
     fn map_of_map() {
-        let store = Store::new(MapStore::new());
+        let store = mapstore();
         let mut map: Map<u32, Map<u32, u32>> = Default::default();
         map.attach(store).unwrap();
 
-        map.entry(42).unwrap().or_insert(Map::new()).unwrap();
+        map.entry(42).unwrap().or_insert_default().unwrap();
 
         let mut sub_map = map.get_mut(42).unwrap().unwrap();
         sub_map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1822,18 +1805,18 @@ mod tests {
 
     #[test]
     fn map_of_map_from_store() {
-        let store = Store::new(MapStore::new());
+        let store = mapstore();
         let mut edit_map: Map<u32, Map<u32, u32>> = Default::default();
         edit_map.attach(store.clone()).unwrap();
 
-        edit_map.entry(42).unwrap().or_insert(Map::new()).unwrap();
+        edit_map.entry(42).unwrap().or_insert_default().unwrap();
 
         let mut sub_map = edit_map.get_mut(42).unwrap().unwrap();
         sub_map.entry(13).unwrap().or_insert(26).unwrap();
 
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, Map<u32, u32>> = Map::with_store(store.clone()).unwrap();
+        let read_map: Map<u32, Map<u32, u32>> = Map::with_store(store).unwrap();
         let inner_map = read_map.get(42).unwrap().unwrap();
         let actual = inner_map.get(13).unwrap().unwrap();
 
@@ -1842,22 +1825,18 @@ mod tests {
 
     #[test]
     fn map_of_deque() {
-        let store = Store::new(MapStore::new());
+        let store = mapstore();
         let mut edit_map: Map<u32, Deque<u32>> = Default::default();
         edit_map.attach(store.clone()).unwrap();
 
-        edit_map
-            .entry(42)
-            .unwrap()
-            .or_insert(Default::default())
-            .unwrap();
+        edit_map.entry(42).unwrap().or_insert_default().unwrap();
 
         let mut deque = edit_map.get_mut(42).unwrap().unwrap();
         deque.push_front(84).unwrap();
 
         edit_map.flush().unwrap();
 
-        let mut read_map: Map<u32, Deque<u32>> = Map::with_store(store.clone()).unwrap();
+        let mut read_map: Map<u32, Deque<u32>> = Map::with_store(store).unwrap();
         let actual = read_map
             .get_mut(42)
             .unwrap()
@@ -1871,7 +1850,7 @@ mod tests {
 
     #[test]
     fn map_of_map_iter() {
-        let store = Store::new(MapStore::new());
+        let store = mapstore();
         let mut edit_map: Map<u32, Map<u32, u32>> = Default::default();
         edit_map.attach(store.clone()).unwrap();
 
@@ -1910,7 +1889,7 @@ mod tests {
 
     #[test]
     fn map_insert() {
-        let (store, mut map) = setup();
+        let (_store, mut map) = setup();
 
         map.insert(12, 24).unwrap();
         map.insert(13, 26).unwrap();
@@ -1929,7 +1908,7 @@ mod tests {
 
     #[test]
     fn map_insert_complex_type() {
-        let store = Store::new(MapStore::new());
+        let store = mapstore();
         let mut map: Map<u32, Deque<u32>> = Default::default();
         map.attach(store).unwrap();
 
@@ -1943,7 +1922,7 @@ mod tests {
 
     #[test]
     fn map_insert_with_flush() {
-        let store = Store::new(MapStore::new());
+        let store = mapstore();
         let mut edit_map: Map<u32, u32> = Default::default();
         edit_map.attach(store.clone()).unwrap();
 
@@ -1970,7 +1949,7 @@ mod tests {
 
     #[test]
     fn map_insert_store_overwrite() {
-        let store = Store::new(MapStore::new());
+        let store = mapstore();
         let mut edit_map: Map<u32, u32> = Default::default();
         edit_map.attach(store.clone()).unwrap();
 
@@ -1986,7 +1965,7 @@ mod tests {
 
     #[test]
     fn map_insert_store_overwrite_get_entry() {
-        let store = Store::new(MapStore::new());
+        let store = mapstore();
         let mut edit_map: Map<u32, u32> = Default::default();
         edit_map.attach(store.clone()).unwrap();
 

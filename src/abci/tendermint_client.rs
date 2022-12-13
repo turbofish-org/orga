@@ -9,7 +9,7 @@ use tm::Client as _;
 
 use crate::call::Call;
 use crate::client::{AsyncCall, AsyncQuery, Client};
-use crate::encoding::{Decode, Encode};
+use crate::encoding::Encode;
 use crate::merk::ABCIPrefixedProofStore;
 use crate::query::Query;
 use crate::state::State;

@@ -98,11 +98,11 @@ impl Address {
 
     pub fn from_pubkey(bytes: [u8; 33]) -> Self {
         let mut sha = Sha256::new();
-        sha.update(&bytes);
+        sha.update(bytes);
         let hash = sha.finalize();
 
         let mut ripemd = Ripemd160::new();
-        ripemd.update(&hash);
+        ripemd.update(hash);
         let hash = ripemd.finalize();
 
         let mut bytes = [0; Address::LENGTH];
