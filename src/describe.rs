@@ -63,6 +63,16 @@ impl Descriptor {
     pub fn children(&self) -> &Children {
         &self.children
     }
+
+    // pub fn kv_descs(self) -> impl Iterator<Item = DynamicChild> {
+    //     let (own, named) = match self.children {
+    //         Children::None => (vec![], vec![]),
+    //         Children::Named(children) => (vec![], children.into_iter().map(|c| c.desc).collect()),
+    //         Children::Dynamic(child) => (vec![child], vec![]),
+    //     };
+    //     own.into_iter()
+    //         .chain(named.into_iter().map(Descriptor::kv_descs).flatten())
+    // }
 }
 
 #[wasm_bindgen]
@@ -274,6 +284,10 @@ impl Value {
             .ok_or_else(|| Error::App(format!("Could not convert '{}' to JSON", self.type_name())))
     }
 
+    pub fn write_json<W: std::io::Write + 'static>(&self, out: W) -> Result<()> {
+        self.instance.maybe_write_json(Box::new(out))
+    }
+
     pub fn type_name(&self) -> String {
         self.describe().type_name
     }
@@ -352,6 +366,10 @@ pub trait Inspect {
 
     fn maybe_to_json(&self) -> Result<Option<serde_json::Value>> {
         MaybeToJson::maybe_to_json(&ToJsonWrapper(&self))
+    }
+
+    fn maybe_write_json(&self, out: Box<dyn std::io::Write>) -> Result<()> {
+        MaybeToJson::maybe_write_json(&ToJsonWrapper(&self), out)
     }
 
     fn maybe_to_wasm(&self) -> WasmResult<Option<JsValue>> {
@@ -437,6 +455,8 @@ impl<'a, T: Debug> MaybeDebug for DebugWrapper<'a, T> {
 trait MaybeToJson {
     fn maybe_to_json(&self) -> Result<Option<serde_json::Value>>;
 
+    fn maybe_write_json<W: std::io::Write>(&self, out: W) -> Result<()>;
+
     fn maybe_to_wasm(&self) -> WasmResult<Option<JsValue>>;
 }
 
@@ -449,6 +469,10 @@ impl<T> MaybeToJson for ToJsonWrapper<T> {
         Ok(None)
     }
 
+    default fn maybe_write_json<W: std::io::Write>(&self, out: W) -> Result<()> {
+        Err(Error::Downcast("Cannot write type as JSON".to_string()))
+    }
+
     default fn maybe_to_wasm(&self) -> WasmResult<Option<JsValue>> {
         Ok(None)
     }
@@ -457,6 +481,10 @@ impl<T> MaybeToJson for ToJsonWrapper<T> {
 impl<T: Serialize> MaybeToJson for ToJsonWrapper<T> {
     fn maybe_to_json(&self) -> Result<Option<serde_json::Value>> {
         Ok(Some(serde_json::to_value(&self.0)?))
+    }
+
+    fn maybe_write_json<W: std::io::Write>(&self, out: W) -> Result<()> {
+        Ok(serde_json::to_writer(out, &self.0)?)
     }
 
     fn maybe_to_wasm(&self) -> WasmResult<Option<JsValue>> {
