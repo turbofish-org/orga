@@ -1,5 +1,6 @@
 use crate::{
     encoding::{Decode, Encode},
+    state::State,
     Error, Result,
 };
 use std::{any::type_name, marker::PhantomData, str::FromStr};
@@ -11,15 +12,17 @@ use super::{
 
 pub struct Builder {
     type_name: String,
+    state_version: u32,
     decode: DecodeFn,
     parse: ParseFn,
     children: Option<Children>,
 }
 
 impl Builder {
-    pub fn new<T: Encode + Decode + Inspect + 'static>() -> Self {
+    pub fn new<T: Encode + Decode + State + Inspect + 'static>() -> Self {
         Builder {
             type_name: type_name::<T>().to_string(),
+            state_version: <T as State>::VERSION,
             decode: |bytes| Ok(Value::new(T::decode(bytes)?)),
             parse: |s| maybe_from_str::<T>(s),
             children: None,
@@ -74,6 +77,7 @@ impl Builder {
     pub fn build(self) -> Descriptor {
         Descriptor {
             type_name: self.type_name,
+            state_version: self.state_version,
             decode: Some(self.decode),
             parse: Some(self.parse),
             children: self.children.unwrap_or_default(),

@@ -27,6 +27,7 @@ pub trait Describe {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Descriptor {
     pub type_name: String,
+    pub state_version: u32,
     children: Children,
     #[serde(skip)]
     decode: Option<DecodeFn>,
@@ -38,6 +39,7 @@ impl Debug for Descriptor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Descriptor")
             .field("type_name", &self.type_name)
+            .field("state_version", &self.state_version)
             .field("children", &self.children)
             .finish()
     }
@@ -55,7 +57,7 @@ impl Descriptor {
     pub fn from_str(&self, string: &str) -> Result<Option<Value>> {
         (self
             .parse
-            .ok_or_else(|| Error::App("Decode function is not available".to_string()))?)(
+            .ok_or_else(|| Error::App("FromStr function is not available".to_string()))?)(
             string
         )
     }
@@ -385,6 +387,9 @@ pub trait Inspect {
     // TODO: should this be a maybe impl?
     fn attach(&mut self, store: Store) -> Result<()>;
 
+    // TODO: should this be a maybe impl?
+    fn state_version(&self) -> u32;
+
     fn to_any(&self) -> Result<Box<dyn Any>>;
 
     // TODO: maybe_to_object
@@ -403,6 +408,10 @@ impl<T: State + Describe + 'static> Inspect for T {
 
     fn attach(&mut self, store: Store) -> Result<()> {
         State::attach(self, store)
+    }
+
+    fn state_version(&self) -> u32 {
+        T::VERSION
     }
 
     fn to_any(&self) -> Result<Box<dyn Any>> {
