@@ -78,17 +78,30 @@ mod tests {
     #[test]
     pub fn migrate() -> Result<()> {
         let foo = create_foo_value()?;
-
         let json = foo.to_json()?.to_string();
-        println!("{}", json);
 
         let store = Store::new(DefaultBackingStore::MapStore(Shared::new(MapStore::new())));
         super::migrate::<_, Foo>(0, json.as_bytes(), store.clone())?;
 
-        for entry in store.range(..) {
-            let entry = entry?;
-            println!("{:?} {:?}", entry.0, entry.1);
-        }
+        let mut iter = store.range(..);
+        let mut assert_next = |k: &[u8], v: &[u8]| {
+            assert_eq!(
+                iter.next().transpose().unwrap(),
+                Some((k.to_vec(), v.to_vec()))
+            )
+        };
+        assert_next(&[], &[0, 0, 0, 0]);
+        assert_next(&[1, 0, 0, 0, 123], &[0, 0, 1, 200]);
+        assert_next(&[1, 0, 0, 3, 21], &[0, 0, 0, 1]);
+        assert_next(&[1, 0, 0, 3, 232], &[0, 0, 0, 2]);
+        assert_next(&[1, 0, 0, 3, 233], &[0, 0, 0, 3]);
+        assert_next(&[2, 0, 0, 0, 10], &[]);
+        assert_next(&[2, 0, 0, 0, 10, 0], &[0]);
+        assert_next(&[2, 0, 0, 0, 10, 1], &[1]);
+        assert_next(&[2, 0, 0, 0, 20], &[]);
+        assert_next(&[2, 0, 0, 0, 20, 0], &[1]);
+        assert_next(&[2, 0, 0, 0, 20, 1], &[0]);
+        assert_eq!(iter.next().transpose()?, None);
 
         Ok(())
     }
