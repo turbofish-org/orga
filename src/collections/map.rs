@@ -1,3 +1,4 @@
+use serde::de::Visitor;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::btree_map::Entry::{Occupied, Vacant};
@@ -5,7 +6,6 @@ use std::collections::{btree_map, BTreeMap};
 use std::iter::Peekable;
 use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
-use super::Next;
 use crate::call::Call;
 use crate::client::{AsyncCall, Client as ClientTrait};
 use crate::describe::Describe;
@@ -87,14 +87,12 @@ impl<K> Eq for MapKey<K> {}
 /// When values in the map are mutated, inserted, or deleted, they are retained
 /// in an in-memory map until the call to `State::flush` which writes the
 /// changes to the backing store.
-#[derive(Query, Call, Serialize, Deserialize)]
-#[serde(bound = "")]
+#[derive(Query, Call)]
 pub struct Map<K, V> {
-    #[serde(skip)]
     store: Store,
-    #[serde(skip)]
     children: BTreeMap<MapKey<K>, Option<V>>,
 }
+
 impl<K, V> Encode for Map<K, V> {
     fn encode_into<W: std::io::Write>(&self, _dest: &mut W) -> ed::Result<()> {
         Ok(())
@@ -113,12 +111,75 @@ impl<K, V> Decode for Map<K, V> {
 
 impl<K, V> Terminated for Map<K, V> {}
 
+impl<K: Serialize, V: Serialize> Serialize for Map<K, V>
+where
+    K: Encode + Decode + Terminated + Clone,
+    V: State,
+{
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error> {
+        use serde::ser::{Error, SerializeSeq};
+        let mut seq = serializer.serialize_seq(None)?;
+        for entry in self.iter().map_err(Error::custom)? {
+            let (key, value) = entry.map_err(Error::custom)?;
+            seq.serialize_element(&(&*key, &*value))?;
+        }
+        seq.end()
+    }
+}
+
+impl<'de, K: Deserialize<'de>, V: Deserialize<'de>> Deserialize<'de> for Map<K, V>
+where
+    K: Encode + Decode + Terminated + Clone,
+    V: State,
+{
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+
+        struct MapVisitor<K, V>(Map<K, V>);
+
+        impl<'de, K, V> Visitor<'de> for MapVisitor<K, V>
+        where
+            K: Deserialize<'de>,
+            K: Encode + Decode + Terminated + Clone,
+            V: Deserialize<'de>,
+            V: State,
+        {
+            type Value = Map<K, V>;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a sequence of key/value entries")
+            }
+
+            fn visit_seq<A>(mut self, mut seq: A) -> std::result::Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                while let Some((key, value)) = seq.next_element::<(K, V)>()? {
+                    self.0.insert(key, value).map_err(Error::custom)?;
+                }
+                Ok(self.0)
+            }
+        }
+
+        deserializer.deserialize_seq(MapVisitor(Map::new()))
+    }
+}
+
 impl<K, V> State for Map<K, V>
 where
     K: Encode + Terminated,
     V: State,
 {
     fn attach(&mut self, store: Store) -> Result<()> {
+        for (key, value) in self.children.iter_mut() {
+            value.attach(store.sub(key.inner_bytes.as_slice()))?;
+        }
         self.store.attach(store)
     }
 

@@ -10,7 +10,10 @@ use crate::Result;
 use serde::{Deserialize, Serialize};
 
 #[derive(Query, Encode, Decode, Serialize, Deserialize)]
-#[serde(bound = "")]
+#[serde(bound(
+    serialize = "T: Serialize + State",
+    deserialize = "T: Deserialize<'de> + State",
+))]
 pub struct Deque<T> {
     meta: Meta,
     map: Map<u64, T>,

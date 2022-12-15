@@ -16,7 +16,10 @@ use crate::store::*;
 use crate::Result;
 
 #[derive(Query, Call, Encode, Decode, Serialize, Deserialize)]
-#[serde(bound = "")]
+#[serde(bound(
+    serialize = "T::Key: Serialize + Terminated + Clone, T::Value: Serialize + State",
+    deserialize = "T::Key: Deserialize<'de> + Terminated + Clone, T::Value: Deserialize<'de> + State",
+))]
 pub struct EntryMap<T: Entry> {
     map: Map<T::Key, T::Value>,
 }
