@@ -328,7 +328,7 @@ where
 
 impl<'a, K, V> Map<K, V>
 where
-    K: Encode + Decode + Terminated + Next + Clone,
+    K: Encode + Decode + Terminated + Clone,
     V: State,
 {
     pub fn iter(&'a self) -> Result<Iter<'a, K, V>> {
@@ -344,7 +344,11 @@ where
             .map(|inner| MapKey::<K>::new(inner.clone()).unwrap());
         let map_iter = self.children.range((map_start, map_end)).peekable();
 
-        let store_iter = StoreNextIter::new(&self.store, range)?.peekable();
+        let encoded_range = (
+            encode_bound(range.start_bound())?,
+            encode_bound(range.end_bound())?,
+        );
+        let store_iter = StoreNextIter::new(&self.store, encoded_range)?.peekable();
 
         Ok(Iter {
             parent_store: &self.store,
@@ -418,17 +422,17 @@ where
 
 pub struct Iter<'a, K, V>
 where
-    K: Next + Decode + Encode + Terminated,
+    K: Decode + Encode + Terminated,
     V: State,
 {
     parent_store: &'a Store,
     map_iter: Peekable<btree_map::Range<'a, MapKey<K>, Option<V>>>,
-    store_iter: Peekable<StoreNextIter<'a, K, Store>>,
+    store_iter: Peekable<StoreNextIter<'a, Store>>,
 }
 
 impl<'a, K, V> Iter<'a, K, V>
 where
-    K: Encode + Decode + Terminated + Next,
+    K: Encode + Decode + Terminated,
     V: State,
 {
     fn iter_merge_next(&mut self) -> Result<Option<(Ref<'a, K>, Ref<'a, V>)>> {
@@ -519,7 +523,7 @@ where
 
 impl<'a, K, V> Iterator for Iter<'a, K, V>
 where
-    K: Next + Decode + Encode + Terminated,
+    K: Decode + Encode + Terminated,
     V: State,
 {
     type Item = Result<(Ref<'a, K>, Ref<'a, V>)>;
@@ -529,63 +533,53 @@ where
     }
 }
 
-struct StoreNextIter<'a, K, S: Default>
-where
-    K: Next + Encode + Decode,
-    S: Read,
-{
+struct StoreNextIter<'a, S: Default + Read> {
     store: &'a S,
-    next_key: Option<K>,
-    end_key_bytes: Bound<Vec<u8>>,
-    done: bool,
+    next_key: Option<Vec<u8>>,
+    end_key: Bound<Vec<u8>>,
 }
 
-impl<'a, K, S: Default> StoreNextIter<'a, K, S>
-where
-    K: Next + Encode + Decode,
-    S: Read,
-{
-    fn new<B: RangeBounds<K>>(store: &'a S, range: B) -> Result<Self> {
+fn increment_bytes(mut bytes: Vec<u8>) -> Vec<u8> {
+    for byte in bytes.iter_mut().rev() {
+        if *byte == 255 {
+            *byte = 0;
+        } else {
+            *byte += 1;
+            return bytes;
+        }
+    }
+
+    bytes.push(0);
+    if bytes.len() > 1 {
+        bytes[0] += 1;
+    }
+
+    bytes
+}
+
+impl<'a, S: Default + Read> StoreNextIter<'a, S> {
+    fn new<B: RangeBounds<Vec<u8>>>(store: &'a S, range: B) -> Result<Self> {
         let next_key = match range.start_bound() {
-            Bound::Included(inner) => {
-                let key_bytes = inner.encode()?;
-                let key = K::decode(key_bytes.as_slice())?;
-                Some(key)
-            }
-            Bound::Excluded(inner) => inner.next(),
+            Bound::Included(inner) => Some(inner.encode()?),
+            Bound::Excluded(inner) => Some(increment_bytes(inner.encode()?)),
             Bound::Unbounded => None,
         };
 
-        let end_key_bytes = encode_bound(range.end_bound())?;
+        let end_key = encode_bound(range.end_bound())?;
 
         Ok(StoreNextIter {
             store,
             next_key,
-            end_key_bytes,
-            done: false,
+            end_key,
         })
     }
 }
 
-impl<'a, K, S: Default> Iterator for StoreNextIter<'a, K, S>
-where
-    K: Next + Encode + Decode,
-    S: Read,
-{
+impl<'a, S: Default + Read> Iterator for StoreNextIter<'a, S> {
     type Item = Result<(Vec<u8>, Vec<u8>)>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.done {
-            return None;
-        }
-
-        let next_key = self.next_key.as_ref();
-        let key = match next_key.map(|k| k.encode()).transpose() {
-            Err(e) => return Some(Err(e.into())),
-            Ok(key) => key,
-        };
-
-        let get_res = match key {
+        let get_res = match self.next_key.as_ref() {
             Some(key) => self.store.get_next_inclusive(key.as_slice()),
 
             // this will be None if the iter had an unbounded start range. start
@@ -595,38 +589,25 @@ where
 
         let (key, value) = match get_res {
             Err(e) => return Some(Err(e)),
-            Ok(None) => {
-                self.done = true;
-                return None;
-            }
+            Ok(None) => return None,
             Ok(Some((key, value))) => (key, value),
         };
 
-        match &self.end_key_bytes {
+        match &self.end_key {
             Bound::Excluded(end) => {
                 if key >= *end {
-                    self.done = true;
                     return None;
                 }
             }
             Bound::Included(end) => {
                 if key > *end {
-                    self.done = true;
                     return None;
                 }
             }
             _ => {}
         };
 
-        let decoded_key = match K::decode(key.as_slice()) {
-            Err(e) => return Some(Err(e.into())),
-            Ok(key) => key,
-        };
-        self.next_key = decoded_key.next();
-        if self.next_key.is_none() {
-            self.done = true;
-        }
-
+        self.next_key = Some(increment_bytes(key.clone()));
         Some(Ok((key, value)))
     }
 }
