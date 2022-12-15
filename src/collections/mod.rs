@@ -34,6 +34,15 @@ pub trait Next: Sized {
     fn next(&self) -> Option<Self>;
 }
 
+impl Next for bool {
+    fn next(&self) -> Option<Self> {
+        match self {
+            false => Some(true),
+            true => None,
+        }
+    }
+}
+
 macro_rules! impl_next {
     ($T:ty) => {
         impl Next for $T {

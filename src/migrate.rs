@@ -1,85 +1,42 @@
-use std::{io::Write, iter::Peekable};
+use std::{
+    io::{BufRead, BufReader, Read, Write},
+    iter::Peekable,
+};
+
+use serde::Deserialize;
 
 use crate::{
-    describe::{Children, Describe, Value},
+    describe::{Children, Describe, Descriptor, Value},
+    state::State,
     store::{Iter, Store},
     Error, Result,
 };
 
-pub fn export<W: Write>(root: Value, out: &mut W) -> Result<()> {
-    fn recurse<W: Write>(
-        value: Value,
-        iter: &mut Peekable<Iter<Store>>,
-        out: &mut W,
-    ) -> Result<()> {
-        let desc = value.describe();
-        match desc.children() {
-            Children::Named(children) => {
-                for child in children.iter() {
-                    value
-                        .child(&child.name)?
-                        .map(|child| recurse(child, iter, out))
-                        .transpose()?;
-                }
-            }
-            Children::Dynamic(kv_desc) => {
-                let store = value.store();
-                // TODO: don't skip first byte after ABCI refactor
-                let prefix = &store.prefix()[1..].to_vec();
-                while let Some(Ok((key_bytes, value_bytes))) = iter.peek() {
-                    if key_bytes < prefix {
-                        panic!(
-                            "Earlier data was not consumed (type={}, key={:?}, prefix={:?})\n ",
-                            value.type_name(),
-                            &key_bytes,
-                            &prefix,
-                        );
-                    }
-                    if !key_bytes.starts_with(prefix.as_slice()) {
-                        break;
-                    }
+pub fn migrate<R: std::io::Read, T: State>(version: u32, input: R, mut store: Store) -> Result<()>
+where
+    for<'de> T: Deserialize<'de>,
+{
+    use crate::store::Write;
 
-                    let key = kv_desc.key_desc().decode(&key_bytes[prefix.len()..])?;
-                    let mut value = kv_desc.value_desc().decode(value_bytes.as_slice())?;
-
-                    // TODO: remove this after ABCI refactor
-                    let mut child_prefix = vec![0];
-                    child_prefix.extend(key_bytes.as_slice());
-                    value.attach(unsafe { store.with_prefix(child_prefix) })?;
-
-                    out.write_all(
-                        format!("[{},{}]\n", key.to_json()?, value.to_json()?).as_bytes(),
-                    )?;
-
-                    iter.next().transpose()?;
-                    recurse(value, iter, out)?;
-                }
-                out.write_all("\n".as_bytes())?;
-            }
-            Children::None => {}
-        }
-
-        Ok(())
-    }
-
-    let json = root.to_json()?.to_string();
-    out.write_all(json.as_bytes())?;
-    out.write_all("\n".as_bytes())?;
-
-    let mut iter = root.store().range(..).peekable();
-    recurse(root, &mut iter, out)
+    let mut value: serde_json::Value = serde_json::from_reader(input)?;
+    T::transform(version, &mut value)?;
+    let mut state: T = serde_json::from_value(value)?;
+    state.attach(store.clone())?;
+    state.flush()?;
+    store.put(vec![], state.encode()?)
 }
 
 #[cfg(test)]
 mod tests {
     use serde::{Deserialize, Serialize};
 
-    use super::*;
     use crate::{
         collections::Map,
+        describe::{Describe, Value},
         encoding::{Decode, Encode},
         state::State,
         store::{DefaultBackingStore, MapStore, Shared, Store, Write},
+        Result,
     };
 
     #[derive(State, Encode, Decode, Describe, Default, Serialize, Deserialize)]
@@ -119,17 +76,19 @@ mod tests {
     }
 
     #[test]
-    fn export_test() -> Result<()> {
+    pub fn migrate() -> Result<()> {
         let foo = create_foo_value()?;
 
-        let mut json = Vec::new();
-        export(foo, &mut json)?;
+        let json = foo.to_json()?.to_string();
+        println!("{}", json);
 
-        println!("{}", String::from_utf8(json.clone()).unwrap());
-        assert_eq!(
-            String::from_utf8(json.clone()).unwrap(),
-            "{\"bar\":0,\"baz\":{},\"beep\":{}}\n[123,456]\n[789,1]\n[1000,2]\n[1001,3]\n\n[10,{}]\n[false,0]\n[true,1]\n\n[20,{}]\n[false,1]\n[true,0]\n\n\n".to_string(),
-        );
+        let store = Store::new(DefaultBackingStore::MapStore(Shared::new(MapStore::new())));
+        super::migrate::<_, Foo>(0, json.as_bytes(), store.clone())?;
+
+        for entry in store.range(..) {
+            let entry = entry?;
+            println!("{:?} {:?}", entry.0, entry.1);
+        }
 
         Ok(())
     }
