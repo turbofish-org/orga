@@ -1,6 +1,6 @@
 use crate::encoding::{Decode, Encode, Terminated};
-use crate::store::*;
 use crate::Result;
+use crate::{store::*, Error};
 pub use orga_macros::State;
 use std::cell::RefCell;
 use std::marker::PhantomData;
@@ -11,6 +11,8 @@ use std::marker::PhantomData;
 /// These types can be complex types like collections (e.g. maps), or simple
 /// data types (e.g. account structs).
 pub trait State<S = DefaultBackingStore>: Encode + Decode + Sized {
+    const VERSION: u32 = 0;
+
     fn attach(&mut self, store: Store<S>) -> Result<()>
     where
         S: Read;
@@ -26,6 +28,19 @@ pub trait State<S = DefaultBackingStore>: Encode + Decode + Sized {
     fn flush(&mut self) -> Result<()>
     where
         S: Write;
+
+    #[allow(unused_variables)]
+    fn transform(version: u32, value: &mut serde_json::Value) -> Result<()> {
+        if version == Self::VERSION {
+            Ok(())
+        } else {
+            Err(Error::State(format!(
+                "Cannot transform data from version {} to version {}",
+                version,
+                Self::VERSION
+            )))
+        }
+    }
 }
 
 macro_rules! state_impl {
