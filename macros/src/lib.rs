@@ -11,7 +11,7 @@ mod query;
 mod state;
 mod utils;
 
-#[proc_macro_derive(State)]
+#[proc_macro_derive(State, attributes(state))]
 pub fn derive_state(item: TokenStream) -> TokenStream {
     state::derive(item)
 }

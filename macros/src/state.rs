@@ -2,7 +2,7 @@ use super::utils::gen_param_input;
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use std::str::FromStr;
+use std::{collections::HashMap, str::FromStr};
 use syn::*;
 
 pub fn derive(item: TokenStream) -> TokenStream {
@@ -26,6 +26,40 @@ pub fn derive(item: TokenStream) -> TokenStream {
     let generics = &item.generics;
     let where_clause = &generics.where_clause;
     let generic_params = gen_param_input(&generics, true);
+
+    let attr = item
+        .attrs
+        .iter()
+        .find(|attr| attr.path.is_ident("state"))
+        .map(|attr| {
+            let mut map = HashMap::new();
+            let args = attr.parse_meta().unwrap();
+            if let syn::Meta::List(list) = args {
+                for entry in list.nested {
+                    if let syn::NestedMeta::Meta(syn::Meta::NameValue(entry)) = entry {
+                        let key = entry.path.get_ident().unwrap().to_string();
+                        map.insert(key, entry.lit);
+                    } else {
+                        panic!()
+                    }
+                }
+            } else {
+                panic!()
+            }
+
+            map
+        });
+
+    let version = attr.map_or(quote!(), |attr| {
+        attr.get("version").map_or(quote!(), |value| {
+            if let syn::Lit::Int(int) = value {
+                let v: u32 = int.base10_parse().unwrap();
+                quote!(const VERSION: u32 = #v;)
+            } else {
+                panic!()
+            }
+        })
+    });
 
     let seq_substore = seq();
     let attach_body = if is_tuple_struct {
@@ -60,6 +94,8 @@ pub fn derive(item: TokenStream) -> TokenStream {
         impl#generics ::orga::state::State for #name#generic_params
         #where_clause
         {
+            #version
+
             fn attach(
                 &mut self,
                 store: ::orga::store::Store,
