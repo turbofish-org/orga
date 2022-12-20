@@ -40,16 +40,16 @@ mod tests {
     };
 
     #[derive(State, Encode, Decode, Describe, Default, Serialize, Deserialize)]
-    struct Foo {
+    struct FooV0 {
         bar: u32,
         baz: Map<u32, u32>,
         beep: Map<u32, Map<bool, u8>>,
     }
 
-    fn create_foo_value() -> Result<Value> {
+    fn create_foo_v0_value() -> Result<Value> {
         let mut store = Store::new(DefaultBackingStore::MapStore(Shared::new(MapStore::new())));
 
-        let mut foo = Foo::default();
+        let mut foo = FooV0::default();
         // TODO: remove this prefix after ABCI refactor
         foo.attach(store.sub(&[0]))?;
 
@@ -76,12 +76,12 @@ mod tests {
     }
 
     #[test]
-    pub fn migrate() -> Result<()> {
-        let foo = create_foo_value()?;
+    pub fn migrate_identity() -> Result<()> {
+        let foo = create_foo_v0_value()?;
         let json = foo.to_json()?.to_string();
 
         let store = Store::new(DefaultBackingStore::MapStore(Shared::new(MapStore::new())));
-        super::migrate::<_, Foo>(0, json.as_bytes(), store.clone())?;
+        super::migrate::<_, FooV0>(0, json.as_bytes(), store.clone())?;
 
         let mut iter = store.range(..);
         let mut assert_next = |k: &[u8], v: &[u8]| {
@@ -91,6 +91,77 @@ mod tests {
             )
         };
         assert_next(&[], &[0, 0, 0, 0]);
+        assert_next(&[1, 0, 0, 0, 123], &[0, 0, 1, 200]);
+        assert_next(&[1, 0, 0, 3, 21], &[0, 0, 0, 1]);
+        assert_next(&[1, 0, 0, 3, 232], &[0, 0, 0, 2]);
+        assert_next(&[1, 0, 0, 3, 233], &[0, 0, 0, 3]);
+        assert_next(&[2, 0, 0, 0, 10], &[]);
+        assert_next(&[2, 0, 0, 0, 10, 0], &[0]);
+        assert_next(&[2, 0, 0, 0, 10, 1], &[1]);
+        assert_next(&[2, 0, 0, 0, 20], &[]);
+        assert_next(&[2, 0, 0, 0, 20, 0], &[1]);
+        assert_next(&[2, 0, 0, 0, 20, 1], &[0]);
+        assert_eq!(iter.next().transpose()?, None);
+
+        Ok(())
+    }
+
+    #[derive(State, Encode, Decode, Describe, Default, Serialize, Deserialize)]
+    #[state(version = 1, transform = "transform_foo")]
+    struct FooV1 {
+        bar: u64,
+        baz: Map<u32, u32>,
+        beep: Map<u32, Map<u8, u8>>,
+    }
+
+    fn transform_foo(version: u32, value: &mut crate::JsonValue) -> Result<()> {
+        match version {
+            0 => value["beep"]
+                .as_array_mut()
+                .unwrap()
+                .iter_mut()
+                .for_each(|arr| {
+                    arr.as_array_mut().unwrap()[1]
+                        .as_array_mut()
+                        .unwrap()
+                        .iter_mut()
+                        .for_each(|arr| {
+                            let key = &mut arr.as_array_mut().unwrap()[0];
+                            *key = serde_json::to_value(match key.as_bool().unwrap() {
+                                false => 0,
+                                true => 1,
+                            })
+                            .unwrap();
+                        })
+                }),
+            1 => {}
+            _ => {
+                return Err(crate::Error::State(format!(
+                    "Cannot upgrade from version {}",
+                    version
+                )))
+            }
+        };
+
+        Ok(())
+    }
+
+    #[test]
+    fn migrate_transform() -> Result<()> {
+        let foo = create_foo_v0_value()?;
+        let json = foo.to_json()?.to_string();
+
+        let store = Store::new(DefaultBackingStore::MapStore(Shared::new(MapStore::new())));
+        super::migrate::<_, FooV1>(0, json.as_bytes(), store.clone())?;
+
+        let mut iter = store.range(..);
+        let mut assert_next = |k: &[u8], v: &[u8]| {
+            assert_eq!(
+                iter.next().transpose().unwrap(),
+                Some((k.to_vec(), v.to_vec()))
+            )
+        };
+        assert_next(&[], &[0, 0, 0, 0, 0, 0, 0, 0]);
         assert_next(&[1, 0, 0, 0, 123], &[0, 0, 1, 200]);
         assert_next(&[1, 0, 0, 3, 21], &[0, 0, 0, 1]);
         assert_next(&[1, 0, 0, 3, 232], &[0, 0, 0, 2]);
