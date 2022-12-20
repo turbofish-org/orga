@@ -478,7 +478,7 @@ impl<T> MaybeToJson for ToJsonWrapper<T> {
         Ok(None)
     }
 
-    default fn maybe_write_json<W: std::io::Write>(&self, out: W) -> Result<()> {
+    default fn maybe_write_json<W: std::io::Write>(&self, _out: W) -> Result<()> {
         Err(Error::Downcast("Cannot write type as JSON".to_string()))
     }
 

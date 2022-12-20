@@ -1,16 +1,6 @@
-use std::{
-    io::{BufRead, BufReader, Read, Write},
-    iter::Peekable,
-};
-
 use serde::Deserialize;
 
-use crate::{
-    describe::{Children, Describe, Descriptor, Value},
-    state::State,
-    store::{Iter, Store},
-    Error, Result,
-};
+use crate::{state::State, store::Store, Result};
 
 pub fn migrate<R: std::io::Read, T: State>(version: u32, input: R, mut store: Store) -> Result<()>
 where
