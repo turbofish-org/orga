@@ -73,6 +73,7 @@ pub use async_trait::async_trait;
 pub use error::*;
 pub use futures_lite::future::Boxed as BoxFuture;
 pub use orga_macros as macros;
+pub use serde_json::Value as JsonValue;
 
 pub mod prelude {
     pub use secp256k1;

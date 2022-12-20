@@ -50,11 +50,26 @@ pub fn derive(item: TokenStream) -> TokenStream {
             map
         });
 
-    let version = attr.map_or(quote!(), |attr| {
+    let version = attr.as_ref().map_or(quote!(), |attr| {
         attr.get("version").map_or(quote!(), |value| {
             if let syn::Lit::Int(int) = value {
                 let v: u32 = int.base10_parse().unwrap();
                 quote!(const VERSION: u32 = #v;)
+            } else {
+                panic!()
+            }
+        })
+    });
+
+    let transform = attr.as_ref().map_or(quote!(), |attr| {
+        attr.get("transform").map_or(quote!(), |value| {
+            if let syn::Lit::Str(string) = value {
+                let f = syn::Ident::new(string.value().as_str(), proc_macro2::Span::call_site());
+                quote! {
+                    fn transform(version: u32, value: &mut ::orga::JsonValue) -> Result<()> {
+                       #f(version, value)
+                    }
+                }
             } else {
                 panic!()
             }
@@ -108,6 +123,8 @@ pub fn derive(item: TokenStream) -> TokenStream {
             ) -> ::orga::Result<()> {
                 #flush_body
             }
+
+            #transform
         }
     };
 
