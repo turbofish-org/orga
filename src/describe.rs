@@ -795,7 +795,7 @@ mod tests {
     fn descriptor_json() {
         assert_eq!(
             serde_json::to_string(&<Bar as Describe>::describe()).unwrap(),
-            "{\"type_name\":\"orga::describe::tests::Bar\",\"children\":{\"Named\":[{\"name\":\"bar\",\"desc\":{\"type_name\":\"u32\",\"children\":\"None\"},\"store_key\":{\"Append\":[0]}},{\"name\":\"baz\",\"desc\":{\"type_name\":\"orga::collections::map::Map<u32, u32>\",\"children\":{\"Dynamic\":{\"key_desc\":{\"type_name\":\"u32\",\"children\":\"None\"},\"value_desc\":{\"type_name\":\"u32\",\"children\":\"None\"}}}},\"store_key\":{\"Append\":[1]}}]}}"
+            "{\"type_name\":\"orga::describe::tests::Bar\",\"state_version\":0,\"children\":{\"Named\":[{\"name\":\"bar\",\"desc\":{\"type_name\":\"u32\",\"state_version\":0,\"children\":\"None\"},\"store_key\":{\"Append\":[0]}},{\"name\":\"baz\",\"desc\":{\"type_name\":\"orga::collections::map::Map<u32, u32>\",\"state_version\":0,\"children\":{\"Dynamic\":{\"key_desc\":{\"type_name\":\"u32\",\"state_version\":0,\"children\":\"None\"},\"value_desc\":{\"type_name\":\"u32\",\"state_version\":0,\"children\":\"None\"}}}},\"store_key\":{\"Append\":[1]}}]}}"
         );
     }
 }
