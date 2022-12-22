@@ -13,49 +13,12 @@ use std::{
     path::{Path, PathBuf},
 };
 use tendermint_proto::v0_34::abci::{self, *};
+
+use super::state_sync;
 type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
 pub const SNAPSHOT_INTERVAL: u64 = 1000;
-pub const SNAPSHOT_LIMIT: u64 = 4;
 pub const FIRST_SNAPSHOT_HEIGHT: u64 = 2;
-
-struct MerkSnapshot {
-    _checkpoint: Merk,
-    chunks: RefCell<Option<ChunkProducer<'static>>>,
-    length: u32,
-    hash: Hash,
-}
-
-impl MerkSnapshot {
-    fn new(checkpoint: Merk) -> Result<Self> {
-        let chunks = checkpoint.chunks()?;
-        let chunks: ChunkProducer<'static> = unsafe { transmute(chunks) };
-
-        let length = chunks.len() as u32;
-        let hash = checkpoint.root_hash();
-
-        Ok(Self {
-            _checkpoint: checkpoint,
-            chunks: RefCell::new(Some(chunks)),
-            length,
-            hash,
-        })
-    }
-
-    fn chunk(&self, index: usize) -> Result<Vec<u8>> {
-        let mut chunks = self.chunks.borrow_mut();
-        let chunks = chunks.as_mut().unwrap();
-        let chunk = chunks.chunk(index)?;
-        Ok(chunk)
-    }
-}
-
-impl Drop for MerkSnapshot {
-    fn drop(&mut self) {
-        // drop the self-referential ChunkProducer before the Merk instance
-        self.chunks.borrow_mut().take();
-    }
-}
 
 /// A [`store::Store`] implementation backed by a [`merk`](https://docs.rs/merk)
 /// Merkle key/value store.
@@ -63,7 +26,7 @@ pub struct MerkStore {
     merk: Option<Merk>,
     home: PathBuf,
     map: Option<Map>,
-    snapshots: BTreeMap<u64, MerkSnapshot>,
+    // snapshots: state_sync::Snapshots,
     restorer: Option<Restorer>,
     target_snapshot: Option<Snapshot>,
 }
@@ -81,13 +44,15 @@ impl MerkStore {
         maybe_remove_restore(&home).expect("Failed to remove incomplete state sync restore");
 
         let snapshot_path = home.join("snapshots");
-
-        let no_snapshot = !snapshot_path.exists();
-        if no_snapshot {
-            std::fs::create_dir(&snapshot_path).expect("Failed to create 'snapshots' directory");
-        }
-
-        let snapshots = load_snapshots(&home).expect("Failed to load snapshots");
+        let snapshots = state_sync::Snapshots::load(snapshot_path.as_path())
+            .expect("Failed to load snapshots")
+            // TODO: make configurable
+            .with_filters(vec![
+                #[cfg(feature = "state-sync")]
+                state_sync::SnapshotFilter::specific_height(2, None),
+                #[cfg(feature = "state-sync")]
+                state_sync::SnapshotFilter::interval(1000, 4),
+            ]);
 
         MerkStore {
             map: Some(Default::default()),
@@ -253,10 +218,6 @@ impl<'a> Iterator for Iter<'a> {
             return None;
         }
 
-        // here we use unsafe code to add lifetimes, since rust-rocksdb just
-        // returns the data with no lifetimes. the transmute calls convert from
-        // `&[u8]` to `&'a [u8]`, so there is no way this can make things *less*
-        // correct.
         let entry = unsafe {
             (
                 transmute(self.iter.key().unwrap()),
@@ -316,7 +277,7 @@ impl ABCIStore for MerkStore {
         self.merk.as_mut().unwrap().flush()?;
 
         #[cfg(feature = "state-sync")]
-        self.maybe_create_snapshot()?;
+        self.snapshots.maybe_create_snapshot(height, self.merk())?;
 
         Ok(())
     }
@@ -336,13 +297,7 @@ impl ABCIStore for MerkStore {
     }
 
     fn load_snapshot_chunk(&self, req: RequestLoadSnapshotChunk) -> Result<Vec<u8>> {
-        match self.snapshots.get(&req.height) {
-            Some(snapshot) => snapshot.chunk(req.chunk as usize),
-            // ABCI has no way to specify that we don't have the requested
-            // chunk, so we just return an empty one (and probably get banned by
-            // the client when they try to verify)
-            None => Ok(vec![]),
-        }
+        self.snapshots.abci_load_chunk(req)
     }
 
     fn apply_snapshot_chunk(&mut self, req: RequestApplySnapshotChunk) -> Result<()> {
@@ -409,51 +364,6 @@ impl ABCIStore for MerkStore {
     }
 }
 
-impl MerkStore {
-    fn maybe_create_snapshot(&mut self) -> Result<()> {
-        let height = self.height()?;
-        if height == 0 || (height % SNAPSHOT_INTERVAL != 0 && height != FIRST_SNAPSHOT_HEIGHT) {
-            return Ok(());
-        }
-        if self.snapshots.contains_key(&height) {
-            return Ok(());
-        }
-
-        let path = self.snapshot_path(height);
-        let merk = self.merk.as_ref().unwrap();
-        let checkpoint = merk.checkpoint(path)?;
-
-        let snapshot = MerkSnapshot::new(checkpoint)?;
-        self.snapshots.insert(height, snapshot);
-
-        self.maybe_prune_snapshots()
-    }
-
-    fn maybe_prune_snapshots(&mut self) -> Result<()> {
-        let height = self.height()?;
-        if height <= SNAPSHOT_INTERVAL * SNAPSHOT_LIMIT {
-            return Ok(());
-        }
-
-        // TODO: iterate through snapshot map rather than just pruning the
-        // expected oldest one
-
-        let remove_height = height - SNAPSHOT_INTERVAL * SNAPSHOT_LIMIT;
-        self.snapshots.remove(&remove_height);
-
-        let path = self.snapshot_path(remove_height);
-        if path.exists() {
-            std::fs::remove_dir_all(path)?;
-        }
-
-        Ok(())
-    }
-
-    fn snapshot_path(&self, height: u64) -> PathBuf {
-        self.path("snapshots").join(height.to_string())
-    }
-}
-
 fn maybe_remove_restore(home: &Path) -> Result<()> {
     let restore_path = home.join("restore");
     if restore_path.exists() {
@@ -461,26 +371,6 @@ fn maybe_remove_restore(home: &Path) -> Result<()> {
     }
 
     Ok(())
-}
-
-fn load_snapshots(home: &Path) -> Result<BTreeMap<u64, MerkSnapshot>> {
-    let mut snapshots = BTreeMap::new();
-
-    let snapshot_dir = home.join("snapshots").read_dir()?;
-    for entry in snapshot_dir {
-        let entry = entry?;
-        let path = entry.path();
-
-        // TODO: open read-only
-        let checkpoint = Merk::open(&path)?;
-        let snapshot = MerkSnapshot::new(checkpoint)?;
-
-        let height_str = path.file_name().unwrap().to_str().unwrap();
-        let height: u64 = height_str.parse()?;
-        snapshots.insert(height, snapshot);
-    }
-
-    Ok(snapshots)
 }
 
 fn read_u64(bytes: &[u8]) -> u64 {
