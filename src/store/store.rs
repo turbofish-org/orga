@@ -1,12 +1,13 @@
 use serde::{Deserialize, Serialize};
-use std::ops::RangeBounds;
+use std::ops::{Bound, RangeBounds};
 
 use super::{BackingStore, Iter, Read, Shared, Write, KV};
 use crate::describe::Describe;
-use crate::encoding::{Decode, Encode, Terminated};
+use crate::encoding::{Decode, Encode, LengthVec, Terminated};
 use crate::migrate::MigrateFrom;
+use crate::query::FieldQuery;
 use crate::state::State;
-use crate::{Error, Result};
+use crate::{orga, Error, Result};
 
 // TODO: figure out how to let users set DefaultBackingStore, similar to setting
 // the global allocator in the standard library
@@ -23,7 +24,7 @@ pub type DefaultBackingStore = BackingStore;
 /// This type is how high-level state types interact with the store, since they
 /// will often need to create substores (through the `store.sub(prefix)`
 /// method).
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize, FieldQuery)]
 pub struct Store<S = DefaultBackingStore> {
     #[serde(skip)]
     prefix: Vec<u8>,
@@ -87,7 +88,8 @@ impl<S> Clone for Store<S> {
     }
 }
 
-impl<S> Store<S> {
+#[orga]
+impl<S: Read> Store<S> {
     /// Creates a new `Store` with no prefix, with `backing` as its backing
     /// store.
     #[inline]
@@ -135,6 +137,28 @@ impl<S> Store<S> {
         Self: Read,
     {
         Read::into_iter(self.clone(), bounds)
+    }
+
+    #[query]
+    pub fn get_query(&self, key: LengthVec<u8, u8>) -> Result<Option<Vec<u8>>> {
+        self.store.get(key.as_slice())
+    }
+
+    #[query]
+    pub fn page(
+        &self,
+        start: LengthVec<u8, u8>,
+        end: Option<LengthVec<u8, u8>>,
+        limit: u32,
+    ) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
+        let limit = limit.min(100);
+
+        let start = Bound::Included(start.to_vec());
+        let end = match end {
+            Some(end) => Bound::Included(end.to_vec()),
+            None => Bound::Unbounded,
+        };
+        self.range((start, end)).take(limit as usize).collect()
     }
 }
 

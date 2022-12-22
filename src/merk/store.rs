@@ -26,7 +26,7 @@ pub struct MerkStore {
     merk: Option<Merk>,
     home: PathBuf,
     map: Option<Map>,
-    // snapshots: state_sync::Snapshots,
+    snapshots: state_sync::Snapshots,
     restorer: Option<Restorer>,
     target_snapshot: Option<Snapshot>,
 }
