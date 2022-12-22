@@ -21,7 +21,9 @@ pub enum BackingStore {
     #[cfg(feature = "merk-full")]
     WrappedMerk(WrappedMerkStore),
     #[cfg(feature = "merk-full")]
-    ProofBuilder(ProofBuilder),
+    ProofBuilder(ProofBuilder<MerkStore>),
+    // #[cfg(feature = "merk-full")]
+    // ProofBuilderSnapshot(ProofBuilder<MerkSnapshot>),
     #[cfg(feature = "merk-full")]
     Merk(Shared<MerkStore>),
     #[cfg(feature = "merk")]
