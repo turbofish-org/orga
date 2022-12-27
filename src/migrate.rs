@@ -1,6 +1,7 @@
 pub use crate::macros::MigrateFrom;
-use crate::{state::State, store::Store, Result};
+use crate::{state::State, store::Store, Error, Result};
 use serde::Deserialize;
+use std::{cell::RefCell, marker::PhantomData};
 
 pub fn migrate<R: std::io::Read, T: State>(version: u32, input: R, mut store: Store) -> Result<()>
 where
@@ -55,6 +56,109 @@ migrate_from_self_impl!(i64);
 migrate_from_self_impl!(i128);
 migrate_from_self_impl!(bool);
 migrate_from_self_impl!(());
+
+impl<T1, T2, const N: usize> MigrateFrom<[T1; N]> for [T2; N]
+where
+    T2: MigrateFrom<T1>,
+{
+    fn migrate_from(other: [T1; N]) -> Result<Self> {
+        other
+            .into_iter()
+            .map(MigrateInto::migrate_into)
+            .collect::<Result<Vec<_>>>()?
+            .try_into()
+            .map_err(|_| Error::Migrate("Failed to migrate array".into()))
+    }
+}
+
+impl<T1, T2> MigrateFrom<Vec<T1>> for Vec<T2>
+where
+    T2: MigrateFrom<T1>,
+{
+    fn migrate_from(other: Vec<T1>) -> Result<Self> {
+        other.into_iter().map(MigrateInto::migrate_into).collect()
+    }
+}
+
+impl<T1, T2> MigrateFrom<Option<T1>> for Option<T2>
+where
+    T2: MigrateFrom<T1>,
+{
+    fn migrate_from(other: Option<T1>) -> Result<Self> {
+        match other {
+            Some(value) => Ok(Some(value.migrate_into()?)),
+            None => Ok(None),
+        }
+    }
+}
+
+impl<T1, T2> MigrateFrom<PhantomData<T1>> for PhantomData<T2> {
+    fn migrate_from(_other: PhantomData<T1>) -> Result<Self> {
+        Ok(Default::default())
+    }
+}
+
+impl<T1, T2> MigrateFrom<RefCell<T1>> for RefCell<T2>
+where
+    T2: MigrateFrom<T1>,
+{
+    fn migrate_from(other: RefCell<T1>) -> Result<Self> {
+        Ok(RefCell::new(other.into_inner().migrate_into()?))
+    }
+}
+
+// Tuple impls, to be replaced by a declarative macro:
+
+impl<A1, A2> MigrateFrom<(A1,)> for (A2,)
+where
+    A2: MigrateFrom<A1>,
+{
+    fn migrate_from(other: (A1,)) -> Result<Self> {
+        Ok((other.0.migrate_into()?,))
+    }
+}
+
+impl<A1, A2, B1, B2> MigrateFrom<(A1, B1)> for (A2, B2)
+where
+    A2: MigrateFrom<A1>,
+    B2: MigrateFrom<B1>,
+{
+    fn migrate_from(other: (A1, B1)) -> Result<Self> {
+        Ok((other.0.migrate_into()?, other.1.migrate_into()?))
+    }
+}
+
+impl<A1, A2, B1, B2, C1, C2> MigrateFrom<(A1, B1, C1)> for (A2, B2, C2)
+where
+    A2: MigrateFrom<A1>,
+    B2: MigrateFrom<B1>,
+    C2: MigrateFrom<C1>,
+{
+    fn migrate_from(other: (A1, B1, C1)) -> Result<Self> {
+        Ok((
+            other.0.migrate_into()?,
+            other.1.migrate_into()?,
+            other.2.migrate_into()?,
+        ))
+    }
+}
+
+impl<A1, A2, B1, B2, C1, C2, D1, D2> MigrateFrom<(A1, B1, C1, D1)> for (A2, B2, C2, D2)
+where
+    A2: MigrateFrom<A1>,
+    B2: MigrateFrom<B1>,
+    C2: MigrateFrom<C1>,
+    D2: MigrateFrom<D1>,
+{
+    fn migrate_from(other: (A1, B1, C1, D1)) -> Result<Self> {
+        Ok((
+            other.0.migrate_into()?,
+            other.1.migrate_into()?,
+            other.2.migrate_into()?,
+            other.3.migrate_into()?,
+        ))
+    }
+}
 
 #[cfg(test)]
 mod tests {
