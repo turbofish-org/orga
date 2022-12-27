@@ -1,6 +1,6 @@
-use serde::Deserialize;
-
+pub use crate::macros::MigrateFrom;
 use crate::{state::State, store::Store, Result};
+use serde::Deserialize;
 
 pub fn migrate<R: std::io::Read, T: State>(version: u32, input: R, mut store: Store) -> Result<()>
 where
@@ -15,6 +15,46 @@ where
     state.flush()?;
     store.put(vec![], state.encode()?)
 }
+
+pub trait MigrateFrom<T>: Sized {
+    fn migrate_from(other: T) -> Result<Self>;
+}
+
+pub trait MigrateInto<T>: Sized {
+    fn migrate_into(self) -> Result<T>;
+}
+
+impl<T, U> MigrateInto<U> for T
+where
+    U: MigrateFrom<T>,
+{
+    fn migrate_into(self) -> Result<U> {
+        U::migrate_from(self)
+    }
+}
+
+macro_rules! migrate_from_self_impl {
+    ($type:ty) => {
+        impl MigrateFrom<Self> for $type {
+            fn migrate_from(other: Self) -> Result<Self> {
+                Ok(other)
+            }
+        }
+    };
+}
+
+migrate_from_self_impl!(u8);
+migrate_from_self_impl!(u16);
+migrate_from_self_impl!(u32);
+migrate_from_self_impl!(u64);
+migrate_from_self_impl!(u128);
+migrate_from_self_impl!(i8);
+migrate_from_self_impl!(i16);
+migrate_from_self_impl!(i32);
+migrate_from_self_impl!(i64);
+migrate_from_self_impl!(i128);
+migrate_from_self_impl!(bool);
+migrate_from_self_impl!(());
 
 #[cfg(test)]
 mod tests {
