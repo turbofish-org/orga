@@ -9,6 +9,7 @@ use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 use crate::call::Call;
 use crate::client::{AsyncCall, Client as ClientTrait};
 use crate::describe::Describe;
+use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::query::Query;
 use crate::state::*;
 use crate::store::*;
@@ -296,6 +297,32 @@ where
             // value is not in memory, try to get from store
             self.get_from_store(&map_key.inner)?.map(Ref::Owned)
         })
+    }
+}
+
+impl<K1, V1, K2, V2> MigrateFrom<Map<K1, V1>> for Map<K2, V2>
+where
+    K1: MigrateInto<K2> + Encode + Decode + Terminated + Clone,
+    V1: MigrateInto<V2> + State,
+    K2: Encode + Terminated,
+    V2: State,
+{
+    fn migrate_from(other: Map<K1, V1>) -> Result<Self> {
+        let mut map = Self::default();
+        for entry in other.iter()? {
+            let (key, value) = entry?;
+            let key_bytes = key.encode()?;
+            let key = key.clone().migrate_into()?;
+            let value_bytes = value.encode()?;
+            let mut value = V1::decode(value_bytes.as_slice())?;
+            let substore = other.store.sub(key_bytes.as_slice());
+            value.attach(substore)?;
+            let value = value.migrate_into()?;
+
+            map.insert(key, value)?;
+        }
+
+        Ok(map)
     }
 }
 
