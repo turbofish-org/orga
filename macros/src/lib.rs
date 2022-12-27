@@ -6,6 +6,7 @@ mod call;
 mod client;
 mod describe;
 mod entry;
+mod migrate_from;
 mod next;
 mod query;
 mod state;
@@ -54,4 +55,9 @@ pub fn derive_next(item: TokenStream) -> TokenStream {
 #[proc_macro_derive(Describe)]
 pub fn derive_describe(item: TokenStream) -> TokenStream {
     describe::derive(item)
+}
+
+#[proc_macro_derive(MigrateFrom)]
+pub fn derive_migrate_from(item: TokenStream) -> TokenStream {
+    migrate_from::derive(item)
 }
