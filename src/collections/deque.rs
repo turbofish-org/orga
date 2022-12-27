@@ -3,6 +3,7 @@ use crate::call::Call;
 use crate::client::Client;
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
+use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
@@ -179,6 +180,19 @@ impl<T, U: Clone + Send> Client<U> for Deque<T> {
     type Client = ();
 
     fn create_client(_: U) {}
+}
+
+impl<T1, T2> MigrateFrom<Deque<T1>> for Deque<T2>
+where
+    T1: State,
+    T2: MigrateFrom<T1> + State,
+{
+    fn migrate_from(other: Deque<T1>) -> Result<Self> {
+        Ok(Deque {
+            meta: other.meta,
+            map: other.map.migrate_into()?,
+        })
+    }
 }
 
 #[allow(unused_imports)]
