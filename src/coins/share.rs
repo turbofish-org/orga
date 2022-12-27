@@ -1,12 +1,13 @@
 use super::{Adjust, Amount, Balance, Coin, Decimal, Give, Symbol, Take};
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
+use crate::migrate::MigrateFrom;
 use crate::state::State;
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
-#[derive(State, Debug, Encode, Decode, Serialize, Deserialize, Describe)]
+#[derive(State, Debug, Encode, Decode, Serialize, Deserialize, Describe, MigrateFrom)]
 pub struct Share<S: Symbol> {
     pub shares: Decimal,
     symbol: PhantomData<S>,

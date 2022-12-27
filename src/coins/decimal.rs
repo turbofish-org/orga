@@ -3,6 +3,7 @@ use crate::call::Call;
 use crate::client::Client;
 use crate::describe::{Builder, Describe};
 use crate::encoding::{Decode, Encode};
+use crate::migrate::migrate_from_self_impl;
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
@@ -14,6 +15,8 @@ use std::convert::TryFrom;
 
 #[derive(Clone, Copy, Debug, Query, Client, Call, Serialize, Deserialize)]
 pub struct Decimal(pub(crate) NumDecimal);
+
+migrate_from_self_impl!(Decimal);
 
 impl Describe for Decimal {
     fn describe() -> crate::describe::Descriptor {

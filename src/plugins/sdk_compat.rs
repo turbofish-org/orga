@@ -3,6 +3,7 @@ use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Address, Symbol};
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
+use crate::migrate::MigrateFrom;
 use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
@@ -12,7 +13,7 @@ use std::ops::{Deref, DerefMut};
 pub const MAX_CALL_SIZE: usize = 65_535;
 pub const NATIVE_CALL_FLAG: u8 = 0xff;
 
-#[derive(State, Clone, Encode, Decode, Default, Describe, Serialize, Deserialize)]
+#[derive(State, Clone, Encode, Decode, Default, Describe, Serialize, Deserialize, MigrateFrom)]
 #[serde(transparent)]
 pub struct SdkCompatPlugin<S, T: State> {
     #[serde(skip)]

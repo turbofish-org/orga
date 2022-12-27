@@ -1,6 +1,7 @@
 use super::*;
 use crate::coins::MultiShare;
 use crate::context::Context;
+use crate::migrate::MigrateFrom;
 #[cfg(feature = "abci")]
 use crate::plugins::Time;
 use crate::Result;
@@ -9,7 +10,7 @@ use serial_test::serial;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-#[derive(State, Encode, Decode, Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(State, Encode, Decode, Debug, Clone, Default, Serialize, Deserialize, MigrateFrom)]
 struct Simp(());
 impl Symbol for Simp {
     const INDEX: u8 = 0;
@@ -1507,7 +1508,7 @@ fn redelegate_from_to_two_stakers() {
         .unwrap();
 }
 
-#[derive(State, Debug, Encode, Decode, Clone, Default)]
+#[derive(State, Debug, Encode, Decode, Clone, Default, MigrateFrom)]
 struct Alt(());
 impl Symbol for Alt {
     const INDEX: u8 = 1;

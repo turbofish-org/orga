@@ -4,6 +4,7 @@ use crate::collections::Deque;
 use crate::context::GetContext;
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
+use crate::migrate::MigrateFrom;
 use crate::plugins::Time;
 use crate::state::State;
 use crate::{Error, Result};
@@ -11,20 +12,20 @@ use serde::{Deserialize, Serialize};
 
 use super::UNBONDING_SECONDS;
 
-#[derive(State, Encode, Decode, Serialize, Deserialize, Default, Describe)]
+#[derive(State, Encode, Decode, Serialize, Deserialize, Default, Describe, MigrateFrom)]
 pub struct Unbond<S: Symbol> {
     pub(super) coins: Share<S>,
     pub(super) start_seconds: i64,
 }
 
-#[derive(State, Clone, Encode, Decode, Serialize, Deserialize, Default, Describe)]
+#[derive(State, Clone, Encode, Decode, Serialize, Deserialize, Default, Describe, MigrateFrom)]
 pub struct Redelegation {
     pub(super) amount: Amount,
     pub(super) address: Address,
     pub(super) start_seconds: i64,
 }
 
-#[derive(State, Encode, Decode, Default, Serialize, Deserialize, Describe)]
+#[derive(State, Encode, Decode, Default, Serialize, Deserialize, Describe, MigrateFrom)]
 pub struct Delegator<S: Symbol> {
     pub(super) liquid: MultiShare,
     pub(super) staked: Share<S>,

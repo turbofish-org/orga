@@ -34,7 +34,7 @@ impl Counter {
     }
 }
 
-#[derive(State, Debug, Clone, Default, Encode, Decode)]
+#[derive(State, Debug, Clone, Default, Encode, Decode, MigrateFrom)]
 pub struct Simp(());
 
 impl Symbol for Simp {

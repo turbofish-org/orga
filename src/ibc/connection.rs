@@ -4,6 +4,7 @@ use crate::client::Client;
 use crate::collections::{Deque, Map};
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
+use crate::migrate::MigrateFrom;
 use crate::query::Query;
 use crate::state::State;
 use crate::store::{Read, Write};
@@ -63,7 +64,19 @@ impl Lunchbox {
     }
 }
 
-#[derive(State, Call, Query, Client, Encode, Decode, Default, Serialize, Deserialize, Describe)]
+#[derive(
+    State,
+    Call,
+    Query,
+    Client,
+    Encode,
+    Decode,
+    Default,
+    Serialize,
+    Deserialize,
+    Describe,
+    MigrateFrom,
+)]
 pub struct ConnectionStore {
     count: u64,
     ends: Map<Adapter<ConnectionId>, ProtobufAdapter<ConnectionEnd>>,

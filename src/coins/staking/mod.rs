@@ -8,6 +8,7 @@ use crate::collections::{Deque, Entry, EntryMap, Map};
 use crate::context::GetContext;
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, Terminated};
+use crate::migrate::MigrateFrom;
 #[cfg(feature = "abci")]
 use crate::plugins::{BeginBlockCtx, EndBlockCtx, Validators};
 use crate::plugins::{Paid, Signer, Time};
@@ -33,7 +34,7 @@ const UNBONDING_SECONDS: u64 = 10; // 10 seconds
 const UNBONDING_SECONDS: u64 = 60 * 60 * 24 * 14; // 2 weeks
 const EDIT_INTERVAL_SECONDS: u64 = 60 * 60 * 24; // 1 day
 
-#[derive(Call, Query, Client, Default, Serialize, Deserialize)]
+#[derive(Call, Query, Client, Default, Serialize, Deserialize, MigrateFrom)]
 pub struct Staking<S: Symbol> {
     validators: Pool<Address, Validator<S>, S>,
     consensus_keys: Map<Address, [u8; 32]>,
@@ -125,7 +126,7 @@ impl<S: Symbol> Decode for Staking<S> {
 
 impl<S: Symbol> Terminated for Staking<S> {}
 
-#[derive(Entry, Clone, Serialize, Deserialize)]
+#[derive(Entry, Clone, Serialize, Deserialize, MigrateFrom)]
 struct ValidatorQueueEntry {
     #[key]
     start_seconds: i64,
@@ -149,14 +150,14 @@ impl EntryMap<ValidatorQueueEntry> {
     }
 }
 
-#[derive(State, Encode, Decode, Serialize, Deserialize, Default, Describe)]
+#[derive(State, Encode, Decode, Serialize, Deserialize, Default, Describe, MigrateFrom)]
 pub struct UnbondingDelegationEntry {
     validator_address: Address,
     delegator_address: Address,
     start_seconds: i64,
 }
 
-#[derive(State, Encode, Decode, Serialize, Deserialize, Default, Describe)]
+#[derive(State, Encode, Decode, Serialize, Deserialize, Default, Describe, MigrateFrom)]
 pub struct RedelegationEntry {
     src_validator_address: Address,
     dst_validator_address: Address,
@@ -164,7 +165,7 @@ pub struct RedelegationEntry {
     start_seconds: i64,
 }
 
-#[derive(Entry, Serialize, Deserialize)]
+#[derive(Entry, Serialize, Deserialize, MigrateFrom)]
 struct ValidatorPowerEntry {
     #[key]
     inverted_power: u64,
@@ -1111,7 +1112,19 @@ pub struct Declaration {
     pub validator_info: ValidatorInfo,
 }
 
-#[derive(State, Default, Debug, Encode, Decode, Clone, Copy, Serialize, Deserialize, Describe)]
+#[derive(
+    State,
+    Default,
+    Debug,
+    Encode,
+    Decode,
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
+    Describe,
+    MigrateFrom,
+)]
 pub struct Commission {
     pub rate: Decimal,
     pub max: Decimal,

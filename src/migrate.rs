@@ -17,7 +17,7 @@ where
     store.put(vec![], state.encode()?)
 }
 
-pub trait MigrateFrom<T>: Sized {
+pub trait MigrateFrom<T = Self>: Sized {
     fn migrate_from(other: T) -> Result<Self>;
 }
 
@@ -36,13 +36,14 @@ where
 
 macro_rules! migrate_from_self_impl {
     ($type:ty) => {
-        impl MigrateFrom<Self> for $type {
+        impl crate::migrate::MigrateFrom<Self> for $type {
             fn migrate_from(other: Self) -> Result<Self> {
                 Ok(other)
             }
         }
     };
 }
+pub(crate) use migrate_from_self_impl;
 
 migrate_from_self_impl!(u8);
 migrate_from_self_impl!(u16);

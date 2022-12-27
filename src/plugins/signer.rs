@@ -8,6 +8,7 @@ use crate::coins::Address;
 use crate::context::{Context, GetContext};
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
+use crate::migrate::MigrateFrom;
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
@@ -16,7 +17,7 @@ use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 
-#[derive(Default, Encode, Decode, Serialize, Deserialize)]
+#[derive(Default, Encode, Decode, Serialize, Deserialize, MigrateFrom)]
 #[serde(transparent)]
 pub struct SignerPlugin<T> {
     inner: T,

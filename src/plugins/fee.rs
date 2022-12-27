@@ -8,6 +8,7 @@ use crate::coins::{Coin, Symbol};
 use crate::context::GetContext;
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
+use crate::migrate::MigrateFrom;
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
@@ -17,7 +18,7 @@ use std::ops::{Deref, DerefMut};
 
 pub const MIN_FEE: u64 = 10_000;
 
-#[derive(Encode, Decode, Default, Serialize, Deserialize)]
+#[derive(Encode, Decode, Default, Serialize, Deserialize, MigrateFrom)]
 #[serde(transparent)]
 pub struct FeePlugin<S, T> {
     #[serde(skip)]

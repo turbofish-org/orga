@@ -6,6 +6,7 @@ use crate::client::{AsyncCall, AsyncQuery, Client as ClientTrait};
 use crate::context::Context;
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
+use crate::migrate::MigrateFrom;
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
@@ -13,7 +14,7 @@ use crate::{Error, Result};
 use std::marker::PhantomData;
 use std::ops::Deref;
 
-#[derive(Encode, Decode, Default, Serialize, Deserialize)]
+#[derive(Encode, Decode, Default, Serialize, Deserialize, MigrateFrom)]
 #[serde(transparent)]
 pub struct ChainCommitmentPlugin<T, const ID: &'static str> {
     inner: T,

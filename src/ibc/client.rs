@@ -10,6 +10,7 @@ use crate::collections::Map;
 use crate::collections::Next;
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
+use crate::migrate::MigrateFrom;
 #[cfg(feature = "abci")]
 use crate::plugins::BeginBlockCtx;
 use crate::query::Query;
@@ -108,7 +109,7 @@ impl Lunchbox {
     }
 }
 
-#[derive(State, Encode, Decode, Default, Describe, Serialize, Deserialize)]
+#[derive(State, Encode, Decode, Default, Describe, Serialize, Deserialize, MigrateFrom)]
 pub struct ConsensusStateMap {
     states: Map<Adapter<Height>, ProtobufAdapter<AnyConsensusState>>,
     prev_height: Map<Adapter<Height>, Adapter<Height>>,
@@ -168,7 +169,19 @@ impl ConsensusStateMap {
     }
 }
 
-#[derive(State, Call, Query, Client, Encode, Decode, Default, Serialize, Deserialize, Describe)]
+#[derive(
+    State,
+    Call,
+    Query,
+    Client,
+    Encode,
+    Decode,
+    Default,
+    Serialize,
+    Deserialize,
+    Describe,
+    MigrateFrom,
+)]
 pub struct ClientStore {
     host_consensus_state: Map<u64, ProtobufAdapter<ConsensusState>>,
     height: u64,

@@ -21,6 +21,7 @@ pub fn derive(item: TokenStream) -> TokenStream {
     let mut generics = item.generics.clone();
     generics.params.iter_mut().for_each(|p| {
         if let GenericParam::Type(tp) = p {
+            tp.bounds.push(parse_quote!(::orga::migrate::MigrateFrom));
             tp.default.take();
         }
     });
@@ -29,6 +30,7 @@ pub fn derive(item: TokenStream) -> TokenStream {
         .clone()
         .unwrap_or(parse_quote!(where))
         .predicates;
+
     let generic_params = gen_param_input(&generics, true);
 
     let output = quote! {
@@ -56,6 +58,6 @@ fn struct_fields(item: &DeriveInput) -> impl Iterator<Item = &Field> {
     match data.fields {
         Fields::Named(ref fields) => fields.named.iter(),
         Fields::Unnamed(ref fields) => fields.unnamed.iter(),
-        Fields::Unit => panic!("Unit structs are not supported"),
+        Fields::Unit => data.fields.iter(),
     }
 }

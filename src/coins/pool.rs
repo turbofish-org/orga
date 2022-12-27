@@ -3,6 +3,7 @@ use crate::collections::map::{ChildMut as MapChildMut, Ref as MapRef};
 use crate::collections::{Map, Next};
 use crate::describe::{Builder, Describe, Descriptor};
 use crate::encoding::{Decode, Encode, Terminated};
+use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
@@ -32,6 +33,27 @@ where
     rewards_this_period: Map<u8, Decimal>,
     last_period_entry: Map<u8, Decimal>,
     drop_errored: bool,
+}
+
+impl<K, V, S> MigrateFrom for Pool<K, V, S>
+where
+    K: Terminated + Encode,
+    V: State,
+    S: Symbol,
+    Map<K, RefCell<Entry<V>>>: MigrateFrom,
+{
+    fn migrate_from(other: Self) -> Result<Self> {
+        Ok(Self {
+            contributions: other.contributions.migrate_into()?,
+            rewards: other.rewards.migrate_into()?,
+            symbol: other.symbol.migrate_into()?,
+            shares_issued: other.shares_issued.migrate_into()?,
+            map: other.map.migrate_into()?,
+            rewards_this_period: other.rewards_this_period.migrate_into()?,
+            last_period_entry: other.last_period_entry.migrate_into()?,
+            drop_errored: other.drop_errored.migrate_into()?,
+        })
+    }
 }
 
 impl<K, V, S> Decode for Pool<K, V, S>
@@ -146,7 +168,7 @@ where
     }
 }
 
-#[derive(State, Encode, Decode, Default, Serialize, Deserialize, Describe)]
+#[derive(State, Encode, Decode, Default, Serialize, Deserialize, Describe, MigrateFrom)]
 pub struct Entry<T>
 where
     T: State,
@@ -526,7 +548,7 @@ mod tests {
     use crate::encoding::{Decode, Encode};
     use crate::store::Store;
 
-    #[derive(Encode, Decode, Debug, Clone, Default)]
+    #[derive(Encode, Decode, Debug, Clone, Default, MigrateFrom)]
     struct Simp;
     impl Symbol for Simp {
         const INDEX: u8 = 0;

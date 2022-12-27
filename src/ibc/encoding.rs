@@ -3,6 +3,7 @@ use crate::client::Client;
 use crate::collections::Next;
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, Terminated};
+use crate::migrate::MigrateFrom;
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
@@ -21,6 +22,12 @@ use tendermint_proto::Protobuf;
 #[derive(Clone, Call, Client, Query, Debug, Serialize, Deserialize, Default)]
 pub struct Adapter<T> {
     pub(crate) inner: T,
+}
+
+impl<T> MigrateFrom for Adapter<T> {
+    fn migrate_from(other: Self) -> crate::Result<Self> {
+        Ok(other)
+    }
 }
 
 unsafe impl<T> Send for Adapter<T> {}
@@ -256,6 +263,12 @@ where
 impl<T> ProtobufAdapter<T> {
     pub fn into_inner(self) -> T {
         self.inner
+    }
+}
+
+impl<T> MigrateFrom for ProtobufAdapter<T> {
+    fn migrate_from(other: Self) -> crate::Result<Self> {
+        Ok(other)
     }
 }
 

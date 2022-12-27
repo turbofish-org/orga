@@ -3,16 +3,29 @@ use crate::client::Client;
 use crate::coins::{Address, Amount, Coin, Give, Symbol, Take};
 use crate::collections::Map;
 use crate::context::GetContext;
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
+use crate::migrate::MigrateFrom;
 use crate::plugins::Paid;
 use crate::plugins::Signer;
 use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
-use crate::describe::Describe;
 
-#[derive(State, Encode, Decode, Call, Query, Client, Default, Serialize, Deserialize, Describe)]
+#[derive(
+    State,
+    Encode,
+    Decode,
+    Call,
+    Query,
+    Client,
+    Default,
+    Serialize,
+    Deserialize,
+    Describe,
+    MigrateFrom,
+)]
 pub struct Accounts<S: Symbol> {
     transfers_allowed: bool,
     transfer_exceptions: Map<Address, ()>,

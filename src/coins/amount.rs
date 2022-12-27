@@ -1,5 +1,6 @@
 use crate::client::Client;
 use crate::describe::Describe;
+use crate::migrate::MigrateFrom;
 use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
@@ -20,6 +21,7 @@ use std::convert::TryFrom;
     Serialize,
     Deserialize,
     Describe,
+    MigrateFrom,
 )]
 pub struct Amount(pub(crate) u64);
 

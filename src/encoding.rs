@@ -1,3 +1,4 @@
+use crate::migrate::MigrateFrom;
 use crate::query::Query;
 use crate::state::State;
 use crate::{client::Client, describe::Describe};
@@ -20,6 +21,7 @@ use std::convert::{TryFrom, TryInto};
     Client,
     Serialize,
     Deserialize,
+    MigrateFrom,
 )]
 pub struct LengthVec<P, T>
 where

@@ -1,11 +1,10 @@
-use std::str::FromStr;
-
 use crate::call::Call;
 use crate::client::Client;
 use crate::coins::{Address, Amount};
 use crate::collections::{Deque, Map};
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, LengthVec};
+use crate::migrate::MigrateFrom;
 use crate::query::Query;
 use crate::state::State;
 use ibc::applications::transfer::context::{
@@ -36,10 +35,23 @@ use ibc::Height;
 use ibc_proto::ibc::core::channel::v1::PacketState;
 use ripemd::Digest;
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 use super::{Adapter, Lunchbox};
 
-#[derive(State, Call, Query, Client, Encode, Decode, Default, Serialize, Deserialize, Describe)]
+#[derive(
+    State,
+    Call,
+    Query,
+    Client,
+    Encode,
+    Decode,
+    Default,
+    Serialize,
+    Deserialize,
+    Describe,
+    MigrateFrom,
+)]
 pub struct TransferModule {
     lunchbox: Lunchbox,
     commitments: Map<Adapter<(PortId, ChannelId)>, Deque<Adapter<PacketState>>>,
@@ -557,7 +569,7 @@ impl TransferModule {
     }
 }
 
-#[derive(State, Encode, Decode, Clone, Debug, Serialize, Deserialize, Describe)]
+#[derive(State, Encode, Decode, Clone, Debug, Serialize, Deserialize, Describe, MigrateFrom)]
 pub struct Dynom(pub LengthVec<u8, u8>);
 
 impl FromStr for Dynom {
@@ -573,7 +585,19 @@ impl FromStr for Dynom {
     }
 }
 
-#[derive(State, Call, Query, Client, Encode, Decode, Default, Serialize, Deserialize, Describe)]
+#[derive(
+    State,
+    Call,
+    Query,
+    Client,
+    Encode,
+    Decode,
+    Default,
+    Serialize,
+    Deserialize,
+    Describe,
+    MigrateFrom,
+)]
 pub struct Bank {
     #[call]
     pub balances: Map<Dynom, Map<Address, Amount>>,
