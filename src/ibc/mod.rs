@@ -60,21 +60,8 @@ use self::port::PortStore;
 pub use self::routing::{IbcMessage, IbcTx};
 use self::transfer::{Dynom, TransferModule};
 use crate::describe::Describe;
-use crate::migrate::MigrateFrom;
 
-#[derive(
-    State,
-    Call,
-    Client,
-    Query,
-    Encode,
-    Decode,
-    Default,
-    Serialize,
-    Deserialize,
-    Describe,
-    MigrateFrom,
-)]
+#[derive(State, Call, Client, Query, Encode, Decode, Default, Serialize, Deserialize, Describe)]
 pub struct Ibc {
     pub clients: ClientStore,
     pub connections: ConnectionStore,
@@ -86,7 +73,7 @@ pub struct Ibc {
     pub(super) lunchbox: Lunchbox,
 }
 
-#[derive(Encode, Decode, Default, Serialize, Deserialize, MigrateFrom)]
+#[derive(Encode, Decode, Default, Serialize, Deserialize)]
 pub struct Lunchbox(pub(super) Store);
 
 impl State for Lunchbox {

@@ -4,7 +4,6 @@ use std::ops::RangeBounds;
 use super::{Iter, Read, Shared, Write, KV};
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, Terminated};
-use crate::migrate::MigrateFrom;
 use crate::state::State;
 use crate::{Error, Result};
 
@@ -32,11 +31,6 @@ pub struct Store<S = DefaultBackingStore> {
     prefix: Vec<u8>,
     #[serde(skip)]
     store: Shared<S>,
-}
-impl<S> MigrateFrom for Store<S> {
-    fn migrate_from(_other: Self) -> crate::Result<Self> {
-        todo!()
-    }
 }
 
 impl<S> Describe for Store<S>

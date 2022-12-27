@@ -39,19 +39,7 @@ use std::str::FromStr;
 
 use super::{Adapter, Lunchbox};
 
-#[derive(
-    State,
-    Call,
-    Query,
-    Client,
-    Encode,
-    Decode,
-    Default,
-    Serialize,
-    Deserialize,
-    Describe,
-    MigrateFrom,
-)]
+#[derive(State, Call, Query, Client, Encode, Decode, Default, Serialize, Deserialize, Describe)]
 pub struct TransferModule {
     lunchbox: Lunchbox,
     commitments: Map<Adapter<(PortId, ChannelId)>, Deque<Adapter<PacketState>>>,
