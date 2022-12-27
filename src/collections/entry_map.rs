@@ -5,6 +5,7 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::encoding::{Decode, Encode, Terminated};
+use crate::migrate::{MigrateFrom, MigrateInto};
 use std::ops::RangeBounds;
 
 use super::{Entry, Next};
@@ -181,6 +182,30 @@ where
             )))),
             Err(err) => Err(err),
         })
+    }
+}
+
+impl<T1, T2> MigrateFrom<EntryMap<T1>> for EntryMap<T2>
+where
+    T1: Entry,
+    T1::Key: Next + Decode + Encode + Terminated + Clone,
+    T1::Value: State + Clone,
+    T2: Entry + MigrateFrom<T1>,
+    T2::Key: Encode + Terminated,
+    T2::Value: State,
+{
+    fn migrate_from(other: EntryMap<T1>) -> Result<Self> {
+        // TODO: clone bound shouldn't be required on T1::Value, but there's currently no
+        // way to access the inner map's store, so we need the
+        // clone bound to create the entry map's iterator
+        let mut entry_map = Self::default();
+        for entry in other.map.iter()? {
+            let (k, v) = entry?;
+            let entry = T1::from_entry((k.clone(), v.clone()));
+            entry_map.insert(entry.migrate_into()?)?;
+        }
+
+        Ok(entry_map)
     }
 }
 
