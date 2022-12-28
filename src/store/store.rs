@@ -88,7 +88,6 @@ impl<S> Clone for Store<S> {
     }
 }
 
-#[orga]
 impl<S: Read> Store<S> {
     /// Creates a new `Store` with no prefix, with `backing` as its backing
     /// store.
@@ -138,7 +137,10 @@ impl<S: Read> Store<S> {
     {
         Read::into_iter(self.clone(), bounds)
     }
+}
 
+#[orga]
+impl Store {
     #[query]
     pub fn get_query(&self, key: LengthVec<u8, u8>) -> Result<Option<Vec<u8>>> {
         self.store.get(key.as_slice())

@@ -1,3 +1,5 @@
+#[cfg(feature = "merk-full")]
+use crate::merk::snapshot::Snapshot;
 #[cfg(feature = "merk")]
 use crate::merk::ProofStore;
 #[cfg(feature = "merk-full")]
@@ -22,10 +24,12 @@ pub enum BackingStore {
     WrappedMerk(WrappedMerkStore),
     #[cfg(feature = "merk-full")]
     ProofBuilder(ProofBuilder<MerkStore>),
-    // #[cfg(feature = "merk-full")]
-    // ProofBuilderSnapshot(ProofBuilder<MerkSnapshot>),
+    #[cfg(feature = "merk-full")]
+    ProofBuilderSnapshot(ProofBuilder<Snapshot>),
     #[cfg(feature = "merk-full")]
     Merk(Shared<MerkStore>),
+    #[cfg(feature = "merk-full")]
+    Snapshot(Shared<Snapshot>),
     #[cfg(feature = "merk")]
     ProofMap(Shared<ProofStore>),
 }
@@ -49,7 +53,11 @@ impl Read for BackingStore {
             #[cfg(feature = "merk-full")]
             BackingStore::ProofBuilder(ref builder) => builder.get(key),
             #[cfg(feature = "merk-full")]
+            BackingStore::ProofBuilderSnapshot(ref builder) => builder.get(key),
+            #[cfg(feature = "merk-full")]
             BackingStore::Merk(ref store) => store.get(key),
+            #[cfg(feature = "merk-full")]
+            BackingStore::Snapshot(ref store) => store.get(key),
             #[cfg(feature = "merk")]
             BackingStore::ProofMap(ref map) => map.get(key),
         }
@@ -67,7 +75,11 @@ impl Read for BackingStore {
             #[cfg(feature = "merk-full")]
             BackingStore::ProofBuilder(ref builder) => builder.get_next(key),
             #[cfg(feature = "merk-full")]
+            BackingStore::ProofBuilderSnapshot(ref builder) => builder.get_next(key),
+            #[cfg(feature = "merk-full")]
             BackingStore::Merk(ref store) => store.get_next(key),
+            #[cfg(feature = "merk-full")]
+            BackingStore::Snapshot(ref store) => store.get_next(key),
             #[cfg(feature = "merk")]
             BackingStore::ProofMap(ref map) => map.get_next(key),
         }
@@ -85,7 +97,11 @@ impl Read for BackingStore {
             #[cfg(feature = "merk-full")]
             BackingStore::ProofBuilder(ref builder) => builder.get_prev(key),
             #[cfg(feature = "merk-full")]
+            BackingStore::ProofBuilderSnapshot(ref builder) => builder.get_prev(key),
+            #[cfg(feature = "merk-full")]
             BackingStore::Merk(ref store) => store.get_prev(key),
+            #[cfg(feature = "merk-full")]
+            BackingStore::Snapshot(ref store) => store.get_prev(key),
             #[cfg(feature = "merk")]
             BackingStore::ProofMap(ref map) => map.get_prev(key),
         }
@@ -105,8 +121,16 @@ impl Write for BackingStore {
             #[cfg(feature = "merk-full")]
             BackingStore::Merk(ref mut store) => store.put(key, value),
             #[cfg(feature = "merk-full")]
+            BackingStore::Snapshot(_) => {
+                panic!("put() is not implemented for Snapshot")
+            }
+            #[cfg(feature = "merk-full")]
             BackingStore::ProofBuilder(_) => {
                 panic!("put() is not implemented for ProofBuilder")
+            }
+            #[cfg(feature = "merk-full")]
+            BackingStore::ProofBuilderSnapshot(ref builder) => {
+                panic!("put() is not implemented for ProofBuilderSnapshot")
             }
             #[cfg(feature = "merk")]
             BackingStore::ProofMap(_) => {
@@ -114,6 +138,7 @@ impl Write for BackingStore {
             }
         }
     }
+
     fn delete(&mut self, key: &[u8]) -> Result<()> {
         match self {
             BackingStore::MapStore(ref mut store) => store.delete(key),
@@ -129,6 +154,14 @@ impl Write for BackingStore {
             BackingStore::ProofBuilder(_) => {
                 panic!("delete() is not implemented for ProofBuilder")
             }
+            #[cfg(feature = "merk-full")]
+            BackingStore::ProofBuilderSnapshot(ref builder) => {
+                panic!("delete() is not implemented for ProofBuilderSnapshot")
+            }
+            #[cfg(feature = "merk-full")]
+            BackingStore::Snapshot(_) => {
+                panic!("delete() is not implemented for Snapshot")
+            }
             #[cfg(feature = "merk")]
             BackingStore::ProofMap(_) => {
                 panic!("delete() is not implemented for ProofMap")
@@ -139,7 +172,7 @@ impl Write for BackingStore {
 
 impl BackingStore {
     #[cfg(feature = "merk-full")]
-    pub fn into_proof_builder(self) -> Result<ProofBuilder<Shared<MerkStore>>> {
+    pub fn into_proof_builder(self) -> Result<ProofBuilder<MerkStore>> {
         match self {
             #[cfg(feature = "merk-full")]
             BackingStore::ProofBuilder(builder) => Ok(builder),

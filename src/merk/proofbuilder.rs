@@ -10,16 +10,24 @@ use store::Read;
 
 /// Records reads to a `MerkStore` and uses them to build a proof including all
 /// accessed keys.
-#[derive(Clone)]
 pub struct ProofBuilder<T> {
     store: Shared<T>,
     query: Rc<RefCell<Query>>,
 }
 
+impl<T> Clone for ProofBuilder<T> {
+    fn clone(&self) -> Self {
+        ProofBuilder {
+            store: self.store.clone(),
+            query: self.query.clone(),
+        }
+    }
+}
+
 impl<T: Prove> ProofBuilder<T> {
     /// Constructs a `ProofBuilder` which provides read access to data in the
     /// given `MerkStore`.
-    pub fn new(store: Shared<MerkStore>) -> Self {
+    pub fn new(store: Shared<T>) -> Self {
         ProofBuilder {
             store,
             query: Rc::new(RefCell::new(Query::new())),
@@ -31,8 +39,7 @@ impl<T: Prove> ProofBuilder<T> {
     pub fn build(self) -> Result<Vec<u8>> {
         let store = self.store.borrow();
         let query = self.query.take();
-
-        Ok(store.borrow().prove(query)?)
+        Ok(store.prove(query)?)
     }
 }
 

@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::mem::transmute;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use tendermint_proto::abci::{RequestLoadSnapshotChunk, Snapshot as AbciSnapshot};
+use tendermint_proto::v0_34::abci::{RequestLoadSnapshotChunk, Snapshot as AbciSnapshot};
 
 #[derive(Clone)]
 pub struct Snapshot {
@@ -47,6 +47,10 @@ impl Read for Snapshot {
 
     fn get_next(&self, key: &[u8]) -> Result<Option<crate::store::KV>> {
         super::store::get_next(&self.checkpoint.borrow(), key)
+    }
+
+    fn get_prev(&self, key: Option<&[u8]>) -> Result<Option<crate::store::KV>> {
+        super::store::get_prev(&self.checkpoint.borrow(), key)
     }
 }
 
@@ -200,7 +204,7 @@ impl Snapshots {
             .map(|(height, snapshot)| {
                 Ok(AbciSnapshot {
                     chunks: snapshot.length,
-                    hash: snapshot.hash.to_vec(),
+                    hash: snapshot.hash.to_vec().into(),
                     height: *height,
                     ..Default::default()
                 })

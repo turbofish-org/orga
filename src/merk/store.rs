@@ -152,39 +152,7 @@ impl Read for MerkStore {
     }
 
     fn get_prev(&self, end: Option<&[u8]>) -> Result<Option<KV>> {
-        // TODO: use an iterator in merk which steps through in-memory nodes
-        // (loading if necessary)
-        let mut iter = self.merk().raw_iter();
-        if let Some(key) = end {
-            iter.seek(key);
-
-            if !iter.valid() {
-                iter.status()?;
-                return Ok(None);
-            }
-
-            if iter.key().unwrap() == key {
-                iter.prev();
-
-                if !iter.valid() {
-                    iter.status()?;
-                    return Ok(None);
-                }
-            }
-        } else {
-            iter.seek_to_last();
-
-            if !iter.valid() {
-                iter.status()?;
-                return Ok(None);
-            }
-        }
-
-        let key = iter.key().unwrap();
-        let tree_bytes = iter.value().unwrap();
-        let tree = Tree::decode(vec![], tree_bytes);
-        let value = tree.value();
-        Ok(Some((key.to_vec(), value.to_vec())))
+        get_prev(self.merk(), end)
     }
 }
 
@@ -201,6 +169,42 @@ pub(crate) fn get_next(merk: &Merk, start: &[u8]) -> Result<Option<KV>> {
 
     if iter.key().unwrap() == start {
         iter.next();
+
+        if !iter.valid() {
+            iter.status()?;
+            return Ok(None);
+        }
+    }
+
+    let key = iter.key().unwrap();
+    let tree_bytes = iter.value().unwrap();
+    let tree = Tree::decode(vec![], tree_bytes);
+    let value = tree.value();
+    Ok(Some((key.to_vec(), value.to_vec())))
+}
+
+pub(crate) fn get_prev(merk: &Merk, end: Option<&[u8]>) -> Result<Option<KV>> {
+    // TODO: use an iterator in merk which steps through in-memory nodes
+    // (loading if necessary)
+    let mut iter = merk.raw_iter();
+    if let Some(key) = end {
+        iter.seek(key);
+
+        if !iter.valid() {
+            iter.status()?;
+            return Ok(None);
+        }
+
+        if iter.key().unwrap() == key {
+            iter.prev();
+
+            if !iter.valid() {
+                iter.status()?;
+                return Ok(None);
+            }
+        }
+    } else {
+        iter.seek_to_last();
 
         if !iter.valid() {
             iter.status()?;
@@ -273,17 +277,7 @@ impl ABCIStore for MerkStore {
     }
 
     fn list_snapshots(&self) -> Result<Vec<Snapshot>> {
-        let snapshots = self
-            .snapshots
-            .iter()
-            .map(|(height, snapshot)| Snapshot {
-                chunks: snapshot.length,
-                hash: snapshot.hash.to_vec().into(),
-                height: *height,
-                ..Default::default()
-            })
-            .collect();
-        Ok(snapshots)
+        self.snapshots.abci_snapshots()
     }
 
     fn load_snapshot_chunk(&self, req: RequestLoadSnapshotChunk) -> Result<Vec<u8>> {
