@@ -267,8 +267,15 @@ impl ABCIStore for MerkStore {
         self.write(metadata)?;
         self.merk.as_mut().unwrap().flush()?;
 
+        let recent = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64
+            - header.time.unwrap().seconds
+            < 10;
+
         #[cfg(feature = "state-sync")]
-        if self.snapshots.should_create(height) {
+        if recent && self.snapshots.should_create(height) {
             let path = self.snapshots.path(height);
             let checkpoint = self.merk.as_ref().unwrap().checkpoint(path)?;
             self.snapshots.create(height, checkpoint)?;
