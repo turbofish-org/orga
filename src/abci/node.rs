@@ -458,9 +458,19 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
         };
 
         if !req.path.is_empty() {
-            let store = BackingStore::Merk(merk_store);
+            let err = || crate::Error::Query(format!("Cannot query for height {}", req.height));
+            let store = merk_store.borrow();
+            let height = if req.height == 0 {
+                store.height()?
+            } else {
+                req.height.try_into().map_err(|_| err())?
+            };
+            let snapshot = store.snapshots().get(height).ok_or_else(err)?;
+            let store = BackingStore::Snapshot(Shared::new(snapshot.clone()));
             let state = create_state(store)?;
-            return state.abci_query(&req);
+            let mut res = state.abci_query(&req)?;
+            res.height = height.try_into().unwrap();
+            return Ok(res);
         }
 
         let backing_store: BackingStore = merk_store.clone().into();

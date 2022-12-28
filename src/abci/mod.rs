@@ -602,5 +602,8 @@ impl<S: State> AbciQuery for S {
     }
 }
 
-pub trait App: BeginBlock + EndBlock + InitChain + State + Call + Query + Default {}
-impl<T: Default + BeginBlock + EndBlock + InitChain + State + Call + Query> App for T {}
+pub trait App:
+    BeginBlock + EndBlock + InitChain + State + Call + Query + Default + AbciQuery
+{
+}
+impl<T: Default + BeginBlock + EndBlock + InitChain + State + Call + Query + AbciQuery> App for T {}
