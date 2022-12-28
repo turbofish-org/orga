@@ -1,14 +1,17 @@
+use crate::store::Read;
 use crate::Result;
 use merk::{chunks::ChunkProducer, Hash, Merk};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::mem::transmute;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use tendermint_proto::abci::{RequestLoadSnapshotChunk, Snapshot as AbciSnapshot};
 
-struct Snapshot {
-    _checkpoint: Merk,
-    chunks: RefCell<Option<ChunkProducer<'static>>>,
+#[derive(Clone)]
+pub struct Snapshot {
+    checkpoint: Rc<RefCell<Merk>>,
+    chunks: Rc<RefCell<Option<ChunkProducer<'static>>>>,
     length: u32,
     hash: Hash,
 }
@@ -22,8 +25,8 @@ impl Snapshot {
         let hash = checkpoint.root_hash();
 
         Ok(Self {
-            _checkpoint: checkpoint,
-            chunks: RefCell::new(Some(chunks)),
+            checkpoint: Rc::new(RefCell::new(checkpoint)),
+            chunks: Rc::new(RefCell::new(Some(chunks))),
             length,
             hash,
         })
@@ -34,6 +37,16 @@ impl Snapshot {
         let chunks = chunks.as_mut().unwrap();
         let chunk = chunks.chunk(index)?;
         Ok(chunk)
+    }
+}
+
+impl Read for Snapshot {
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        Ok(self.checkpoint.borrow().get(key)?)
+    }
+
+    fn get_next(&self, key: &[u8]) -> Result<Option<crate::store::KV>> {
+        super::store::get_next(&self.checkpoint.borrow(), key)
     }
 }
 
@@ -83,11 +96,10 @@ impl SnapshotFilter {
     }
 }
 
-#[derive(Debug)]
 pub struct Snapshots {
     snapshots: BTreeMap<u64, Snapshot>,
     filters: Vec<SnapshotFilter>,
-    path: Path,
+    path: PathBuf,
 }
 
 impl Snapshots {
@@ -99,12 +111,12 @@ impl Snapshots {
         Ok(Self {
             snapshots: BTreeMap::new(),
             filters: vec![],
-            path: path.clone(),
+            path: path.to_path_buf(),
         })
     }
 
     pub fn load(path: &Path) -> Result<Self> {
-        let mut snapshots = Self::new(path);
+        let mut snapshots = Self::new(path)?;
 
         let snapshot_dir = snapshots.path.read_dir()?;
         for entry in snapshot_dir {
@@ -128,45 +140,37 @@ impl Snapshots {
         self
     }
 
-    pub fn should_create_snapshot(&self, height: u64) -> bool {
-        height > 0
-            && self
-                .snapshot_filters
-                .iter()
-                .any(|f| f.should_create(height))
+    pub fn get(&self, height: u64) -> Option<&Snapshot> {
+        self.snapshots.get(&height)
     }
 
-    pub fn should_keep_snapshot(&self, ss_height: u64, cur_height: u64) -> bool {
-        self.snapshot_filters
+    pub fn should_create(&self, height: u64) -> bool {
+        height > 0 && self.filters.iter().any(|f| f.should_create(height))
+    }
+
+    pub fn should_keep(&self, ss_height: u64, cur_height: u64) -> bool {
+        self.filters
             .iter()
             .any(|f| f.should_keep(ss_height, cur_height))
     }
 
-    pub fn maybe_create_snapshot(&mut self, height: u64, merk: &Merk) -> Result<()> {
-        if !self.should_create_snapshot(height) {
-            return Ok(());
-        }
+    pub fn create(&mut self, height: u64, checkpoint: Merk) -> Result<()> {
         if self.snapshots.contains_key(&height) {
             return Ok(());
         }
 
-        let path = self.snapshot_path(height);
-        let checkpoint = merk.checkpoint(path)?;
-
         let snapshot = Snapshot::new(checkpoint)?;
         self.snapshots.insert(height, snapshot);
 
-        self.maybe_prune_snapshots()
+        self.maybe_prune(height)
     }
 
-    pub fn maybe_prune_snapshots(&mut self) -> Result<()> {
-        let cur_height = self.height()?;
-
+    pub fn maybe_prune(&mut self, cur_height: u64) -> Result<()> {
         let remove_heights = self
             .snapshots
             .iter()
             .filter_map(|(ss_height, _)| {
-                if self.should_keep_snapshot(*ss_height, cur_height) {
+                if self.should_keep(*ss_height, cur_height) {
                     None
                 } else {
                     Some(*ss_height)
@@ -177,7 +181,7 @@ impl Snapshots {
         for ss_height in remove_heights {
             self.snapshots.remove(&ss_height);
 
-            let path = self.snapshot_path(ss_height);
+            let path = self.path(ss_height);
             if path.exists() {
                 std::fs::remove_dir_all(path)?;
             }
@@ -186,11 +190,11 @@ impl Snapshots {
         Ok(())
     }
 
-    pub fn snapshot_path(&self, height: u64) -> PathBuf {
+    pub fn path(&self, height: u64) -> PathBuf {
         self.path.join(height.to_string())
     }
 
-    pub fn list_snapshots(&self) -> Result<Vec<Snapshot>> {
+    pub fn abci_snapshots(&self) -> Result<Vec<AbciSnapshot>> {
         self.snapshots
             .iter()
             .map(|(height, snapshot)| {
@@ -204,7 +208,7 @@ impl Snapshots {
             .collect()
     }
 
-    pub fn load_snapshot_chunk(&self, req: RequestLoadSnapshotChunk) -> Result<Vec<u8>> {
+    pub fn abci_load_chunk(&self, req: RequestLoadSnapshotChunk) -> Result<Vec<u8>> {
         match self.snapshots.get(&req.height) {
             Some(snapshot) => snapshot.chunk(req.chunk as usize),
             // ABCI has no way to specify that we don't have the requested

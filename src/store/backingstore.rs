@@ -139,7 +139,7 @@ impl Write for BackingStore {
 
 impl BackingStore {
     #[cfg(feature = "merk-full")]
-    pub fn into_proof_builder(self) -> Result<ProofBuilder> {
+    pub fn into_proof_builder(self) -> Result<ProofBuilder<Shared<MerkStore>>> {
         match self {
             #[cfg(feature = "merk-full")]
             BackingStore::ProofBuilder(builder) => Ok(builder),

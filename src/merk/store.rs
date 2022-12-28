@@ -14,7 +14,7 @@ use std::{
 };
 use tendermint_proto::v0_34::abci::{self, *};
 
-use super::state_sync;
+use super::snapshot;
 type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
 pub const SNAPSHOT_INTERVAL: u64 = 1000;
@@ -26,7 +26,7 @@ pub struct MerkStore {
     merk: Option<Merk>,
     home: PathBuf,
     map: Option<Map>,
-    snapshots: state_sync::Snapshots,
+    snapshots: snapshot::Snapshots,
     restorer: Option<Restorer>,
     target_snapshot: Option<Snapshot>,
 }
@@ -44,14 +44,15 @@ impl MerkStore {
         maybe_remove_restore(&home).expect("Failed to remove incomplete state sync restore");
 
         let snapshot_path = home.join("snapshots");
-        let snapshots = state_sync::Snapshots::load(snapshot_path.as_path())
+        let snapshots = snapshot::Snapshots::load(snapshot_path.as_path())
             .expect("Failed to load snapshots")
             // TODO: make configurable
             .with_filters(vec![
                 #[cfg(feature = "state-sync")]
-                state_sync::SnapshotFilter::specific_height(2, None),
+                snapshot::SnapshotFilter::specific_height(2, None),
                 #[cfg(feature = "state-sync")]
-                state_sync::SnapshotFilter::interval(1000, 4),
+                snapshot::SnapshotFilter::interval(1000, 4),
+                snapshot::SnapshotFilter::interval(1, 20),
             ]);
 
         MerkStore {
@@ -118,6 +119,10 @@ impl MerkStore {
     pub fn merk(&self) -> &Merk {
         self.merk.as_ref().unwrap()
     }
+
+    pub(crate) fn snapshots(&self) -> &snapshot::Snapshots {
+        &self.snapshots
+    }
 }
 
 /// Collects an iterator of key/value entries into a `Vec`.
@@ -143,30 +148,7 @@ impl Read for MerkStore {
     }
 
     fn get_next(&self, start: &[u8]) -> Result<Option<KV>> {
-        // TODO: use an iterator in merk which steps through in-memory nodes
-        // (loading if necessary)
-        let mut iter = self.merk().raw_iter();
-        iter.seek(start);
-
-        if !iter.valid() {
-            iter.status()?;
-            return Ok(None);
-        }
-
-        if iter.key().unwrap() == start {
-            iter.next();
-
-            if !iter.valid() {
-                iter.status()?;
-                return Ok(None);
-            }
-        }
-
-        let key = iter.key().unwrap();
-        let tree_bytes = iter.value().unwrap();
-        let tree = Tree::decode(vec![], tree_bytes);
-        let value = tree.value();
-        Ok(Some((key.to_vec(), value.to_vec())))
+        get_next(self.merk(), start)
     }
 
     fn get_prev(&self, end: Option<&[u8]>) -> Result<Option<KV>> {
@@ -206,27 +188,31 @@ impl Read for MerkStore {
     }
 }
 
-pub struct Iter<'a> {
-    iter: rocksdb::DBRawIterator<'a>,
-}
+pub(crate) fn get_next(merk: &Merk, start: &[u8]) -> Result<Option<KV>> {
+    // TODO: use an iterator in merk which steps through in-memory nodes
+    // (loading if necessary)
+    let mut iter = merk.raw_iter();
+    iter.seek(start);
 
-impl<'a> Iterator for Iter<'a> {
-    type Item = (&'a [u8], &'a [u8]);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if !self.iter.valid() {
-            return None;
-        }
-
-        let entry = unsafe {
-            (
-                transmute(self.iter.key().unwrap()),
-                transmute(self.iter.value().unwrap()),
-            )
-        };
-        self.iter.next();
-        Some(entry)
+    if !iter.valid() {
+        iter.status()?;
+        return Ok(None);
     }
+
+    if iter.key().unwrap() == start {
+        iter.next();
+
+        if !iter.valid() {
+            iter.status()?;
+            return Ok(None);
+        }
+    }
+
+    let key = iter.key().unwrap();
+    let tree_bytes = iter.value().unwrap();
+    let tree = Tree::decode(vec![], tree_bytes);
+    let value = tree.value();
+    Ok(Some((key.to_vec(), value.to_vec())))
 }
 
 impl Write for MerkStore {
@@ -277,7 +263,11 @@ impl ABCIStore for MerkStore {
         self.merk.as_mut().unwrap().flush()?;
 
         #[cfg(feature = "state-sync")]
-        self.snapshots.maybe_create_snapshot(height, self.merk())?;
+        if self.snapshots.should_create(height) {
+            let path = self.snapshots.path(height);
+            let checkpoint = self.merk.as_ref().unwrap().checkpoint(path)?;
+            self.snapshots.create(height, checkpoint)?;
+        }
 
         Ok(())
     }
