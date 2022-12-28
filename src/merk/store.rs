@@ -258,7 +258,8 @@ impl ABCIStore for MerkStore {
         Ok(calc_app_hash(merk_root.as_slice()))
     }
 
-    fn commit(&mut self, height: u64) -> Result<()> {
+    fn commit(&mut self, header: tendermint_proto::v0_34::types::Header) -> Result<()> {
+        let height = header.height as u64;
         let height_bytes = height.to_be_bytes();
 
         let metadata = vec![(b"height".to_vec(), Some(height_bytes.to_vec()))];

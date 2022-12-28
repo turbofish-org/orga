@@ -1,3 +1,5 @@
+use tendermint_proto::v0_34::types::Header;
+
 use crate::call::Call;
 use crate::query::Query;
 use crate::state::State;
@@ -37,6 +39,7 @@ mod server {
         consensus_state: Option<BufStoreMap>,
         height: u64,
         skip_init_chain: bool,
+        header: Option<Header>,
     }
 
     impl<A: Application> ABCIStateMachine<A> {
@@ -54,6 +57,7 @@ mod server {
                 consensus_state: Some(Default::default()),
                 height: 0,
                 skip_init_chain,
+                header: None,
             }
         }
 
@@ -155,6 +159,7 @@ mod server {
                     let app = self.app.take().unwrap();
                     let self_store = self.store.take().unwrap().into_inner();
                     let self_store_shared = Shared::new(self_store);
+                    self.header = req.header.clone();
 
                     let mut store = Some(Shared::new(BufStore::wrap_with_map(
                         self_store_shared.clone(),
@@ -249,7 +254,9 @@ mod server {
                         store.flush()?;
                     }
 
-                    self_store_shared.borrow_mut().commit(self.height)?;
+                    self_store_shared
+                        .borrow_mut()
+                        .commit(self.header.clone().unwrap())?;
 
                     if let Some(stop_height_str) = env::var_os("STOP_HEIGHT") {
                         let stop_height: u64 = stop_height_str
@@ -465,7 +472,7 @@ mod server {
 
         fn root_hash(&self) -> Result<Vec<u8>>;
 
-        fn commit(&mut self, height: u64) -> Result<()>;
+        fn commit(&mut self, header: Header) -> Result<()>;
 
         fn list_snapshots(&self) -> Result<Vec<Snapshot>>;
 
@@ -532,8 +539,8 @@ mod server {
             Ok(vec![])
         }
 
-        fn commit(&mut self, height: u64) -> Result<()> {
-            self.height = height;
+        fn commit(&mut self, header: Header) -> Result<()> {
+            self.height = header.height as u64;
             Ok(())
         }
 
