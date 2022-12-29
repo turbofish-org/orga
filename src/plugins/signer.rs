@@ -67,6 +67,8 @@ pub enum SigType {
     #[skip]
     Sdk(Box<sdk_compat::sdk::Tx>),
     #[skip]
+    Adr36WrappedSdk(Box<sdk_compat::sdk::Tx>),
+    #[skip]
     EthPersonalSign(Box<sdk_compat::sdk::Tx>),
 }
 
@@ -161,6 +163,13 @@ where
                         let msg = Message::from_hashed_data::<sha256::Hash>(bytes.as_slice());
                         (msg, addr)
                     }
+                    SigType::Adr36WrappedSdk(tx) => {
+                        let addr = Address::from_pubkey(*pubkey_bytes);
+                        let inner_bytes = self.sdk_sign_bytes(tx, addr)?;
+                        let outer_bytes = adr36_bytes(inner_bytes.as_slice(), addr)?;
+                        let msg = Message::from_hashed_data::<sha256::Hash>(outer_bytes.as_slice());
+                        (msg, addr)
+                    }
                     SigType::EthPersonalSign(tx) => {
                         let pubkey_bytes = pubkey.serialize_uncompressed();
                         let mut eth_pubkey = [0; 64];
@@ -233,6 +242,7 @@ pub(crate) fn sdk_to_signercall(sdk_tx: &SdkTx) -> Result<SignerCall> {
     let sdk_tx = Box::new(sdk_tx.clone());
     let sigtype = match sig_type {
         None | Some("sdk") => SigType::Sdk(sdk_tx),
+        Some("adr36") => SigType::Adr36WrappedSdk(sdk_tx),
         Some("eth") => SigType::EthPersonalSign(sdk_tx),
         Some(_) => return Err(Error::App("Unknown signature type".to_string())),
     };
@@ -691,6 +701,39 @@ mod tests {
         fn convert(&self, msg: &sdk_compat::sdk::Tx) -> Result<Self::Output> {
             Ok(<Counter as Call>::Call::MethodIncrement(vec![]))
         }
+    }
+
+    #[test]
+    fn adr36_wrapped_sdk() {
+        let mut state = SdkCompatPlugin {
+            symbol: std::marker::PhantomData::<X>,
+            inner: SignerPlugin {
+                inner: Counter {
+                    count: 0,
+                    last_signer: Address::NULL,
+                    nonce: NonceNoop(()),
+                },
+            },
+        };
+
+        Context::add(ChainId("testchain"));
+
+        // sign bytes: {"account_number":"0","chain_id":"testchain","fee":{"amount":[{"amount":"0","denom":"unom"}],"gas":"10000"},"memo":"","msgs":[{"type":"x","value":{}}],"sequence":"1"}
+        // signature and pubkey taken from keplr
+        let call_bytes = br#"{"msg":[{"type":"x","value":{}}],"fee":{"amount":[{"amount":"0","denom":"unom"}],"gas":"10000"},"memo":"","signatures":[{"pub_key":{"type":"tendermint/PubKeySecp256k1","value":"A8zft66O7FIkDwbAf8Ebqaj5rqShkrIdkCw7f3O33hqk"},"signature":"uDffKLG/gWeSIy3RUl7Vv8TwGL9ZjOU1ZcvJgJO8f+EvpYPzLgRU92lGKNgbk5qpESD5MghkI5xmP3+uazRtDg==","type":"adr36"}]}"#;
+        let call = Decode::decode(call_bytes.as_slice()).unwrap();
+
+        SdkCompatPlugin::<_, _>::call(&mut state, call).unwrap();
+
+        assert_eq!(state.count, 1);
+        assert_eq!(
+            state.last_signer,
+            [
+                62, 46, 35, 97, 6, 46, 116, 239, 232, 168, 72, 36, 226, 246, 13, 67, 210, 250, 99,
+                31
+            ]
+            .into()
+        );
     }
 
     #[test]
