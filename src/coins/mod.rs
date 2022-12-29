@@ -39,11 +39,11 @@ pub use adjust::*;
 pub mod balance;
 pub use balance::*;
 
-pub mod ratio;
-pub use ratio::*;
-
 pub mod decimal;
 pub use decimal::Decimal;
+
+pub mod ratio;
+pub use ratio::*;
 
 pub mod math;
 pub use math::*;
@@ -59,10 +59,12 @@ use bech32::{self, encode_to_fmt, FromBase32, ToBase32, Variant};
 use crate::call::Call;
 use crate::client::Client;
 use crate::collections::Next;
+use crate::describe::Describe;
 use crate::macros::State;
 use crate::query::Query;
 use ed::{Decode, Encode};
 use ripemd::{Digest as _, Ripemd160};
+use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
 #[derive(
@@ -81,6 +83,8 @@ use sha2::Sha256;
     Copy,
     Client,
     Call,
+    Default,
+    Describe,
 )]
 pub struct Address {
     bytes: [u8; Address::LENGTH],
@@ -94,11 +98,11 @@ impl Address {
 
     pub fn from_pubkey(bytes: [u8; 33]) -> Self {
         let mut sha = Sha256::new();
-        sha.update(&bytes);
+        sha.update(bytes);
         let hash = sha.finalize();
 
         let mut ripemd = Ripemd160::new();
-        ripemd.update(&hash);
+        ripemd.update(hash);
         let hash = ripemd.finalize();
 
         let mut bytes = [0; Address::LENGTH];
@@ -153,6 +157,48 @@ impl FromStr for Address {
         bytes.copy_from_slice(&data);
 
         Ok(Address { bytes })
+    }
+}
+
+impl Serialize for Address {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.to_string().as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for Address {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct AddressVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for AddressVisitor {
+            type Value = Address;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a bech32-encoded string")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                value.parse().map_err(serde::de::Error::custom)
+            }
+
+            fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                value.parse().map_err(serde::de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(AddressVisitor)
     }
 }
 

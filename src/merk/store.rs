@@ -1,6 +1,3 @@
-#[cfg(test)]
-use mutagen::mutate;
-
 use crate::abci::ABCIStore;
 use crate::error::{Error, Result};
 use crate::store::*;
@@ -74,9 +71,8 @@ impl MerkStore {
     /// [`Merk`](https://docs.rs/merk/latest/merk/struct.Merk.html) inside the
     /// `merk_home` directory. Initializes a new Merk instance if the directory
     /// is empty
-    #[cfg_attr(test, mutate)]
     pub fn new(home: PathBuf) -> Self {
-        let merk = Merk::open(&home.join("db")).unwrap();
+        let merk = Merk::open(home.join("db")).unwrap();
 
         // TODO: return result instead of panicking
         maybe_remove_restore(&home).expect("Failed to remove incomplete state sync restore");

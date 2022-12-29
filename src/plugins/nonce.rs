@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use super::{sdk_compat::sdk::Tx as SdkTx, ConvertSdkTx, Signer};
 use crate::call::Call;
 use crate::client::Client;
@@ -5,6 +7,7 @@ use crate::client::{AsyncCall, AsyncQuery};
 use crate::coins::Address;
 use crate::collections::Map;
 use crate::context::GetContext;
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
@@ -13,7 +16,7 @@ use std::ops::{Deref, DerefMut};
 
 const NONCE_INCREASE_LIMIT: u64 = 1000;
 
-#[derive(State)]
+#[derive(State, Encode, Decode, Default, Describe, Serialize, Deserialize)]
 pub struct NoncePlugin<T: State> {
     map: Map<Address, u64>,
     inner: T,
@@ -240,7 +243,10 @@ impl<T: Client<NonceAdapter<T, U>> + State, U: Clone> DerefMut for NonceClient<T
 impl<
         T: Client<NonceAdapter<T, U>> + State + Query,
         U: Clone
-            + for<'a> AsyncQuery<Query = NonceQuery<T::Query>, Response<'a> = std::rc::Rc<NoncePlugin<T>>>,
+            + for<'a> AsyncQuery<
+                Query = NonceQuery<T::Query>,
+                Response<'a> = std::rc::Rc<NoncePlugin<T>>,
+            >,
     > NonceClient<T, U>
 {
     pub async fn nonce(&self, address: Address) -> Result<u64> {
@@ -319,7 +325,7 @@ fn write_nonce(nonce: u64) -> Result<()> {
 #[cfg(not(target_arch = "wasm32"))]
 fn write_nonce(nonce: u64) -> Result<()> {
     let nonce_path = nonce_path()?;
-    Ok(std::fs::write(&nonce_path, nonce.encode()?)?)
+    Ok(std::fs::write(nonce_path, nonce.encode()?)?)
 }
 
 // TODO: Remove dependency on ABCI for this otherwise-pure plugin.
@@ -374,9 +380,8 @@ mod tests {
     use super::super::Signer;
     use super::*;
     use crate::context::Context;
-    use crate::store::{MapStore, Shared, Store};
 
-    #[derive(State)]
+    #[derive(State, Encode, Decode, Default)]
     struct Counter {
         pub count: u64,
     }
@@ -418,9 +423,7 @@ mod tests {
 
     #[test]
     fn nonced_calls() {
-        let store = Shared::new(MapStore::new());
-        let mut state =
-            NoncePlugin::<Counter>::create(Store::new(store.into()), Default::default()).unwrap();
+        let mut state: NoncePlugin<Counter> = Default::default();
 
         // Fails if the signer context isn't available.
         assert!(state.call(unnonced_call()).is_err());

@@ -6,14 +6,18 @@ use crate::call::Call;
 use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Address, Symbol};
 use crate::context::{Context, GetContext};
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::{Error, Result};
 use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
+use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 
+#[derive(Default, Encode, Decode, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct SignerPlugin<T> {
     pub(crate) inner: T,
 }
@@ -65,8 +69,6 @@ pub enum SigType {
     #[skip]
     EthPersonalSign(Box<sdk_compat::sdk::Tx>),
 }
-
-use serde::Serialize;
 
 #[derive(Serialize)]
 struct Adr36Msg {
@@ -369,28 +371,26 @@ impl<T: Client<SignerClient<T, U>>, U: Clone> Client<U> for SignerPlugin<T> {
     }
 }
 
-impl<T> State for SignerPlugin<T>
-where
-    T: State,
-{
-    type Encoding = (T::Encoding,);
-    fn create(store: Store, data: Self::Encoding) -> Result<Self> {
-        Ok(Self {
-            inner: T::create(store, data.0)?,
-        })
+impl<T: State> State for SignerPlugin<T> {
+    fn attach(&mut self, store: Store) -> Result<()> {
+        self.inner.attach(store)
     }
 
-    fn flush(self) -> Result<Self::Encoding> {
-        Ok((self.inner.flush()?,))
+    fn flush(&mut self) -> Result<()> {
+        self.inner.flush()
     }
 }
 
-impl<T> From<SignerPlugin<T>> for (T::Encoding,)
+impl<T> Describe for SignerPlugin<T>
 where
-    T: State,
+    T: State + Describe + 'static,
 {
-    fn from(provider: SignerPlugin<T>) -> Self {
-        (provider.inner.into(),)
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>()
+            .named_child::<T>("inner", &[], |v| {
+                crate::describe::Builder::access(v, |v: Self| v.inner)
+            })
+            .build()
     }
 }
 
@@ -639,7 +639,7 @@ mod abci {
     }
 }
 
-#[derive(State, Call, Query, Client, Clone)]
+#[derive(State, Call, Query, Client, Clone, Encode, Decode)]
 pub struct Counter {
     pub count: u64,
     pub last_signer: Address,
@@ -665,7 +665,7 @@ impl Deref for Counter {
     }
 }
 
-#[derive(State, Clone, Debug)]
+#[derive(State, Clone, Debug, Encode, Decode)]
 pub struct NonceNoop(());
 impl GetNonce for NonceNoop {
     fn nonce(&self, address: Address) -> Result<u64> {
@@ -673,7 +673,7 @@ impl GetNonce for NonceNoop {
     }
 }
 
-#[derive(State, Clone, Debug)]
+#[derive(State, Clone, Debug, Encode, Decode, Default)]
 pub struct X(());
 impl Symbol for X {
     const INDEX: u8 = 99;

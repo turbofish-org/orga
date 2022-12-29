@@ -1,11 +1,26 @@
 use crate::client::Client;
+use crate::describe::Describe;
 use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
 use ed::{Decode, Encode};
+use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
-#[derive(State, Encode, Decode, Debug, Default, Clone, Copy, Query, Client)]
+#[derive(
+    State,
+    Encode,
+    Decode,
+    Debug,
+    Default,
+    Clone,
+    Copy,
+    Query,
+    Client,
+    Serialize,
+    Deserialize,
+    Describe,
+)]
 pub struct Amount(pub(crate) u64);
 
 impl std::fmt::Display for Amount {
@@ -48,27 +63,5 @@ impl TryFrom<Result<Amount>> for Amount {
 
     fn try_from(value: Result<Amount>) -> Result<Self> {
         value
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::super::{Amount, Ratio};
-    use super::*;
-    use std::convert::TryInto;
-
-    #[test]
-    fn ops() -> Result<()> {
-        let v: Amount = 2.try_into().unwrap();
-        let w: Amount = 3.into();
-        let b = v * w;
-
-        let x = Ratio::new(3, 1)?;
-        let y = Ratio::new(4, 1)?;
-        let z = Ratio::new(2, 1)?;
-
-        let a = (b * x * y * z)?;
-        assert_eq!(*a.0.numer(), 144);
-        Ok(())
     }
 }

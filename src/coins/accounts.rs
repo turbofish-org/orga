@@ -4,15 +4,15 @@ use crate::coins::{Address, Amount, Coin, Give, Symbol, Take};
 use crate::collections::Map;
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
-#[cfg(feature = "abci")]
-use crate::migrate::Migrate;
 use crate::plugins::Paid;
 use crate::plugins::Signer;
 use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
+use serde::{Deserialize, Serialize};
+use crate::describe::Describe;
 
-#[derive(State, Encode, Decode, Call, Query, Client)]
+#[derive(State, Encode, Decode, Call, Query, Client, Default, Serialize, Deserialize, Describe)]
 pub struct Accounts<S: Symbol> {
     transfers_allowed: bool,
     transfer_exceptions: Map<Address, ()>,
@@ -126,21 +126,5 @@ impl<S: Symbol> Accounts<S> {
     pub fn withdraw(&mut self, address: Address, amount: Amount) -> Result<Coin<S>> {
         let mut account = self.accounts.entry(address)?.or_insert_default()?;
         account.take(amount)
-    }
-}
-
-#[cfg(feature = "abci")]
-impl<S: Symbol, T: v3::coins::Symbol> Migrate<v3::coins::Accounts<T>> for Accounts<S> {
-    fn migrate(&mut self, legacy: v3::coins::Accounts<T>) -> Result<()> {
-        let accounts = legacy.accounts();
-        for entry in accounts.iter().unwrap() {
-            let (addr, coins) = entry.unwrap();
-            let amt: u64 = coins.amount.into();
-            if amt > 0 {
-                self.deposit(addr.bytes().into(), amt.into())?;
-            }
-        }
-
-        Ok(())
     }
 }

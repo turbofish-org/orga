@@ -8,6 +8,7 @@ use crate::call::Call;
 use crate::client::Client;
 use crate::collections::Map;
 use crate::collections::Next;
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 #[cfg(feature = "abci")]
 use crate::plugins::BeginBlockCtx;
@@ -29,6 +30,8 @@ use ibc::timestamp::Timestamp;
 use ibc::Height;
 use ibc_proto::ibc::core::client::v1::ConsensusStateWithHeight;
 use ibc_proto::ibc::core::client::v1::IdentifiedClientState;
+use serde::Deserialize;
+use serde::Serialize;
 
 impl From<crate::Error> for Error {
     fn from(_err: crate::Error) -> Error {
@@ -105,7 +108,7 @@ impl Lunchbox {
     }
 }
 
-#[derive(State)]
+#[derive(State, Encode, Decode, Default, Describe, Serialize, Deserialize)]
 pub struct ConsensusStateMap {
     states: Map<Adapter<Height>, ProtobufAdapter<AnyConsensusState>>,
     prev_height: Map<Adapter<Height>, Adapter<Height>>,
@@ -165,7 +168,7 @@ impl ConsensusStateMap {
     }
 }
 
-#[derive(State, Call, Query, Client)]
+#[derive(State, Call, Query, Client, Encode, Decode, Default, Serialize, Deserialize, Describe)]
 pub struct ClientStore {
     host_consensus_state: Map<u64, ProtobufAdapter<ConsensusState>>,
     height: u64,

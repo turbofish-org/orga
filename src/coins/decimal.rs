@@ -1,17 +1,25 @@
 use super::Amount;
 use crate::call::Call;
 use crate::client::Client;
+use crate::describe::{Builder, Describe};
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::{Error, Result};
 use rust_decimal::prelude::{Decimal as NumDecimal, *};
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::convert::TryFrom;
 
-#[derive(Clone, Copy, Debug, Query, Client, Call)]
+#[derive(Clone, Copy, Debug, Query, Client, Call, Serialize, Deserialize)]
 pub struct Decimal(pub(crate) NumDecimal);
+
+impl Describe for Decimal {
+    fn describe() -> crate::describe::Descriptor {
+        Builder::new::<Self>().build()
+    }
+}
 
 impl std::fmt::Display for Decimal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -88,29 +96,13 @@ impl Decimal {
     }
 }
 
-#[derive(Encode, Decode)]
-pub struct DecimalEncoding(pub(crate) [u8; 16]);
-
-impl Default for DecimalEncoding {
-    fn default() -> Self {
-        Decimal(0.into()).into()
-    }
-}
-
 impl State for Decimal {
-    type Encoding = DecimalEncoding;
-    fn create(_store: Store, data: Self::Encoding) -> Result<Self> {
-        Ok(Self(NumDecimal::deserialize(data.0)))
+    fn attach(&mut self, _store: Store) -> Result<()> {
+        Ok(())
     }
 
-    fn flush(self) -> Result<Self::Encoding> {
-        Ok(self.into())
-    }
-}
-
-impl From<Decimal> for DecimalEncoding {
-    fn from(decimal: Decimal) -> Self {
-        DecimalEncoding(decimal.0.serialize())
+    fn flush(&mut self) -> Result<()> {
+        Ok(())
     }
 }
 

@@ -1,9 +1,13 @@
+use serde::{Deserialize, Serialize};
+
 use super::sdk_compat::{sdk::Tx as SdkTx, ConvertSdkTx};
 use super::Paid;
 use crate::call::Call;
 use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Coin, Symbol};
 use crate::context::GetContext;
+use crate::describe::Describe;
+use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
@@ -13,9 +17,12 @@ use std::ops::{Deref, DerefMut};
 
 pub const MIN_FEE: u64 = 10_000;
 
+#[derive(Encode, Decode, Default, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct FeePlugin<S, T> {
-    inner: T,
+    #[serde(skip)]
     _symbol: PhantomData<S>,
+    inner: T,
 }
 
 impl<S, T> State for FeePlugin<S, T>
@@ -23,25 +30,26 @@ where
     S: Symbol,
     T: State,
 {
-    type Encoding = (T::Encoding,);
-    fn create(store: Store, data: Self::Encoding) -> Result<Self> {
-        Ok(Self {
-            inner: T::create(store, data.0)?,
-            _symbol: PhantomData,
-        })
+    fn attach(&mut self, store: Store) -> Result<()> {
+        self.inner.attach(store)
     }
 
-    fn flush(self) -> Result<Self::Encoding> {
-        Ok((self.inner.flush()?,))
+    fn flush(&mut self) -> Result<()> {
+        self.inner.flush()
     }
 }
 
-impl<S, T> From<FeePlugin<S, T>> for (T::Encoding,)
+impl<S, T> Describe for FeePlugin<S, T>
 where
-    T: State,
+    S: Symbol,
+    T: State + Describe + 'static,
 {
-    fn from(provider: FeePlugin<S, T>) -> Self {
-        (provider.inner.into(),)
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>()
+            .named_child::<T>("inner", &[], |v| {
+                crate::describe::Builder::access(v, |v: Self| v.inner)
+            })
+            .build()
     }
 }
 

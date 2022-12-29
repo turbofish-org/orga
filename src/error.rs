@@ -53,6 +53,8 @@ pub enum Error {
     RocksDB(#[from] merk::rocksdb::Error),
     #[error(transparent)]
     Secp256k1(#[from] secp256k1::Error),
+    #[error(transparent)]
+    SerdeJson(#[from] serde_json::Error),
     #[error("Signer Error: {0}")]
     Signer(String),
     #[error("Store Error: {0}")]

@@ -21,7 +21,7 @@ is_executable = { version = "1.0.1", optional = true }
 reqwest = {version = "0.11.4", features = ["blocking"]}
 flate2 = "1.0.20"
 tar = "0.4.33"
-ed = "0.3.0" 
+ed = { git = "https://github.com/nomic-io/ed", rev = "9c0e206ffdb59dacb90f083e004e8080713e6ad8" }
 toml_edit = "0.2.0"
 prost = {version = "=0.10", optional = true}
 home = { version = "0.5.3", optional = true }
@@ -34,11 +34,11 @@ num-rational = "0.4.0"
 num-traits = "0.2.15"
 rust_decimal = "1.18"
 ripemd = "0.1.0"
-web-sys = { version = "0.3.55", features = ["Window", "Storage"] }
+web-sys = { version = "0.3.55", features = ["Window", "Storage", "console"] }
 rust_decimal_macros = "1.18"
 js-sys = "0.3.55"
 wasm-bindgen-futures = "0.4.28"
-wasm-bindgen = "0.2.78"
+wasm-bindgen = "0.2.83"
 hex = "0.4.3"
 base64 = "0.13.0"
 secp256k1 = { version = "0.22.1", features = ["bitcoin_hashes"] }
@@ -53,19 +53,18 @@ tokio = { version = "1.18.1", optional = true }
 tonic = { version = "0.7", optional = true }
 cosmrs = "0.7.0"
 derive_more = "0.99.17"
-v3 = { git = "https://github.com/nomic-io/orga", branch="v3-legacy", features = ["merk-full", "abci"], package = "orga", optional = true }
 sha3 = "0.10.6"
+serde-wasm-bindgen = "0.4.5"
 
 [dev-dependencies]
 tempdir = "0.3.7"
-mutagen = {git = "https://github.com/llogiq/mutagen"}
 serial_test = "0.5.1"
 
 [package.metadata.docs.rs]
 features = ["abci", "merk/full"]
 
 [features]
-abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto", "prost", "is_executable", "home", "secp256k1/rand-std", "tokio", "tonic", "ibc-proto/server", "v3"]
+abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto", "prost", "is_executable", "home", "secp256k1/rand-std", "tokio", "tonic", "ibc-proto/server"]
 merk-verify = ["merk/verify"]
 merk-full = ["merk/full", "ics23"]
 state-sync = []
@@ -78,6 +77,11 @@ lto = true
 name = "ibc"
 required-features = ["abci", "merk-full", "feat-ibc"]
 
+[[example]]
+name = "app"
+crate-type = ["cdylib", "rlib"]
+path = "examples/app/lib.rs"
+required-features = ["feat-ibc", "merk-verify"]
 
 [patch.crates-io]
 ibc = { git = "https://github.com/informalsystems/ibc-rs.git", rev = "e8c98d4" }

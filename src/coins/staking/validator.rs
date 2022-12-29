@@ -3,18 +3,20 @@ use std::convert::TryInto;
 use crate::coins::pool::{Child as PoolChild, ChildMut as PoolChildMut};
 use crate::coins::{Address, Amount, Balance, Coin, Decimal, Give, Pool, Symbol};
 use crate::context::GetContext;
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::plugins::Time;
 use crate::state::State;
 use crate::store::Store;
 use crate::{Error, Result};
 use ed::Terminated;
+use serde::{Deserialize, Serialize};
 
 use super::{Commission, Delegator, Redelegation};
 
 type Delegators<S> = Pool<Address, Delegator<S>, S>;
 
-#[derive(State)]
+#[derive(State, Encode, Decode, Default, Serialize, Deserialize, Describe)]
 pub struct Validator<S: Symbol> {
     pub(super) jailed_until: Option<i64>,
     pub(super) tombstoned: bool,
@@ -45,7 +47,7 @@ pub struct ValidatorQueryInfo {
     pub amount_staked: Amount,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, Describe)]
 pub struct ValidatorInfo {
     pub bytes: Vec<u8>,
 }
@@ -88,14 +90,12 @@ impl Decode for ValidatorInfo {
 }
 
 impl State for ValidatorInfo {
-    type Encoding = Self;
-
-    fn create(_store: Store, data: Self::Encoding) -> Result<Self> {
-        Ok(data)
+    fn attach(&mut self, _store: Store) -> Result<()> {
+        Ok(())
     }
 
-    fn flush(self) -> Result<Self::Encoding> {
-        Ok(self)
+    fn flush(&mut self) -> Result<()> {
+        Ok(())
     }
 }
 impl From<ValidatorInfo> for Vec<u8> {
@@ -116,7 +116,7 @@ pub(super) struct SlashableRedelegation {
     pub outbound_redelegations: Vec<Redelegation>,
 }
 
-impl<S: Symbol> Validator<S> {
+impl<S: Symbol + Default> Validator<S> {
     pub(super) fn get_mut(
         &mut self,
         address: Address,

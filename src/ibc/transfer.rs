@@ -4,6 +4,7 @@ use crate::call::Call;
 use crate::client::Client;
 use crate::coins::{Address, Amount};
 use crate::collections::{Deque, Map};
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, LengthVec};
 use crate::query::Query;
 use crate::state::State;
@@ -34,10 +35,11 @@ use ibc::timestamp::Timestamp;
 use ibc::Height;
 use ibc_proto::ibc::core::channel::v1::PacketState;
 use ripemd::Digest;
+use serde::{Deserialize, Serialize};
 
 use super::{Adapter, Lunchbox};
 
-#[derive(State, Call, Query, Client)]
+#[derive(State, Call, Query, Client, Encode, Decode, Default, Serialize, Deserialize, Describe)]
 pub struct TransferModule {
     lunchbox: Lunchbox,
     commitments: Map<Adapter<(PortId, ChannelId)>, Deque<Adapter<PacketState>>>,
@@ -555,7 +557,7 @@ impl TransferModule {
     }
 }
 
-#[derive(State, Encode, Decode, Clone, Debug)]
+#[derive(State, Encode, Decode, Clone, Debug, Serialize, Deserialize, Describe)]
 pub struct Dynom(pub LengthVec<u8, u8>);
 
 impl FromStr for Dynom {
@@ -567,11 +569,11 @@ impl FromStr for Dynom {
             return Err(crate::Error::Ibc("Denom name is too long".into()));
         }
 
-        Ok(Self(bytes.into()))
+        Ok(Self(bytes.try_into()?))
     }
 }
 
-#[derive(State, Call, Query, Client)]
+#[derive(State, Call, Query, Client, Encode, Decode, Default, Serialize, Deserialize, Describe)]
 pub struct Bank {
     #[call]
     pub balances: Map<Dynom, Map<Address, Amount>>,

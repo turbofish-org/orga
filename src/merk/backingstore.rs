@@ -1,9 +1,6 @@
-#[cfg(test)]
-use mutagen::mutate;
-
 #[cfg(feature = "merk-full")]
 use super::{MerkStore, ProofBuilder};
-use crate::store::{BufStore, MapStore, Read, Shared, Write, KV};
+use crate::store::{BufStore, MapStore, NullStore, Read, Shared, Write, KV};
 use crate::{Error, Result};
 use merk::proofs::query::Map as ProofMap;
 use std::ops::Bound;
@@ -21,6 +18,13 @@ pub enum BackingStore {
     Merk(Shared<MerkStore>),
     MapStore(Shared<MapStore>),
     ProofMap(Shared<ABCIPrefixedProofStore>),
+    Null(NullStore),
+}
+
+impl Default for BackingStore {
+    fn default() -> Self {
+        BackingStore::Null(NullStore)
+    }
 }
 
 impl Read for BackingStore {
@@ -34,6 +38,7 @@ impl Read for BackingStore {
             BackingStore::Merk(ref store) => store.get(key),
             BackingStore::MapStore(ref store) => store.get(key),
             BackingStore::ProofMap(ref map) => map.get(key),
+            BackingStore::Null(ref null) => null.get(key),
         }
     }
 
@@ -47,6 +52,7 @@ impl Read for BackingStore {
             BackingStore::Merk(ref store) => store.get_next(key),
             BackingStore::MapStore(ref store) => store.get_next(key),
             BackingStore::ProofMap(ref map) => map.get_next(key),
+            BackingStore::Null(ref null) => null.get_next(key),
         }
     }
 }
@@ -66,6 +72,7 @@ impl Write for BackingStore {
             BackingStore::ProofMap(_) => {
                 panic!("put() is not implemented for ProofMap")
             }
+            BackingStore::Null(ref mut store) => store.put(key, value),
         }
     }
     fn delete(&mut self, key: &[u8]) -> Result<()> {
@@ -83,13 +90,13 @@ impl Write for BackingStore {
             BackingStore::ProofMap(_) => {
                 panic!("delete() is not implemented for ProofMap")
             }
+            BackingStore::Null(ref mut store) => store.delete(key),
         }
     }
 }
 
 impl BackingStore {
     #[cfg(feature = "merk-full")]
-    #[cfg_attr(test, mutate)]
     pub fn into_proof_builder(self) -> Result<ProofBuilder> {
         match self {
             #[cfg(feature = "merk-full")]
@@ -101,7 +108,6 @@ impl BackingStore {
     }
 
     #[cfg(feature = "merk-full")]
-    #[cfg_attr(test, mutate)]
     pub fn into_wrapped_merk(self) -> Result<WrappedMerkStore> {
         match self {
             #[cfg(feature = "merk-full")]
@@ -112,7 +118,6 @@ impl BackingStore {
         }
     }
 
-    #[cfg_attr(test, mutate)]
     pub fn into_map_store(self) -> Result<Shared<MapStore>> {
         match self {
             BackingStore::MapStore(store) => Ok(store),
@@ -122,7 +127,6 @@ impl BackingStore {
         }
     }
 
-    #[cfg_attr(test, mutate)]
     pub fn into_abci_prefixed_proof_map(self) -> Result<Shared<ABCIPrefixedProofStore>> {
         match self {
             BackingStore::ProofMap(store) => Ok(store),
@@ -142,7 +146,7 @@ impl BackingStore {
 
         let store = wrapped_store.borrow();
 
-        f(&*store)
+        f(&store)
     }
 }
 
@@ -191,7 +195,6 @@ impl Read for ProofStore {
 pub struct ABCIPrefixedProofStore(pub ProofStore);
 
 impl ABCIPrefixedProofStore {
-    #[cfg_attr(test, mutate)]
     pub fn new(map: ProofMap) -> Self {
         ABCIPrefixedProofStore(ProofStore(map))
     }

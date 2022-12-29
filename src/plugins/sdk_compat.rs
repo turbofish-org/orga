@@ -1,6 +1,7 @@
 use crate::call::Call as CallTrait;
 use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Address, Symbol};
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
@@ -11,8 +12,10 @@ use std::ops::{Deref, DerefMut};
 pub const MAX_CALL_SIZE: usize = 65_535;
 pub const NATIVE_CALL_FLAG: u8 = 0xff;
 
-#[derive(State, Clone)]
+#[derive(State, Clone, Encode, Decode, Default, Describe, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct SdkCompatPlugin<S, T: State> {
+    #[serde(skip)]
     pub(crate) symbol: PhantomData<S>,
     pub(crate) inner: T,
 }
@@ -28,12 +31,6 @@ impl<S, T: State> Deref for SdkCompatPlugin<S, T> {
 impl<S, T: State> DerefMut for SdkCompatPlugin<S, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
-    }
-}
-
-impl<S, T: State> From<SdkCompatPlugin<S, T>> for (T::Encoding,) {
-    fn from(plugin: SdkCompatPlugin<S, T>) -> Self {
-        (plugin.inner.into(),)
     }
 }
 
@@ -452,6 +449,7 @@ impl<T: Client<SdkCompatAdapter<T, U, S>>, U: Clone, S> DerefMut for SdkCompatCl
     }
 }
 
+use serde::{Deserialize, Serialize};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsValue;
 

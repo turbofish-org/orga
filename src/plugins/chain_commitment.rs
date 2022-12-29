@@ -1,7 +1,10 @@
+use serde::{Deserialize, Serialize};
+
 use super::{sdk_compat::sdk::Tx as SdkTx, ConvertSdkTx};
 use crate::call::Call as CallTrait;
 use crate::client::{AsyncCall, AsyncQuery, Client as ClientTrait};
 use crate::context::Context;
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
@@ -10,6 +13,8 @@ use crate::{Error, Result};
 use std::marker::PhantomData;
 use std::ops::Deref;
 
+#[derive(Encode, Decode, Default, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct ChainCommitmentPlugin<T, const ID: &'static str> {
     inner: T,
 }
@@ -163,27 +168,27 @@ impl<T, const ID: &'static str> State for ChainCommitmentPlugin<T, ID>
 where
     T: State,
 {
-    type Encoding = (T::Encoding,);
-
-    fn create(store: Store, data: Self::Encoding) -> Result<Self> {
+    fn attach(&mut self, store: Store) -> Result<()> {
         Context::add(ChainId(ID));
 
-        Ok(Self {
-            inner: T::create(store, data.0)?,
-        })
+        self.inner.attach(store)
     }
 
-    fn flush(self) -> Result<Self::Encoding> {
-        Ok((self.inner.flush()?,))
+    fn flush(&mut self) -> Result<()> {
+        self.inner.flush()
     }
 }
 
-impl<T, const ID: &'static str> From<ChainCommitmentPlugin<T, ID>> for (T::Encoding,)
+impl<T, const ID: &'static str> Describe for ChainCommitmentPlugin<T, ID>
 where
-    T: State,
+    T: State + Describe + 'static,
 {
-    fn from(provider: ChainCommitmentPlugin<T, ID>) -> Self {
-        (provider.inner.into(),)
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>()
+            .named_child::<T>("inner", &[], |v| {
+                crate::describe::Builder::access(v, |v: Self| v.inner)
+            })
+            .build()
     }
 }
 

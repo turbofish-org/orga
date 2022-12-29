@@ -1,7 +1,9 @@
-#[cfg(test)]
-use mutagen::mutate;
+use serde::{Deserialize, Serialize};
+use std::ops::RangeBounds;
 
-use super::{Read, Shared, Write, KV};
+use super::{Iter, Read, Shared, Write, KV};
+use crate::describe::Describe;
+use crate::encoding::{Decode, Encode, Terminated};
 use crate::state::State;
 use crate::{Error, Result};
 
@@ -23,10 +25,40 @@ pub type DefaultBackingStore = Shared<super::MapStore>;
 /// This type is how high-level state types interact with the store, since they
 /// will often need to create substores (through the `store.sub(prefix)`
 /// method).
+#[derive(Default, Serialize, Deserialize)]
 pub struct Store<S = DefaultBackingStore> {
+    #[serde(skip)]
     prefix: Vec<u8>,
+    #[serde(skip)]
     store: Shared<S>,
 }
+
+impl<S> Describe for Store<S>
+where
+    Self: State + 'static,
+{
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>().build()
+    }
+}
+
+impl<S> Encode for Store<S> {
+    fn encode_into<W: std::io::Write>(&self, _dest: &mut W) -> ed::Result<()> {
+        Ok(())
+    }
+
+    fn encoding_length(&self) -> ed::Result<usize> {
+        Ok(0)
+    }
+}
+
+impl<S: Default> Decode for Store<S> {
+    fn decode<R: std::io::Read>(_input: R) -> ed::Result<Self> {
+        Ok(Self::default())
+    }
+}
+
+impl<S> Terminated for Store<S> {}
 
 impl<S> Clone for Store<S> {
     fn clone(&self) -> Self {
@@ -37,26 +69,10 @@ impl<S> Clone for Store<S> {
     }
 }
 
-impl State for Store {
-    type Encoding = ();
-    fn create(store: Store, _: Self::Encoding) -> Result<Self> {
-        Ok(store)
-    }
-
-    fn flush(self) -> Result<Self::Encoding> {
-        Ok(())
-    }
-}
-
-impl<S> From<Store<S>> for () {
-    fn from(_store: Store<S>) -> Self {}
-}
-
 impl<S> Store<S> {
     /// Creates a new `Store` with no prefix, with `backing` as its backing
     /// store.
     #[inline]
-    #[cfg_attr(test, mutate)]
     pub fn new(backing: S) -> Self {
         Store {
             prefix: vec![],
@@ -67,7 +83,6 @@ impl<S> Store<S> {
     /// Creates a substore of this store by concatenating `prefix` to this
     /// store's own prefix, and pointing to the same backing store.
     #[inline]
-    #[cfg_attr(test, mutate)]
     #[must_use]
     pub fn sub(&self, prefix: &[u8]) -> Self {
         Store {
@@ -91,6 +106,31 @@ impl<S> Store<S> {
 
     pub fn backing_store(&self) -> Shared<S> {
         self.store.clone()
+    }
+
+    pub fn range<B: RangeBounds<Vec<u8>>>(&self, bounds: B) -> Iter<Self>
+    where
+        Self: Read,
+    {
+        Read::into_iter(self.clone(), bounds)
+    }
+}
+
+impl<S: Default> State<S> for Store<S> {
+    fn attach(&mut self, store: Store<S>) -> Result<()>
+    where
+        S: Read,
+    {
+        self.prefix = store.prefix;
+        self.store = store.store;
+        Ok(())
+    }
+
+    fn flush(&mut self) -> Result<()>
+    where
+        S: Write,
+    {
+        Ok(())
     }
 }
 

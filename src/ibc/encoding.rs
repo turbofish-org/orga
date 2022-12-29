@@ -1,6 +1,7 @@
 use crate::call::Call;
 use crate::client::Client;
 use crate::collections::Next;
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, Terminated};
 use crate::query::Query;
 use crate::state::State;
@@ -17,7 +18,7 @@ use prost::Message;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
 
-#[derive(Clone, Call, Client, Query, Debug)]
+#[derive(Clone, Call, Client, Query, Debug, Serialize, Deserialize, Default)]
 pub struct Adapter<T> {
     pub(crate) inner: T,
 }
@@ -64,6 +65,16 @@ where
 }
 
 impl<T> Terminated for Adapter<T> {}
+
+impl<T> Describe for Adapter<T>
+where
+    for<'de> T: Deserialize<'de>,
+    T: Serialize + std::fmt::Debug + 'static,
+{
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>().build()
+    }
+}
 
 macro_rules! from_impl {
     ($type:ty) => {
@@ -116,18 +127,16 @@ where
     T: Serialize + for<'de> Deserialize<'de>,
     T: std::fmt::Debug,
 {
-    type Encoding = Self;
-
-    fn create(_: Store, data: Self::Encoding) -> crate::Result<Self> {
-        Ok(data)
+    fn attach(&mut self, _: Store) -> crate::Result<()> {
+        Ok(())
     }
 
-    fn flush(self) -> crate::Result<Self::Encoding> {
-        Ok(self)
+    fn flush(&mut self) -> crate::Result<()> {
+        Ok(())
     }
 }
 
-#[derive(Call, Query, Client)]
+#[derive(Call, Query, Client, Default, Serialize, Deserialize)]
 pub struct ProtobufAdapter<T> {
     inner: T,
 }
@@ -167,6 +176,17 @@ where
         let inner: T = T::decode(bytes.as_slice()).map_err(|_e| ed::Error::UnexpectedByte(0))?;
 
         Ok(Self { inner })
+    }
+}
+
+impl<T: 'static> Describe for ProtobufAdapter<T>
+where
+    T: IbcProto,
+    T: Protobuf<<T as IbcProto>::Proto>,
+    <T as std::convert::TryFrom<<T as IbcProto>::Proto>>::Error: std::fmt::Display,
+{
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>().build()
     }
 }
 
@@ -228,14 +248,12 @@ where
     T: Protobuf<<T as IbcProto>::Proto>,
     <T as std::convert::TryFrom<<T as IbcProto>::Proto>>::Error: std::fmt::Display,
 {
-    type Encoding = Self;
-
-    fn create(_: Store, data: Self::Encoding) -> crate::Result<Self> {
-        Ok(data)
+    fn attach(&mut self, _: Store) -> crate::Result<()> {
+        Ok(())
     }
 
-    fn flush(self) -> crate::Result<Self::Encoding> {
-        Ok(self)
+    fn flush(&mut self) -> crate::Result<()> {
+        Ok(())
     }
 }
 

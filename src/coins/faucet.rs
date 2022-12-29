@@ -1,14 +1,15 @@
 use super::{Amount, Coin, Decimal, Symbol};
 use crate::context::GetContext;
-#[cfg(feature = "abci")]
-use crate::migrate::Migrate;
+use crate::describe::Describe;
+use crate::encoding::{Decode, Encode};
 use crate::plugins::Time;
 use crate::state::State;
 use crate::{Error, Result};
+use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::time::Duration;
 
-#[derive(State)]
+#[derive(State, Encode, Decode, Default, Serialize, Deserialize, Describe)]
 pub struct Faucet<S: Symbol> {
     _symbol: PhantomData<S>,
     configured: bool,
@@ -80,7 +81,7 @@ impl<S: Symbol> Faucet<S> {
                 let seconds_into_period =
                     seconds_since_start - (i as i64) * self.seconds_per_period as i64;
                 let period_fraction = (Amount::new(seconds_into_period as u64)
-                    / Amount::new(self.seconds_per_period as u64))?;
+                    / Amount::new(self.seconds_per_period))?;
                 total = (total + period_fraction * total_to_mint_this_period)?;
                 break;
             }
@@ -105,57 +106,34 @@ pub struct FaucetOptions {
     pub start_seconds: i64,
 }
 
-#[cfg(feature = "abci")]
-impl<S: Symbol, T: v3::coins::Symbol> Migrate<v3::coins::Faucet<T>> for Faucet<S> {
-    fn migrate(&mut self, legacy: v3::coins::Faucet<T>) -> Result<()> {
-        use crate::encoding::Decode;
-        use v3::encoding::Encode;
-        let data: <v3::coins::Faucet<T> as v3::state::State>::Encoding = legacy.into();
-
-        self.configured = data.1;
-        self.amount_minted = data.2 .0.into();
-        self.start_seconds = data.3;
-        self.multiplier_total = Decode::decode(data.4.encode().unwrap().as_slice())?;
-        self.total_to_mint = data.5 .0.into();
-        self.period_decay = Decode::decode(data.6.encode().unwrap().as_slice())?;
-        self.seconds_per_period = data.7;
-        self.num_periods = data.8;
-
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::context::Context;
     use crate::encoding::{Decode, Encode};
-    use crate::store::{MapStore, Shared, Store};
+    use crate::store::Store;
     use serial_test::serial;
 
-    #[derive(Encode, Decode, Debug, Clone)]
+    #[derive(Encode, Decode, Debug, Clone, Default, Serialize, Deserialize)]
     struct Simp;
     impl Symbol for Simp {
         const INDEX: u8 = 0;
     }
 
     impl State for Simp {
-        type Encoding = Self;
-
-        fn create(_: Store, data: Self::Encoding) -> Result<Self> {
-            Ok(data)
+        fn attach(&mut self, _store: Store) -> Result<()> {
+            Ok(())
         }
 
-        fn flush(self) -> Result<Self::Encoding> {
-            Ok(self)
+        fn flush(&mut self) -> Result<()> {
+            Ok(())
         }
     }
 
     #[test]
     #[serial]
     fn halvenings() -> Result<()> {
-        let store = Store::new(Shared::new(MapStore::new()).into());
-        let mut faucet = Faucet::<Simp>::create(store, Default::default())?;
+        let mut faucet: Faucet<Simp> = Faucet::default();
 
         let _ = faucet
             .mint()
@@ -198,8 +176,7 @@ mod tests {
     #[test]
     #[serial]
     fn thirdenings() -> Result<()> {
-        let store = Store::new(Shared::new(MapStore::new()).into());
-        let mut faucet = Faucet::<Simp>::create(store, Default::default())?;
+        let mut faucet: Faucet<Simp> = Faucet::default();
 
         let _ = faucet
             .mint()

@@ -43,7 +43,10 @@ pub trait Read {
 
     /// Returns an iterator over the key/value entries in the given range.
     #[inline]
-    fn range<B: RangeBounds<Vec<u8>>>(&self, bounds: B) -> Iter<Self> {
+    fn into_iter<B: RangeBounds<Vec<u8>>>(self, bounds: B) -> Iter<Self>
+    where
+        Self: Sized,
+    {
         Iter::new(
             self,
             (

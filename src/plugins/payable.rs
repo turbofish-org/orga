@@ -1,8 +1,11 @@
+use serde::{Deserialize, Serialize};
+
 use super::sdk_compat::{sdk::Tx as SdkTx, ConvertSdkTx};
 use crate::call::Call;
 use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Amount, Coin, Symbol};
 use crate::context::{Context, GetContext};
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::query::Query;
 use crate::state::State;
@@ -11,7 +14,8 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::ops::{Deref, DerefMut};
 
-#[derive(State, Encode, Decode)]
+#[derive(State, Encode, Decode, Default, Describe, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct PayablePlugin<T: State> {
     inner: T,
 }

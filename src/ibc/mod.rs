@@ -33,6 +33,7 @@ pub use ibc_proto as proto;
 use ibc_proto::cosmos::base::v1beta1::Coin;
 use ibc_proto::ibc::core::channel::v1::PacketState;
 use ics23::LeafOp;
+use serde::{Deserialize, Serialize};
 use tendermint_proto::abci::{EventAttribute, RequestQuery, ResponseQuery};
 use tendermint_proto::Protobuf;
 
@@ -58,8 +59,9 @@ use self::connection::ConnectionStore;
 use self::port::PortStore;
 pub use self::routing::{IbcMessage, IbcTx};
 use self::transfer::{Dynom, TransferModule};
+use crate::describe::Describe;
 
-#[derive(State, Call, Client, Query)]
+#[derive(State, Call, Client, Query, Encode, Decode, Default, Serialize, Deserialize, Describe)]
 pub struct Ibc {
     pub clients: ClientStore,
     pub connections: ConnectionStore,
@@ -71,16 +73,27 @@ pub struct Ibc {
     pub(super) lunchbox: Lunchbox,
 }
 
+#[derive(Encode, Decode, Default, Serialize, Deserialize)]
 pub struct Lunchbox(pub(super) Store);
 
 impl State for Lunchbox {
-    type Encoding = ();
-    fn create(store: Store, _data: Self::Encoding) -> Result<Self> {
-        Ok(unsafe { Self(store.with_prefix(vec![])) })
+    fn attach(&mut self, store: Store) -> Result<()> {
+        self.0 = unsafe { store.with_prefix(vec![]) };
+        Ok(())
     }
 
-    fn flush(self) -> Result<Self::Encoding> {
+    fn flush(&mut self) -> Result<()> {
         Ok(())
+    }
+}
+
+impl Describe for Lunchbox {
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>()
+            .named_child_keyop::<Store>("0", crate::describe::KeyOp::Absolute(vec![]), |v| {
+                crate::describe::Builder::access(v, |v: Self| v.0)
+            })
+            .build()
     }
 }
 

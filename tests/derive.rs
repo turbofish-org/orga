@@ -24,13 +24,13 @@ fn encode_decode() {
     assert_eq!(decoded_value, value);
 }
 
-#[derive(State)]
+#[derive(State, Encode, Decode, Default)]
 struct MyStruct {
     a: u32,
     c: MyStruct2,
 }
 
-#[derive(State)]
+#[derive(State, Encode, Decode, Default)]
 struct MyStruct2(u32, u32);
 
 // #[derive(State)]
@@ -45,7 +45,8 @@ fn struct_state() {
     let mapstore = Shared::new(MapStore::new());
     let store = Store::new(mapstore.into());
 
-    let mut state = MyStruct::create(store, Default::default()).unwrap();
+    let mut state = MyStruct::default();
+    state.attach(store).unwrap();
 
     assert_eq!(state.a, 0);
     assert_eq!(state.c.0, 0);
@@ -54,12 +55,12 @@ fn struct_state() {
     state.c.0 = 5;
     state.c.1 = 6;
 
-    let data = state.flush().unwrap();
-    let bytes = data.encode().unwrap();
+    state.flush().unwrap();
+    let bytes = state.encode().unwrap();
     assert_eq!(bytes, vec![0, 0, 0, 123, 0, 0, 0, 5, 0, 0, 0, 6]);
 }
 
-#[derive(State, PartialEq, Debug)]
+#[derive(State, PartialEq, Debug, Encode, Decode, Default)]
 struct GenericStruct<T: State>
 where
     T: Default,
@@ -73,16 +74,8 @@ fn generic_struct_state() {
     let mapstore = Shared::new(MapStore::new());
     let store = Store::new(mapstore.into());
 
-    let mut state = GenericStruct::<u64>::create(store, Default::default()).unwrap();
-
-    assert_eq!(state.a, 0);
-    assert_eq!(state.b, 0);
-
-    state.a = 123;
-    state.b = 5;
-
-    let data = state.flush().unwrap();
-    assert_eq!(data, (123, 5));
+    let mut state: GenericStruct<u64> = Default::default();
+    state.attach(store).unwrap();
 }
 
 #[derive(Entry, Debug, PartialEq)]

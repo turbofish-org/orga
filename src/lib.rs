@@ -1,11 +1,9 @@
-#![feature(map_first_last)]
 #![feature(bound_map)]
 #![feature(once_cell)]
 #![feature(associated_type_defaults)]
 #![feature(trivial_bounds)]
 #![allow(incomplete_features)]
 #![feature(specialization)]
-#![feature(generic_associated_types)]
 #![feature(try_trait_v2)]
 #![feature(never_type)]
 #![feature(adt_const_params)]
@@ -25,6 +23,8 @@ pub mod client;
 /// Data structures which implement the [`state::State`](state/trait.State.html)
 /// trait.
 pub mod collections;
+
+pub mod describe;
 
 /// Traits for deterministic encoding and decoding.
 ///
@@ -58,9 +58,6 @@ pub mod plugins;
 pub mod coins;
 
 pub mod context;
-
-#[cfg(feature = "abci")]
-pub mod migrate;
 
 #[cfg(feature = "feat-ibc")]
 pub mod ibc;

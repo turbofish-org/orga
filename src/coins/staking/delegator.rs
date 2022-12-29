@@ -2,27 +2,29 @@ use crate::coins::{Address, MultiShare};
 use crate::coins::{Amount, Balance, Coin, Decimal, Give, Share, Symbol, Take};
 use crate::collections::Deque;
 use crate::context::GetContext;
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::plugins::Time;
 use crate::state::State;
 use crate::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 use super::UNBONDING_SECONDS;
 
-#[derive(State)]
+#[derive(State, Encode, Decode, Serialize, Deserialize, Default, Describe)]
 pub struct Unbond<S: Symbol> {
     pub(super) coins: Share<S>,
     pub(super) start_seconds: i64,
 }
 
-#[derive(State, Clone)]
+#[derive(State, Clone, Encode, Decode, Serialize, Deserialize, Default, Describe)]
 pub struct Redelegation {
     pub(super) amount: Amount,
     pub(super) address: Address,
     pub(super) start_seconds: i64,
 }
 
-#[derive(State)]
+#[derive(State, Encode, Decode, Default, Serialize, Deserialize, Describe)]
 pub struct Delegator<S: Symbol> {
     pub(super) liquid: MultiShare,
     pub(super) staked: Share<S>,
@@ -44,7 +46,7 @@ impl<S: Symbol> Delegator<S> {
                 coins,
                 start_seconds,
             };
-            self.unbonding.push_back(unbond.into())
+            self.unbonding.push_back(unbond)
         } else {
             self.liquid.give(S::mint(amount))
         }
@@ -202,14 +204,11 @@ impl<S: Symbol> Delegator<S> {
 
         let redelegated_coins = self.staked.take(amount)?;
         if let Some(start_seconds) = start_seconds {
-            self.redelegations_out.push_back(
-                Redelegation {
-                    amount,
-                    address: dst_val_address,
-                    start_seconds,
-                }
-                .into(),
-            )?;
+            self.redelegations_out.push_back(Redelegation {
+                amount,
+                address: dst_val_address,
+                start_seconds,
+            })?;
         }
 
         Ok(redelegated_coins)
@@ -222,14 +221,11 @@ impl<S: Symbol> Delegator<S> {
         start_seconds: Option<i64>,
     ) -> Result<()> {
         if let Some(start_seconds) = start_seconds {
-            self.redelegations_in.push_back(
-                Redelegation {
-                    address: src_val_address,
-                    amount: coins.amount,
-                    start_seconds,
-                }
-                .into(),
-            )?;
+            self.redelegations_in.push_back(Redelegation {
+                address: src_val_address,
+                amount: coins.amount,
+                start_seconds,
+            })?;
         }
 
         self.add_stake(coins)
@@ -265,13 +261,13 @@ impl<S: Symbol> Give<(u8, Amount)> for Delegator<S> {
     }
 }
 
-#[derive(Encode, Decode, Debug)]
+#[derive(Encode, Decode, Debug, Serialize, Deserialize)]
 pub struct UnbondInfo {
     pub start_seconds: i64,
     pub amount: Amount,
 }
 
-#[derive(Encode, Decode, Debug)]
+#[derive(Encode, Decode, Debug, Serialize, Deserialize)]
 pub struct DelegationInfo {
     pub unbonding: Vec<UnbondInfo>,
     pub staked: Amount,

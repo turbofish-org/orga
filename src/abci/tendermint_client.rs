@@ -9,7 +9,7 @@ use tm::Client as _;
 
 use crate::call::Call;
 use crate::client::{AsyncCall, AsyncQuery, Client};
-use crate::encoding::{Decode, Encode};
+use crate::encoding::Encode;
 use crate::merk::ABCIPrefixedProofStore;
 use crate::query::Query;
 use crate::state::State;
@@ -129,9 +129,9 @@ impl<T: Client<TendermintAdapter<T>> + Query + State> TendermintClient<T> {
             Some(root_value) => root_value,
             None => return Err(Error::ABCI("Missing root value".into())),
         };
-        let encoding = T::Encoding::decode(root_value)?;
+        let mut state = T::decode(root_value)?;
         let store: Shared<ABCIPrefixedProofStore> = Shared::new(ABCIPrefixedProofStore::new(map));
-        let state = T::create(Store::new(store.into()), encoding)?;
+        state.attach(Store::new(store.into()))?;
 
         // TODO: retry logic
         check(&state)
@@ -231,13 +231,12 @@ impl<T: Query + State> AsyncQuery for TendermintAdapter<T> {
             Some(root_value) => root_value,
             None => return Err(Error::ABCI("Missing root value".into())),
         };
-        let encoding = T::Encoding::decode(root_value)?;
+        let mut state = T::decode(root_value)?;
 
         // TODO: remove need for ABCI prefix layer since that should come from
         // ABCIPlugin Client impl and should be part of app type
         let store: Shared<ABCIPrefixedProofStore> = Shared::new(ABCIPrefixedProofStore::new(map));
-
-        let state = T::create(Store::new(store.into()), encoding)?;
+        state.attach(Store::new(store.into()))?;
 
         // TODO: retry logic
         check(std::rc::Rc::new(state))

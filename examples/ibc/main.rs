@@ -3,12 +3,11 @@
 #![feature(async_closure)]
 #![feature(fn_traits)]
 #![feature(type_name_of_val)]
-#![feature(generic_associated_types)]
 
 use orga::ibc::{start_grpc, Ibc, IbcTx};
 use orga::prelude::*;
 
-#[derive(State, Query, Client, Call)]
+#[derive(State, Query, Client, Call, Encode, Decode, Default)]
 pub struct Counter {
     count: u64,
     #[call]
@@ -35,7 +34,7 @@ impl Counter {
     }
 }
 
-#[derive(State, Debug, Clone)]
+#[derive(State, Debug, Clone, Default, Encode, Decode)]
 pub struct Simp(());
 
 impl Symbol for Simp {
@@ -53,28 +52,17 @@ impl BeginBlock for Counter {
     }
 }
 
-// impl EndBlock for Counter {
-//     fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
-//         Ok(())
-//     }
-// }
-
-// impl InitChain for Counter {
-//     fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
-//         Ok(())
-//     }
-// }
-
 impl ConvertSdkTx for Counter {
     type Output = PaidCall<<Counter as Call>::Call>;
     fn convert(&self, msg: &sdk_compat::sdk::Tx) -> Result<Self::Output> {
         type AppCall = <Counter as Call>::Call;
+        type IbcCall = <Ibc as Call>::Call;
 
         let tx_bytes = msg.encode()?;
-        let _ibc_tx = IbcTx::decode(tx_bytes.as_slice())?;
-        let deliver_msg_call_bytes = [vec![5], tx_bytes].concat();
+        let ibc_tx = IbcTx::decode(tx_bytes.as_slice())?;
 
-        let paid_call = AppCall::FieldIbc(deliver_msg_call_bytes);
+        let ibc_call = IbcCall::MethodDeliverTx(ibc_tx, vec![]);
+        let paid_call = AppCall::FieldIbc(ibc_call.encode()?);
         Ok(PaidCall {
             payer: AppCall::MethodNoop(vec![]),
             paid: paid_call,
