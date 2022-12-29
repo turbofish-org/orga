@@ -668,7 +668,7 @@ impl Deref for Counter {
 #[derive(State, Clone, Debug, Encode, Decode)]
 pub struct NonceNoop(());
 impl GetNonce for NonceNoop {
-    fn nonce(&self, address: Address) -> Result<u64> {
+    fn nonce(&self, _: Address) -> Result<u64> {
         Ok(0)
     }
 }
