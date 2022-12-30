@@ -286,6 +286,8 @@ mod full {
                     if res.is_ok() {
                         self.events
                             .replace(Context::resolve::<Events>().unwrap().events.clone());
+                    } else {
+                        Context::remove::<Validators>();
                     }
                     Context::remove::<Events>();
                     res?;
@@ -297,6 +299,8 @@ mod full {
                     if res.is_ok() {
                         self.events
                             .replace(Context::resolve::<Events>().unwrap().events.clone());
+                    } else {
+                        Context::remove::<Validators>();
                     }
                     Context::remove::<Events>();
                     res?;
