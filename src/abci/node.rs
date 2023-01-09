@@ -60,6 +60,7 @@ impl<A: App> Node<A> {
         if !home.exists() {
             std::fs::create_dir(&home).expect("Failed to initialize application home directory");
         }
+
         let cfg_path = tm_home.join("config/config.toml");
         let tm_previously_configured = cfg_path.exists();
         let _ = Tendermint::new(tm_home.clone())

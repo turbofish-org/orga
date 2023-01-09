@@ -4,7 +4,7 @@ use std::ops::RangeBounds;
 use super::{Iter, Read, Shared, Write, KV};
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, Terminated};
-use crate::state::State;
+use crate::state::{state2::State as State2, State};
 use crate::{Error, Result};
 
 // TODO: figure out how to let users set DefaultBackingStore, similar to setting
@@ -130,6 +130,22 @@ impl<S: Default> State<S> for Store<S> {
     where
         S: Write,
     {
+        Ok(())
+    }
+}
+
+impl State2 for Store {
+    fn attach(&mut self, store: Store) -> Result<()> {
+        self.prefix = store.prefix;
+        self.store = store.store;
+        Ok(())
+    }
+
+    fn load(store: Store, _bytes: &mut &[u8]) -> Result<Self> {
+        Ok(store)
+    }
+
+    fn flush<W: std::io::Write>(&mut self, _out: &mut W) -> Result<()> {
         Ok(())
     }
 }

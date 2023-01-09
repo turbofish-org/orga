@@ -12,6 +12,9 @@ pub use map::Map;
 
 pub use map::{ChildMut, Ref};
 
+pub mod entry2;
+pub mod map2;
+
 /// A trait for types which can be converted to or from a key/value pair.
 ///
 /// This is useful when it is conceptually easier to think about values as

@@ -16,3 +16,5 @@ syn = { version = "1.0.17", features = [ "full" ] }
 proc-macro2 = "1.0.10"
 quote = "1.0.3"
 heck = "0.3.3"
+darling = "0.14.2"
+superstruct = "0.7.0"

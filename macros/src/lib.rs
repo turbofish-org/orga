@@ -5,16 +5,24 @@ use proc_macro::TokenStream;
 mod call;
 mod client;
 mod describe;
+mod encoding;
 mod entry;
 mod migrate_from;
 mod next;
+mod orga;
 mod query;
 mod state;
+mod state2;
 mod utils;
 
 #[proc_macro_derive(State, attributes(state))]
 pub fn derive_state(item: TokenStream) -> TokenStream {
     state::derive(item)
+}
+
+#[proc_macro_derive(State2, attributes(state))]
+pub fn derive_state2(item: TokenStream) -> TokenStream {
+    state2::derive(item)
 }
 
 #[proc_macro_derive(Entry, attributes(key))]
@@ -60,4 +68,19 @@ pub fn derive_describe(item: TokenStream) -> TokenStream {
 #[proc_macro_derive(MigrateFrom)]
 pub fn derive_migrate_from(item: TokenStream) -> TokenStream {
     migrate_from::derive(item)
+}
+
+#[proc_macro_attribute]
+pub fn orga(args: TokenStream, input: TokenStream) -> TokenStream {
+    orga::orga(args, input)
+}
+
+#[proc_macro_derive(VersionedDecode)]
+pub fn derive_decode(item: TokenStream) -> TokenStream {
+    encoding::derive_decode(item)
+}
+
+#[proc_macro_derive(VersionedEncode)]
+pub fn derive_encode(item: TokenStream) -> TokenStream {
+    encoding::derive_encode(item)
 }

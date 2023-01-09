@@ -5,6 +5,17 @@ pub use orga_macros::State;
 use std::cell::RefCell;
 use std::marker::PhantomData;
 
+mod load;
+pub use load::Loader;
+
+mod attach;
+pub use attach::Attacher;
+
+mod flush;
+pub use flush::Flusher;
+
+pub mod state2;
+
 /// A trait for types which provide a higher-level API for data stored within a
 /// [`store::Store`](../store/trait.Store.html).
 ///

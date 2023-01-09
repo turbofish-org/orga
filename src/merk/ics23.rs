@@ -138,7 +138,7 @@ mod tests {
     #[test]
     fn existence_proof() {
         let path = "/tmp/ics23-proof-test";
-        let mut store = MerkStore::new(path.into());
+        let mut store = MerkStore::new(path);
 
         store.put(b"foo".to_vec(), b"1".to_vec()).unwrap();
         store.put(b"bar".to_vec(), b"2".to_vec()).unwrap();
@@ -168,7 +168,7 @@ mod tests {
     #[test]
     fn nonexistence_proof() {
         let path = "/tmp/ics23-proof-test2";
-        let mut store = MerkStore::new(path.into());
+        let mut store = MerkStore::new(path);
 
         store.put(b"foo".to_vec(), b"1".to_vec()).unwrap();
         store.put(b"bar".to_vec(), b"2".to_vec()).unwrap();

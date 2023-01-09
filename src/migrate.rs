@@ -17,10 +17,12 @@ where
     store.put(vec![], state.encode()?)
 }
 
+#[fundamental]
 pub trait MigrateFrom<T = Self>: Sized {
     fn migrate_from(other: T) -> Result<Self>;
 }
 
+#[fundamental]
 pub trait MigrateInto<T>: Sized {
     fn migrate_into(self) -> Result<T>;
 }

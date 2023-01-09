@@ -3,6 +3,7 @@ use crate::query::Query;
 use crate::state::State;
 use crate::{client::Client, describe::Describe};
 pub use ed::*;
+pub use orga_macros::{VersionedDecode, VersionedEncode};
 
 use derive_more::{Deref, DerefMut, Into};
 use serde::{Deserialize, Serialize};

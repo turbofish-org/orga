@@ -9,6 +9,7 @@
 #![feature(adt_const_params)]
 #![feature(fn_traits)]
 #![feature(async_closure)]
+#![feature(fundamental)]
 
 extern crate self as orga;
 
