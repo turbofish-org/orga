@@ -68,7 +68,6 @@ pub mod context;
 mod error;
 
 pub use cosmrs;
-pub use superstruct::superstruct;
 
 // re-exports
 pub use async_trait::async_trait;
