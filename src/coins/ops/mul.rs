@@ -1,4 +1,4 @@
-use super::super::{Amount, Decimal, MathResult, Ratio};
+use super::super::{Amount, Decimal, MathResult};
 use crate::Error;
 use num_traits::CheckedMul;
 use std::ops::Mul;
@@ -9,7 +9,12 @@ impl Mul<Amount> for Amount {
     type Output = MathResult<Amount>;
 
     fn mul(self, other: Amount) -> Self::Output {
-        MathResult::Ok(self.0.checked_mul(other.0).ok_or(Error::Overflow)?.into())
+        MathResult::Ok(
+            self.value
+                .checked_mul(other.value)
+                .ok_or(Error::Overflow)?
+                .into(),
+        )
     }
 }
 
@@ -37,121 +42,15 @@ impl Mul<MathResult<Amount>> for MathResult<Amount> {
     }
 }
 
-// Amount * ratio
-
-impl Mul<Ratio> for Amount {
-    type Output = MathResult<Ratio>;
-
-    fn mul(self, other: Ratio) -> Self::Output {
-        Ok(other
-            .0
-            .checked_mul(&self.0.into())
-            .ok_or(Error::Overflow)?
-            .into())
-    }
-}
-
-impl Mul<Ratio> for MathResult<Amount> {
-    type Output = MathResult<Ratio>;
-
-    fn mul(self, other: Ratio) -> Self::Output {
-        self? * other
-    }
-}
-
-impl Mul<MathResult<Ratio>> for Amount {
-    type Output = MathResult<Ratio>;
-
-    fn mul(self, other: MathResult<Ratio>) -> Self::Output {
-        self * other?
-    }
-}
-
-impl Mul<MathResult<Ratio>> for MathResult<Amount> {
-    type Output = MathResult<Ratio>;
-
-    fn mul(self, other: MathResult<Ratio>) -> Self::Output {
-        self? * other?
-    }
-}
-
-// Ratio * ratio
-
-impl Mul<Ratio> for Ratio {
-    type Output = MathResult<Ratio>;
-
-    fn mul(self, other: Ratio) -> Self::Output {
-        Ok(other.0.checked_mul(&self.0).ok_or(Error::Overflow)?.into())
-    }
-}
-
-impl Mul<Ratio> for MathResult<Ratio> {
-    type Output = MathResult<Ratio>;
-
-    fn mul(self, other: Ratio) -> Self::Output {
-        self? * other
-    }
-}
-
-impl Mul<MathResult<Ratio>> for Ratio {
-    type Output = MathResult<Ratio>;
-
-    fn mul(self, other: MathResult<Ratio>) -> Self::Output {
-        self * other?
-    }
-}
-
-impl Mul<MathResult<Ratio>> for MathResult<Ratio> {
-    type Output = MathResult<Ratio>;
-
-    fn mul(self, other: MathResult<Ratio>) -> Self::Output {
-        self? * other?
-    }
-}
-
-// Ratio * amount
-
-impl Mul<Amount> for Ratio {
-    type Output = MathResult<Ratio>;
-
-    fn mul(self, other: Amount) -> Self::Output {
-        other * self
-    }
-}
-
-impl Mul<Amount> for MathResult<Ratio> {
-    type Output = MathResult<Ratio>;
-
-    fn mul(self, other: Amount) -> Self::Output {
-        other * self?
-    }
-}
-
-impl Mul<MathResult<Amount>> for Ratio {
-    type Output = MathResult<Ratio>;
-
-    fn mul(self, other: MathResult<Amount>) -> Self::Output {
-        other? * self
-    }
-}
-
-impl Mul<MathResult<Amount>> for MathResult<Ratio> {
-    type Output = MathResult<Ratio>;
-
-    fn mul(self, other: MathResult<Amount>) -> Self::Output {
-        other? * self?
-    }
-}
-
 // Decimal * decimal
 
 impl Mul<Decimal> for Decimal {
     type Output = MathResult<Decimal>;
 
     fn mul(self, other: Decimal) -> Self::Output {
-        self.0
-            .checked_mul(other.0)
-            .map(Self)
+        self.value
+            .checked_mul(other.value)
+            .map(|value| value.into())
             .ok_or(Error::Overflow)
             .into()
     }
@@ -190,9 +89,9 @@ impl Mul<Decimal> for Amount {
         let self_decimal: Decimal = self.into();
 
         self_decimal
-            .0
-            .checked_mul(other.0)
-            .map(Decimal)
+            .value
+            .checked_mul(other.value)
+            .map(|value| value.into())
             .ok_or(Error::Overflow)
             .into()
     }
@@ -231,9 +130,9 @@ impl Mul<Amount> for Decimal {
         let other_decimal: Decimal = other.into();
 
         other_decimal
-            .0
-            .checked_mul(self.0)
-            .map(Decimal)
+            .value
+            .checked_mul(self.value)
+            .map(|value| value.into())
             .ok_or(Error::Overflow)
             .into()
     }

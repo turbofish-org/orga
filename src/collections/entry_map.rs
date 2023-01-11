@@ -1,8 +1,6 @@
 use super::map::Iter as MapIter;
 use super::map::Map;
 use super::map::ReadOnly;
-use serde::Deserialize;
-use serde::Serialize;
 
 use crate::encoding::{Decode, Encode, Terminated};
 use crate::migrate::{MigrateFrom, MigrateInto};
@@ -16,11 +14,8 @@ use crate::state::*;
 use crate::store::*;
 use crate::Result;
 
-#[derive(Query, Call, Encode, Decode, Serialize, Deserialize)]
-#[serde(bound(
-    serialize = "T::Key: Serialize + Terminated + Clone, T::Value: Serialize + State",
-    deserialize = "T::Key: Deserialize<'de> + Terminated + Clone, T::Value: Deserialize<'de> + State",
-))]
+#[derive(Query, Call, Encode, Decode)]
+
 pub struct EntryMap<T: Entry> {
     map: Map<T::Key, T::Value>,
 }
@@ -34,24 +29,31 @@ where
         self.map.attach(store)
     }
 
-    fn flush(&mut self) -> Result<()> {
-        self.map.flush()
+    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+        self.map.flush(out)
+    }
+
+    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
+        let entry_map = EntryMap::default();
+        entry_map.map.attach(store)?;
+
+        Ok(entry_map)
     }
 }
 
-impl<T: Entry + 'static> Describe for EntryMap<T>
-where
-    T::Key: Encode + Terminated + Describe + 'static,
-    T::Value: State + Describe + 'static,
-{
-    fn describe() -> crate::describe::Descriptor {
-        crate::describe::Builder::new::<Self>()
-            .named_child::<Map<T::Key, T::Value>>("map", &[], |v| {
-                crate::describe::Builder::access(v, |v: Self| v.map)
-            })
-            .build()
-    }
-}
+// impl<T: Entry + 'static> Describe for EntryMap<T>
+// where
+//     T::Key: Encode + Terminated + Describe + 'static,
+//     T::Value: State + Describe + 'static,
+// {
+//     fn describe() -> crate::describe::Descriptor {
+//         crate::describe::Builder::new::<Self>()
+//             .named_child::<Map<T::Key, T::Value>>("map", &[], |v| {
+//                 crate::describe::Builder::access(v, |v: Self| v.map)
+//             })
+//             .build()
+//     }
+// }
 
 impl<T: Entry> Default for EntryMap<T> {
     fn default() -> Self {
@@ -254,7 +256,8 @@ mod tests {
             .insert(MapEntry { key: 42, value: 84 })
             .unwrap();
 
-        edit_entry_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_entry_map.flush(&mut buf).unwrap();
 
         let mut read_entry_map: EntryMap<MapEntry> = Default::default();
         read_entry_map.attach(store).unwrap();
@@ -282,7 +285,8 @@ mod tests {
         entry_map.insert(entry).unwrap();
         entry_map.delete(MapEntry { key: 42, value: 84 }).unwrap();
 
-        entry_map.flush().unwrap();
+        let mut buf = vec![];
+        entry_map.flush(&mut buf).unwrap();
 
         let read_map: EntryMap<MapEntry> = EntryMap::with_store(store).unwrap();
 
@@ -562,7 +566,9 @@ mod tests {
                 value: 4,
             })
             .unwrap();
-        entry_map.flush().unwrap();
+
+        let mut buf = vec![];
+        entry_map.flush(&mut buf).unwrap();
 
         let expected: Vec<MultiKeyMapEntry> = vec![
             MultiKeyMapEntry {

@@ -2,8 +2,9 @@ use crate::coins::pool::{Child as PoolChild, ChildMut as PoolChildMut};
 use crate::coins::{Address, Amount, Balance, Coin, Decimal, Give, Pool, Symbol};
 use crate::context::GetContext;
 use crate::describe::Describe;
-use crate::encoding::{Decode, Encode};
+use crate::encoding::{Decode, Encode, LengthVec};
 use crate::migrate::MigrateFrom;
+use crate::orga;
 use crate::plugins::Time;
 use crate::state::State;
 use crate::store::Store;
@@ -15,7 +16,7 @@ use super::{Commission, Delegator, Redelegation};
 
 type Delegators<S> = Pool<Address, Delegator<S>, S>;
 
-#[derive(State, Encode, Decode, Default, Serialize, Deserialize, Describe, MigrateFrom)]
+#[orga]
 pub struct Validator<S: Symbol> {
     pub(super) jailed_until: Option<i64>,
     pub(super) tombstoned: bool,
@@ -46,62 +47,7 @@ pub struct ValidatorQueryInfo {
     pub amount_staked: Amount,
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize, Describe, MigrateFrom)]
-pub struct ValidatorInfo {
-    pub bytes: Vec<u8>,
-}
-
-impl From<Vec<u8>> for ValidatorInfo {
-    fn from(bytes: Vec<u8>) -> Self {
-        ValidatorInfo { bytes }
-    }
-}
-
-impl Encode for ValidatorInfo {
-    fn encoding_length(&self) -> ed::Result<usize> {
-        Ok(self.bytes.len() + 2)
-    }
-
-    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
-        let info_byte_len: u16 = self
-            .bytes
-            .len()
-            .try_into()
-            .map_err(|_| ed::Error::UnexpectedByte(0))?;
-
-        dest.write_all(&info_byte_len.encode()?)?;
-        dest.write_all(&self.bytes)?;
-
-        Ok(())
-    }
-}
-
-impl Terminated for ValidatorInfo {}
-
-impl Decode for ValidatorInfo {
-    fn decode<R: std::io::Read>(mut reader: R) -> ed::Result<Self> {
-        let info_byte_len = u16::decode(&mut reader)?;
-        let mut bytes = vec![0u8; info_byte_len as usize];
-        reader.read_exact(&mut bytes)?;
-
-        Ok(ValidatorInfo { bytes })
-    }
-}
-
-impl State for ValidatorInfo {
-    fn attach(&mut self, _store: Store) -> Result<()> {
-        Ok(())
-    }
-
-    fn flush(&mut self) -> Result<()> {
-        Ok(())
-    }
-}
-impl From<ValidatorInfo> for Vec<u8> {
-    fn from(info: ValidatorInfo) -> Self {
-        info.bytes
-    }
-}
+pub type ValidatorInfo = LengthVec<u16, u8>;
 
 #[derive(Encode, Decode)]
 pub enum Status {

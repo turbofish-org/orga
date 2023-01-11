@@ -17,7 +17,7 @@ use std::ops::{Deref, DerefMut};
 
 const NONCE_INCREASE_LIMIT: u64 = 1000;
 
-#[derive(State, Encode, Decode, Default, Describe, Serialize, Deserialize, MigrateFrom)]
+#[derive(State, Encode, Decode, Default, MigrateFrom)]
 pub struct NoncePlugin<T: State> {
     map: Map<Address, u64>,
     inner: T,

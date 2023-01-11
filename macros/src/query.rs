@@ -1,4 +1,4 @@
-use super::utils::parse_parent;
+use super::utils::{parse_parent, relevant_methods};
 use heck::{CamelCase, SnakeCase};
 use proc_macro::TokenStream;
 use proc_macro2::{Literal, Span, TokenStream as TokenStream2};
@@ -448,66 +448,6 @@ where
             });
     }
     requirements
-}
-
-fn relevant_impls(name: &Ident, source: &File) -> Vec<ItemImpl> {
-    source
-        .items
-        .iter()
-        .filter_map(|item| match item {
-            Item::Impl(item) => Some(item),
-            _ => None,
-        })
-        .filter(|item| item.trait_.is_none())
-        .filter(|item| {
-            let path = match &*item.self_ty {
-                Type::Path(path) => path,
-                _ => return false,
-            };
-
-            if path.qself.is_some() {
-                return false;
-            }
-            if path.path.segments.len() != 1 {
-                return false;
-            }
-            if path.path.segments[0].ident != *name {
-                return false;
-            }
-
-            true
-        })
-        .cloned()
-        .collect()
-}
-
-fn relevant_methods(name: &Ident, attr: &str, source: &File) -> Vec<(ImplItemMethod, ItemImpl)> {
-    let get_methods = |item: ItemImpl| -> Vec<_> {
-        item.items
-            .iter()
-            .filter_map(|item| match item {
-                ImplItem::Method(method) => Some(method),
-                _ => None,
-            })
-            .filter(|method| {
-                method
-                    .attrs
-                    .iter()
-                    .find(|a| a.path.is_ident(&attr))
-                    .is_some()
-            })
-            .filter(|method| matches!(method.vis, Visibility::Public(_)))
-            .filter(|method| method.sig.unsafety.is_none())
-            .filter(|method| method.sig.asyncness.is_none())
-            .filter(|method| method.sig.abi.is_none())
-            .map(|method| (method.clone(), item.clone()))
-            .collect()
-    };
-
-    relevant_impls(name, source)
-        .into_iter()
-        .flat_map(get_methods)
-        .collect()
 }
 
 fn gen_param_input(generics: &Generics, bracketed: bool) -> TokenStream2 {

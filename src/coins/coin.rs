@@ -4,28 +4,20 @@ use crate::context::GetContext;
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::migrate::MigrateFrom;
+use crate::orga;
 use crate::plugins::Paid;
 use crate::state::State;
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
-#[must_use = "If these coins are meant to be discarded, explicitly call the `burn` method"]
-#[derive(State, Call, Debug, Encode, Decode, Serialize, Deserialize, Describe, MigrateFrom)]
+#[orga]
+#[derive(Debug)]
+// #[must_use = "If these coins are meant to be discarded, explicitly call the `burn` method"]
 pub struct Coin<S: Symbol> {
     #[call]
     pub amount: Amount,
-    #[serde(skip)]
     symbol: PhantomData<S>,
-}
-
-impl<S: Symbol> Default for Coin<S> {
-    fn default() -> Self {
-        Self {
-            amount: Default::default(),
-            symbol: PhantomData,
-        }
-    }
 }
 
 impl<S: Symbol> Coin<S> {

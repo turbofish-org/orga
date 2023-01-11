@@ -4,6 +4,8 @@ use crate::client::Client;
 use crate::describe::{Builder, Describe};
 use crate::encoding::{Decode, Encode};
 use crate::migrate::migrate_from_self_impl;
+use crate::migrate::MigrateFrom;
+use crate::orga;
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
@@ -13,10 +15,16 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::convert::TryFrom;
 
-#[derive(Clone, Copy, Debug, Query, Client, Call, Serialize, Deserialize)]
-pub struct Decimal(pub(crate) NumDecimal);
+#[derive(Clone, Copy, Debug, Query, Call, Default)]
+pub struct Decimal {
+    pub(crate) value: NumDecimal,
+}
 
-migrate_from_self_impl!(Decimal);
+impl MigrateFrom for Decimal {
+    fn migrate_from(other: Self) -> Result<Self> {
+        Ok(other)
+    }
+}
 
 impl Describe for Decimal {
     fn describe() -> crate::describe::Descriptor {
@@ -26,13 +34,13 @@ impl Describe for Decimal {
 
 impl std::fmt::Display for Decimal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
+        self.value.fmt(f)
     }
 }
 
 impl Encode for Decimal {
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
-        dest.write_all(&self.0.serialize())?;
+        dest.write_all(&self.value.serialize())?;
 
         Ok(())
     }
@@ -46,21 +54,19 @@ impl Decode for Decimal {
     fn decode<R: std::io::Read>(mut source: R) -> ed::Result<Self> {
         let mut bytes = [0u8; 16];
         source.read_exact(&mut bytes)?;
-        Ok(Self(NumDecimal::deserialize(bytes)))
+        Ok(Self {
+            value: NumDecimal::deserialize(bytes),
+        })
     }
 }
 
 impl ed::Terminated for Decimal {}
 
-impl Default for Decimal {
-    fn default() -> Self {
-        0.into()
-    }
-}
-
 impl From<u64> for Decimal {
     fn from(value: u64) -> Self {
-        Decimal(value.into())
+        Decimal {
+            value: value.into(),
+        }
     }
 }
 
@@ -74,10 +80,10 @@ impl Ord for Decimal {
 
 impl Decimal {
     pub fn amount(&self) -> Result<Amount> {
-        if self.0.is_sign_negative() {
+        if self.value.is_sign_negative() {
             Err(Error::Coins("Amounts may not be negative".into()))
         } else {
-            match self.0.round().to_u64() {
+            match self.value.round().to_u64() {
                 Some(value) => Ok(value.into()),
                 None => Err(Error::Coins(
                     "Amounts may not be greater than u64::MAX".into(),
@@ -87,15 +93,21 @@ impl Decimal {
     }
 
     pub fn abs(&self) -> Self {
-        Self(self.0.abs())
+        Decimal {
+            value: self.value.abs(),
+        }
     }
 
     pub fn zero() -> Self {
-        Self(NumDecimal::ZERO)
+        Decimal {
+            value: NumDecimal::ZERO,
+        }
     }
 
     pub fn one() -> Self {
-        Self(NumDecimal::ONE)
+        Decimal {
+            value: NumDecimal::ONE,
+        }
     }
 }
 
@@ -104,8 +116,14 @@ impl State for Decimal {
         Ok(())
     }
 
-    fn flush(&mut self) -> Result<()> {
+    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+        self.encode_into(out)?;
         Ok(())
+    }
+
+    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
+        let mut value = Self::decode(bytes)?;
+        Ok(value)
     }
 }
 
@@ -119,13 +137,15 @@ impl TryFrom<Result<Decimal>> for Decimal {
 
 impl From<NumDecimal> for Decimal {
     fn from(value: NumDecimal) -> Self {
-        Decimal(value)
+        Decimal { value }
     }
 }
 
 impl From<Amount> for Decimal {
     fn from(amount: Amount) -> Self {
-        Self(amount.0.into())
+        Self {
+            value: amount.value.into(),
+        }
     }
 }
 
@@ -133,18 +153,19 @@ impl FromStr for Decimal {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        Ok(Self(NumDecimal::from_str(s)?))
+        Ok(Self {
+            value: NumDecimal::from_str(s)?,
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Decimal;
+    use super::*;
 
     #[test]
     fn format() {
         let formatted: Decimal = rust_decimal_macros::dec!(1.23).into();
-
         assert_eq!(format!("{}", formatted), "1.23");
     }
 }

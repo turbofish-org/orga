@@ -1,4 +1,4 @@
-use super::state2::State;
+use super::State;
 use crate::store::Store;
 use crate::Result;
 

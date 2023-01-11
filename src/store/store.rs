@@ -4,7 +4,7 @@ use std::ops::RangeBounds;
 use super::{Iter, Read, Shared, Write, KV};
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, Terminated};
-use crate::state::{state2::State as State2, State};
+use crate::state::State;
 use crate::{Error, Result};
 
 // TODO: figure out how to let users set DefaultBackingStore, similar to setting
@@ -33,14 +33,14 @@ pub struct Store<S = DefaultBackingStore> {
     store: Shared<S>,
 }
 
-impl<S> Describe for Store<S>
-where
-    Self: State + 'static,
-{
-    fn describe() -> crate::describe::Descriptor {
-        crate::describe::Builder::new::<Self>().build()
-    }
-}
+// impl<S> Describe for Store<S>
+// where
+//     Self: State + 'static,
+// {
+//     fn describe() -> crate::describe::Descriptor {
+//         crate::describe::Builder::new::<Self>().build()
+//     }
+// }
 
 impl<S> Encode for Store<S> {
     fn encode_into<W: std::io::Write>(&self, _dest: &mut W) -> ed::Result<()> {
@@ -116,25 +116,7 @@ impl<S> Store<S> {
     }
 }
 
-impl<S: Default> State<S> for Store<S> {
-    fn attach(&mut self, store: Store<S>) -> Result<()>
-    where
-        S: Read,
-    {
-        self.prefix = store.prefix;
-        self.store = store.store;
-        Ok(())
-    }
-
-    fn flush(&mut self) -> Result<()>
-    where
-        S: Write,
-    {
-        Ok(())
-    }
-}
-
-impl State2 for Store {
+impl State for Store {
     fn attach(&mut self, store: Store) -> Result<()> {
         self.prefix = store.prefix;
         self.store = store.store;
@@ -145,7 +127,7 @@ impl State2 for Store {
         Ok(store)
     }
 
-    fn flush<W: std::io::Write>(&mut self, _out: &mut W) -> Result<()> {
+    fn flush<W: std::io::Write>(self, _out: &mut W) -> Result<()> {
         Ok(())
     }
 }

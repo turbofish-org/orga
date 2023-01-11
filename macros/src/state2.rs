@@ -1,4 +1,5 @@
 use super::utils::gen_param_input;
+use darling::FromField;
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
@@ -18,6 +19,7 @@ pub fn derive(item: TokenStream) -> TokenStream {
         _ => todo!("Currently only structs are supported"),
     }
 
+    let fields = || struct_fields(&item);
     let field_names = || struct_fields(&item).map(|field| &field.ident);
     let seq =
         || (0..field_names().count()).map(|i| TokenStream2::from_str(&i.to_string()).unwrap());
@@ -29,11 +31,11 @@ pub fn derive(item: TokenStream) -> TokenStream {
 
     let StateInfo { previous, version } = parse_state_info(&item);
 
-    let seq_substore = seq();
     let attach_body = if is_tuple_struct {
         let seq_field = seq();
         quote!(
-            // #(::orga::state::State2::<::orga::store::DefaultBackingStore>::attach(&mut self.#seq_field, store.sub(&[#seq_substore]))?;)*
+            ::orga::state::Attacher::new(store)
+            #(.attach(&mut self.#seq_field)?)*;
             Ok(())
         )
     } else {
@@ -41,7 +43,6 @@ pub fn derive(item: TokenStream) -> TokenStream {
         quote!(
             ::orga::state::Attacher::new(store)
                 #(.attach_child(&mut self.#names)?)*;
-            // #(::orga::state::State::<::orga::store::DefaultBackingStore>::attach(&mut self.#names, store.sub(&[#seq_substore]))?;)*
             Ok(())
         )
     };
@@ -49,15 +50,31 @@ pub fn derive(item: TokenStream) -> TokenStream {
     let flush_body = if is_tuple_struct {
         let indexes = seq();
         quote!(
-            // #(::orga::state::State::<::orga::store::DefaultBackingStore>::flush(&mut self.#indexes)?;)*
+            ::orga::state::Flusher::new(out)
+                .version(#version)?
+                #(.flush_child(self.#indexes)?)*;
             Ok(())
         )
     } else {
         let names = field_names();
+        let child_flushes = fields().map(|field| {
+            let field_info = StateFieldInfo::from_field(field).unwrap();
+            let name = &field.ident;
+            match field_info.as_type {
+                Some(as_type) => quote! {
+                    .flush_child_as::<#as_type, _>(self.#name)?
+                },
+                None => quote! {
+                    .flush_child(self.#name)?
+                },
+            }
+        });
         quote!(
             ::orga::state::Flusher::new(out)
                 .version(#version)?
-                #(.flush_child(&mut self.#names)?)*;
+                #(#child_flushes)*;
+                // #(.flush_child(self.#names)?)*;
+
 
             Ok(())
         )
@@ -65,10 +82,9 @@ pub fn derive(item: TokenStream) -> TokenStream {
 
     let load_body_inner = if is_tuple_struct {
         let indexes = seq();
-        quote!(
-            // #(::orga::state::State::<::orga::store::DefaultBackingStore>::flush(&mut self.#indexes)?;)*
-            Ok(())
-        )
+        quote! {
+            Self(#(#indexes: loader.load_child()?,)*)
+        }
     } else {
         let names = field_names();
         quote! {
@@ -105,7 +121,7 @@ pub fn derive(item: TokenStream) -> TokenStream {
     };
 
     let output = quote! {
-        impl#generics ::orga::state::state2::State for #name#generic_params
+        impl#generics ::orga::state::State for #name#generic_params
         #where_clause
         {
             fn attach(
@@ -115,8 +131,8 @@ pub fn derive(item: TokenStream) -> TokenStream {
                 #attach_body
             }
 
-            fn flush<__ORGA_WRITE: ::std::io::Write>(
-                &mut self, out: &mut __ORGA_WRITE
+            fn flush<__W: ::std::io::Write>(
+                self, out: &mut __W
             ) -> ::orga::Result<()> {
                 #flush_body
             }
@@ -198,4 +214,9 @@ pub fn parse_state_info(item: &DeriveInput) -> StateInfo {
     });
 
     StateInfo { version, previous }
+}
+
+#[derive(FromField)]
+struct StateFieldInfo {
+    as_type: Option<Ident>,
 }

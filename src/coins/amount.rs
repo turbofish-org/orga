@@ -5,29 +5,19 @@ use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
 use ed::{Decode, Encode};
+use orga::orga;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
-#[derive(
-    State,
-    Encode,
-    Decode,
-    Debug,
-    Default,
-    Clone,
-    Copy,
-    Query,
-    Client,
-    Serialize,
-    Deserialize,
-    Describe,
-    MigrateFrom,
-)]
-pub struct Amount(pub(crate) u64);
+#[orga]
+#[derive(Debug, Clone, Copy)]
+pub struct Amount {
+    pub(crate) value: u64,
+}
 
 impl std::fmt::Display for Amount {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", self.value)
     }
 }
 
@@ -41,10 +31,7 @@ impl Eq for Amount {}
 
 impl Amount {
     pub fn new(value: u64) -> Self {
-        Amount(value)
-    }
-    pub fn foo(&self) -> i64 {
-        0
+        Amount { value }
     }
 }
 
@@ -56,7 +43,7 @@ impl From<u64> for Amount {
 
 impl From<Amount> for u64 {
     fn from(amount: Amount) -> Self {
-        amount.0
+        amount.value
     }
 }
 

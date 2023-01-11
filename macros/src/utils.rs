@@ -1,6 +1,9 @@
 use proc_macro2::TokenStream;
 use quote::quote;
+use regex::Regex;
+use std::borrow::Borrow;
 use std::collections::HashSet;
+use syn::Ident;
 use syn::*;
 
 pub fn parse_parent() -> File {
@@ -66,7 +69,7 @@ where
     req_set.into_iter().collect()
 }
 
-pub fn relevant_impls(name: &Ident, source: &File) -> Vec<ItemImpl> {
+pub fn relevant_impls(names: Vec<&Ident>, source: &File) -> Vec<ItemImpl> {
     source
         .items
         .iter()
@@ -87,7 +90,7 @@ pub fn relevant_impls(name: &Ident, source: &File) -> Vec<ItemImpl> {
             if path.path.segments.len() != 1 {
                 return false;
             }
-            if path.path.segments[0].ident != *name {
+            if !names.contains(&&path.path.segments[0].ident) {
                 return false;
             }
 
@@ -124,7 +127,7 @@ pub fn relevant_methods(
             .collect()
     };
 
-    relevant_impls(name, source)
+    relevant_impls(vec![name, &strip_version(name)], source)
         .into_iter()
         .flat_map(get_methods)
         .collect()
@@ -153,4 +156,11 @@ pub fn gen_param_input(generics: &Generics, bracketed: bool) -> TokenStream {
     } else {
         quote!(#(#gen_params),*)
     }
+}
+
+pub fn strip_version(ident: &Ident) -> Ident {
+    let name = ident.to_string();
+    let re = Regex::new(r"V([0-9]+)").unwrap();
+    let stripped_name = re.replace_all(&name, "").to_string();
+    Ident::new(stripped_name.as_str(), ident.span())
 }

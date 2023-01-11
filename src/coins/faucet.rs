@@ -3,6 +3,7 @@ use crate::context::GetContext;
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::migrate::MigrateFrom;
+use crate::orga;
 use crate::plugins::Time;
 use crate::state::State;
 use crate::{Error, Result};
@@ -10,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::time::Duration;
 
-#[derive(State, Encode, Decode, Default, Serialize, Deserialize, Describe, MigrateFrom)]
+#[orga]
 pub struct Faucet<S: Symbol> {
     _symbol: PhantomData<S>,
     configured: bool,
@@ -115,20 +116,11 @@ mod tests {
     use crate::store::Store;
     use serial_test::serial;
 
-    #[derive(Encode, Decode, Debug, Clone, Default, Serialize, Deserialize, MigrateFrom)]
+    #[orga]
+    #[derive(Clone, Debug)]
     struct Simp;
     impl Symbol for Simp {
         const INDEX: u8 = 0;
-    }
-
-    impl State for Simp {
-        fn attach(&mut self, _store: Store) -> Result<()> {
-            Ok(())
-        }
-
-        fn flush(&mut self) -> Result<()> {
-            Ok(())
-        }
     }
 
     #[test]

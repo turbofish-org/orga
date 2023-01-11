@@ -1,70 +1,39 @@
-use crate::encoding::{Decode, Encode, Terminated};
-use crate::Result;
-use crate::{store::*, Error};
-pub use orga_macros::State;
-use std::cell::RefCell;
-use std::marker::PhantomData;
-
-mod load;
-pub use load::Loader;
+use crate::encoding::{Decode, Encode};
+use crate::store::Store;
+use crate::{Error, Result};
+pub use orga_macros::{State};
 
 mod attach;
 pub use attach::Attacher;
-
 mod flush;
 pub use flush::Flusher;
+mod load;
+pub use load::Loader;
 
-pub mod state2;
+use std::cell::RefCell;
+use std::marker::PhantomData;
 
-/// A trait for types which provide a higher-level API for data stored within a
-/// [`store::Store`](../store/trait.Store.html).
-///
-/// These types can be complex types like collections (e.g. maps), or simple
-/// data types (e.g. account structs).
-pub trait State<S = DefaultBackingStore>: Encode + Decode + Sized {
-    const VERSION: u32 = 0;
-
-    fn attach(&mut self, store: Store<S>) -> Result<()>
-    where
-        S: Read;
-
-    /// Called when the data is to be written to the backing store.
-    ///
-    /// Note that the type does not write its own binary representation, it is
-    /// assumed some external container will store the bytes in a relevant part
-    /// of the store. The type does however need to write any child key/value
-    /// entries (often by calling child `State` types' `flush()` implementations
-    /// then storing their resulting binary representations) to the store if
-    /// necessary.
-    fn flush(&mut self) -> Result<()>
-    where
-        S: Write;
-
-    #[allow(unused_variables)]
-    fn transform(version: u32, value: &mut serde_json::Value) -> Result<()> {
-        if version == Self::VERSION {
-            Ok(())
-        } else {
-            Err(Error::State(format!(
-                "Cannot transform data from version {} to version {}",
-                version,
-                Self::VERSION
-            )))
-        }
-    }
+pub trait State: Sized {
+    fn attach(&mut self, store: Store) -> Result<()>;
+    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()>;
+    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self>;
 }
 
 macro_rules! state_impl {
     ($type:ty) => {
-        impl<S> State<S> for $type {
+        impl State for $type {
             #[inline]
-            fn attach(&mut self, _: Store<S>) -> Result<()> {
+            fn attach(&mut self, _: Store) -> Result<()> {
                 Ok(())
             }
 
             #[inline]
-            fn flush(&mut self) -> Result<()> {
-                Ok(())
+            fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+                Ok(self.encode_into(out)?)
+            }
+
+            fn load(_store: Store, bytes: &mut &[u8]) -> Result<Self> {
+                Ok(Self::decode(bytes)?)
             }
         }
     };
@@ -83,43 +52,30 @@ state_impl!(i128);
 state_impl!(bool);
 state_impl!(());
 
-fn varint(n: usize, max: usize) -> Vec<u8> {
-    if max < u8::MAX as usize {
-        vec![n as u8]
-    } else if max < u16::MAX as usize {
-        (n as u16).to_be_bytes().to_vec()
-    } else if max < u32::MAX as usize {
-        (n as u32).to_be_bytes().to_vec()
-    } else {
-        (n as u64).to_be_bytes().to_vec()
+impl<T: State> State for Option<T> {
+    fn attach(&mut self, store: Store) -> Result<()> {
+        self.as_mut().map_or(Ok(()), |inner| inner.attach(store))
+    }
+
+    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+        self.as_mut().map_or(Ok(()), |inner| inner.flush(out))
+    }
+
+    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
+        if bytes.is_empty() {
+            return Err(Error::State(
+                "Cannot load Option from empty bytes".to_string(),
+            ));
+        }
+        if bytes[0] == 0 {
+            Ok(None)
+        } else {
+            Ok(Some(T::load(store, &mut &bytes[1..])?))
+        }
     }
 }
 
-impl<T: State<S> + Terminated, S, const N: usize> State<S> for [T; N] {
-    fn attach(&mut self, store: Store<S>) -> Result<()>
-    where
-        S: Read,
-    {
-        for (i, value) in self.iter_mut().enumerate() {
-            let prefix = varint(i, N);
-            let substore = store.sub(prefix.as_slice());
-            value.attach(substore)?;
-        }
-        Ok(())
-    }
-
-    fn flush(&mut self) -> Result<()>
-    where
-        S: Write,
-    {
-        for value in self.iter_mut() {
-            value.flush()?;
-        }
-        Ok(())
-    }
-}
-
-impl<T: State + Terminated> State for Vec<T> {
+impl<T: State, const N: usize> State for [T; N] {
     fn attach(&mut self, store: Store) -> Result<()> {
         for (i, value) in self.iter_mut().enumerate() {
             let prefix = (i as u64).to_be_bytes();
@@ -129,11 +85,39 @@ impl<T: State + Terminated> State for Vec<T> {
         Ok(())
     }
 
-    fn flush(&mut self) -> Result<()> {
+    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+        out.write_all(&(self.len() as u64).to_be_bytes())?;
         for value in self.iter_mut() {
-            value.flush()?;
+            value.flush(out)?;
         }
         Ok(())
+    }
+
+    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
+        todo!()
+    }
+}
+
+impl<T: State> State for Vec<T> {
+    fn attach(&mut self, store: Store) -> Result<()> {
+        for (i, value) in self.iter_mut().enumerate() {
+            let prefix = (i as u64).to_be_bytes();
+            let substore = store.sub(prefix.as_slice());
+            value.attach(substore)?;
+        }
+        Ok(())
+    }
+
+    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+        out.write_all(&(self.len() as u64).to_be_bytes())?;
+        for value in self.iter_mut() {
+            value.flush(out)?;
+        }
+        Ok(())
+    }
+
+    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
+        todo!()
     }
 }
 
@@ -142,93 +126,83 @@ impl<T: State> State for RefCell<T> {
         self.get_mut().attach(store)
     }
 
-    fn flush(&mut self) -> Result<()> {
-        self.get_mut().flush()
+    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+        self.get_mut().flush(out)
+    }
+
+    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
+        Ok(RefCell::new(T::load(store, bytes)?))
     }
 }
 
-// impl<T: State> State for UnsafeCell<T> {
-//     fn attach(&mut self, store: Store) -> Result<()> {
-//         self.get_mut().attach(store)
-//     }
-//
-//     fn flush(&mut self) -> Result<()> {
-//         self.get_mut().flush()
-//     }
-// }
-
-impl<T, S> State<S> for PhantomData<T> {
-    fn attach(&mut self, _: Store<S>) -> Result<()> {
+impl<T> State for PhantomData<T> {
+    fn attach(&mut self, _: Store) -> Result<()> {
         Ok(())
     }
 
-    fn flush(&mut self) -> Result<()> {
+    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
         Ok(())
     }
-}
 
-impl<A: State<S>, S> State<S> for (A,) {
-    fn attach(&mut self, store: Store<S>) -> Result<()>
-    where
-        S: Read,
-    {
-        self.0.attach(store)
-    }
-
-    fn flush(&mut self) -> Result<()>
-    where
-        S: Write,
-    {
-        self.0.flush()
+    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
+        Ok(PhantomData::default())
     }
 }
 
 macro_rules! state_tuple_impl {
-    ($($type:ident),*; $last_type: ident; $($indices:tt),*) => {
-        impl<$($type,)* $last_type, S> State<S> for ($($type,)* $last_type,)
+    ($($type:ident),*; $($indices:tt),*) => {
+        impl<$($type,)*> State for ($($type,)*)
         where
-            $($type: State<S>,)*
-            $last_type: State<S>,
-            // last type doesn't need to be terminated
-            $($type: ed::Terminated,)*
+            $($type: State,)*
         {
-            fn attach(&mut self, store: Store<S>) -> Result<()>
-            where
-                S: Read,
+            fn attach(&mut self, store: Store) -> Result<()>
             {
                 $(self.$indices.attach(store.sub(&[$indices as u8]))?;)*
                 Ok(())
             }
 
-            fn flush(&mut self) -> Result<()>
-            where
-                S: Write,
+            fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()>
             {
-                $(self.$indices.flush()?;)*
+                $(self.$indices.flush(out)?;)*
                 Ok(())
+            }
+
+            fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
+                Ok((
+                    $(<$type>::load(store.sub(&[$indices as u8]), bytes)?,)*
+                ))
             }
         }
     }
 }
 
-state_tuple_impl!(A; B; 0, 1);
-state_tuple_impl!(A, B; C; 0, 1, 2);
-state_tuple_impl!(A, B, C; D; 0, 1, 2, 3);
-state_tuple_impl!(A, B, C, D; E; 0, 1, 2, 3, 4);
-state_tuple_impl!(A, B, C, D, E; F; 0, 1, 2, 3, 4, 5);
-state_tuple_impl!(A, B, C, D, E, F; G; 0, 1, 2, 3, 4, 5, 6);
-state_tuple_impl!(A, B, C, D, E, F, G; H; 0, 1, 2, 3, 4, 5, 6, 7);
-state_tuple_impl!(A, B, C, D, E, F, G, H; I; 0, 1, 2, 3, 4, 5, 6, 7, 8);
-state_tuple_impl!(A, B, C, D, E, F, G, H, I; J; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
-state_tuple_impl!(A, B, C, D, E, F, G, H, I, J; K; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
-state_tuple_impl!(A, B, C, D, E, F, G, H, I, J, K; L; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
-
-impl<T: State> State for Option<T> {
+impl<A: State> State for (A,) {
     fn attach(&mut self, store: Store) -> Result<()> {
-        self.as_mut().map_or(Ok(()), |inner| inner.attach(store))
+        self.0.attach(store.sub(&[0]))
     }
 
-    fn flush(&mut self) -> Result<()> {
-        self.as_mut().map_or(Ok(()), |inner| inner.flush())
+    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+        self.0.flush(out)
+    }
+
+    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
+        Ok((A::load(store.sub(&[0]), bytes)?,))
     }
 }
+
+//Call and Query macros parse the file
+//Go look for the attributes on method calls and queries
+
+//looking for Foo, but not FooV4
+
+state_tuple_impl!(A, B; 0, 1);
+state_tuple_impl!(A, B, C; 0, 1, 2);
+state_tuple_impl!(A, B, C, D; 0, 1, 2, 3);
+state_tuple_impl!(A, B, C, D, E; 0, 1, 2, 3, 4);
+state_tuple_impl!(A, B, C, D, E, F; 0, 1, 2, 3, 4, 5);
+state_tuple_impl!(A, B, C, D, E, F, G; 0, 1, 2, 3, 4, 5, 6);
+state_tuple_impl!(A, B, C, D, E, F, G, H; 0, 1, 2, 3, 4, 5, 6, 7);
+state_tuple_impl!(A, B, C, D, E, F, G, H, I; 0, 1, 2, 3, 4, 5, 6, 7, 8);
+state_tuple_impl!(A, B, C, D, E, F, G, H, I, J; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
+state_tuple_impl!(A, B, C, D, E, F, G, H, I, J, K; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+state_tuple_impl!(A, B, C, D, E, F, G, H, I, J, K, L; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);

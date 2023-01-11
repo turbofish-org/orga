@@ -6,6 +6,7 @@ use crate::context::GetContext;
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::migrate::MigrateFrom;
+use crate::orga;
 use crate::plugins::Paid;
 use crate::plugins::Signer;
 use crate::query::Query;
@@ -13,19 +14,7 @@ use crate::state::State;
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 
-#[derive(
-    State,
-    Encode,
-    Decode,
-    Call,
-    Query,
-    Client,
-    Default,
-    Serialize,
-    Deserialize,
-    Describe,
-    MigrateFrom,
-)]
+#[orga]
 pub struct Accounts<S: Symbol> {
     transfers_allowed: bool,
     transfer_exceptions: Map<Address, ()>,

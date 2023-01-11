@@ -20,11 +20,6 @@ pub fn derive_state(item: TokenStream) -> TokenStream {
     state::derive(item)
 }
 
-#[proc_macro_derive(State2, attributes(state))]
-pub fn derive_state2(item: TokenStream) -> TokenStream {
-    state2::derive(item)
-}
-
 #[proc_macro_derive(Entry, attributes(key))]
 pub fn derive_entry(item: TokenStream) -> TokenStream {
     entry::derive(item)

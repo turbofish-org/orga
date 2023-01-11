@@ -9,9 +9,9 @@
 #![feature(adt_const_params)]
 #![feature(fn_traits)]
 #![feature(async_closure)]
-#![feature(fundamental)]
 
 extern crate self as orga;
+pub use orga_macros::orga;
 
 /// Integration with ABCI (gated by `abci` feature).
 #[cfg(feature = "abci")]
@@ -62,12 +62,13 @@ pub mod coins;
 
 pub mod context;
 
-#[cfg(feature = "feat-ibc")]
-pub mod ibc;
+// #[cfg(feature = "feat-ibc")]
+// pub mod ibc;
 
 mod error;
 
 pub use cosmrs;
+pub use superstruct::superstruct;
 
 // re-exports
 pub use async_trait::async_trait;

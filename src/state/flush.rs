@@ -1,4 +1,4 @@
-use super::state2::State;
+use super::State;
 use crate::Result;
 
 pub struct Flusher<'a, W> {
@@ -13,10 +13,21 @@ where
         Self { out }
     }
 
-    pub fn flush_child<U>(self, value: &mut U) -> Result<Self>
+    pub fn flush_child<U>(self, value: U) -> Result<Self>
     where
         U: State,
     {
+        value.flush(self.out)?;
+
+        Ok(self)
+    }
+
+    pub fn flush_child_as<T, U>(self, value: U) -> Result<Self>
+    where
+        T: State + From<U>,
+        U: State,
+    {
+        let mut value: T = value.into();
         value.flush(self.out)?;
 
         Ok(self)

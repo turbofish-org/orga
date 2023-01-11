@@ -101,3 +101,5 @@ where
         Ok(Self { len, values })
     }
 }
+
+pub struct Adapter<T>(T);

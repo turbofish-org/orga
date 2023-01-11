@@ -4,17 +4,13 @@ use crate::client::Client;
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::migrate::{MigrateFrom, MigrateInto};
+use crate::orga;
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::Result;
-use serde::{Deserialize, Serialize};
 
-#[derive(Query, Encode, Decode, Serialize, Deserialize)]
-#[serde(bound(
-    serialize = "T: Serialize + State",
-    deserialize = "T: Deserialize<'de> + State",
-))]
+#[derive(Query, Encode, Decode)]
 pub struct Deque<T> {
     meta: Meta,
     map: Map<u64, T>,
@@ -50,7 +46,8 @@ impl<T> std::fmt::Debug for Deque<T> {
     }
 }
 
-#[derive(State, Encode, Decode, Clone, Debug, Serialize, Deserialize, Describe)]
+#[orga(skip(Default))]
+#[derive(Clone, Debug)]
 pub struct Meta {
     head: u64,
     tail: u64,
@@ -87,20 +84,27 @@ impl<T: State> State for Deque<T> {
         self.map.attach(store)
     }
 
-    fn flush(&mut self) -> Result<()> {
-        self.map.flush()
+    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+        self.map.flush(out)
+    }
+
+    fn load(store: Store, _bytes: &mut &[u8]) -> Result<Self> {
+        let deque = Deque::default();
+        deque.attach(store)?;
+
+        Ok(deque)
     }
 }
 
-impl<T: State + Describe + 'static> Describe for Deque<T> {
-    fn describe() -> crate::describe::Descriptor {
-        crate::describe::Builder::new::<Self>()
-            .named_child::<Map<u64, T>>("map", &[], |v| {
-                crate::describe::Builder::access(v, |v: Self| v.map)
-            })
-            .build()
-    }
-}
+// impl<T: State + Describe + 'static> Describe for Deque<T> {
+//     fn describe() -> crate::describe::Descriptor {
+//         crate::describe::Builder::new::<Self>()
+//             .named_child::<Map<u64, T>>("map", &[], |v| {
+//                 crate::describe::Builder::access(v, |v: Self| v.map)
+//             })
+//             .build()
+//     }
+// }
 
 impl<T: State> Deque<T> {
     #[query]

@@ -1,21 +1,90 @@
 use std::collections::HashMap;
 
+use super::utils::gen_param_input;
 use darling::FromMeta;
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse::ParseStream, *};
+use syn::*;
 
 pub fn orga(args: TokenStream, input: TokenStream) -> TokenStream {
     let attr_args = parse_macro_input!(args as AttributeArgs);
     let mut item = parse_macro_input!(input as ItemStruct);
     let root_attrs = item.attrs.clone();
+    let vis = item.vis.clone();
+
+    let generics = &item.generics;
+    let generic_params = gen_param_input(&generics, true);
 
     let name = item.ident.clone();
     let opts = StructOpts::from_list(&attr_args).unwrap();
 
+    let maybe_default = if opts.skip.is_some()
+        && opts
+            .skip
+            .as_ref()
+            .unwrap()
+            .contains_key(&format_ident!("Default"))
+    {
+        quote! {}
+    } else {
+        quote! { Default, }
+    };
+
+    let maybe_call = if opts.skip.is_some()
+        && opts
+            .skip
+            .as_ref()
+            .unwrap()
+            .contains_key(&format_ident!("Call"))
+    {
+        quote! {}
+    } else {
+        quote! { ::orga::call::Call, }
+    };
+
+    let maybe_query = if opts.skip.is_some()
+        && opts
+            .skip
+            .as_ref()
+            .unwrap()
+            .contains_key(&format_ident!("Query"))
+    {
+        quote! {}
+    } else {
+        quote! { ::orga::query::Query, }
+    };
+
+    let maybe_state = if opts.skip.is_some()
+        && opts
+            .skip
+            .as_ref()
+            .unwrap()
+            .contains_key(&format_ident!("State"))
+    {
+        quote! {}
+    } else {
+        quote! { ::orga::state::State, }
+    };
+
+    let maybe_migrate_from = if opts.skip.is_some()
+        && opts
+            .skip
+            .as_ref()
+            .unwrap()
+            .contains_key(&format_ident!("MigrateFrom"))
+    {
+        quote! {}
+    } else {
+        quote! { ::orga::migrate::MigrateFrom, }
+    };
+
     let mut fields = vec![];
     for field in item.fields.iter_mut() {
-        let name = field.ident.clone().expect("named fields only");
+        let name = field
+            .ident
+            .clone()
+            .expect("Only named fields are supported");
+
         let field_opts = field
             .attrs
             .iter()
@@ -47,40 +116,45 @@ pub fn orga(args: TokenStream, input: TokenStream) -> TokenStream {
     let root_attrs = root_attrs.into_iter().map(|attr| {
         let path = &attr.path;
         let tokens = &attr.tokens;
+
         quote! {
            #path#tokens,
         }
     });
 
     let sfxs = opts.version_suffixes();
-    let latest_variant_sfx = format_ident!("V{}", opts.version);
     let latest_variant_name = format_ident!("{}V{}", name, opts.version);
 
-    let specific_variant_attributes = {
-        let mut specific_variant_attributes = (1..=opts.version)
-            .into_iter()
-            .map(|v| {
-                let sfx = format_ident!("V{}", v);
+    let specific_variant_attributes = (0..=opts.version)
+        .into_iter()
+        .map(|v| {
+            let prev = if v > 0 {
                 let prev_name = format!("{}V{}", name, v - 1);
-                quote! { #sfx(state(version = #v, previous = #prev_name))}
-            })
-            .collect::<Vec<_>>();
-        // let v = opts.version;
-        // let prev_name = format!("{}V{}", name, v - 1);
-        // specific_variant_attributes.push(quote! { #latest_variant_sfx(#(#root_attrs),* state(version = #v, previous = #prev_name), derive(::orga::call::Call, ::orga::query::Query)) });
-        // specific_variant_attributes.push(quote! { #latest_variant_sfx(#(#root_attrs),* state(version = #v, previous = #prev_name), derive(::orga::call::Call, ::orga::query::Query)) });
-        specific_variant_attributes
-    };
+                quote! { previous = #prev_name }
+            } else {
+                quote! {}
+            };
+
+            let derive_attr = if v == opts.version {
+                quote! { derive(#maybe_call #maybe_query) }
+            } else {
+                quote! {}
+            };
+
+            let sfx = format_ident!("V{}", v);
+            quote! { #sfx(state(version = #v, #prev), #derive_attr)}
+        })
+        .collect::<Vec<_>>();
 
     let ss_output = quote! {
-        #[::superstruct::superstruct(
+        #[::orga::superstruct(
             variants(#(#sfxs),*),
-            variant_attributes(derive(::orga::state::state2::State, ::orga::migrate::MigrateFrom, ::orga::encoding::VersionedDecode, ::orga::encoding::VersionedEncode, Default), #(#root_attrs),*),
+            variant_attributes(derive(#maybe_state #maybe_migrate_from ::orga::encoding::VersionedDecode, ::orga::encoding::VersionedEncode, #maybe_default), #(#root_attrs),*),
             specific_variant_attributes(#(#specific_variant_attributes),*),
             no_enum
         )]
         #item
-        type #name = #latest_variant_name;
+        #vis type #name#generic_params = #latest_variant_name#generic_params;
     };
 
     quote! {
@@ -91,7 +165,9 @@ pub fn orga(args: TokenStream, input: TokenStream) -> TokenStream {
 
 #[derive(FromMeta, Debug)]
 struct StructOpts {
+    #[darling(default)]
     version: u8,
+    skip: Option<HashMap<Ident, ()>>,
 }
 
 impl StructOpts {

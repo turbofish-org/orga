@@ -1,5 +1,3 @@
-use serde::de::Visitor;
-use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::btree_map::Entry::{Occupied, Vacant};
 use std::collections::{btree_map, BTreeMap};
@@ -7,11 +5,9 @@ use std::iter::Peekable;
 use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
 use crate::call::Call;
-use crate::client::{AsyncCall, Client as ClientTrait};
-use crate::describe::Describe;
 use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::query::Query;
-use crate::state::*;
+use crate::state::State;
 use crate::store::*;
 use crate::{Error, Result};
 use ed::*;
@@ -51,7 +47,7 @@ impl<K> Encode for MapKey<K> {
 //implement Encode for MapKey that just returns the inner_bytes
 impl<K> MapKey<K> {
     pub fn new<E: Encode>(key: E) -> Result<MapKey<E>> {
-        let inner_bytes = Encode::encode(&key)?;
+        let mut inner_bytes = Encode::encode(&key)?;
         Ok(MapKey {
             inner: key,
             inner_bytes,
@@ -94,83 +90,13 @@ pub struct Map<K, V> {
     children: BTreeMap<MapKey<K>, Option<V>>,
 }
 
-impl<K, V> Encode for Map<K, V> {
-    fn encode_into<W: std::io::Write>(&self, _dest: &mut W) -> ed::Result<()> {
-        Ok(())
-    }
-
-    fn encoding_length(&self) -> ed::Result<usize> {
-        Ok(0)
-    }
-}
-
-impl<K, V> Decode for Map<K, V> {
-    fn decode<R: std::io::Read>(_input: R) -> ed::Result<Self> {
-        Ok(Map::new())
+impl<K, V> std::fmt::Debug for Map<K, V> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Map").finish()
     }
 }
 
 impl<K, V> Terminated for Map<K, V> {}
-
-impl<K: Serialize, V: Serialize> Serialize for Map<K, V>
-where
-    K: Encode + Decode + Terminated + Clone,
-    V: State,
-{
-    fn serialize<S: serde::Serializer>(
-        &self,
-        serializer: S,
-    ) -> std::result::Result<S::Ok, S::Error> {
-        use serde::ser::{Error, SerializeSeq};
-        let mut seq = serializer.serialize_seq(None)?;
-        for entry in self.iter().map_err(Error::custom)? {
-            let (key, value) = entry.map_err(Error::custom)?;
-            seq.serialize_element(&(&*key, &*value))?;
-        }
-        seq.end()
-    }
-}
-
-impl<'de, K: Deserialize<'de>, V: Deserialize<'de>> Deserialize<'de> for Map<K, V>
-where
-    K: Encode + Decode + Terminated + Clone,
-    V: State,
-{
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        use serde::de::Error;
-
-        struct MapVisitor<K, V>(Map<K, V>);
-
-        impl<'de, K, V> Visitor<'de> for MapVisitor<K, V>
-        where
-            K: Deserialize<'de>,
-            K: Encode + Decode + Terminated + Clone,
-            V: Deserialize<'de>,
-            V: State,
-        {
-            type Value = Map<K, V>;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("a sequence of key/value entries")
-            }
-
-            fn visit_seq<A>(mut self, mut seq: A) -> std::result::Result<Self::Value, A::Error>
-            where
-                A: serde::de::SeqAccess<'de>,
-            {
-                while let Some((key, value)) = seq.next_element::<(K, V)>()? {
-                    self.0.insert(key, value).map_err(Error::custom)?;
-                }
-                Ok(self.0)
-            }
-        }
-
-        deserializer.deserialize_seq(MapVisitor(Map::new()))
-    }
-}
 
 impl<K, V> State for Map<K, V>
 where
@@ -184,12 +110,19 @@ where
         self.store.attach(store)
     }
 
-    fn flush(&mut self) -> Result<()> {
+    fn flush<W: std::io::Write>(mut self, out: &mut W) -> Result<()> {
         while let Some((key, maybe_value)) = self.children.pop_first() {
             Self::apply_change(&mut self.store, &key.inner, maybe_value)?;
         }
 
         Ok(())
+    }
+
+    fn load(store: Store, _bytes: &mut &[u8]) -> Result<Self> {
+        let mut map = Self::default();
+        map.attach(store)?;
+
+        Ok(map)
     }
 }
 
@@ -199,32 +132,12 @@ impl<K, V> Map<K, V> {
     }
 }
 
-impl<K: Encode + Decode + Terminated, V: State> Map<K, V> {
-    pub fn with_store(store: Store) -> Result<Self> {
-        let mut map = Map::new();
-        State::attach(&mut map, store)?;
-        Ok(map)
-    }
-}
-
 impl<K, V> Default for Map<K, V> {
     fn default() -> Self {
         Map {
             store: Store::default(),
             children: BTreeMap::default(),
         }
-    }
-}
-
-impl<K: Describe + 'static, V: Describe + 'static> Describe for Map<K, V>
-where
-    K: Encode + Terminated,
-    V: State,
-{
-    fn describe() -> crate::describe::Descriptor {
-        crate::describe::Builder::new::<Self>()
-            .dynamic_child::<K, V>()
-            .build()
     }
 }
 
@@ -260,8 +173,7 @@ where
             .get(key_bytes.as_slice())?
             .map(|value_bytes| {
                 let substore = self.store.sub(key_bytes.as_slice());
-                let mut value = V::decode(value_bytes.as_slice())?;
-                value.attach(substore)?;
+                let mut value = V::load(substore, &mut value_bytes.as_slice())?;
                 Ok(value)
             })
             .transpose()
@@ -304,23 +216,34 @@ impl<K1, V1, K2, V2> MigrateFrom<Map<K1, V1>> for Map<K2, V2>
 where
     K1: MigrateInto<K2> + Encode + Decode + Terminated + Clone,
     V1: MigrateInto<V2> + State,
-    K2: Encode + Terminated,
+    K2: Encode + Decode + Terminated + Clone,
     V2: State,
 {
-    fn migrate_from(other: Map<K1, V1>) -> Result<Self> {
+    fn migrate_from(mut other: Map<K1, V1>) -> Result<Self> {
         let mut map = Self::default();
+        let mut old_keys = vec![];
         for entry in other.iter()? {
-            let (key, value) = entry?;
-            let key_bytes = key.encode()?;
-            let key = key.clone().migrate_into()?;
-            let value_bytes = value.encode()?;
-            let mut value = V1::decode(value_bytes.as_slice())?;
-            let substore = other.store.sub(key_bytes.as_slice());
-            value.attach(substore)?;
-            let value = value.migrate_into()?;
-
-            map.insert(key, value)?;
+            let (key, _value) = entry?;
+            old_keys.push(key.clone());
         }
+
+        for key in old_keys.iter() {
+            let old_key_bytes = key.encode()?;
+            let mut value_bytes = vec![];
+            let mut value = other.get_mut(key.clone())?.unwrap();
+            value.flush(&mut value_bytes)?;
+            let value = V1::load(
+                other.store.sub(old_key_bytes.as_slice()),
+                &mut value_bytes.as_slice(),
+            )?;
+            let new_key = key.clone().migrate_into()?;
+            let new_value = value.migrate_into()?;
+
+            map.insert(new_key, new_value)?;
+            other.remove(key.clone())?;
+        }
+        let mut out = vec![];
+        other.flush(&mut out)?;
 
         Ok(map)
     }
@@ -494,8 +417,8 @@ where
         match maybe_value {
             Some(mut value) => {
                 // insert/update
-                value.flush()?;
-                let value_bytes = value.encode()?;
+                let mut value_bytes = vec![];
+                value.flush(&mut value_bytes)?;
                 store.put(key_bytes, value_bytes)?;
             }
             None => {
@@ -553,11 +476,12 @@ where
                         .transpose()?
                         .expect("Peek ensures this arm is unreachable");
 
-                    let key: K = Decode::decode(entry.0.as_slice())?;
+                    let key = Decode::decode(entry.0.as_slice())?;
 
-                    let mut value: V = Decode::decode(entry.1.as_slice())?;
-                    let substore = self.parent_store.sub(entry.0.as_slice());
-                    value.attach(substore)?;
+                    let value = V::load(
+                        self.parent_store.sub(entry.0.as_slice()),
+                        &mut entry.1.as_slice(),
+                    )?;
 
                     Some((Ref::Owned(key), Ref::Owned(value)))
                 }
@@ -572,7 +496,7 @@ where
                         Ok((ref key, _)) => key,
                     };
 
-                    let decoded_backing_key: K = Decode::decode(backing_key.as_slice())?;
+                    let decoded_backing_key = Decode::decode(backing_key.as_slice())?;
 
                     //so compare backing_key with map_key.inner_bytes
                     let key_cmp = map_key.inner_bytes.cmp(backing_key);
@@ -582,9 +506,10 @@ where
                         let entry = self.store_iter.next().unwrap()?;
                         let key: K = decoded_backing_key;
 
-                        let mut value: V = Decode::decode(entry.1.as_slice())?;
-                        let substore = self.parent_store.sub(entry.0.as_slice());
-                        value.attach(substore)?;
+                        let mut value = V::load(
+                            self.parent_store.sub(entry.0.as_slice()),
+                            &mut entry.1.as_slice(),
+                        )?;
 
                         return Ok(Some((Ref::Owned(key), Ref::Owned(value))));
                     }
@@ -713,12 +638,6 @@ impl<V> Deref for ReadOnly<V> {
     }
 }
 
-// impl<V> From<V> for ReadOnly<V> {
-//     fn from(value: V) -> Self {
-//         ReadOnly { inner: value }
-//     }
-// }
-
 impl<V> ReadOnly<V> {
     pub fn new(inner: V) -> Self {
         ReadOnly { inner }
@@ -785,14 +704,6 @@ impl<'a, V: Ord> Ord for Ref<'a, V> {
     }
 }
 
-impl<'a, T: ClientTrait<U>, U: Clone> ClientTrait<U> for Ref<'a, T> {
-    type Client = T::Client;
-
-    fn create_client(parent: U) -> Self::Client {
-        T::create_client(parent)
-    }
-}
-
 /// A mutable reference to an existing value in a collection.
 ///
 /// If the value is mutated, it will be retained in memory until the parent
@@ -830,25 +741,12 @@ where
 
 impl<'a, K, V: Call> Call for ChildMut<'a, K, V>
 where
-    K: Encode + Clone,
+    K: State + Clone + Encode,
 {
     type Call = V::Call;
 
     fn call(&mut self, call: Self::Call) -> Result<()> {
         (**self).call(call)
-    }
-}
-
-impl<'a, K, V, U> ClientTrait<U> for ChildMut<'a, K, V>
-where
-    V: ClientTrait<U>,
-    K: Encode,
-    U: Clone,
-{
-    type Client = V::Client;
-
-    fn create_client(parent: U) -> Self::Client {
-        V::create_client(parent)
     }
 }
 
@@ -940,6 +838,14 @@ where
     }
 }
 
+impl<K: Encode + Decode + Terminated, V: State> Map<K, V> {
+    pub fn with_store(store: Store) -> Result<Self> {
+        let mut map = Map::new();
+        State::attach(&mut map, store)?;
+        Ok(map)
+    }
+}
+
 impl<'a, K, V> Entry<'a, K, V>
 where
     K: Encode + Terminated + Clone,
@@ -998,77 +904,6 @@ impl<'a, K: Encode, V> From<Entry<'a, K, V>> for Option<ChildMut<'a, K, V>> {
         }
     }
 }
-
-pub struct Client<K, V, U: Clone> {
-    parent: U,
-    key: Option<K>,
-    _marker: std::marker::PhantomData<V>,
-}
-
-impl<K, V, U: Clone> ClientTrait<U> for Map<K, V> {
-    type Client = Client<K, V, U>;
-
-    fn create_client(parent: U) -> Self::Client {
-        Client {
-            parent,
-            key: None,
-            _marker: std::marker::PhantomData,
-        }
-    }
-}
-
-impl<K: Clone, V, U: Clone> Clone for Client<K, V, U> {
-    fn clone(&self) -> Self {
-        Client {
-            parent: self.parent.clone(),
-            key: self.key.clone(),
-            _marker: std::marker::PhantomData,
-        }
-    }
-}
-
-impl<K: Clone, V: Call, U: Clone> Client<K, V, U>
-where
-    V: ClientTrait<Self>,
-{
-    pub fn get_mut(&mut self, key: K) -> V::Client {
-        let mut adapter = self.clone();
-        adapter.key = Some(key);
-        V::create_client(adapter)
-    }
-}
-
-unsafe impl<K: Clone, V: Call, U: Clone> Send for Client<K, V, U>
-where
-    U: AsyncCall<Call = <Map<K, V> as Call>::Call>,
-    K: Encode + Decode + Terminated,
-    V::Call: Sync,
-    U: Send,
-    K: Send + std::fmt::Debug,
-{
-}
-
-#[async_trait::async_trait(?Send)]
-impl<K: Clone, V: Call, U: Clone> AsyncCall for Client<K, V, U>
-where
-    U: AsyncCall<Call = <Map<K, V> as Call>::Call>,
-    K: Encode + Decode + Terminated,
-    V::Call: Sync + Send,
-    U: Send,
-    K: Send + std::fmt::Debug,
-{
-    type Call = V::Call;
-
-    async fn call(&self, subcall: Self::Call) -> Result<()> {
-        let key = self.key.as_ref().unwrap().clone();
-
-        let subcall_bytes = subcall.encode()?;
-
-        let call = <Map<K, V> as Call>::Call::MethodGetMut(key, subcall_bytes);
-        self.parent.call(call).await
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::super::deque::Deque;
@@ -1109,7 +944,8 @@ mod tests {
         *v = 3;
         assert_eq!(store.get(&enc(1)).unwrap().unwrap(), enc(2));
 
-        map.flush().unwrap();
+        let mut buf = vec![];
+        map.flush(&mut buf).unwrap();
         assert_eq!(store.get(&enc(1)).unwrap().unwrap(), enc(3));
     }
 
@@ -1135,7 +971,8 @@ mod tests {
         assert!(map.children.contains_key(&map_key));
         assert!(store.get(&enc(6)).unwrap().is_none());
 
-        map.flush().unwrap();
+        let mut buf = vec![];
+        map.flush(&mut buf).unwrap();
         assert_eq!(store.get(&enc(6)).unwrap().unwrap(), enc(8));
     }
 
@@ -1149,7 +986,8 @@ mod tests {
         assert!(map.children.contains_key(&map_key));
         assert!(store.get(&enc(9)).unwrap().is_none());
 
-        map.flush().unwrap();
+        let mut buf = vec![];
+        map.flush(&mut buf).unwrap();
         assert_eq!(store.get(&enc(9)).unwrap().unwrap(), enc(10));
     }
 
@@ -1163,7 +1001,8 @@ mod tests {
         assert!(map.children.contains_key(&map_key));
         assert!(store.get(&enc(11)).unwrap().is_none());
 
-        map.flush().unwrap();
+        let mut buf = vec![];
+        map.flush(&mut buf).unwrap();
         assert_eq!(store.get(&enc(11)).unwrap().unwrap(), enc(u32::default()));
     }
 
@@ -1179,7 +1018,8 @@ mod tests {
         map.remove(12).unwrap();
         let map_key = MapKey::<u32>::new(12).unwrap();
         assert!(map.children.get(&map_key).unwrap().is_none());
-        map.flush().unwrap();
+        let mut buf = vec![];
+        map.flush(&mut buf).unwrap();
         assert!(store.get(&enc(12)).unwrap().is_none());
 
         // Remove a value that was in the store before map's creation
@@ -1190,7 +1030,8 @@ mod tests {
         // Also remove a value by entry
         let entry = map.entry(16).unwrap();
         assert!(entry.remove().unwrap());
-        map.flush().unwrap();
+        let mut buf = vec![];
+        map.flush(&mut buf).unwrap();
         assert!(store.get(&enc(14)).unwrap().is_none());
         assert!(store.get(&enc(16)).unwrap().is_none());
     }
@@ -1251,7 +1092,8 @@ mod tests {
         edit_map.entry(13).unwrap().or_insert(26).unwrap();
         edit_map.entry(14).unwrap().or_insert(28).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
         let read_map: Map<u32, u32> = Map::with_store(store.clone()).unwrap();
 
@@ -1286,7 +1128,8 @@ mod tests {
 
         edit_map.entry(12).unwrap().or_insert(24).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
         let mut read_map: Map<u32, u32> = Map::with_store(store.clone()).unwrap();
 
@@ -1317,7 +1160,8 @@ mod tests {
 
         edit_map.entry(12).unwrap().or_insert(24).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
         let mut read_map: Map<u32, u32> = Map::with_store(store.clone()).unwrap();
 
@@ -1342,7 +1186,8 @@ mod tests {
 
         edit_map.entry(12).unwrap().or_insert(24).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
         let mut read_map: Map<u32, u32> = Map::with_store(store.clone()).unwrap();
 
@@ -1384,7 +1229,8 @@ mod tests {
 
         edit_map.entry(13).unwrap().or_insert(26).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
         let mut read_map: Map<u32, u32> = Map::with_store(store.clone()).unwrap();
 
@@ -1455,7 +1301,8 @@ mod tests {
 
         edit_map.entry(13).unwrap().or_insert(26).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
         let mut read_map: Map<u32, u32> = Map::with_store(store.clone()).unwrap();
 
@@ -1509,7 +1356,8 @@ mod tests {
         edit_map.entry(13).unwrap().or_insert(26).unwrap();
         edit_map.entry(14).unwrap().or_insert(28).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
         let read_map: Map<u32, u32> = Map::with_store(store).unwrap();
 
@@ -1531,7 +1379,8 @@ mod tests {
 
         edit_map.entry(12).unwrap().or_insert(24).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
         let mut read_map: Map<u32, u32> = Map::with_store(store).unwrap();
 
@@ -1555,7 +1404,8 @@ mod tests {
 
         edit_map.entry(12).unwrap().or_insert(24).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
         let mut read_map: Map<u32, u32> = Map::with_store(store).unwrap();
 
@@ -1579,7 +1429,8 @@ mod tests {
 
         edit_map.entry(13).unwrap().or_insert(26).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
         let mut read_map: Map<u32, u32> = Map::with_store(store).unwrap();
 
@@ -1624,7 +1475,8 @@ mod tests {
 
         edit_map.entry(13).unwrap().or_insert(26).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
         let mut read_map: Map<u32, u32> = Map::with_store(store).unwrap();
 
@@ -1771,7 +1623,8 @@ mod tests {
         edit_map.entry(13).unwrap().or_insert(26).unwrap();
         edit_map.entry(14).unwrap().or_insert(28).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
         let read_map: Map<u32, u32> = Map::with_store(store).unwrap();
 
@@ -1796,7 +1649,8 @@ mod tests {
         edit_map.entry(13).unwrap().or_insert(26).unwrap();
         edit_map.entry(14).unwrap().or_insert(28).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
         let read_map: Map<u32, u32> = Map::with_store(store).unwrap();
 
@@ -1820,7 +1674,8 @@ mod tests {
         edit_map.entry(12).unwrap().or_insert(24).unwrap();
         edit_map.entry(14).unwrap().or_insert(28).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
         let mut read_map: Map<u32, u32> = Default::default();
         read_map.attach(store).unwrap();
@@ -1883,7 +1738,8 @@ mod tests {
         let mut sub_map = edit_map.get_mut(42).unwrap().unwrap();
         sub_map.entry(13).unwrap().or_insert(26).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
         let read_map: Map<u32, Map<u32, u32>> = Map::with_store(store).unwrap();
         let inner_map = read_map.get(42).unwrap().unwrap();
@@ -1903,7 +1759,8 @@ mod tests {
         let mut deque = edit_map.get_mut(42).unwrap().unwrap();
         deque.push_front(84).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
         let mut read_map: Map<u32, Deque<u32>> = Map::with_store(store).unwrap();
         let actual = read_map
@@ -1935,7 +1792,8 @@ mod tests {
 
         edit_map.entry(45).unwrap().or_insert_default().unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
         let mut read_map: Map<u32, Map<u32, u32>> = Default::default();
         read_map.attach(store).unwrap();
@@ -1998,7 +1856,8 @@ mod tests {
         edit_map.insert(12, 24).unwrap();
         edit_map.insert(13, 26).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
         let mut read_map: Map<u32, u32> = Default::default();
         read_map.attach(store).unwrap();
@@ -2023,7 +1882,8 @@ mod tests {
         edit_map.attach(store.clone()).unwrap();
 
         edit_map.insert(12, 24).unwrap();
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
         let mut read_map: Map<u32, u32> = Default::default();
         read_map.attach(store).unwrap();
@@ -2039,7 +1899,8 @@ mod tests {
         edit_map.attach(store.clone()).unwrap();
 
         edit_map.insert(12, 24).unwrap();
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
         let mut read_map: Map<u32, u32> = Default::default();
         read_map.attach(store).unwrap();

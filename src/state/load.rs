@@ -4,7 +4,7 @@ use crate::migrate::MigrateInto;
 use crate::store::Store;
 use crate::Result;
 
-use super::state2::State;
+use super::State;
 
 pub struct Loader<'a, 'b> {
     version: u8,
@@ -22,22 +22,6 @@ impl<'a, 'b> Loader<'a, 'b> {
             bytes,
         }
     }
-
-    // pub fn version(&mut self, version: u8) -> &mut Self {
-    //     self.version = version;
-    //     self
-    // }
-
-    // pub fn previous<U>(self) -> Loader<'a, 'b, U> {
-    //     Loader {
-    //         version: self.version,
-    //         field_count: self.field_count,
-    //         has_prev: true,
-    //         _prev: Default::default(),
-    //         store: self.store,
-    //         bytes: self.bytes,
-    //     }
-    // }
 
     pub fn maybe_load_from_prev<T, U>(&mut self) -> Result<Option<U>>
     where
@@ -64,5 +48,14 @@ impl<'a, 'b> Loader<'a, 'b> {
         self.field_count += 1;
 
         res
+    }
+
+    pub fn load_child_as<T, U>(&mut self) -> Result<U>
+    where
+        U: From<T> + State,
+        T: State,
+    {
+        let value = self.load_child::<T>()?;
+        Ok(value.into())
     }
 }
