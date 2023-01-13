@@ -12,7 +12,6 @@ mod next;
 mod orga;
 mod query;
 mod state;
-mod state2;
 mod utils;
 
 #[proc_macro_derive(State, attributes(state))]
@@ -60,7 +59,7 @@ pub fn derive_describe(item: TokenStream) -> TokenStream {
     describe::derive(item)
 }
 
-#[proc_macro_derive(MigrateFrom)]
+#[proc_macro_derive(MigrateFrom, attributes(migrate_from))]
 pub fn derive_migrate_from(item: TokenStream) -> TokenStream {
     migrate_from::derive(item)
 }
@@ -70,12 +69,7 @@ pub fn orga(args: TokenStream, input: TokenStream) -> TokenStream {
     orga::orga(args, input)
 }
 
-#[proc_macro_derive(VersionedDecode)]
-pub fn derive_decode(item: TokenStream) -> TokenStream {
-    encoding::derive_decode(item)
-}
-
-#[proc_macro_derive(VersionedEncode)]
-pub fn derive_encode(item: TokenStream) -> TokenStream {
-    encoding::derive_encode(item)
+#[proc_macro_derive(VersionedEncoding, attributes(encoding))]
+pub fn derive_versioned_encoding(item: TokenStream) -> TokenStream {
+    encoding::derive(item)
 }

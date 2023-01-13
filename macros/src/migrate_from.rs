@@ -1,63 +1,86 @@
-use super::utils::gen_param_input;
+use darling::{ast, FromDeriveInput, FromField};
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{quote, ToTokens};
-use std::str::FromStr;
 use syn::*;
+
+#[derive(FromDeriveInput)]
+#[darling(attributes(migrate_from), supports(struct_any))]
+struct MigrateFromInputReceiver {
+    ident: Ident,
+    generics: Generics,
+    data: ast::Data<(), MigrateFromFieldReceiver>,
+
+    #[darling(default)]
+    identity: bool,
+}
+
+impl ToTokens for MigrateFromInputReceiver {
+    fn to_tokens(&self, tokens: &mut TokenStream2) {
+        let MigrateFromInputReceiver {
+            ident,
+            generics,
+            data,
+            identity,
+        } = self;
+
+        let (imp, ty, wher) = generics.split_for_impl();
+        if *identity {
+            return tokens.extend(quote! {
+                impl#imp ::orga::migrate::MigrateFrom for #ident#ty
+                #wher
+                {
+                    fn migrate_from(other: Self) -> ::orga::Result<Self> {
+                        Ok(other)
+                    }
+                }
+            });
+        }
+
+        let fields = data.as_ref().take_struct().unwrap().fields;
+
+        let field_migrations = fields.iter().enumerate().map(|(i, f)| {
+            let field_ident = f.ident.as_ref().map(|v| quote!(#v)).unwrap_or_else(|| {
+                let i = syn::Index::from(i);
+                quote!(#i)
+            });
+
+            quote! { #field_ident: ::orga::migrate::MigrateFrom::migrate_from(other.#field_ident)?,}
+        });
+        let bounds = fields.iter().map(|f| {
+            let ty = &f.ty;
+            quote! { #ty: ::orga::migrate::MigrateFrom }
+        });
+        let wher = match wher {
+            Some(wher) => quote! { #wher #(#bounds,)* },
+            None => quote! { where #(#bounds,)* },
+        };
+
+        tokens.extend(quote! {
+            impl#imp ::orga::migrate::MigrateFrom for #ident#ty
+            #wher
+            {
+                fn migrate_from(other: Self) -> ::orga::Result<Self> {
+                    Ok(Self {
+                        #(#field_migrations)*
+                    })
+                }
+            }
+        })
+    }
+}
+
+#[derive(FromField)]
+struct MigrateFromFieldReceiver {
+    ident: Option<Ident>,
+    ty: Type,
+}
 
 pub fn derive(item: TokenStream) -> TokenStream {
     let item = parse_macro_input!(item as DeriveInput);
 
-    let num_to_token = |n: usize| TokenStream2::from_str(&n.to_string()).unwrap();
-    let names = struct_fields(&item).enumerate().map(|(i, field)| {
-        field
-            .ident
-            .clone()
-            .map(|name| name.into_token_stream())
-            .unwrap_or_else(|| num_to_token(i))
-    });
-
-    let name = &item.ident;
-    let mut generics = item.generics.clone();
-    generics.params.iter_mut().for_each(|p| {
-        if let GenericParam::Type(tp) = p {
-            tp.bounds.push(parse_quote!(::orga::migrate::MigrateFrom));
-            tp.default.take();
-        }
-    });
-    let where_clause = generics
-        .where_clause
-        .clone()
-        .unwrap_or(parse_quote!(where))
-        .predicates;
-
-    let generic_params = gen_param_input(&generics, true);
-
-    let output = quote! {
-        impl#generics ::orga::migrate::MigrateFrom<Self> for #name#generic_params
-        where #where_clause
-        {
-            fn migrate_from(other: Self) -> ::orga::Result<Self> {
-                Ok(Self {
-                    #(#names: ::orga::migrate::MigrateFrom::migrate_from(other.#names)?),*
-                })
-            }
-        }
-    };
-
-    output.into()
-}
-
-fn struct_fields(item: &DeriveInput) -> impl Iterator<Item = &Field> {
-    let data = match item.data {
-        Data::Struct(ref data) => data,
-        Data::Enum(ref _data) => todo!("#[derive(MigrateFrom)] does not yet support enums"),
-        Data::Union(_) => panic!("Unions are not supported"),
-    };
-
-    match data.fields {
-        Fields::Named(ref fields) => fields.named.iter(),
-        Fields::Unnamed(ref fields) => fields.unnamed.iter(),
-        Fields::Unit => data.fields.iter(),
-    }
+    MigrateFromInputReceiver::from_derive_input(&item)
+        .unwrap()
+        .into_token_stream()
+        .into()
 }

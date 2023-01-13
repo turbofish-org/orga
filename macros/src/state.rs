@@ -6,15 +6,15 @@ use syn::*;
 
 #[derive(Debug, FromDeriveInput)]
 #[darling(attributes(state), supports(struct_any))]
-struct StateInputReceiver {
-    ident: syn::Ident,
+pub struct StateInputReceiver {
+    ident: Ident,
     generics: syn::Generics,
     data: ast::Data<(), StateFieldReceiver>,
 
     #[darling(default)]
-    version: u8,
-    previous: Option<Ident>,
-    as_type: Option<Ident>,
+    pub version: u8,
+    pub previous: Option<Ident>,
+    pub as_type: Option<Path>,
 }
 
 impl ToTokens for StateInputReceiver {
@@ -49,7 +49,16 @@ impl ToTokens for StateInputReceiver {
 
         let fields_with_names = || fields.iter().cloned().zip(field_names());
 
-        let attach_method = {
+        let attach_method = if as_type.is_some() {
+            // TODO: review whether noop is the correct behavior when using
+            // as_type. Since we have a &mut self, we can't simple convert into
+            // the as_type.
+            quote! {
+                fn attach(&mut self, store: #store_ty) -> #result_ty<()> {
+                    Ok(())
+                }
+            }
+        } else {
             let names = field_names();
             quote! {
                 fn attach(&mut self, store: #store_ty) -> #result_ty<()> {

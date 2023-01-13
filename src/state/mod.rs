@@ -1,7 +1,7 @@
 use crate::encoding::{Decode, Encode};
 use crate::store::Store;
 use crate::{Error, Result};
-pub use orga_macros::{State};
+pub use orga_macros::State;
 
 mod attach;
 pub use attach::Attacher;
@@ -109,6 +109,7 @@ impl<T: State> State for Vec<T> {
     }
 
     fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+        // TODO: no length prefix
         out.write_all(&(self.len() as u64).to_be_bytes())?;
         for value in self.iter_mut() {
             value.flush(out)?;

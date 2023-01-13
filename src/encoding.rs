@@ -3,7 +3,9 @@ use crate::query::Query;
 use crate::state::State;
 use crate::{client::Client, describe::Describe};
 pub use ed::*;
-pub use orga_macros::{VersionedDecode, VersionedEncode};
+pub use orga_macros::VersionedEncoding;
+pub mod decoder;
+pub mod encoder;
 
 use derive_more::{Deref, DerefMut, Into};
 use serde::{Deserialize, Serialize};
@@ -102,4 +104,20 @@ where
     }
 }
 
-pub struct Adapter<T>(T);
+pub struct Adapter<T>(pub T);
+
+impl<T> State for Adapter<T>
+where
+    Self: Encode + Decode,
+{
+    fn attach(&mut self, _store: crate::store::Store) -> crate::Result<()> {
+        Ok(())
+    }
+    fn flush<W: std::io::Write>(self, out: &mut W) -> crate::Result<()> {
+        self.encode_into(out)?;
+        Ok(())
+    }
+    fn load(_store: crate::store::Store, bytes: &mut &[u8]) -> crate::Result<Self> {
+        Ok(Self::decode(bytes)?)
+    }
+}

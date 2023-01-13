@@ -1,504 +1,264 @@
-use proc_macro2::{Literal, Span, TokenStream};
-use quote::quote;
+use darling::{ast, FromDeriveInput, FromField};
+use proc_macro::TokenStream;
+use proc_macro2::TokenStream as TokenStream2;
+use quote::{quote, ToTokens};
 use syn::*;
 
-use crate::state2::{parse_state_info, StateInfo};
+#[derive(Debug, FromDeriveInput)]
+#[darling(attributes(encoding), supports(struct_any))]
+pub struct EncodingInputReceiver {
+    ident: Ident,
+    generics: Generics,
+    data: ast::Data<(), EncodingFieldReceiver>,
 
-pub fn derive_encode(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let item = parse_macro_input!(item as DeriveInput);
-
-    let output = match item.data.clone() {
-        Data::Struct(data) => struct_encode(item, data),
-        Data::Enum(data) => enum_encode(item, data),
-        Data::Union(_) => unimplemented!("Not implemented for unions"),
-    };
-
-    output.into()
+    #[darling(default)]
+    pub version: u8,
+    pub previous: Option<Ident>,
+    pub as_type: Option<Path>,
 }
 
-fn struct_encode(item: DeriveInput, data: DataStruct) -> TokenStream {
-    let name = &item.ident;
-    let state_info = parse_state_info(&item);
+impl ToTokens for EncodingInputReceiver {
+    fn to_tokens(&self, tokens: &mut TokenStream2) {
+        let EncodingInputReceiver {
+            ident,
+            generics,
+            data,
+            version,
+            previous,
+            as_type,
+        } = self;
+        let encode_trait = quote! { ::orga::encoding::Encode };
+        let decode_trait = quote! { ::orga::encoding::Decode };
+        let terminated_trait = quote! { ::orga::encoding::Terminated };
+        let encoder_ty = quote! { ::orga::encoding::encoder::Encoder };
+        let decoder_ty = quote! { ::orga::encoding::decoder::Decoder };
+        let result_ty = quote! { ::orga::encoding::Result };
 
-    let mut generics_sanitized = item.generics.clone();
-    generics_sanitized.params.iter_mut().for_each(|p| {
-        if let GenericParam::Type(ref mut ty) = p {
-            ty.default.take();
-        }
-    });
-    let gen_params = gen_param_input(&item.generics);
-    let terminated_bounds = iter_terminated_bounds(&item, quote!(::ed::Encode));
-    let where_preds = item
-        .generics
-        .where_clause
-        .as_ref()
-        .map(|w| {
-            let preds = w.predicates.clone().into_iter();
-            quote!(#(#preds,)*)
-        })
-        .unwrap_or_default();
+        let (imp, ty, wher) = generics.split_for_impl();
+        let struct_data = data.as_ref().take_struct().expect("Should never be enum");
 
-    let encode_into = fields_encode_into(
-        iter_field_names(&data.fields),
-        Some(quote!(self)),
-        &state_info,
-    );
-    let encoding_length =
-        fields_encoding_length(iter_field_names(&data.fields), Some(quote!(self)));
+        let fields = struct_data.fields.clone();
 
-    let terminated = terminated_impl(&item);
-
-    quote! {
-        impl#generics_sanitized ::ed::Encode for #name#gen_params
-        where #where_preds #terminated_bounds
-        {
-            #[inline]
-            fn encode_into<__W: std::io::Write>(&self, mut dest: &mut __W) -> ::ed::Result<()> {
-                #encode_into
-
-                Ok(())
-            }
-
-            #[inline]
-            fn encoding_length(&self) -> ::ed::Result<usize> {
-                Ok(#encoding_length)
-            }
-        }
-
-        #terminated
-    }
-}
-
-fn enum_encode(item: DeriveInput, data: DataEnum) -> TokenStream {
-    let name = &item.ident;
-    let state_info = parse_state_info(&item);
-
-    let mut generics_sanitized = item.generics.clone();
-    generics_sanitized.params.iter_mut().for_each(|p| {
-        if let GenericParam::Type(ref mut ty) = p {
-            ty.default.take();
-        }
-    });
-    let gen_params = gen_param_input(&item.generics);
-    let terminated_bounds = iter_terminated_bounds(&item, quote!(::ed::Encode));
-    let where_preds = item
-        .generics
-        .where_clause
-        .as_ref()
-        .map(|w| {
-            let preds = w.predicates.clone().into_iter();
-            quote!(#(#preds,)*)
-        })
-        .unwrap_or_default();
-
-    let arms = data
-        .variants
-        .iter()
-        .filter(|v| filter_skipped_variants(*v))
-        .enumerate()
-        .map(|(i, v)| {
-            let i = i as u8;
-            let ident = &v.ident;
-            let destructure = variant_destructure(&v);
-            let encode = fields_encode_into(iter_field_destructure(&v), None, &state_info);
-            quote!(Self::#ident #destructure => {
-                dest.write_all(&[ #i ][..])?;
-                #encode
-            })
-        });
-
-    let encode_into = quote! {
-        #[inline]
-        fn encode_into<__W: std::io::Write>(&self, mut dest: &mut __W) -> ::ed::Result<()> {
-            match self {
-                #(#arms)*
-                _ => return Err(::ed::Error::UnencodableVariant)
-            }
-
-            Ok(())
-        }
-    };
-
-    let arms = data
-        .variants
-        .iter()
-        .filter(|v| filter_skipped_variants(*v))
-        .map(|v| {
-            let arm = fields_encoding_length(iter_field_destructure(&v), None);
-            let ident = &v.ident;
-            let destructure = variant_destructure(&v);
-            quote!(Self::#ident #destructure => { #arm })
-        });
-
-    let encoding_length = quote! {
-        #[inline]
-        fn encoding_length(&self) -> ::ed::Result<usize> {
-            Ok(1 + match self {
-                #(#arms)*
-                _ => return Err(::ed::Error::UnencodableVariant)
-            })
-        }
-    };
-
-    let terminated = terminated_impl(&item);
-
-    quote! {
-        impl#generics_sanitized ::ed::Encode for #name#gen_params
-        where #where_preds #terminated_bounds
-        {
-            #encode_into
-            #encoding_length
-        }
-
-        #terminated
-    }
-}
-
-pub fn derive_decode(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let item = parse_macro_input!(item as DeriveInput);
-
-    let output = match item.data.clone() {
-        Data::Struct(data) => struct_decode(item, data),
-        Data::Enum(data) => enum_decode(item, data),
-        Data::Union(_) => unimplemented!("Not implemented for unions"),
-    };
-
-    output.into()
-}
-
-fn struct_decode(item: DeriveInput, data: DataStruct) -> TokenStream {
-    let name = &item.ident;
-    let state_info = parse_state_info(&item);
-
-    let decode = fields_decode(&data.fields, None, &state_info);
-    let decode = wrap_decode_body(decode, &state_info);
-    // let decode_into = fields_decode_into(&data.fields, None);
-
-    let mut generics = item.generics.clone();
-    generics.params.iter_mut().for_each(|p| {
-        if let GenericParam::Type(ref mut ty) = p {
-            ty.default.take();
-        }
-    });
-    let gen_params = gen_param_input(&item.generics);
-    let terminated_bounds = iter_terminated_bounds(&item, quote!(::ed::Decode));
-    let where_preds = item
-        .generics
-        .where_clause
-        .as_ref()
-        .map(|w| {
-            let preds = w.predicates.clone().into_iter();
-            quote!(#(#preds,)*)
-        })
-        .unwrap_or_default();
-
-    quote! {
-        impl#generics ::orga::encoding::Decode for #name#gen_params
-        where #where_preds #terminated_bounds
-        {
-            #[inline]
-            fn decode<__R: std::io::Read>(mut input: __R) -> ed::Result<Self> {
-                #decode
-            }
-
-            // #[inline]
-            // fn decode_into<__R: std::io::Read>(&mut self, mut input: __R) -> ed::Result<()> {
-            //     #decode_into
-            //     Ok(())
-            // }
-        }
-    }
-}
-
-fn enum_decode(item: DeriveInput, data: DataEnum) -> TokenStream {
-    let name = &item.ident;
-    let state_info = parse_state_info(&item);
-
-    let mut generics = item.generics.clone();
-    generics.params.iter_mut().for_each(|p| {
-        if let GenericParam::Type(ref mut ty) = p {
-            ty.default.take();
-        }
-    });
-    let gen_params = gen_param_input(&item.generics);
-    let terminated_bounds = iter_terminated_bounds(&item, quote!(::ed::Decode));
-    let where_preds = item
-        .generics
-        .where_clause
-        .as_ref()
-        .map(|w| {
-            let preds = w.predicates.clone().into_iter();
-            quote!(#(#preds,)*)
-        })
-        .unwrap_or_default();
-
-    let arms = data
-        .variants
-        .iter()
-        .filter(|v| filter_skipped_variants(*v))
-        .enumerate()
-        .map(|(i, v)| {
-            let i = i as u8;
-            let arm = fields_decode(&v.fields, Some(v.ident.clone()), &state_info);
-            quote!(#i => { #arm })
-        });
-
-    quote! {
-        impl#generics ::ed::Decode for #name#gen_params
-        where #where_preds #terminated_bounds
-        {
-            #[inline]
-            fn decode<__R: std::io::Read>(mut input: __R) -> ::ed::Result<Self> {
-                let mut variant = [0; 1];
-                input.read_exact(&mut variant[..])?;
-                let variant = variant[0];
-
-                Ok(match variant {
-                    #(#arms),*
-                    n => return Err(::ed::Error::UnexpectedByte(n)),
+        let field_names = || {
+            fields.iter().enumerate().map(|(i, f)| {
+                f.ident.as_ref().map(|v| quote!(#v)).unwrap_or_else(|| {
+                    let i = syn::Index::from(i);
+                    quote!(#i)
                 })
+            })
+        };
+
+        let fields_with_names = || fields.iter().cloned().zip(field_names());
+
+        // TODO: proper encoding len calculation
+        let encoding_len_method = quote! {
+            fn encoding_length(&self) -> #result_ty<usize> {
+                Ok(self.encode()?.len())
             }
+        };
 
-            // TODO: decode_into
-        }
-    }
-}
-
-fn wrap_decode_body(decode_body: TokenStream, state_info: &StateInfo) -> TokenStream {
-    if state_info.version == 0 {
-        quote! {
-            let version = u8::decode(&mut input)?;
-
-            if version != 0 {
-                return Err(::orga::encoding::Error::UnexpectedByte(version));
+        let encode_into_method = if let Some(as_type) = as_type {
+            quote! {
+                fn encode_into<__W: ::std::io::Write>(&self, out: &mut __W) -> #result_ty<()> {
+                    #encoder_ty::new(out).version(#version)?.encode_child_as::<#as_type, _>(self)?;
+                    Ok(())
+                }
             }
+        } else {
+            let child_encodes = fields_with_names().map(|(field, name)| match field.as_type {
+                Some(ref as_type) => quote! {.encode_child_as::<#as_type, _>(&self.#name)?},
+                None => quote! {.encode_child(&self.#name)?},
+            });
 
-            Ok(#decode_body)
-        }
-    } else {
-        let version = state_info.version;
-        let previous = state_info.previous.as_ref().unwrap().clone();
+            quote! {
+                fn encode_into<__W: ::std::io::Write>(&self, out: &mut __W) -> #result_ty<()> {
+                    #encoder_ty::new(out).version(#version)?
+                    #(#child_encodes)*;
 
-        quote! {
-            let version = u8::decode(&mut input)?;
+                    Ok(())
+                }
+            }
+        };
 
-            let value = if version < #version {
-                let mut bytes = vec![version];
-                input.read_to_end(&mut bytes)?;
-                let value: #previous = Decode::decode(&mut bytes.as_slice())?;
-                ::orga::migrate::MigrateFrom::migrate_from(value)
-                    .map_err(|_| ed::Error::UnexpectedByte(version))?
+        let decode_method = {
+            let decode_value = match as_type {
+                Some(as_type) => {
+                    quote! { decoder.decode_child_as::<#as_type, _>()?}
+                }
+                None => {
+                    let child_self_decodes =
+                        fields_with_names().map(|(field, name)| match field.as_type {
+                            Some(ref as_type) => {
+                                quote! { #name: decoder.decode_child_as::<#as_type, _>()? }
+                            }
+                            None => quote! { #name: decoder.decode_child()? },
+                        });
+                    quote! { Self { #(#child_self_decodes),* } }
+                }
+            };
+            let decode_value = if let Some(previous) = previous {
+                quote! {
+                    if let Some(prev) = decoder.maybe_decode_from_prev::<#previous, _>()? {
+                        prev
+                    } else {
+                        #decode_value
+                    }
+                }
             } else {
-                #decode_body
+                quote! {
+                    #decode_value
+                }
             };
 
-            Ok(value)
+            quote! {
+                fn decode<__R: ::std::io::Read>(mut input: __R) -> #result_ty<Self> {
+                    let mut bytes = vec![];
+                    input.read_to_end(&mut bytes)?;
+                    let mut decoder = #decoder_ty::new(&mut bytes.as_slice(), #version);
+                    let mut value = #decode_value;
 
-        }
-    }
-}
-
-fn terminated_impl(item: &DeriveInput) -> TokenStream {
-    let name = &item.ident;
-
-    let mut generics = item.generics.clone();
-    generics.params.iter_mut().for_each(|p| {
-        if let GenericParam::Type(ref mut ty) = p {
-            ty.default.take();
-        }
-    });
-    let gen_params = gen_param_input(&item.generics);
-    let where_preds = item
-        .generics
-        .where_clause
-        .as_ref()
-        .map(|w| {
-            let preds = w.predicates.clone().into_iter();
-            quote!(#(#preds,)*)
-        })
-        .unwrap_or_default();
-
-    let bounds = iter_field_groups(item.clone()).map(|fields| {
-        let bounds = fields
-            .iter()
-            .map(|f| f.ty.clone())
-            .map(|ty| quote!(#ty: ::ed::Terminated,));
-        quote!(#(#bounds)*)
-    });
-    let bounds = quote!(#(#bounds)*);
-
-    quote! {
-        impl#generics ::ed::Terminated for #name#gen_params
-        where #where_preds #bounds
-        {}
-    }
-}
-
-fn iter_fields(fields: &Fields) -> Box<dyn Iterator<Item = Field>> {
-    match fields.clone() {
-        Fields::Named(fields) => Box::new(fields.named.into_iter()),
-        Fields::Unnamed(fields) => Box::new(fields.unnamed.into_iter()),
-        Fields::Unit => Box::new(vec![].into_iter()),
-    }
-}
-
-fn iter_field_names(fields: &Fields) -> impl Iterator<Item = TokenStream> {
-    iter_fields(fields)
-        .enumerate()
-        .map(|(i, field)| match field.ident {
-            Some(ident) => quote!(#ident),
-            None => {
-                let i = Literal::usize_unsuffixed(i);
-                quote!(#i)
+                    Ok(value)
+                }
             }
-        })
-}
+        };
 
-fn iter_field_destructure(variant: &Variant) -> Box<dyn Iterator<Item = TokenStream>> {
-    match variant.fields.clone() {
-        Fields::Named(fields) => Box::new(fields.named.into_iter().map(|v| {
-            let ident = v.ident;
-            quote!(#ident)
-        })),
-        Fields::Unnamed(_) => Box::new((0..variant.fields.len()).map(|i| {
-            let ident = Ident::new(
-                ("var".to_string() + i.to_string().as_str()).as_str(),
-                Span::call_site(),
-            );
-            quote!(#ident)
-        })),
-        Fields::Unit => Box::new(vec![].into_iter()),
+        let encode_where = {
+            let maybe_prev_encode = previous
+                .as_ref()
+                .map(|prev| quote! { #prev: #encode_trait, })
+                .unwrap_or_default();
+
+            let field_encode_bounds = if let Some(ref as_type) = self.as_type {
+                vec![quote! { #as_type: #encode_trait }]
+            } else {
+                fields
+                    .iter()
+                    .enumerate()
+                    .map(|(i, field)| {
+                        let ty = &field.ty;
+                        let maybe_term = if i < fields.len() - 1 {
+                            quote! { + #terminated_trait }
+                        } else {
+                            quote! {}
+                        };
+                        quote! {
+                            #ty: #encode_trait #maybe_term
+                        }
+                    })
+                    .collect()
+            };
+
+            let bounds = quote! {
+                #maybe_prev_encode
+                #(#field_encode_bounds),*
+            };
+
+            if wher.is_some() {
+                quote! { #wher #bounds}
+            } else {
+                quote! { where #bounds }
+            }
+        };
+
+        let decode_where = {
+            let maybe_prev_decode = previous
+                .as_ref()
+                .map(|prev| quote! { #prev: #decode_trait, })
+                .unwrap_or_default();
+
+            let field_decode_bounds = if let Some(ref as_type) = self.as_type {
+                vec![quote! { #as_type: #encode_trait }]
+            } else {
+                fields
+                    .iter()
+                    .enumerate()
+                    .map(|(i, field)| {
+                        let ty = &field.ty;
+                        let maybe_term = if i < fields.len() - 1 {
+                            quote! { + #terminated_trait }
+                        } else {
+                            quote! {}
+                        };
+                        quote! {
+                            #ty: #decode_trait #maybe_term
+                        }
+                    })
+                    .collect()
+            };
+
+            let bounds = quote! {
+                #maybe_prev_decode
+                #(#field_decode_bounds),*
+            };
+
+            if wher.is_some() {
+                quote! { #wher #bounds}
+            } else {
+                quote! { where #bounds }
+            }
+        };
+
+        let term_where = {
+            let maybe_prev_term = previous
+                .as_ref()
+                .map(|prev| quote! { #prev: #terminated_trait, })
+                .unwrap_or_default();
+
+            let field_term_bounds = if let Some(ref as_type) = self.as_type {
+                vec![quote! { #as_type: #terminated_trait }]
+            } else {
+                fields_with_names()
+                    .map(|(field, _)| {
+                        let ty = &field.ty;
+                        quote! {
+                            #ty: #terminated_trait
+                        }
+                    })
+                    .collect()
+            };
+
+            let bounds = quote! {
+                #maybe_prev_term
+                #(#field_term_bounds),*
+            };
+
+            if wher.is_some() {
+                quote! { #wher #bounds}
+            } else {
+                quote! { where #bounds }
+            }
+        };
+
+        tokens.extend(quote! {
+            impl #imp #encode_trait for #ident #ty #encode_where {
+                #encode_into_method
+
+                #encoding_len_method
+            }
+
+            impl #imp #decode_trait for #ident #ty #decode_where {
+                #decode_method
+            }
+
+            impl #imp #terminated_trait for #ident #ty #term_where {}
+
+        });
     }
 }
 
-fn filter_skipped_variants(variant: &Variant) -> bool {
-    !variant.attrs.iter().any(|attr| attr.path.is_ident("skip"))
+#[derive(Debug, FromField)]
+#[darling(attributes(encoding))]
+struct EncodingFieldReceiver {
+    ty: Type,
+    ident: Option<Ident>,
+    as_type: Option<Ident>,
 }
 
-fn iter_field_groups(item: DeriveInput) -> Box<dyn Iterator<Item = Fields>> {
-    match item.data {
-        Data::Struct(data) => Box::new(vec![data.fields].into_iter()),
-        Data::Enum(data) => Box::new(
-            data.variants
-                .into_iter()
-                .filter(filter_skipped_variants)
-                .map(|v| v.fields),
-        ),
-        Data::Union(_) => unimplemented!("Not implemented for unions"),
-    }
-}
+pub fn derive(item: TokenStream) -> TokenStream {
+    let item = parse_macro_input!(item as DeriveInput);
 
-fn iter_terminated_bounds(item: &DeriveInput, add: TokenStream) -> TokenStream {
-    let bounds = iter_field_groups(item.clone()).map(|fields| {
-        if fields.len() == 0 {
-            return quote!();
-        }
-
-        let bounds = iter_fields(&fields)
-            .map(|f| f.ty.clone())
-            .enumerate()
-            .map(|(i, ty)| {
-                let terminated = if i < fields.len() - 1 {
-                    quote!(::ed::Terminated+)
-                } else {
-                    quote!()
-                };
-                quote!(#ty: #terminated #add,)
-            });
-        quote!(#(#bounds)*)
-    });
-    quote!(#(#bounds)*)
-}
-
-fn variant_destructure(variant: &Variant) -> TokenStream {
-    let names = iter_field_destructure(&variant);
-    match &variant.fields {
-        Fields::Named(_) => quote!({ #(#names),* }),
-        Fields::Unnamed(_) => quote!(( #(#names),* )),
-        Fields::Unit => quote!(),
-    }
-}
-
-fn gen_param_input(generics: &Generics) -> TokenStream {
-    let gen_params = generics.params.iter().map(|p| match p {
-        GenericParam::Type(p) => {
-            let ident = &p.ident;
-            quote!(#ident)
-        }
-        GenericParam::Lifetime(p) => {
-            let ident = &p.lifetime.ident;
-            quote!(#ident)
-        }
-        GenericParam::Const(p) => {
-            let ident = &p.ident;
-            quote!(#ident)
-        }
-    });
-
-    if gen_params.len() == 0 {
-        quote!()
-    } else {
-        quote!(<#(#gen_params),*>)
-    }
-}
-
-fn fields_encode_into(
-    field_names: impl Iterator<Item = TokenStream>,
-    parent: Option<TokenStream>,
-    state_info: &StateInfo,
-) -> TokenStream {
-    let field_names: Vec<_> = field_names.collect();
-    let mut field_names_minus_last = field_names.clone();
-    field_names_minus_last.pop();
-
-    let parent_dot = parent.as_ref().map(|_| quote!(.));
-    let version = state_info.version;
-
-    quote! {
-        ::std::io::Write::write_all(dest, &[#version])?;
-        #(#parent#parent_dot#field_names.encode_into(&mut dest)?;)*
-    }
-}
-
-fn fields_encoding_length(
-    field_names: impl Iterator<Item = TokenStream>,
-    parent: Option<TokenStream>,
-) -> TokenStream {
-    let parent_dot = parent.as_ref().map(|_| quote!(.));
-
-    quote! {
-        0 #( + #parent#parent_dot#field_names.encoding_length()?)*
-    }
-}
-
-fn fields_decode(
-    fields: &Fields,
-    variant_name: Option<Ident>,
-    state_info: &StateInfo,
-) -> TokenStream {
-    let field_names = iter_field_names(&fields);
-
-    let item_name = match variant_name {
-        Some(name) => quote!(Self::#name),
-        None => quote!(Self),
-    };
-
-    quote! {
-        #item_name {
-            #(
-                #field_names: ::orga::encoding::Decode::decode(&mut input)?,
-            )*
-        }
-    }
-}
-
-fn fields_decode_into(fields: &Fields, parent: Option<TokenStream>) -> TokenStream {
-    let field_names = iter_field_names(&fields);
-    let parent = parent.unwrap_or(quote!(self));
-
-    quote! {
-        #(
-            #parent.#field_names.decode_into(&mut input)?;
-        )*
-    }
+    EncodingInputReceiver::from_derive_input(&item)
+        .unwrap()
+        .into_token_stream()
+        .into()
 }

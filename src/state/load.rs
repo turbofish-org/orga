@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use crate::migrate::MigrateInto;
 use crate::store::Store;
 use crate::Result;

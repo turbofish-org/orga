@@ -1,20 +1,24 @@
-use std::collections::HashMap;
-
 use darling::{ast, FromDeriveInput, FromField, FromMeta, ToTokens};
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
+use std::collections::HashMap;
 use syn::*;
+
+/// Arguments to the top-level orga macro invocation.
 #[derive(Debug, FromMeta)]
 struct OrgaAttrReceiver {
     #[darling(default)]
     version: u8,
     #[darling(default)]
     skip: HashMap<Ident, ()>,
+    #[darling(default)]
+    simple: bool,
 }
 
-impl OrgaAttrReceiver {}
-
+/// Field-level data. This type is used in both the meta struct and the sub
+/// structs. Attributes from other macros are passed through, including
+/// attributes from other core macros like Call and State.
 #[derive(Debug, FromField, Clone)]
 #[darling(attributes(orga), forward_attrs)]
 struct OrgaFieldReceiver {
@@ -25,12 +29,8 @@ struct OrgaFieldReceiver {
     version: Option<HashMap<Ident, ()>>,
 }
 
-impl ToTokens for OrgaFieldReceiver {
-    fn to_tokens(&self, tokens: &mut TokenStream2) {
-        tokens.extend(quote! {});
-    }
-}
-
+/// Derive-style data about the top-level struct. Excludes attributes passed to
+/// the orga attribute itself.
 #[derive(FromDeriveInput, Debug, Clone)]
 #[darling(attributes(orga), supports(struct_any), forward_attrs)]
 struct OrgaInputReceiver {
@@ -41,45 +41,8 @@ struct OrgaInputReceiver {
     data: ast::Data<(), OrgaFieldReceiver>,
 }
 
-impl OrgaInputReceiver {
-    fn filter_for_version(
-        &self,
-        version: u8,
-        is_last: bool,
-        skip: HashMap<Ident, ()>,
-    ) -> OrgaSubStruct {
-        let res = self.clone();
-        let style = self.clone().data.take_struct().unwrap().style;
-        let fields: Vec<_> = self
-            .clone()
-            .data
-            .take_struct()
-            .unwrap()
-            .fields
-            .into_iter()
-            .filter(|f| {
-                f.version.is_none()
-                    || f.version
-                        .as_ref()
-                        .unwrap()
-                        .contains_key(&format_ident!("V{}", version))
-            })
-            .map(|field| field)
-            .collect();
-        let data = ast::Data::Struct(ast::Fields::new(style, fields));
-        OrgaSubStruct {
-            data,
-            generics: res.generics,
-            base_ident: res.ident,
-            version,
-            is_last,
-            attrs: res.attrs,
-            vis: res.vis,
-            skip,
-        }
-    }
-}
-
+/// A sub struct that is generated for each version, containing only the fields
+/// that should be present in that version.
 struct OrgaSubStruct {
     base_ident: Ident,
     generics: Generics,
@@ -89,9 +52,14 @@ struct OrgaSubStruct {
     version: u8,
     is_last: bool,
     skip: HashMap<Ident, ()>,
+    simple: bool,
 }
 
 impl OrgaSubStruct {
+    fn ident(&self) -> Ident {
+        format_ident!("{}V{}", self.base_ident, self.version)
+    }
+
     fn all_attrs(&self) -> impl Iterator<Item = Attribute> {
         let mut derives = vec![];
         let mut maybe_add = |name: &str, full_path| {
@@ -102,8 +70,10 @@ impl OrgaSubStruct {
         };
         maybe_add("Default", quote! { Default});
         maybe_add("MigrateFrom", quote! { ::orga::migrate::MigrateFrom });
-        maybe_add("Encode", quote! { ::orga::encoding::VersionedEncode });
-        maybe_add("Decode", quote! { ::orga::encoding::VersionedDecode });
+        maybe_add(
+            "VersionedEncoding",
+            quote! { ::orga::encoding::VersionedEncoding },
+        );
         maybe_add("State", quote! { ::orga::state::State });
 
         if self.is_last {
@@ -114,18 +84,57 @@ impl OrgaSubStruct {
         let mut attrs: Vec<Attribute> = vec![parse_quote! {#[derive(#(#derives),*)]}];
 
         attrs.push(self.state_attr());
+        if self.simple {
+            attrs.push(self.encoding_attr());
+            attrs.push(self.migrate_from_attr());
+            attrs.push(parse_quote! {#[derive(Clone)]})
+        }
 
         attrs.into_iter().chain(self.attrs.clone().into_iter())
     }
 
     fn state_attr(&self) -> Attribute {
         let version = self.version;
-        if self.version > 0 {
+
+        let maybe_prev = if self.version > 0 {
             let prev_name = format!("{}V{}", self.base_ident, version - 1);
-            parse_quote!(#[state(version = #version, previous = #prev_name)])
+            quote! {previous = #prev_name,}
         } else {
-            parse_quote!(#[state(version = #version)])
-        }
+            quote! {}
+        };
+
+        let maybe_as_type = if self.simple {
+            let as_type_name = quote! { "::orga::encoding::Adapter<Self>" };
+            quote! {as_type = #as_type_name,}
+        } else {
+            quote! {}
+        };
+
+        parse_quote!(#[state(version = #version, #maybe_prev #maybe_as_type)])
+    }
+
+    fn encoding_attr(&self) -> Attribute {
+        let version = self.version;
+
+        let maybe_prev = if self.version > 0 {
+            let prev_name = format!("{}V{}", self.base_ident, version - 1);
+            quote! {previous = #prev_name,}
+        } else {
+            quote! {}
+        };
+
+        let maybe_as_type = if self.simple {
+            let as_type_name = quote! { "::orga::encoding::Adapter<Self>" };
+            quote! {as_type = #as_type_name,}
+        } else {
+            quote! {}
+        };
+
+        parse_quote!(#[encoding(version = #version, #maybe_prev #maybe_as_type)])
+    }
+
+    fn migrate_from_attr(&self) -> Attribute {
+        parse_quote!(#[migrate_from(identity)])
     }
 }
 
@@ -140,10 +149,9 @@ impl ToTokens for OrgaSubStruct {
             vis,
             ..
         } = self;
-
+        let ident = self.ident();
         let attrs = self.all_attrs();
         let (imp, decl_generics, wher) = generics.split_for_impl();
-        let ident = format_ident!("{}V{}", base_ident, version);
         let body = data.clone().take_struct().unwrap();
 
         let fields = body.fields.iter().enumerate().map(|(i, f)| {
@@ -162,6 +170,31 @@ impl ToTokens for OrgaSubStruct {
             }
         });
 
+        if self.simple {
+            tokens.extend(quote! {
+                impl #imp From<::orga::encoding::Adapter<#ident #decl_generics>> for #ident #decl_generics #wher {
+                    fn from(adapter: ::orga::encoding::Adapter<#ident #decl_generics>) -> Self {
+                        adapter.0
+                    }
+                }
+
+                impl #imp From<&#ident #decl_generics> for ::orga::encoding::Adapter<#ident #decl_generics> #wher
+                where #ident: Clone,
+                 {
+                    fn from(inner: &#ident #decl_generics) -> Self {
+                        ::orga::encoding::Adapter(inner.clone())
+                    }
+                }
+
+                impl #imp From<#ident #decl_generics> for ::orga::encoding::Adapter<#ident #decl_generics> #wher
+                 {
+                    fn from(inner: #ident #decl_generics) -> Self {
+                        ::orga::encoding::Adapter(inner.clone())
+                    }
+                }
+            });
+        }
+
         tokens.extend(quote! {
             #(#attrs)*
             #vis struct #ident #imp #wher {
@@ -177,6 +210,7 @@ impl ToTokens for OrgaSubStruct {
     }
 }
 
+/// A wrapper that holds the parsed input as well as orga attribute arguments.
 struct OrgaMetaStruct {
     item: OrgaInputReceiver,
     attrs: OrgaAttrReceiver,
@@ -191,16 +225,47 @@ impl OrgaMetaStruct {
     }
 
     fn versioned_structs(&self) -> impl Iterator<Item = OrgaSubStruct> + '_ {
-        (0..=self.attrs.version).map(move |v| {
-            self.item
-                .filter_for_version(v, v == self.attrs.version, self.attrs.skip.clone())
-        })
+        (0..=self.attrs.version).map(move |v| self.substruct_for_version(v))
+    }
+
+    fn substruct_for_version(&self, version: u8) -> OrgaSubStruct {
+        let is_last = version == self.attrs.version;
+        let item = self.item.clone();
+        let style = item.clone().data.take_struct().unwrap().style;
+        let fields: Vec<_> = item
+            .clone()
+            .data
+            .take_struct()
+            .unwrap()
+            .fields
+            .into_iter()
+            .filter(|f| {
+                f.version.is_none()
+                    || f.version
+                        .as_ref()
+                        .unwrap()
+                        .contains_key(&format_ident!("V{}", version))
+            })
+            .map(|field| field)
+            .collect();
+        let data = ast::Data::Struct(ast::Fields::new(style, fields));
+
+        OrgaSubStruct {
+            data,
+            generics: item.generics,
+            base_ident: item.ident,
+            version,
+            is_last,
+            attrs: item.attrs,
+            vis: item.vis,
+            skip: self.attrs.skip.clone(),
+            simple: self.attrs.simple,
+        }
     }
 }
 
 impl ToTokens for OrgaMetaStruct {
     fn to_tokens(&self, tokens: &mut TokenStream2) {
-        let item = &self.item;
         let substructs = self.versioned_structs();
 
         tokens.extend(quote! {

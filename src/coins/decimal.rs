@@ -2,6 +2,7 @@ use super::Amount;
 use crate::call::Call;
 use crate::client::Client;
 use crate::describe::{Builder, Describe};
+use crate::encoding::Adapter;
 use crate::encoding::{Decode, Encode};
 use crate::migrate::migrate_from_self_impl;
 use crate::migrate::MigrateFrom;
@@ -10,27 +11,23 @@ use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::{Error, Result};
-use rust_decimal::prelude::{Decimal as NumDecimal, *};
+use rust_decimal::{prelude::ToPrimitive, Decimal as NumDecimal};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::convert::TryFrom;
+use std::str::FromStr;
 
-#[derive(Clone, Copy, Debug, Query, Call, Default)]
+#[orga(simple)]
+#[derive(Copy, Debug)]
 pub struct Decimal {
     pub(crate) value: NumDecimal,
 }
 
-impl MigrateFrom for Decimal {
-    fn migrate_from(other: Self) -> Result<Self> {
-        Ok(other)
-    }
-}
-
-impl Describe for Decimal {
-    fn describe() -> crate::describe::Descriptor {
-        Builder::new::<Self>().build()
-    }
-}
+// impl Describe for Decimal {
+//     fn describe() -> crate::describe::Descriptor {
+//         Builder::new::<Self>().build()
+//     }
+// }
 
 impl std::fmt::Display for Decimal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -38,9 +35,9 @@ impl std::fmt::Display for Decimal {
     }
 }
 
-impl Encode for Decimal {
+impl Encode for Adapter<Decimal> {
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
-        dest.write_all(&self.value.serialize())?;
+        dest.write_all(&self.0.value.serialize())?;
 
         Ok(())
     }
@@ -50,13 +47,14 @@ impl Encode for Decimal {
     }
 }
 
-impl Decode for Decimal {
+impl Decode for Adapter<Decimal> {
     fn decode<R: std::io::Read>(mut source: R) -> ed::Result<Self> {
         let mut bytes = [0u8; 16];
         source.read_exact(&mut bytes)?;
-        Ok(Self {
+        Ok(Decimal {
             value: NumDecimal::deserialize(bytes),
-        })
+        }
+        .into())
     }
 }
 
@@ -108,22 +106,6 @@ impl Decimal {
         Decimal {
             value: NumDecimal::ONE,
         }
-    }
-}
-
-impl State for Decimal {
-    fn attach(&mut self, _store: Store) -> Result<()> {
-        Ok(())
-    }
-
-    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
-        self.encode_into(out)?;
-        Ok(())
-    }
-
-    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
-        let mut value = Self::decode(bytes)?;
-        Ok(value)
     }
 }
 
