@@ -1,5 +1,6 @@
 pub use crate::macros::MigrateFrom;
 use crate::{state::State, store::Store, Error, Result};
+use paste::paste;
 use serde::Deserialize;
 use std::{cell::RefCell, marker::PhantomData};
 
@@ -94,58 +95,33 @@ where
     }
 }
 
-// Tuple impls, to be replaced by a declarative macro:
-
-impl<A1, A2> MigrateFrom<(A1,)> for (A2,)
-where
-    A2: MigrateFrom<A1>,
-{
-    fn migrate_from(other: (A1,)) -> Result<Self> {
-        Ok((other.0.migrate_into()?,))
-    }
+macro_rules! migrate_tuple_impl {
+        ($($types:ident),* $(,)?; $($indices:tt),*) => {
+            paste! {
+                impl<$([<$types 1>],)* $([<$types 2>],)*> MigrateFrom<($([<$types 1>],)*)> for ($([<$types 2>],)*)
+                where
+                    $([<$types 2>]: MigrateFrom<[<$types 1>]>,)*
+                {
+                    fn migrate_from(other: ($([<$types 1>],)*)) -> Result<($([<$types 2>],)*)> {
+                        Ok(($(other.$indices.migrate_into()?,)*))
+                    }
+                }
+            }
+        }
 }
 
-impl<A1, A2, B1, B2> MigrateFrom<(A1, B1)> for (A2, B2)
-where
-    A2: MigrateFrom<A1>,
-    B2: MigrateFrom<B1>,
-{
-    fn migrate_from(other: (A1, B1)) -> Result<Self> {
-        Ok((other.0.migrate_into()?, other.1.migrate_into()?))
-    }
-}
-
-impl<A1, A2, B1, B2, C1, C2> MigrateFrom<(A1, B1, C1)> for (A2, B2, C2)
-where
-    A2: MigrateFrom<A1>,
-    B2: MigrateFrom<B1>,
-    C2: MigrateFrom<C1>,
-{
-    fn migrate_from(other: (A1, B1, C1)) -> Result<Self> {
-        Ok((
-            other.0.migrate_into()?,
-            other.1.migrate_into()?,
-            other.2.migrate_into()?,
-        ))
-    }
-}
-
-impl<A1, A2, B1, B2, C1, C2, D1, D2> MigrateFrom<(A1, B1, C1, D1)> for (A2, B2, C2, D2)
-where
-    A2: MigrateFrom<A1>,
-    B2: MigrateFrom<B1>,
-    C2: MigrateFrom<C1>,
-    D2: MigrateFrom<D1>,
-{
-    fn migrate_from(other: (A1, B1, C1, D1)) -> Result<Self> {
-        Ok((
-            other.0.migrate_into()?,
-            other.1.migrate_into()?,
-            other.2.migrate_into()?,
-            other.3.migrate_into()?,
-        ))
-    }
-}
+migrate_tuple_impl!(A; 0);
+migrate_tuple_impl!(A, B; 0, 1);
+migrate_tuple_impl!(A, B, C; 0, 1, 2);
+migrate_tuple_impl!(A, B, C, D; 0, 1, 2, 3);
+migrate_tuple_impl!(A, B, C, D, E; 0, 1, 2, 3, 4);
+migrate_tuple_impl!(A, B, C, D, E, F; 0, 1, 2, 3, 4, 5);
+migrate_tuple_impl!(A, B, C, D, E, F, G; 0, 1, 2, 3, 4, 5, 6);
+migrate_tuple_impl!(A, B, C, D, E, F, G, H; 0, 1, 2, 3, 4, 5, 6, 7);
+migrate_tuple_impl!(A, B, C, D, E, F, G, H, I; 0, 1, 2, 3, 4, 5, 6, 7, 8);
+migrate_tuple_impl!(A, B, C, D, E, F, G, H, I, J; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
+migrate_tuple_impl!(A, B, C, D, E, F, G, H, I, J, K; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+migrate_tuple_impl!(A, B, C, D, E, F, G, H, I, J, K, L; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
 
 // #[cfg(test)]
 // mod tests {
