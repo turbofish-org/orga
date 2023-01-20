@@ -35,6 +35,12 @@ impl ToTokens for EncodingInputReceiver {
         let result_ty = quote! { ::orga::encoding::Result };
 
         let (imp, ty, wher) = generics.split_for_impl();
+        let wher = if wher.is_some() {
+            quote! { #wher }
+        } else {
+            quote! { where }
+        };
+
         let struct_data = data.as_ref().take_struct().expect("Should never be enum");
 
         let fields = struct_data.fields.clone();
@@ -163,11 +169,7 @@ impl ToTokens for EncodingInputReceiver {
                 #(#field_encode_bounds),*
             };
 
-            if wher.is_some() {
-                quote! { #wher #bounds}
-            } else {
-                quote! { where #bounds }
-            }
+            quote! { #wher #bounds }
         };
 
         let decode_where = {
@@ -201,11 +203,7 @@ impl ToTokens for EncodingInputReceiver {
                 #(#field_decode_bounds),*
             };
 
-            if wher.is_some() {
-                quote! { #wher #bounds}
-            } else {
-                quote! { where #bounds }
-            }
+            quote! { #wher #bounds }
         };
 
         let term_where = {
@@ -232,11 +230,7 @@ impl ToTokens for EncodingInputReceiver {
                 #(#field_term_bounds),*
             };
 
-            if wher.is_some() {
-                quote! { #wher #bounds}
-            } else {
-                quote! { where #bounds }
-            }
+            quote! { #wher #bounds }
         };
 
         tokens.extend(quote! {
