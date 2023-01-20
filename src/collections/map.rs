@@ -173,7 +173,7 @@ where
             .get(key_bytes.as_slice())?
             .map(|value_bytes| {
                 let substore = self.store.sub(key_bytes.as_slice());
-                let mut value = V::load(substore, &mut value_bytes.as_slice())?;
+                let value = V::load(substore, &mut value_bytes.as_slice())?;
                 Ok(value)
             })
             .transpose()
@@ -230,7 +230,7 @@ where
         for key in old_keys.iter() {
             let old_key_bytes = key.encode()?;
             let mut value_bytes = vec![];
-            let mut value = other.get_mut(key.clone())?.unwrap();
+            let value = other.remove(key.clone())?.unwrap().into_inner();
             value.flush(&mut value_bytes)?;
             let value = V1::load(
                 other.store.sub(old_key_bytes.as_slice()),
@@ -240,7 +240,6 @@ where
             let new_value = value.migrate_into()?;
 
             map.insert(new_key, new_value)?;
-            other.remove(key.clone())?;
         }
         let mut out = vec![];
         other.flush(&mut out)?;
