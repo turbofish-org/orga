@@ -54,6 +54,8 @@ tonic = { version = "0.7", optional = true }
 cosmrs = "0.7.0"
 derive_more = "0.99.17"
 serde-wasm-bindgen = "0.4.5"
+nom = "7.1.2"
+chrono = "0.4.23"
 
 [dev-dependencies]
 tempdir = "0.3.7"

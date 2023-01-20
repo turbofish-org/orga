@@ -2,13 +2,18 @@ use crate::error::{Error, Result};
 use flate2::read::GzDecoder;
 use hex_literal::hex;
 use is_executable::IsExecutable;
-use log::info;
+use log::{info, trace};
+use nom::bytes::complete::take_until;
+use nom::character::complete::alphanumeric1;
+use nom::multi::{many0, many1};
+use nom::sequence::separated_pair;
 use sha2::{Digest, Sha256};
 use std::fs;
-use std::io::prelude::*;
+use std::io::{prelude::*, BufReader};
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::str::FromStr;
 use tar::Archive;
 use toml_edit::{value, Document};
 
@@ -133,7 +138,7 @@ impl Tendermint {
         let tendermint_path = self.home.join(TENDERMINT_BINARY_NAME);
 
         if tendermint_path.is_executable() {
-            info!("Tendermint already installed");
+            trace!("Tendermint already installed");
             return;
         }
 
@@ -543,7 +548,37 @@ impl Tendermint {
         self.install();
         self.mutate_configuration();
         self.process.set_arg("start");
+        self.process.command.stdout(Stdio::piped());
         self.process.spawn().unwrap();
+        let stdout = self
+            .process
+            .process
+            .as_mut()
+            .unwrap()
+            .stdout
+            .take()
+            .unwrap();
+        std::thread::spawn(move || {
+            let stdout = BufReader::new(stdout).lines();
+            for line in stdout {
+                line.as_ref()
+                    .unwrap()
+                    .parse()
+                    .map(|msg: LogMessage| {
+                        log::trace!("{:#?}", msg);
+                        match msg.message.as_str() {
+                            "Started node" => log::info!("Started Tendermint"),
+                            "executed block" => log::info!(
+                                "Executed block, height={}, txs={}",
+                                msg.meta[1].1,
+                                msg.meta[2].1
+                            ),
+                            _ => {}
+                        }
+                    })
+                    .unwrap_or_else(|_| println!("! {}", line.unwrap()));
+            }
+        });
         self
     }
 
@@ -575,6 +610,73 @@ impl Tendermint {
         self.process.set_arg("unsafe_reset_all");
         self.process.spawn().unwrap();
         self.process.wait().unwrap();
+    }
+}
+
+#[derive(Debug)]
+struct LogMessage {
+    level: String,
+    timestamp: String,
+    message: String,
+    meta: Vec<(String, String)>,
+}
+
+impl FromStr for LogMessage {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        use nom::{
+            branch::alt,
+            bytes::complete::{tag, take, take_while_m_n},
+            character::complete::{anychar, char, none_of},
+            combinator::{cut, map, map_res},
+            sequence::{delimited, preceded, terminated},
+            IResult, Parser,
+        };
+
+        let into_string = |chars: Vec<char>| chars.into_iter().collect::<String>();
+
+        let (s, level) = take::<_, _, nom::error::Error<_>>(1usize)(s)
+            .map_err(|_| Error::App("Could not parse log line".to_string()))?;
+        let (s, (date, time)) = separated_pair(
+            preceded(
+                char::<_, nom::error::Error<_>>('['),
+                map(many1(none_of("|")), into_string),
+            ),
+            char('|'),
+            terminated(map(many1(none_of("]")), into_string), char(']')),
+        )(s)
+        .map_err(|_| Error::App("Could not parse log line".to_string()))?;
+        let (s, message) =
+            preceded(char::<_, nom::error::Error<_>>(' '), take_until(" module="))(s)
+                .map_err(|_| Error::App("Could not parse log line".to_string()))?;
+        let (s, _) = many1::<_, _, nom::error::Error<_>, _>(tag(" "))(s)
+            .map_err(|_| Error::App("Could not parse log line".to_string()))?;
+        let (_, meta) = many1(preceded(
+            many0(char(' ')),
+            separated_pair(
+                map(
+                    many1(none_of::<_, _, nom::error::Error<_>>("=")),
+                    into_string,
+                ),
+                char('='),
+                alt((
+                    map(
+                        preceded(char('"'), terminated(many1(none_of("\"")), char('"'))),
+                        into_string,
+                    ),
+                    map(terminated(many1(none_of(" ")), char(' ')), into_string),
+                )),
+            ),
+        ))(s)
+        .map_err(|_| Error::App("Could not parse log line".to_string()))?;
+
+        Ok(LogMessage {
+            level: level.to_string(),
+            timestamp: format!("{date} {time}"),
+            message: message.trim().to_string(),
+            meta,
+        })
     }
 }
 
