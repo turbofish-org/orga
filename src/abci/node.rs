@@ -205,18 +205,22 @@ impl<A: App> InternalApp<ABCIPlugin<A>> {
         let state_bytes = match store.get(&[])? {
             Some(inner) => inner,
             None => {
-                let default: A = Default::default();
-                let encoded_bytes = Encode::encode(&default).unwrap();
+                let mut default: ABCIPlugin<A> = Default::default();
+                // TODO: should the real store actually be passed in here?
+                default.attach(store.clone())?;
+                let mut encoded_bytes = vec![];
+                default.flush(&mut encoded_bytes)?;
+
                 store.put(vec![], encoded_bytes.clone())?;
                 encoded_bytes
             }
         };
-        let mut state: ABCIPlugin<A> = Decode::decode(state_bytes.as_slice())?;
-        state.attach(store.clone())?;
+        let mut state: ABCIPlugin<A> =
+            ABCIPlugin::<A>::load(store.clone(), &mut state_bytes.as_slice())?;
         let res = op(&mut state);
-        state.flush()?;
-        store.put(vec![], state.encode()?)?;
-
+        let mut bytes = vec![];
+        state.flush(&mut bytes)?;
+        store.put(vec![], bytes)?;
         Ok(res)
     }
 }
@@ -318,8 +322,7 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
             let state_bytes = store
                 .get(&[])?
                 .ok_or_else(|| crate::Error::Query("Store is empty".to_string()))?;
-            let mut state: ABCIPlugin<A> = Decode::decode(state_bytes.as_slice())?;
-            state.attach(store)?;
+            let mut state: ABCIPlugin<A> = State::load(store, &mut state_bytes.as_slice())?;
             Ok(state)
         };
 
