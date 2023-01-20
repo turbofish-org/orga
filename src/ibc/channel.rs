@@ -5,6 +5,7 @@ use crate::client::Client;
 use crate::collections::{Deque, Map};
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, LengthVec};
+use crate::orga;
 use crate::query::Query;
 use crate::state::State;
 use crate::store::{Read, Write};
@@ -38,7 +39,7 @@ impl From<crate::Error> for Error {
     }
 }
 
-#[derive(State, Call, Query, Client, Encode, Decode, Default, Serialize, Deserialize, Describe)]
+#[orga]
 pub struct ChannelStore {
     channel_counter: u64,
     connection_channels: Map<Adapter<ConnectionId>, Deque<Adapter<(PortId, ChannelId)>>>,
