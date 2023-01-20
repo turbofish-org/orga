@@ -49,20 +49,30 @@ impl ToTokens for StateInputReceiver {
 
         let fields_with_names = || fields.iter().cloned().zip(field_names());
 
-        let attach_method = if as_type.is_some() {
-            // TODO: review whether noop is the correct behavior when using
-            // as_type. Since we have a &mut self, we can't simple convert into
-            // the as_type.
+        let attach_method = if let Some(as_type) = as_type {
             quote! {
                 fn attach(&mut self, store: #store_ty) -> #result_ty<()> {
+                    #attacher_ty::new(store).attach_child_as::<#as_type, _>(self)?;
                     Ok(())
                 }
             }
         } else {
-            let names = field_names();
+            let child_attaches = fields_with_names().map(|(field, name)| match field.as_type {
+                Some(ref as_type) => quote! {.attach_child_as::<#as_type, _>(&mut self.#name)?},
+                None => {
+                    if field.skip {
+                        quote! { .attach_skipped_child(&mut self.#name)?}
+                    } else {
+                        quote! {.attach_child(&mut self.#name)?}
+                    }
+                }
+            });
+
             quote! {
                 fn attach(&mut self, store: #store_ty) -> #result_ty<()> {
-                    #(self.#names.attach(store)?;)*
+                    #attacher_ty::new(store)
+                    #(#child_attaches)*;
+
                     Ok(())
                 }
             }
