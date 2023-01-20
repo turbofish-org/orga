@@ -1,6 +1,7 @@
 use crate::encoding::{Decode, Encode};
 use crate::store::Store;
 use crate::{Error, Result};
+use ed::Terminated;
 pub use orga_macros::State;
 
 mod attach;
@@ -12,6 +13,7 @@ pub use load::Loader;
 
 use std::cell::RefCell;
 use std::marker::PhantomData;
+use std::rc::Rc;
 
 pub trait State: Sized {
     fn attach(&mut self, store: Store) -> Result<()>;
@@ -52,30 +54,80 @@ state_impl!(i128);
 state_impl!(bool);
 state_impl!(());
 
+fn varint(n: usize, max: usize) -> Vec<u8> {
+    if max < u8::MAX as usize {
+        vec![n as u8]
+    } else if max < u16::MAX as usize {
+        (n as u16).to_be_bytes().to_vec()
+    } else if max < u32::MAX as usize {
+        (n as u32).to_be_bytes().to_vec()
+    } else {
+        (n as u64).to_be_bytes().to_vec()
+    }
+}
+
 impl<T: State> State for Option<T> {
     fn attach(&mut self, store: Store) -> Result<()> {
         self.as_mut().map_or(Ok(()), |inner| inner.attach(store))
     }
 
     fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
-        self.as_mut().map_or(Ok(()), |inner| inner.flush(out))
+        match self {
+            Some(inner) => {
+                out.write_all(&[1])?;
+                inner.flush(out)
+            }
+            None => {
+                out.write_all(&[0])?;
+                Ok(())
+            }
+        }
     }
 
-    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
-        if bytes.is_empty() {
-            return Err(Error::State(
-                "Cannot load Option from empty bytes".to_string(),
-            ));
-        }
-        if bytes[0] == 0 {
+    fn load(store: Store, mut bytes: &mut &[u8]) -> Result<Self> {
+        let variant_byte = u8::decode(&mut bytes)?;
+        if variant_byte == 0 {
             Ok(None)
         } else {
-            Ok(Some(T::load(store, &mut &bytes[1..])?))
+            Ok(Some(T::load(store, bytes)?))
         }
     }
 }
 
-impl<T: State, const N: usize> State for [T; N] {
+impl<T: State + Terminated, const N: usize> State for [T; N] {
+    fn attach(&mut self, store: Store) -> Result<()> {
+        for (i, value) in self.iter_mut().enumerate() {
+            let prefix = varint(i, N);
+            let substore = store.sub(prefix.as_slice());
+            value.attach(substore)?;
+        }
+        Ok(())
+    }
+
+    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+        for value in self.into_iter() {
+            value.flush(out)?;
+        }
+        Ok(())
+    }
+
+    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
+        let items: Vec<T> = (0..N)
+            .map(|i| {
+                let prefix = varint(i, N);
+                let substore = store.sub(prefix.as_slice());
+                let value = T::load(substore, bytes)?;
+                Ok(value)
+            })
+            .collect::<Result<_>>()?;
+
+        Ok(items
+            .try_into()
+            .map_err(|_| Error::State(format!("Cannot convert Vec to array of length {}", N)))?)
+    }
+}
+
+impl<T: State + Terminated> State for Vec<T> {
     fn attach(&mut self, store: Store) -> Result<()> {
         for (i, value) in self.iter_mut().enumerate() {
             let prefix = (i as u64).to_be_bytes();
@@ -86,39 +138,22 @@ impl<T: State, const N: usize> State for [T; N] {
     }
 
     fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
-        out.write_all(&(self.len() as u64).to_be_bytes())?;
-        for value in self.iter_mut() {
+        for value in self.into_iter() {
             value.flush(out)?;
         }
         Ok(())
     }
 
     fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
-        todo!()
-    }
-}
-
-impl<T: State> State for Vec<T> {
-    fn attach(&mut self, store: Store) -> Result<()> {
-        for (i, value) in self.iter_mut().enumerate() {
-            let prefix = (i as u64).to_be_bytes();
+        let mut value = vec![];
+        while !bytes.is_empty() {
+            let prefix = (value.len() as u64).to_be_bytes();
             let substore = store.sub(prefix.as_slice());
-            value.attach(substore)?;
+            let item = T::load(substore, bytes)?;
+            value.push(item);
         }
-        Ok(())
-    }
 
-    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
-        // TODO: no length prefix
-        out.write_all(&(self.len() as u64).to_be_bytes())?;
-        for value in self.iter_mut() {
-            value.flush(out)?;
-        }
-        Ok(())
-    }
-
-    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
-        todo!()
+        Ok(value)
     }
 }
 
