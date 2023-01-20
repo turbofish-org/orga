@@ -45,7 +45,6 @@ mod full {
 
     type UpdateMap = Map<[u8; 32], Adapter<ValidatorUpdate>>;
 
-    #[derive(Default)]
     pub struct ABCIPlugin<T> {
         inner: T,
         pub(crate) validator_updates: Option<HashMap<[u8; 32], ValidatorUpdate>>,
@@ -54,6 +53,20 @@ mod full {
         pub(crate) events: Option<Vec<Event>>,
         current_vp: Rc<RefCell<Option<EntryMap<ValidatorEntry>>>>,
         cons_key_by_op_addr: Rc<RefCell<Option<OperatorMap>>>,
+    }
+
+    impl<T: Default> Default for ABCIPlugin<T> {
+        fn default() -> Self {
+            Self {
+                inner: T::default(),
+                validator_updates: None,
+                updates: UpdateMap::default(),
+                time: None,
+                events: None,
+                current_vp: Rc::new(RefCell::new(Some(Default::default()))),
+                cons_key_by_op_addr: Rc::new(RefCell::new(Some(Default::default()))),
+            }
+        }
     }
 
     pub struct InitChainCtx {
@@ -367,11 +380,25 @@ mod full {
                 .attach(store.sub(&[3]))
         }
 
-        fn flush(&mut self) -> Result<()> {
-            self.updates.flush()?;
-            self.current_vp.borrow_mut().flush()?;
-            self.cons_key_by_op_addr.borrow_mut().flush()?;
-            self.inner.flush()
+        fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+            self.inner.flush(out)?;
+            self.updates.flush(out)?;
+            self.current_vp.take().flush(&mut vec![])?;
+            self.cons_key_by_op_addr.take().flush(&mut vec![])
+        }
+
+        fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
+            let mut loader = crate::state::Loader::new(store, bytes, 0);
+
+            Ok(Self {
+                inner: loader.load_child()?,
+                validator_updates: None,
+                updates: loader.load_child()?,
+                current_vp: Rc::new(RefCell::new(Some(loader.load_child()?))),
+                cons_key_by_op_addr: Rc::new(RefCell::new(Some(loader.load_child()?))),
+                events: None,
+                time: None,
+            })
         }
     }
 
