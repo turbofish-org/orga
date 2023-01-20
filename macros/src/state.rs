@@ -29,6 +29,7 @@ impl ToTokens for StateInputReceiver {
         } = self;
         let state_trait = quote! { ::orga::state::State };
         let store_ty = quote! { ::orga::store::Store };
+        let attacher_ty = quote! { ::orga::state::Attacher };
         let flusher_ty = quote! { ::orga::state::Flusher };
         let loader_ty = quote! { ::orga::state::Loader };
         let result_ty = quote! { ::orga::Result };
@@ -88,7 +89,13 @@ impl ToTokens for StateInputReceiver {
         } else {
             let child_flushes = fields_with_names().map(|(field, name)| match field.as_type {
                 Some(ref as_type) => quote! {.flush_child_as::<#as_type, _>(self.#name)?},
-                None => quote! {.flush_child(self.#name)?},
+                None => {
+                    if field.skip {
+                        quote! { .flush_skipped_child(self.#name)?}
+                    } else {
+                        quote! {.flush_child(self.#name)?}
+                    }
+                }
             });
 
             quote! {
@@ -112,7 +119,13 @@ impl ToTokens for StateInputReceiver {
                             Some(ref as_type) => {
                                 quote! { #name: loader.load_child_as::<#as_type, _>()? }
                             }
-                            None => quote! { #name: loader.load_child()? },
+                            None => {
+                                if field.skip {
+                                    quote! { #name: loader.load_skipped_child()? }
+                                } else {
+                                    quote! { #name: loader.load_child()? }
+                                }
+                            }
                         });
                     quote! { Self { #(#child_self_loads),* } }
                 }
@@ -157,6 +170,9 @@ impl ToTokens for StateInputReceiver {
 struct StateFieldReceiver {
     ident: Option<Ident>,
     as_type: Option<Ident>,
+    ty: Type,
+    #[darling(default)]
+    skip: bool,
 }
 
 pub fn derive(item: TokenStream) -> TokenStream {
