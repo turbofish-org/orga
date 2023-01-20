@@ -24,12 +24,13 @@ where
 {
     contributions: Decimal,
     rewards: Map<u8, Decimal>,
-    symbol: PhantomData<S>,
     shares_issued: Decimal,
     map: Map<K, RefCell<Entry<V>>>,
     rewards_this_period: Map<u8, Decimal>,
     last_period_entry: Map<u8, Decimal>,
+    #[state(skip)]
     drop_errored: bool,
+    symbol: PhantomData<S>,
 }
 
 impl<K, V, S> Balance<S, Decimal> for Pool<K, V, S>
@@ -43,7 +44,7 @@ where
     }
 }
 
-#[derive(State, Encode, Decode, Default, MigrateFrom)]
+#[orga]
 pub struct Entry<T>
 where
     T: State,
