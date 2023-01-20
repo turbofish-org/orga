@@ -304,28 +304,36 @@ impl<T: Client<SignerClient<T, U>>, U: Clone> Client<U> for SignerPlugin<T> {
     }
 }
 
-impl<T: State> State for SignerPlugin<T> {
+impl<T> State for SignerPlugin<T>
+where
+    T: State,
+{
     fn attach(&mut self, store: Store) -> Result<()> {
         self.inner.attach(store)
     }
 
-    fn flush(&mut self) -> Result<()> {
-        self.inner.flush()
+    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+        self.inner.flush(out)
+    }
+
+    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
+        let inner = T::load(store, bytes)?;
+        Ok(Self { inner })
     }
 }
 
-impl<T> Describe for SignerPlugin<T>
-where
-    T: State + Describe + 'static,
-{
-    fn describe() -> crate::describe::Descriptor {
-        crate::describe::Builder::new::<Self>()
-            .named_child::<T>("inner", &[], |v| {
-                crate::describe::Builder::access(v, |v: Self| v.inner)
-            })
-            .build()
-    }
-}
+// impl<T> Describe for SignerPlugin<T>
+// where
+//     T: State + Describe + 'static,
+// {
+//     fn describe() -> crate::describe::Descriptor {
+//         crate::describe::Builder::new::<Self>()
+//             .named_child::<T>("inner", &[], |v| {
+//                 crate::describe::Builder::access(v, |v: Self| v.inner)
+//             })
+//             .build()
+//     }
+// }
 
 #[cfg(target_arch = "wasm32")]
 pub mod keplr {

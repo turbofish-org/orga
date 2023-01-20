@@ -6,6 +6,7 @@ use crate::encoding::{Decode, Encode};
 use crate::migrate::MigrateFrom;
 use crate::query::Query;
 use crate::state::State;
+use crate::store::Store;
 use crate::{Error, Result};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
@@ -13,12 +14,31 @@ use std::ops::{Deref, DerefMut};
 pub const MAX_CALL_SIZE: usize = 65_535;
 pub const NATIVE_CALL_FLAG: u8 = 0xff;
 
-#[derive(State, Clone, Encode, Decode, Default, Describe, Serialize, Deserialize, MigrateFrom)]
-#[serde(transparent)]
+#[derive(Clone, Encode, Decode, Default, MigrateFrom)]
 pub struct SdkCompatPlugin<S, T: State> {
-    #[serde(skip)]
     symbol: PhantomData<S>,
     inner: T,
+}
+
+impl<S, T> State for SdkCompatPlugin<S, T>
+where
+    T: State,
+{
+    fn attach(&mut self, store: Store) -> Result<()> {
+        self.inner.attach(store.sub(&[1]))
+    }
+
+    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+        self.inner.flush(out)
+    }
+
+    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
+        let inner = T::load(store.sub(&[1]), bytes)?;
+        Ok(Self {
+            inner,
+            symbol: Default::default(),
+        })
+    }
 }
 
 impl<S, T: State> Deref for SdkCompatPlugin<S, T> {

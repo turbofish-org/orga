@@ -35,24 +35,32 @@ where
         self.inner.attach(store)
     }
 
-    fn flush(&mut self) -> Result<()> {
-        self.inner.flush()
+    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+        self.inner.flush(out)
+    }
+
+    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
+        let inner = T::load(store, bytes)?;
+        Ok(Self {
+            _symbol: PhantomData,
+            inner,
+        })
     }
 }
 
-impl<S, T> Describe for FeePlugin<S, T>
-where
-    S: Symbol,
-    T: State + Describe + 'static,
-{
-    fn describe() -> crate::describe::Descriptor {
-        crate::describe::Builder::new::<Self>()
-            .named_child::<T>("inner", &[], |v| {
-                crate::describe::Builder::access(v, |v: Self| v.inner)
-            })
-            .build()
-    }
-}
+// impl<S, T> Describe for FeePlugin<S, T>
+// where
+//     S: Symbol,
+//     T: State + Describe + 'static,
+// {
+//     fn describe() -> crate::describe::Descriptor {
+//         crate::describe::Builder::new::<Self>()
+//             .named_child::<T>("inner", &[], |v| {
+//                 crate::describe::Builder::access(v, |v: Self| v.inner)
+//             })
+//             .build()
+//     }
+// }
 
 impl<S, T: Query> Query for FeePlugin<S, T> {
     type Query = T::Query;
