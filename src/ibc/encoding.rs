@@ -138,8 +138,12 @@ where
         Ok(())
     }
 
-    fn flush(&mut self) -> crate::Result<()> {
-        Ok(())
+    fn flush<W: std::io::Write>(self, dest: &mut W) -> crate::Result<()> {
+        Ok(self.encode_into(dest)?)
+    }
+
+    fn load(_store: Store, bytes: &mut &[u8]) -> crate::Result<Self> {
+        Ok(Decode::decode(bytes)?)
     }
 }
 
@@ -296,8 +300,12 @@ where
         Ok(())
     }
 
-    fn flush(&mut self) -> crate::Result<()> {
-        Ok(())
+    fn flush<W: std::io::Write>(self, dest: &mut W) -> crate::Result<()> {
+        Ok(self.encode_into(dest)?)
+    }
+
+    fn load(_store: Store, bytes: &mut &[u8]) -> crate::Result<Self> {
+        Ok(Decode::decode(bytes)?)
     }
 }
 
