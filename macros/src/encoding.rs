@@ -50,10 +50,20 @@ impl ToTokens for EncodingInputReceiver {
 
         let fields_with_names = || fields.iter().cloned().zip(field_names());
 
-        // TODO: proper encoding len calculation
-        let encoding_len_method = quote! {
-            fn encoding_length(&self) -> #result_ty<usize> {
-                Ok(self.encode()?.len())
+        let encoding_len_method = if let Some(as_type) = as_type {
+            quote! {
+                fn encoding_length(&self) -> #result_ty<usize> {
+                    #encoder_ty::<Vec<u8>>::encoding_length_as::<#as_type, &Self>(self)
+                }
+            }
+        } else {
+            let child_encoding_lens = field_names().map(|name| {
+                quote! { + #encode_trait::encoding_length(&self.#name)? }
+            });
+            quote! {
+                fn encoding_length(&self) -> #result_ty<usize> {
+                    Ok(0 #(#child_encoding_lens)*)
+                }
             }
         };
 
