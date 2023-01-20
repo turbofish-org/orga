@@ -62,12 +62,15 @@ pub mod coins;
 
 pub mod context;
 
-// #[cfg(feature = "feat-ibc")]
-// pub mod ibc;
+#[cfg(feature = "feat-ibc")]
+pub mod ibc;
 
 mod error;
 
 pub use cosmrs;
+
+mod compat;
+pub use compat::{compat_mode, set_compat_mode};
 
 // re-exports
 pub use async_trait::async_trait;
@@ -76,24 +79,24 @@ pub use futures_lite::future::Boxed as BoxFuture;
 pub use orga_macros as macros;
 pub use serde_json::Value as JsonValue;
 
-// pub mod prelude {
-//     pub use secp256k1;
+pub mod prelude {
+    pub use secp256k1;
 
-//     #[cfg(feature = "abci")]
-//     pub use crate::abci::*;
-//     pub use crate::call::*;
-//     pub use crate::client::{AsyncCall, Client};
-//     #[cfg(any(target_arch = "wasm32", feature = "abci"))]
-//     pub use crate::coins::*;
-//     pub use crate::collections::*;
-//     pub use crate::context::*;
-//     pub use crate::encoding::*;
-//     #[cfg(merk)]
-//     pub use crate::merk;
-//     #[cfg(any(target_arch = "wasm32", feature = "abci"))]
-//     pub use crate::plugins::*;
-//     pub use crate::query::*;
-//     pub use crate::state::*;
-//     pub use crate::store::*;
-//     pub use crate::Result;
-// }
+    #[cfg(feature = "abci")]
+    pub use crate::abci::*;
+    pub use crate::call::*;
+    pub use crate::client::{AsyncCall, Client};
+    #[cfg(any(target_arch = "wasm32", feature = "abci"))]
+    pub use crate::coins::*;
+    pub use crate::collections::*;
+    pub use crate::context::*;
+    pub use crate::encoding::*;
+    #[cfg(merk)]
+    pub use crate::merk;
+    #[cfg(any(target_arch = "wasm32", feature = "abci"))]
+    pub use crate::plugins::*;
+    pub use crate::query::*;
+    pub use crate::state::*;
+    pub use crate::store::*;
+    pub use crate::Result;
+}
