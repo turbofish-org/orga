@@ -24,4 +24,13 @@ impl Attacher {
 
         Ok(self)
     }
+
+    pub fn attach_child_as<T, U>(mut self, _value: U) -> Result<Self> {
+        self.field_count += 1;
+        Ok(self)
+    }
+
+    pub fn attach_skipped_child<T>(self, _value: T) -> Result<Self> {
+        Ok(self)
+    }
 }

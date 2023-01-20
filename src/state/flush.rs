@@ -1,4 +1,5 @@
 use super::State;
+use crate::compat_mode;
 use crate::Result;
 
 pub struct Flusher<'a, W> {
@@ -27,14 +28,20 @@ where
         T: State + From<U>,
         U: State,
     {
-        let mut value: T = value.into();
+        let value: T = value.into();
         value.flush(self.out)?;
 
         Ok(self)
     }
 
+    pub fn flush_skipped_child<T>(self, value: T) -> Result<Self> {
+        Ok(self)
+    }
+
     pub fn version(self, version: u8) -> Result<Self> {
-        self.out.write_all(&[version])?;
+        if !compat_mode() {
+            self.out.write_all(&[version])?;
+        }
 
         Ok(self)
     }
