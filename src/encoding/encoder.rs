@@ -26,7 +26,7 @@ where
     where
         T: Encode + From<U>,
     {
-        let mut value: T = value.into();
+        let value: T = value.into();
         self.encode_child(&value)
     }
 
@@ -34,5 +34,13 @@ where
         self.out.write_all(&[version])?;
 
         Ok(self)
+    }
+
+    pub fn encoding_length_as<T, U>(value: U) -> Result<usize>
+    where
+        T: Encode + From<U>,
+    {
+        let value: T = value.into();
+        value.encoding_length()
     }
 }
