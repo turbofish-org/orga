@@ -357,30 +357,6 @@ mod full {
         }
     }
 
-    impl<T: State> Encode for ABCIPlugin<T> {
-        fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
-            self.inner.encode_into(dest)
-        }
-
-        fn encoding_length(&self) -> ed::Result<usize> {
-            self.inner.encoding_length()
-        }
-    }
-
-    impl<T: State> Decode for ABCIPlugin<T> {
-        fn decode<R: std::io::Read>(input: R) -> ed::Result<Self> {
-            Ok(Self {
-                inner: T::decode(input)?,
-                validator_updates: None,
-                updates: UpdateMap::new(),
-                time: None,
-                events: None,
-                current_vp: Rc::new(RefCell::new(Some(EntryMap::new()))),
-                cons_key_by_op_addr: Rc::new(RefCell::new(Some(Map::new()))),
-            })
-        }
-    }
-
     impl<T: State> State for ABCIPlugin<T> {
         fn attach(&mut self, store: Store) -> Result<()> {
             self.inner.attach(store.sub(&[0]))?;
