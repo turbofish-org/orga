@@ -163,7 +163,7 @@ impl<T: State> State for RefCell<T> {
     }
 
     fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
-        self.get_mut().flush(out)
+        self.into_inner().flush(out)
     }
 
     fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
