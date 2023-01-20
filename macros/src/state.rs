@@ -155,6 +155,23 @@ impl ToTokens for StateInputReceiver {
             }
         };
 
+        let bounds = {
+            fields.iter().enumerate().map(|(i, field)| {
+                let field_ty = &field.ty;
+                let maybe_term_bound = if i < fields.len() - 1 {
+                    quote! { #field_ty: ::orga::encoding::Terminated, }
+                } else {
+                    quote! {}
+                };
+                quote! { #maybe_term_bound }
+            })
+        };
+        let wher = if wher.is_some() {
+            quote! { #wher #(#bounds)*  }
+        } else {
+            quote! { where #(#bounds)*  }
+        };
+
         tokens.extend(quote! {
             impl #imp #state_trait for #ident #ty #wher {
                 #attach_method
