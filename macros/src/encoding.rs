@@ -128,9 +128,7 @@ impl ToTokens for EncodingInputReceiver {
 
             quote! {
                 fn decode<__R: ::std::io::Read>(mut input: __R) -> #result_ty<Self> {
-                    let mut bytes = vec![];
-                    input.read_to_end(&mut bytes)?;
-                    let mut decoder = #decoder_ty::new(&mut bytes.as_slice(), #version);
+                    let mut decoder = #decoder_ty::new(input, #version);
                     let mut value = #decode_value;
 
                     Ok(value)

@@ -1,14 +1,15 @@
+use crate::compat_mode;
 use crate::encoding::{Decode, Error, Result};
 use crate::migrate::MigrateInto;
 
-pub struct Decoder<'a, 'b> {
+pub struct Decoder<R> {
     field_count: u8,
     version: u8,
-    bytes: &'a mut &'b [u8],
+    bytes: R,
 }
 
-impl<'a, 'b> Decoder<'a, 'b> {
-    pub fn new(bytes: &'a mut &'b [u8], version: u8) -> Self {
+impl<R: std::io::Read> Decoder<R> {
+    pub fn new(bytes: R, version: u8) -> Self {
         Self {
             version,
             bytes,
