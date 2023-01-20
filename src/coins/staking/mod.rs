@@ -5,6 +5,7 @@ use crate::abci::{BeginBlock, EndBlock};
 use crate::call::Call;
 use crate::client::Client;
 use crate::collections::{Deque, Entry, EntryMap, Map};
+use crate::compat_mode;
 use crate::context::GetContext;
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, Terminated};
@@ -35,19 +36,18 @@ const UNBONDING_SECONDS: u64 = 10; // 10 seconds
 const UNBONDING_SECONDS: u64 = 60 * 60 * 24 * 14; // 2 weeks
 const EDIT_INTERVAL_SECONDS: u64 = 60 * 60 * 24; // 1 day
 
-// #[derive(Call, Query, Client, Default, Serialize, Deserialize, MigrateFrom)]
-#[orga]
+#[derive(Call, Query, Default)]
 pub struct Staking<S: Symbol> {
     validators: Pool<Address, Validator<S>, S>,
-    consensus_keys: Map<Address, [u8; 32]>,
-    last_signed_block: Map<[u8; 20], u64>,
-    #[call]
-    pub max_validators: u64,
     #[call]
     pub min_self_delegation_min: u64,
+    consensus_keys: Map<Address, [u8; 32]>,
+    last_signed_block: Map<[u8; 20], u64>,
     validators_by_power: EntryMap<ValidatorPowerEntry>,
-    last_indexed_power: Map<Address, u64>,
     last_validator_powers: Map<Address, u64>,
+    #[call]
+    pub max_validators: u64,
+    last_indexed_power: Map<Address, u64>,
     address_for_tm_hash: Map<[u8; 20], Address>,
     unbonding_seconds: u64,
     #[call]
@@ -63,6 +63,130 @@ pub struct Staking<S: Symbol> {
     redelegation_queue: Deque<RedelegationEntry>,
     delegation_index: Map<Address, Map<Address, ()>>,
 }
+
+impl<S: Symbol> State for Staking<S> {
+    fn attach(&mut self, store: Store) -> Result<()> {
+        ::orga::state::Attacher::new(store)
+            .attach_child(&mut self.validators)?
+            .attach_child(&mut self.min_self_delegation_min)?
+            .attach_child(&mut self.consensus_keys)?
+            .attach_child(&mut self.last_signed_block)?
+            .attach_child(&mut self.validators_by_power)?
+            .attach_child(&mut self.last_validator_powers)?
+            .attach_child(&mut self.max_validators)?
+            .attach_child(&mut self.last_indexed_power)?
+            .attach_child(&mut self.address_for_tm_hash)?
+            .attach_child(&mut self.unbonding_seconds)?
+            .attach_child(&mut self.max_offline_blocks)?
+            .attach_child(&mut self.slash_fraction_double_sign)?
+            .attach_child(&mut self.slash_fraction_downtime)?
+            .attach_child(&mut self.downtime_jail_seconds)?
+            .attach_child(&mut self.validator_queue)?
+            .attach_child(&mut self.unbonding_delegation_queue)?
+            .attach_child(&mut self.redelegation_queue)?
+            .attach_child(&mut self.delegation_index)?;
+        Ok(())
+    }
+
+    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+        if compat_mode() {
+            ::orga::state::Flusher::new(out)
+                .version(0u8)?
+                .flush_child(self.max_validators)?
+                .flush_child(self.min_self_delegation_min)?
+                .flush_child(self.unbonding_seconds)?
+                .flush_child(self.max_offline_blocks)?
+                .flush_child(self.slash_fraction_double_sign)?
+                .flush_child(self.slash_fraction_downtime)?
+                .flush_child(self.downtime_jail_seconds)?
+                .flush_child(self.validators)?
+                .flush_child(self.unbonding_delegation_queue)?
+                .flush_child(self.redelegation_queue)?
+                .flush_child(self.consensus_keys)?
+                .flush_child(self.last_signed_block)?
+                .flush_child(self.validators_by_power)?
+                .flush_child(self.last_validator_powers)?
+                .flush_child(self.last_indexed_power)?
+                .flush_child(self.address_for_tm_hash)?
+                .flush_child(self.validator_queue)?
+                .flush_child(self.delegation_index)?;
+        } else {
+            ::orga::state::Flusher::new(out)
+                .version(0u8)?
+                .flush_child(self.validators)?
+                .flush_child(self.min_self_delegation_min)?
+                .flush_child(self.consensus_keys)?
+                .flush_child(self.last_signed_block)?
+                .flush_child(self.validators_by_power)?
+                .flush_child(self.last_validator_powers)?
+                .flush_child(self.max_validators)?
+                .flush_child(self.last_indexed_power)?
+                .flush_child(self.address_for_tm_hash)?
+                .flush_child(self.unbonding_seconds)?
+                .flush_child(self.max_offline_blocks)?
+                .flush_child(self.slash_fraction_double_sign)?
+                .flush_child(self.slash_fraction_downtime)?
+                .flush_child(self.downtime_jail_seconds)?
+                .flush_child(self.validator_queue)?
+                .flush_child(self.unbonding_delegation_queue)?
+                .flush_child(self.redelegation_queue)?
+                .flush_child(self.delegation_index)?;
+        }
+
+        Ok(())
+    }
+
+    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
+        let mut loader = ::orga::state::Loader::new(store.clone(), bytes, 0u8);
+        let mut value: Self = if compat_mode() {
+            Self {
+                max_validators: loader.load_child()?,
+                min_self_delegation_min: loader.load_child()?,
+                unbonding_seconds: loader.load_child()?,
+                max_offline_blocks: loader.load_child()?,
+                slash_fraction_double_sign: loader.load_child()?,
+                slash_fraction_downtime: loader.load_child()?,
+                downtime_jail_seconds: loader.load_child()?,
+                validators: loader.load_child()?,
+                unbonding_delegation_queue: loader.load_child()?,
+                redelegation_queue: loader.load_child()?,
+                consensus_keys: loader.load_child()?,
+                last_signed_block: loader.load_child()?,
+                validators_by_power: loader.load_child()?,
+                last_validator_powers: loader.load_child()?,
+                last_indexed_power: loader.load_child()?,
+                address_for_tm_hash: loader.load_child()?,
+                validator_queue: loader.load_child()?,
+                delegation_index: loader.load_child()?,
+            }
+        } else {
+            Self {
+                validators: loader.load_child()?,
+                min_self_delegation_min: loader.load_child()?,
+                consensus_keys: loader.load_child()?,
+                last_signed_block: loader.load_child()?,
+                validators_by_power: loader.load_child()?,
+                last_validator_powers: loader.load_child()?,
+                max_validators: loader.load_child()?,
+                last_indexed_power: loader.load_child()?,
+                address_for_tm_hash: loader.load_child()?,
+                unbonding_seconds: loader.load_child()?,
+                max_offline_blocks: loader.load_child()?,
+                slash_fraction_double_sign: loader.load_child()?,
+                slash_fraction_downtime: loader.load_child()?,
+                downtime_jail_seconds: loader.load_child()?,
+                validator_queue: loader.load_child()?,
+                unbonding_delegation_queue: loader.load_child()?,
+                redelegation_queue: loader.load_child()?,
+                delegation_index: loader.load_child()?,
+            }
+        };
+        value.attach(store)?;
+        Ok(value)
+    }
+}
+
+impl<S: Symbol> Terminated for Staking<S> {}
 
 // impl<S: Symbol> Encode for Staking<S> {
 //     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
