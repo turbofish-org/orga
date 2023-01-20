@@ -124,7 +124,9 @@ impl State for Store {
     }
 
     fn load(store: Store, _bytes: &mut &[u8]) -> Result<Self> {
-        Ok(store)
+        let mut value = store.clone();
+        value.attach(store)?;
+        Ok(value)
     }
 
     fn flush<W: std::io::Write>(self, _out: &mut W) -> Result<()> {

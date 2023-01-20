@@ -186,10 +186,13 @@ impl<T> State for PhantomData<T> {
 }
 
 macro_rules! state_tuple_impl {
-    ($($type:ident),*; $($indices:tt),*) => {
-        impl<$($type,)*> State for ($($type,)*)
+    ($($type:ident),*; $last_type: ident; $($indices:tt),*) => {
+        impl<$($type,)* $last_type> State for ($($type,)* $last_type,)
         where
             $($type: State,)*
+            $last_type: State,
+            // last type doesn't need to be terminated
+            $($type: ed::Terminated,)*
         {
             fn attach(&mut self, store: Store) -> Result<()>
             {
@@ -205,40 +208,42 @@ macro_rules! state_tuple_impl {
 
             fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
                 Ok((
-                    $(<$type>::load(store.sub(&[$indices as u8]), bytes)?,)*
+                    $(State::load(store.sub(&[$indices as u8]), bytes)?,)*
                 ))
             }
         }
     }
 }
 
-impl<A: State> State for (A,) {
+impl<T: State> State for Rc<T> {
     fn attach(&mut self, store: Store) -> Result<()> {
-        self.0.attach(store.sub(&[0]))
+        Rc::<T>::get_mut(self)
+            .ok_or_else(|| Error::State("Cannot attach Rc".to_string()))?
+            .attach(store)
     }
 
     fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
-        self.0.flush(out)
+        let value =
+            Rc::try_unwrap(self).map_err(|_| Error::State("Cannot flush Rc".to_string()))?;
+        value.flush(out)
     }
 
     fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
-        Ok((A::load(store.sub(&[0]), bytes)?,))
+        let value = T::load(store, bytes)?;
+
+        Ok(Rc::new(value))
     }
 }
 
-//Call and Query macros parse the file
-//Go look for the attributes on method calls and queries
-
-//looking for Foo, but not FooV4
-
-state_tuple_impl!(A, B; 0, 1);
-state_tuple_impl!(A, B, C; 0, 1, 2);
-state_tuple_impl!(A, B, C, D; 0, 1, 2, 3);
-state_tuple_impl!(A, B, C, D, E; 0, 1, 2, 3, 4);
-state_tuple_impl!(A, B, C, D, E, F; 0, 1, 2, 3, 4, 5);
-state_tuple_impl!(A, B, C, D, E, F, G; 0, 1, 2, 3, 4, 5, 6);
-state_tuple_impl!(A, B, C, D, E, F, G, H; 0, 1, 2, 3, 4, 5, 6, 7);
-state_tuple_impl!(A, B, C, D, E, F, G, H, I; 0, 1, 2, 3, 4, 5, 6, 7, 8);
-state_tuple_impl!(A, B, C, D, E, F, G, H, I, J; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
-state_tuple_impl!(A, B, C, D, E, F, G, H, I, J, K; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
-state_tuple_impl!(A, B, C, D, E, F, G, H, I, J, K, L; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
+state_tuple_impl!(; A; 0);
+state_tuple_impl!(A; B; 0, 1);
+state_tuple_impl!(A, B; C; 0, 1, 2);
+state_tuple_impl!(A, B, C; D; 0, 1, 2, 3);
+state_tuple_impl!(A, B, C, D; E; 0, 1, 2, 3, 4);
+state_tuple_impl!(A, B, C, D, E; F; 0, 1, 2, 3, 4, 5);
+state_tuple_impl!(A, B, C, D, E, F; G; 0, 1, 2, 3, 4, 5, 6);
+state_tuple_impl!(A, B, C, D, E, F, G; H; 0, 1, 2, 3, 4, 5, 6, 7);
+state_tuple_impl!(A, B, C, D, E, F, G, H; I; 0, 1, 2, 3, 4, 5, 6, 7, 8);
+state_tuple_impl!(A, B, C, D, E, F, G, H, I; J; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
+state_tuple_impl!(A, B, C, D, E, F, G, H, I, J; K; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+state_tuple_impl!(A, B, C, D, E, F, G, H, I, J, K; L; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
