@@ -1,6 +1,7 @@
 use crate::compat_mode;
 use crate::encoding::{Decode, Error, Result};
 use crate::migrate::MigrateInto;
+use std::io::Read;
 
 pub struct Decoder<R> {
     field_count: u8,
@@ -8,7 +9,7 @@ pub struct Decoder<R> {
     bytes: R,
 }
 
-impl<R: std::io::Read> Decoder<R> {
+impl<R: Read> Decoder<R> {
     pub fn new(bytes: R, version: u8) -> Self {
         Self {
             version,
@@ -21,24 +22,29 @@ impl<R: std::io::Read> Decoder<R> {
     where
         T: MigrateInto<U> + Decode,
     {
-        let res = if !self.bytes.is_empty() && self.bytes[0] < self.version {
-            let value = T::decode(self.bytes)?;
-            Some(value.migrate_into().map_err(|_| Error::UnexpectedByte(0))?)
+        let value = if compat_mode() {
+            Some(T::decode(&mut self.bytes)?)
         } else {
-            None
-        };
+            let version_byte = u8::decode(&mut self.bytes)?;
+            if version_byte < self.version {
+                let byte_prefix = vec![version_byte];
+                let mut inp = byte_prefix.chain(&mut self.bytes);
+                Some(T::decode(&mut inp)?)
+            } else {
+                None
+            }
+        }
+        .map(|v| v.migrate_into().map_err(|_| Error::UnexpectedByte(0)))
+        .transpose()?;
 
-        Ok(res)
+        Ok(value)
     }
 
     pub fn decode_child<U>(&mut self) -> Result<U>
     where
         U: Decode,
     {
-        if self.field_count == 0 {
-            *self.bytes = &self.bytes[1..];
-        }
-        let res = U::decode(self.bytes);
+        let res = U::decode(&mut self.bytes);
         self.field_count += 1;
 
         res

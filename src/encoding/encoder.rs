@@ -1,4 +1,5 @@
 use super::Encode;
+use crate::compat_mode;
 use ed::Result;
 
 pub struct Encoder<'a, W> {
@@ -31,7 +32,9 @@ where
     }
 
     pub fn version(self, version: u8) -> Result<Self> {
-        self.out.write_all(&[version])?;
+        if !compat_mode() {
+            self.out.write_all(&[version])?;
+        }
 
         Ok(self)
     }
