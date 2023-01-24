@@ -2,7 +2,6 @@ use crate::migrate::MigrateFrom;
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
-use crate::{client::Client, describe::Describe};
 pub use ed::*;
 pub use orga_macros::VersionedEncoding;
 pub mod decoder;
@@ -10,7 +9,6 @@ pub mod encoder;
 
 use derive_more::{Deref, DerefMut, Into};
 use std::convert::{TryFrom, TryInto};
-use std::io::Read;
 
 #[derive(Deref, DerefMut, Encode, Into, Default, Clone, Debug, Query, MigrateFrom)]
 pub struct LengthVec<P, T>
@@ -82,7 +80,7 @@ where
         Ok(())
     }
 
-    fn load(store: Store, mut bytes: &mut &[u8]) -> crate::Result<Self> {
+    fn load(_store: Store, mut bytes: &mut &[u8]) -> crate::Result<Self> {
         let len = P::decode(&mut bytes)?;
         let len_usize = len
             .clone()

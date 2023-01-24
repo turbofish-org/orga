@@ -4,7 +4,6 @@ use std::str::from_utf8;
 #[cfg(feature = "abci")]
 use crate::abci::{AbciQuery, BeginBlock};
 use crate::call::Call;
-use crate::client::Client;
 use crate::coins::{Address, Amount};
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
@@ -59,8 +58,6 @@ use self::connection::ConnectionStore;
 use self::port::PortStore;
 pub use self::routing::{IbcMessage, IbcTx};
 use self::transfer::{Dynom, TransferModule};
-use crate::describe::Describe;
-use crate::orga;
 
 #[derive(State, Call, Query, Encode, Decode, Default)]
 // #[orga]
@@ -84,7 +81,7 @@ impl State for Lunchbox {
         Ok(())
     }
 
-    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+    fn flush<W: std::io::Write>(self, _out: &mut W) -> Result<()> {
         Ok(())
     }
 
@@ -109,7 +106,7 @@ impl From<Lunchbox> for () {
     fn from(_: Lunchbox) -> Self {}
 }
 
-#[derive(Encode, Debug, Clone)]
+#[derive(Encode, Debug, Clone, Decode)]
 pub struct TransferOpts {
     pub channel_id: Adapter<ChannelId>,
     pub port_id: Adapter<PortId>,
@@ -120,41 +117,6 @@ pub struct TransferOpts {
     pub timeout_timestamp: Adapter<Timestamp>,
 }
 
-impl ed::Decode for TransferOpts
-where
-    Adapter<ChannelId>: ::ed::Terminated + ::ed::Decode,
-    Adapter<PortId>: ::ed::Terminated + ::ed::Decode,
-    Amount: ::ed::Terminated + ::ed::Decode,
-    Dynom: ::ed::Terminated + ::ed::Decode,
-    Adapter<IbcSigner>: ::ed::Terminated + ::ed::Decode,
-    Adapter<TimeoutHeight>: ::ed::Terminated + ::ed::Decode,
-    Adapter<Timestamp>: ::ed::Decode,
-{
-    #[inline]
-    fn decode<__R: std::io::Read>(mut input: __R) -> ed::Result<Self> {
-        println!("decoding transfer opts");
-        Ok(Self {
-            channel_id: ::ed::Decode::decode(&mut input)?,
-            port_id: ::ed::Decode::decode(&mut input)?,
-            amount: ::ed::Decode::decode(&mut input)?,
-            denom: ::ed::Decode::decode(&mut input)?,
-            receiver: ::ed::Decode::decode(&mut input)?,
-            timeout_height: ::ed::Decode::decode(&mut input)?,
-            timeout_timestamp: ::ed::Decode::decode(&mut input)?,
-        })
-    }
-    #[inline]
-    fn decode_into<__R: std::io::Read>(&mut self, mut input: __R) -> ed::Result<()> {
-        self.channel_id.decode_into(&mut input)?;
-        self.port_id.decode_into(&mut input)?;
-        self.amount.decode_into(&mut input)?;
-        self.denom.decode_into(&mut input)?;
-        self.receiver.decode_into(&mut input)?;
-        self.timeout_height.decode_into(&mut input)?;
-        self.timeout_timestamp.decode_into(&mut input)?;
-        Ok(())
-    }
-}
 
 pub struct TransferArgs {
     pub channel_id: String,

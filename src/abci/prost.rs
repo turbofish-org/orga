@@ -8,7 +8,7 @@ use std::io::{Error as IOError, ErrorKind as IOErrorKind, Read, Write};
 pub struct Adapter<T: Message + Default>(pub(crate) T);
 
 impl<T: Message + Default> State for Adapter<T> {
-    fn attach(&mut self, store: Store) -> crate::Result<()> {
+    fn attach(&mut self, _store: Store) -> crate::Result<()> {
         Ok(())
     }
 
@@ -17,7 +17,7 @@ impl<T: Message + Default> State for Adapter<T> {
         Ok(())
     }
 
-    fn load(store: Store, bytes: &mut &[u8]) -> crate::Result<Self> {
+    fn load(_store: Store, bytes: &mut &[u8]) -> crate::Result<Self> {
         Ok(Self::decode(bytes)?)
     }
 }

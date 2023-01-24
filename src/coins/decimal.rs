@@ -1,18 +1,9 @@
 use super::Amount;
-use crate::call::Call;
-use crate::client::Client;
-use crate::describe::{Builder, Describe};
 use crate::encoding::Adapter;
 use crate::encoding::{Decode, Encode};
-use crate::migrate::migrate_from_self_impl;
-use crate::migrate::MigrateFrom;
 use crate::orga;
-use crate::query::Query;
-use crate::state::State;
-use crate::store::Store;
 use crate::{Error, Result};
 use rust_decimal::{prelude::ToPrimitive, Decimal as NumDecimal};
-use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::str::FromStr;
@@ -58,7 +49,7 @@ impl Decode for Adapter<Decimal> {
     }
 }
 
-impl ed::Terminated for Decimal {}
+impl ed::Terminated for Adapter<Decimal> {}
 
 impl From<u64> for Decimal {
     fn from(value: u64) -> Self {

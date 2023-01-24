@@ -3,7 +3,6 @@ use super::{Address, Amount, Balance, Coin, Decimal, Give, Pool, Symbol};
 #[cfg(feature = "abci")]
 use crate::abci::{BeginBlock, EndBlock};
 use crate::call::Call;
-use crate::client::Client;
 use crate::collections::{Deque, Entry, EntryMap, Map};
 use crate::compat_mode;
 use crate::context::GetContext;

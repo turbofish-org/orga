@@ -34,7 +34,7 @@ where
         Ok(self)
     }
 
-    pub fn flush_skipped_child<T>(self, value: T) -> Result<Self> {
+    pub fn flush_skipped_child<T>(self, _value: T) -> Result<Self> {
         Ok(self)
     }
 

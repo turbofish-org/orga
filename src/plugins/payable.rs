@@ -1,11 +1,8 @@
-use serde::{Deserialize, Serialize};
-
 use super::sdk_compat::{sdk::Tx as SdkTx, ConvertSdkTx};
 use crate::call::Call;
 use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Amount, Coin, Symbol};
 use crate::context::{Context, GetContext};
-use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::migrate::MigrateFrom;
 use crate::query::Query;

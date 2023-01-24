@@ -1,13 +1,8 @@
 use super::{Amount, Coin, Decimal, Symbol};
 use crate::context::GetContext;
-use crate::describe::Describe;
-use crate::encoding::{Decode, Encode};
-use crate::migrate::MigrateFrom;
 use crate::orga;
 use crate::plugins::Time;
-use crate::state::State;
 use crate::{Error, Result};
-use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::time::Duration;
 
@@ -112,8 +107,6 @@ pub struct FaucetOptions {
 mod tests {
     use super::*;
     use crate::context::Context;
-    use crate::encoding::{Decode, Encode};
-    use crate::store::Store;
     use serial_test::serial;
 
     #[orga]

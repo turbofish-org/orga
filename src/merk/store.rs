@@ -120,7 +120,7 @@ impl MerkStore {
             .apply(batch.as_ref(), aux_batch.as_ref())?)
     }
 
-    pub(crate) fn merk(&self) -> &Merk {
+    pub fn merk(&self) -> &Merk {
         self.merk.as_ref().unwrap()
     }
 }

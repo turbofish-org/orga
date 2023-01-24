@@ -1,8 +1,6 @@
 use super::super::{Amount, Decimal, MathResult};
 use crate::Error;
-use num_traits::CheckedMul;
 use std::ops::Mul;
-use MathResult::*;
 
 // Amount * amount
 impl Mul<Amount> for Amount {

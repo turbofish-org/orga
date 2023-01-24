@@ -47,7 +47,7 @@ impl<K> Encode for MapKey<K> {
 //implement Encode for MapKey that just returns the inner_bytes
 impl<K> MapKey<K> {
     pub fn new<E: Encode>(key: E) -> Result<MapKey<E>> {
-        let mut inner_bytes = Encode::encode(&key)?;
+        let inner_bytes = Encode::encode(&key)?;
         Ok(MapKey {
             inner: key,
             inner_bytes,
@@ -110,7 +110,7 @@ where
         self.store.attach(store)
     }
 
-    fn flush<W: std::io::Write>(mut self, out: &mut W) -> Result<()> {
+    fn flush<W: std::io::Write>(mut self, _out: &mut W) -> Result<()> {
         while let Some((key, maybe_value)) = self.children.pop_first() {
             Self::apply_change(&mut self.store, &key.inner, maybe_value)?;
         }
@@ -414,7 +414,7 @@ where
         let key_bytes = key.encode()?;
 
         match maybe_value {
-            Some(mut value) => {
+            Some(value) => {
                 // insert/update
                 let mut value_bytes = vec![];
                 value.flush(&mut value_bytes)?;
@@ -505,7 +505,7 @@ where
                         let entry = self.store_iter.next().unwrap()?;
                         let key: K = decoded_backing_key;
 
-                        let mut value = V::load(
+                        let value = V::load(
                             self.parent_store.sub(entry.0.as_slice()),
                             &mut entry.1.as_slice(),
                         )?;

@@ -121,9 +121,9 @@ impl<T: State + Terminated, const N: usize> State for [T; N] {
             })
             .collect::<Result<_>>()?;
 
-        Ok(items
+        items
             .try_into()
-            .map_err(|_| Error::State(format!("Cannot convert Vec to array of length {}", N)))?)
+            .map_err(|_| Error::State(format!("Cannot convert Vec to array of length {}", N)))
     }
 }
 
@@ -172,15 +172,15 @@ impl<T: State> State for RefCell<T> {
 }
 
 impl<T> State for PhantomData<T> {
-    fn attach(&mut self, _: Store) -> Result<()> {
+    fn attach(&mut self, _store: Store) -> Result<()> {
         Ok(())
     }
 
-    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+    fn flush<W: std::io::Write>(self, _out: &mut W) -> Result<()> {
         Ok(())
     }
 
-    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
+    fn load(_store: Store, _bytes: &mut &[u8]) -> Result<Self> {
         Ok(PhantomData::default())
     }
 }

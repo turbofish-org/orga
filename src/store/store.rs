@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 use std::ops::RangeBounds;
 
 use super::{Iter, Read, Shared, Write, KV};
-use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, Terminated};
 use crate::state::State;
 use crate::{Error, Result};

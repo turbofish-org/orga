@@ -1,7 +1,6 @@
 use super::*;
 use crate::coins::MultiShare;
 use crate::context::Context;
-use crate::migrate::MigrateFrom;
 use crate::orga;
 #[cfg(feature = "abci")]
 use crate::plugins::Time;

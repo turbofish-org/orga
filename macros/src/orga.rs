@@ -144,7 +144,6 @@ impl ToTokens for OrgaSubStruct {
             base_ident,
             generics,
             data,
-            version,
             is_last,
             vis,
             ..

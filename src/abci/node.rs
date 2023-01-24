@@ -1,6 +1,6 @@
 use super::{ABCIStateMachine, ABCIStore, AbciQuery, App, Application, WrappedMerk};
 use crate::call::Call;
-use crate::encoding::{Decode, Encode};
+use crate::encoding::Decode;
 use crate::merk::{BackingStore, MerkStore};
 use crate::plugins::{ABCICall, ABCIPlugin};
 use crate::query::Query;
@@ -322,7 +322,7 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
             let state_bytes = store
                 .get(&[])?
                 .ok_or_else(|| crate::Error::Query("Store is empty".to_string()))?;
-            let mut state: ABCIPlugin<A> = State::load(store, &mut state_bytes.as_slice())?;
+            let state: ABCIPlugin<A> = State::load(store, &mut state_bytes.as_slice())?;
             Ok(state)
         };
 

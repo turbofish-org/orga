@@ -1,7 +1,6 @@
 pub use crate::macros::MigrateFrom;
-use crate::{state::State, store::Store, Error, Result};
+use crate::{Error, Result};
 use paste::paste;
-use serde::Deserialize;
 use std::{cell::RefCell, marker::PhantomData};
 
 pub trait MigrateFrom<T = Self>: Sized {

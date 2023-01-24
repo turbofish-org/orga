@@ -8,7 +8,6 @@ use std::ops::RangeBounds;
 
 use super::{Entry, Next};
 use crate::call::Call;
-use crate::describe::Describe;
 use crate::query::Query;
 use crate::state::*;
 use crate::store::*;
@@ -33,8 +32,8 @@ where
         self.map.flush(out)
     }
 
-    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
-        let entry_map = EntryMap::default();
+    fn load(store: Store, _bytes: &mut &[u8]) -> Result<Self> {
+        let mut entry_map = EntryMap::default();
         entry_map.map.attach(store)?;
 
         Ok(entry_map)

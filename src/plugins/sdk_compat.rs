@@ -1,7 +1,6 @@
 use crate::call::Call as CallTrait;
 use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Address, Symbol};
-use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::migrate::MigrateFrom;
 use crate::query::Query;
@@ -455,7 +454,6 @@ impl<T: Client<SdkCompatAdapter<T, U, S>>, U: Clone, S> DerefMut for SdkCompatCl
     }
 }
 
-use serde::{Deserialize, Serialize};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsValue;
 

@@ -4,7 +4,6 @@ use super::{sdk_compat::sdk::Tx as SdkTx, ConvertSdkTx};
 use crate::call::Call as CallTrait;
 use crate::client::{AsyncCall, AsyncQuery, Client as ClientTrait};
 use crate::context::Context;
-use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::migrate::MigrateFrom;
 use crate::query::Query;

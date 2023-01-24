@@ -2,7 +2,6 @@ use heck::{CamelCase, SnakeCase};
 use proc_macro::TokenStream;
 use proc_macro2::{Literal, Span, TokenStream as TokenStream2};
 use quote::quote;
-use regex::Regex;
 use std::collections::HashSet;
 use syn::*;
 

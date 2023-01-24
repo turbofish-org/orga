@@ -1,7 +1,6 @@
 use super::map::{ChildMut, Map, ReadOnly, Ref};
 use crate::call::Call;
 use crate::client::Client;
-use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::orga;
@@ -85,14 +84,19 @@ impl<T: State> State for Deque<T> {
     }
 
     fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+        self.meta.flush(out)?;
         self.map.flush(out)
     }
 
-    fn load(store: Store, _bytes: &mut &[u8]) -> Result<Self> {
-        let deque = Deque::default();
-        deque.attach(store)?;
+    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
+        let mut value = Self {
+            meta: Meta::load(store.clone(), bytes)?,
+            map: Map::load(store.clone(), bytes)?,
+        };
 
-        Ok(deque)
+        value.attach(store)?;
+
+        Ok(value)
     }
 }
 

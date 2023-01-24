@@ -1,7 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 use regex::Regex;
-use std::borrow::Borrow;
 use std::collections::HashSet;
 use syn::Ident;
 use syn::*;

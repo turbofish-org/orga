@@ -1,6 +1,5 @@
 use super::super::{Amount, Decimal, MathResult};
 use crate::Error;
-use num_traits::CheckedAdd;
 use std::ops::Add;
 
 // Amount + amount
