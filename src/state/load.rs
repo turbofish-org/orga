@@ -1,3 +1,4 @@
+use crate::compat_mode;
 use crate::migrate::MigrateInto;
 use crate::store::Store;
 use crate::Result;
@@ -25,24 +26,28 @@ impl<'a, 'b> Loader<'a, 'b> {
     where
         T: MigrateInto<U> + State,
     {
-        let res = if !self.bytes.is_empty() && self.bytes[0] < self.version {
+        let value = if compat_mode() {
+            Some(T::load(self.store.clone(), self.bytes)?.migrate_into()?)
+        } else if !self.bytes.is_empty() && self.bytes[0] < self.version {
             let value = T::load(self.store.clone(), self.bytes)?;
             Some(value.migrate_into()?)
         } else {
             None
         };
 
-        Ok(res)
+        Ok(value)
     }
 
     pub fn load_child<U>(&mut self) -> Result<U>
     where
         U: State,
     {
-        if self.field_count == 0 {
+        if !compat_mode() && self.field_count == 0 {
             *self.bytes = &self.bytes[1..];
         }
+
         let res = U::load(self.store.sub(&[self.field_count]), self.bytes);
+
         self.field_count += 1;
 
         res
@@ -55,5 +60,9 @@ impl<'a, 'b> Loader<'a, 'b> {
     {
         let value = self.load_child::<T>()?;
         Ok(value.into())
+    }
+
+    pub fn load_skipped_child<T: Default>(&mut self) -> Result<T> {
+        Ok(T::default())
     }
 }
