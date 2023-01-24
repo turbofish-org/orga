@@ -1,5 +1,3 @@
-use serde::{Deserialize, Serialize};
-
 use super::{sdk_compat::sdk::Tx as SdkTx, ConvertSdkTx, Signer};
 use crate::call::Call;
 use crate::client::Client;
@@ -7,8 +5,8 @@ use crate::client::{AsyncCall, AsyncQuery};
 use crate::coins::Address;
 use crate::collections::Map;
 use crate::context::GetContext;
-use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
+use crate::migrate::MigrateFrom;
 use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
@@ -16,7 +14,7 @@ use std::ops::{Deref, DerefMut};
 
 const NONCE_INCREASE_LIMIT: u64 = 1000;
 
-#[derive(State, Encode, Decode, Default, Describe, Serialize, Deserialize)]
+#[derive(State, Encode, Decode, Default, MigrateFrom)]
 pub struct NoncePlugin<T: State> {
     map: Map<Address, u64>,
     inner: T,

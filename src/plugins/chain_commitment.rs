@@ -4,8 +4,8 @@ use super::{sdk_compat::sdk::Tx as SdkTx, ConvertSdkTx};
 use crate::call::Call as CallTrait;
 use crate::client::{AsyncCall, AsyncQuery, Client as ClientTrait};
 use crate::context::Context;
-use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
+use crate::migrate::MigrateFrom;
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
@@ -13,7 +13,7 @@ use crate::{Error, Result};
 use std::marker::PhantomData;
 use std::ops::Deref;
 
-#[derive(Encode, Decode, Default, Serialize, Deserialize)]
+#[derive(Encode, Decode, Default, Serialize, Deserialize, MigrateFrom)]
 #[serde(transparent)]
 pub struct ChainCommitmentPlugin<T, const ID: &'static str> {
     inner: T,
@@ -169,28 +169,32 @@ where
     T: State,
 {
     fn attach(&mut self, store: Store) -> Result<()> {
-        Context::add(ChainId(ID));
-
         self.inner.attach(store)
     }
 
-    fn flush(&mut self) -> Result<()> {
-        self.inner.flush()
+    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+        self.inner.flush(out)
+    }
+
+    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
+        Context::add(ChainId(ID));
+        let inner = T::load(store, bytes)?;
+        Ok(Self { inner })
     }
 }
 
-impl<T, const ID: &'static str> Describe for ChainCommitmentPlugin<T, ID>
-where
-    T: State + Describe + 'static,
-{
-    fn describe() -> crate::describe::Descriptor {
-        crate::describe::Builder::new::<Self>()
-            .named_child::<T>("inner", &[], |v| {
-                crate::describe::Builder::access(v, |v: Self| v.inner)
-            })
-            .build()
-    }
-}
+// impl<T, const ID: &'static str> Describe for ChainCommitmentPlugin<T, ID>
+// where
+//     T: State + Describe + 'static,
+// {
+//     fn describe() -> crate::describe::Descriptor {
+//         crate::describe::Builder::new::<Self>()
+//             .named_child::<T>("inner", &[], |v| {
+//                 crate::describe::Builder::access(v, |v: Self| v.inner)
+//             })
+//             .build()
+//     }
+// }
 
 // TODO: In the future, this plugin shouldn't need to know about ABCI, but
 // implementing passthrough of ABCI lifecycle methods as below seems preferable

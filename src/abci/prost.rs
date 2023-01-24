@@ -8,12 +8,17 @@ use std::io::{Error as IOError, ErrorKind as IOErrorKind, Read, Write};
 pub struct Adapter<T: Message + Default>(pub(crate) T);
 
 impl<T: Message + Default> State for Adapter<T> {
-    fn attach(&mut self, _: Store) -> crate::Result<()> {
+    fn attach(&mut self, _store: Store) -> crate::Result<()> {
         Ok(())
     }
 
-    fn flush(&mut self) -> crate::Result<()> {
+    fn flush<W: std::io::Write>(self, out: &mut W) -> crate::Result<()> {
+        self.encode_into(out)?;
         Ok(())
+    }
+
+    fn load(_store: Store, bytes: &mut &[u8]) -> crate::Result<Self> {
+        Ok(Self::decode(bytes)?)
     }
 }
 

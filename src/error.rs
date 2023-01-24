@@ -35,6 +35,8 @@ pub enum Error {
     #[cfg(feature = "merk")]
     #[error(transparent)]
     Merk(#[from] merk::Error),
+    #[error("Migration Error: {0}")]
+    Migrate(String),
     #[error("Nonce Error: {0}")]
     Nonce(String),
     #[error("Overflow Error")]

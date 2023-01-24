@@ -1,4 +1,5 @@
 use crate::encoding::{Decode, Encode};
+use crate::state::State;
 
 pub use crate::macros::{Entry, Next};
 
@@ -21,7 +22,7 @@ pub trait Entry {
     type Key: Encode + Decode;
 
     /// Represents the value type for the key/value pair.
-    type Value: Encode + Decode;
+    type Value: State;
 
     /// Converts the entry type into its corresponding key and value types.
     fn into_entry(self) -> (Self::Key, Self::Value);
@@ -32,6 +33,15 @@ pub trait Entry {
 
 pub trait Next: Sized {
     fn next(&self) -> Option<Self>;
+}
+
+impl Next for bool {
+    fn next(&self) -> Option<Self> {
+        match self {
+            false => Some(true),
+            true => None,
+        }
+    }
 }
 
 macro_rules! impl_next {
