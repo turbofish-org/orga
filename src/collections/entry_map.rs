@@ -151,11 +151,11 @@ where
     }
 }
 
-pub struct Iter<'a, T: Entry, S: Default>
+pub struct Iter<'a, T: Entry, S = DefaultBackingStore>
 where
     T::Key: Next + Decode + Encode + Terminated + Clone,
     T::Value: State<S> + Clone,
-    S: Read,
+    S: Default + Read,
 {
     map_iter: MapIter<'a, T::Key, T::Value, S>,
 }
