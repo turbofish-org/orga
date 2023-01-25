@@ -1,6 +1,7 @@
 use crate::call::Call;
 use crate::client::Client;
 use crate::coins::{Address, Amount, Coin, Give, Symbol, Take};
+use crate::collections::map::Iter as MapIter;
 use crate::collections::Map;
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
@@ -17,6 +18,12 @@ pub struct Accounts<S: Symbol> {
     transfers_allowed: bool,
     transfer_exceptions: Map<Address, ()>,
     accounts: Map<Address, Coin<S>>,
+}
+
+impl<S: Symbol> Accounts<S> {
+    pub fn iter(&self) -> Result<MapIter<Address, Coin<S>>> {
+        self.accounts.iter()
+    }
 }
 
 impl<S: Symbol> Accounts<S> {
