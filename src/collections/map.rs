@@ -427,11 +427,11 @@ where
     }
 }
 
-pub struct Iter<'a, K, V, S: Default>
+pub struct Iter<'a, K, V, S = DefaultBackingStore>
 where
     K: Next + Decode + Encode + Terminated,
     V: State<S>,
-    S: Read,
+    S: Default + Read,
 {
     parent_store: &'a Store<S>,
     map_iter: Peekable<btree_map::Range<'a, MapKey<K>, Option<V>>>,
