@@ -212,8 +212,8 @@ impl Default for Types {
             terminated_trait: quote! { ::orga::encoding::Terminated },
             encode_trait: quote! { ::orga::encoding::Encode },
             decode_trait: quote! { ::orga::encoding::Decode },
-            encoder_ty: quote! { ::orga::encoding::encoder::Encoder };
-            decoder_ty: quote! { ::orga::encoding::decoder::Decoder };
+            encoder_ty: quote! { ::orga::encoding::encoder::Encoder },
+            decoder_ty: quote! { ::orga::encoding::decoder::Decoder },
         }
     }
 }

@@ -1,4 +1,9 @@
-use darling::{ast, FromDeriveInput, FromField};
+use super::utils::{named_fields, Types};
+use darling::{
+    ast,
+    usage::{GenericsExt, Options, Purpose, UsesTypeParams},
+    uses_type_params, FromDeriveInput, FromField,
+};
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{quote, ToTokens};
@@ -15,42 +20,57 @@ pub struct StateInputReceiver {
     pub version: u8,
     pub previous: Option<Ident>,
     pub as_type: Option<Path>,
+    #[darling(default)]
+    transparent: bool,
 }
 
-impl ToTokens for StateInputReceiver {
-    fn to_tokens(&self, tokens: &mut TokenStream2) {
-        let StateInputReceiver {
-            ident,
-            generics,
-            data,
-            version,
-            previous,
-            as_type,
-        } = self;
-        let state_trait = quote! { ::orga::state::State };
-        let store_ty = quote! { ::orga::store::Store };
-        let attacher_ty = quote! { ::orga::state::Attacher };
-        let flusher_ty = quote! { ::orga::state::Flusher };
-        let loader_ty = quote! { ::orga::state::Loader };
-        let result_ty = quote! { ::orga::Result };
+impl StateInputReceiver {
+    fn transparent_inner(&self) -> Option<(TokenStream2, StateFieldReceiver)> {
+        let fields = self.data.as_ref().take_struct().unwrap().fields.clone();
+        let state_fields = fields.iter().filter(|f| !f.skip).collect::<Vec<_>>();
+        let n_marked_fields = fields
+            .iter()
+            .filter(|f| f.transparent)
+            .collect::<Vec<_>>()
+            .len();
+        if n_marked_fields > 1 {
+            panic!("Only one field can be marked as transparent")
+        }
+        if self.transparent && n_marked_fields == 0 && state_fields.len() > 1 {
+            panic!("Transparent state struct must have exactly one field or have one field marked transparent")
+        }
+        if !self.transparent && n_marked_fields == 0 {
+            return None;
+        }
+        if n_marked_fields == 1 {
+            return named_fields!(self)
+                .find(|(_, f)| f.transparent)
+                .map(|(ident, field)| (ident, field.clone()));
+        }
+        if self.transparent && state_fields.len() == 1 {
+            return named_fields!(self)
+                .find(|(_, f)| !f.skip)
+                .map(|(ident, field)| (ident, field.clone()));
+        }
+        unreachable!()
+    }
 
-        let (imp, ty, wher) = generics.split_for_impl();
-        let struct_data = data.as_ref().take_struct().expect("Should never be enum");
+    fn attach_method(&self) -> TokenStream2 {
+        let Types {
+            attacher_ty,
+            result_ty,
+            store_ty,
+            ..
+        } = Default::default();
 
-        let fields = struct_data.fields.clone();
-
-        let field_names = || {
-            fields.iter().enumerate().map(|(i, f)| {
-                f.ident.as_ref().map(|v| quote!(#v)).unwrap_or_else(|| {
-                    let i = syn::Index::from(i);
-                    quote!(#i)
-                })
-            })
-        };
-
-        let fields_with_names = || fields.iter().cloned().zip(field_names());
-
-        let attach_method = if let Some(as_type) = as_type {
+        if let Some((name, _field)) = self.transparent_inner() {
+            quote! {
+                fn attach(&mut self, store: #store_ty) -> #result_ty<()> {
+                    #attacher_ty::new(store).attach_transparent_child(&mut self.#name)?;
+                    Ok(())
+                }
+            }
+        } else if let Some(ref as_type) = self.as_type {
             quote! {
                 fn attach(&mut self, store: #store_ty) -> #result_ty<()> {
                     #attacher_ty::new(store).attach_child_as::<#as_type, _>(self)?;
@@ -58,7 +78,7 @@ impl ToTokens for StateInputReceiver {
                 }
             }
         } else {
-            let child_attaches = fields_with_names().map(|(field, name)| match field.as_type {
+            let child_attaches = named_fields!(self).map(|(name, field)| match field.as_type {
                 Some(ref as_type) => quote! {.attach_child_as::<#as_type, _>(&mut self.#name)?},
                 None => {
                     if field.skip {
@@ -77,9 +97,25 @@ impl ToTokens for StateInputReceiver {
                     Ok(())
                 }
             }
-        };
+        }
+    }
 
-        let flush_method = if let Some(as_type) = as_type {
+    fn flush_method(&self) -> TokenStream2 {
+        let Types {
+            flusher_ty,
+            result_ty,
+            ..
+        } = Default::default();
+        let Self { version, .. } = self;
+
+        if let Some((name, _field)) = self.transparent_inner() {
+            quote! {
+                fn flush<__W: ::std::io::Write>(self, out: &mut __W) -> #result_ty<()> {
+                    #flusher_ty::new(out).version(#version)?.flush_transparent_child(self.#name)?;
+                    Ok(())
+                }
+            }
+        } else if let Some(ref as_type) = self.as_type {
             quote! {
                 fn flush<__W: ::std::io::Write>(self, out: &mut __W) -> #result_ty<()> {
                     #flusher_ty::new(out).version(#version)?.flush_child_as::<#as_type, _>(self)?;
@@ -87,7 +123,7 @@ impl ToTokens for StateInputReceiver {
                 }
             }
         } else {
-            let child_flushes = fields_with_names().map(|(field, name)| match field.as_type {
+            let child_flushes = named_fields!(self).map(|(name, field)| match field.as_type {
                 Some(ref as_type) => quote! {.flush_child_as::<#as_type, _>(self.#name)?},
                 None => {
                     if field.skip {
@@ -106,70 +142,136 @@ impl ToTokens for StateInputReceiver {
                     Ok(())
                 }
             }
-        };
+        }
+    }
 
-        let load_method = {
-            let load_value = match as_type {
-                Some(as_type) => {
-                    quote! { loader.load_child_as::<#as_type, _>()?}
+    fn load_method(&self) -> TokenStream2 {
+        let Types {
+            loader_ty,
+            store_ty,
+            result_ty,
+            ..
+        } = Default::default();
+
+        let Self {
+            version, previous, ..
+        } = self;
+
+        let load_value = if let Some((inner_name, _field)) = self.transparent_inner() {
+            let child_transparent_other_loads = named_fields!(self)
+                .filter(|(name, _field)| name.to_string() != inner_name.to_string())
+                .map(|(name, _field)| {
+                    quote! { #name: loader.load_transparent_child_other()? }
+                });
+            quote! { Self {
+                #inner_name: loader.load_transparent_child_inner()?,
+                #(#child_transparent_other_loads),*
+            }}
+        } else if let Some(ref as_type) = self.as_type {
+            quote! { loader.load_child_as::<#as_type, _>()?}
+        } else {
+            let child_self_loads = named_fields!(self).map(|(name, field)| match field.as_type {
+                Some(ref as_type) => {
+                    quote! { #name: loader.load_child_as::<#as_type, _>()? }
                 }
                 None => {
-                    let child_self_loads =
-                        fields_with_names().map(|(field, name)| match field.as_type {
-                            Some(ref as_type) => {
-                                quote! { #name: loader.load_child_as::<#as_type, _>()? }
-                            }
-                            None => {
-                                if field.skip {
-                                    quote! { #name: loader.load_skipped_child()? }
-                                } else {
-                                    quote! { #name: loader.load_child()? }
-                                }
-                            }
-                        });
-                    quote! { Self { #(#child_self_loads),* } }
-                }
-            };
-            let load_value = if let Some(previous) = previous {
-                quote! {
-                    if let Some(prev) = loader.maybe_load_from_prev::<#previous, _>()? {
-                        prev
+                    if field.skip {
+                        quote! { #name: loader.load_skipped_child()? }
                     } else {
-                        #load_value
+                        quote! { #name: loader.load_child()? }
                     }
                 }
-            } else {
-                quote! {
+            });
+            quote! { Self { #(#child_self_loads),* } }
+        };
+
+        let load_value = if let Some(previous) = previous {
+            quote! {
+                if let Some(prev) = loader.maybe_load_from_prev::<#previous, _>()? {
+                    prev
+                } else {
                     #load_value
                 }
-            };
-
+            }
+        } else {
             quote! {
-                fn load(store: #store_ty, bytes: &mut &[u8]) -> ::orga::Result<Self> {
-                    let mut loader = #loader_ty::new(store.clone(), bytes, #version);
-                    let mut value: Self = #load_value;
-                    value.attach(store)?;
-
-                    Ok(value)
-                }
+                #load_value
             }
         };
 
-        let bounds = {
-            fields.iter().enumerate().map(|(i, field)| {
+        quote! {
+            fn load(store: #store_ty, bytes: &mut &[u8]) -> #result_ty<Self> {
+                let mut loader = #loader_ty::new(store.clone(), bytes, #version);
+                let mut value: Self = #load_value;
+                value.attach(store)?;
+
+                Ok(value)
+            }
+        }
+    }
+
+    fn bounds(&self) -> TokenStream2 {
+        let Types {
+            terminated_trait,
+            state_trait,
+            ..
+        } = Default::default();
+        let n_fields = self.state_fields().len();
+        self.state_fields()
+            .iter()
+            .enumerate()
+            .map(|(i, (_name, field))| {
                 let field_ty = &field.ty;
-                let maybe_term_bound = if i < fields.len() - 1 {
-                    quote! { #field_ty: ::orga::encoding::Terminated, }
+                let maybe_term_bound = if i < n_fields - 1 {
+                    quote! { #field_ty: #terminated_trait, }
                 } else {
                     quote! {}
                 };
-                quote! { #maybe_term_bound }
+                let opts: Options = Purpose::BoundImpl.into();
+                let tys = self.generics.declared_type_params().into();
+                let uses_generic = !field.uses_type_params(&opts, &tys).is_empty();
+                let maybe_state_bound = if uses_generic {
+                    quote! { #field_ty: #state_trait, }
+                } else {
+                    quote! {}
+                };
+                quote! { #maybe_term_bound #maybe_state_bound }
             })
-        };
-        let wher = if wher.is_some() {
-            quote! { #wher #(#bounds)*  }
+            .collect()
+    }
+
+    fn state_fields(&self) -> Vec<(TokenStream2, StateFieldReceiver)> {
+        if let Some(inner) = self.transparent_inner() {
+            vec![inner]
         } else {
-            quote! { where #(#bounds)*  }
+            named_fields!(self)
+                .filter(|(_name, field)| !field.skip)
+                .map(|(name, field)| (name, field.clone()))
+                .collect()
+        }
+    }
+}
+
+impl ToTokens for StateInputReceiver {
+    fn to_tokens(&self, tokens: &mut TokenStream2) {
+        let StateInputReceiver {
+            ident, generics, ..
+        } = self;
+
+        let Types { state_trait, .. } = Default::default();
+
+        let (imp, ty, wher) = generics.split_for_impl();
+
+        let attach_method = self.attach_method();
+        let flush_method = self.flush_method();
+        let load_method = self.load_method();
+
+        let bounds = self.bounds();
+
+        let wher = if wher.is_some() {
+            quote! { #wher #bounds  }
+        } else {
+            quote! { where #bounds  }
         };
 
         tokens.extend(quote! {
@@ -182,15 +284,19 @@ impl ToTokens for StateInputReceiver {
     }
 }
 
-#[derive(Debug, FromField)]
+#[derive(Debug, FromField, Clone)]
 #[darling(attributes(state))]
 struct StateFieldReceiver {
     ident: Option<Ident>,
-    as_type: Option<Ident>,
     ty: Type,
+
+    as_type: Option<Ident>,
     #[darling(default)]
     skip: bool,
+    #[darling(default)]
+    transparent: bool,
 }
+uses_type_params!(StateFieldReceiver, ty);
 
 pub fn derive(item: TokenStream) -> TokenStream {
     let item = parse_macro_input!(item as DeriveInput);

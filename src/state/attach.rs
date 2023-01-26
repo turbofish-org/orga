@@ -33,4 +33,9 @@ impl Attacher {
     pub fn attach_skipped_child<T>(self, _value: T) -> Result<Self> {
         Ok(self)
     }
+
+    pub fn attach_transparent_child<T: State>(self, value: &mut T) -> Result<Self> {
+        value.attach(self.store.clone())?;
+        Ok(self)
+    }
 }

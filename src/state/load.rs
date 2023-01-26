@@ -65,4 +65,12 @@ impl<'a, 'b> Loader<'a, 'b> {
     pub fn load_skipped_child<T: Default>(&mut self) -> Result<T> {
         Ok(T::default())
     }
+
+    pub fn load_transparent_child_inner<T: State>(&mut self) -> Result<T> {
+        T::load(self.store.clone(), self.bytes)
+    }
+
+    pub fn load_transparent_child_other<T: Default>(&mut self) -> Result<T> {
+        Ok(T::default())
+    }
 }
