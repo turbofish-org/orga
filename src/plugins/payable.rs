@@ -13,7 +13,7 @@ use std::convert::TryInto;
 use std::ops::{Deref, DerefMut};
 
 #[derive(State, Encode, Decode, Default, MigrateFrom)]
-pub struct PayablePlugin<T: State> {
+pub struct PayablePlugin<T> {
     inner: T,
 }
 

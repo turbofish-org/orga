@@ -10,41 +10,18 @@ use crate::encoding::{Decode, Encode};
 use crate::migrate::MigrateFrom;
 use crate::query::Query;
 use crate::state::State;
-use crate::store::Store;
 use crate::{Error, Result};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
 pub const MIN_FEE: u64 = 10_000;
 
-#[derive(Encode, Decode, Default, Serialize, Deserialize, MigrateFrom)]
-#[serde(transparent)]
+#[derive(Encode, Decode, Default, Serialize, Deserialize, MigrateFrom, State)]
+#[state(transparent)]
 pub struct FeePlugin<S, T> {
-    #[serde(skip)]
+    #[state(skip)]
     _symbol: PhantomData<S>,
     inner: T,
-}
-
-impl<S, T> State for FeePlugin<S, T>
-where
-    S: Symbol,
-    T: State,
-{
-    fn attach(&mut self, store: Store) -> Result<()> {
-        self.inner.attach(store)
-    }
-
-    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
-        self.inner.flush(out)
-    }
-
-    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
-        let inner = T::load(store, bytes)?;
-        Ok(Self {
-            _symbol: PhantomData,
-            inner,
-        })
-    }
 }
 
 // impl<S, T> Describe for FeePlugin<S, T>
