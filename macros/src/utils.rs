@@ -163,3 +163,57 @@ pub fn strip_version(ident: &Ident) -> Ident {
     let stripped_name = re.replace_all(&name, "").to_string();
     Ident::new(stripped_name.as_str(), ident.span())
 }
+
+macro_rules! named_fields {
+    ($target:ident) => {
+        $target
+            .data
+            .as_ref()
+            .take_struct()
+            .unwrap()
+            .fields
+            .clone()
+            .into_iter()
+            .enumerate()
+            .map(|(i, f)| {
+                (f.ident.as_ref().map(|v| quote!(#v)).unwrap_or_else(|| {
+                    let i = syn::Index::from(i);
+                    quote!(#i)
+                }), f)
+            })
+    };
+}
+
+pub(crate) use named_fields;
+
+pub struct Types {
+    pub state_trait: TokenStream,
+    pub store_ty: TokenStream,
+    pub attacher_ty: TokenStream,
+    pub flusher_ty: TokenStream,
+    pub loader_ty: TokenStream,
+    pub result_ty: TokenStream,
+    pub terminated_trait: TokenStream,
+    pub encode_trait: TokenStream,
+    pub decode_trait: TokenStream,
+    pub encoder_ty: TokenStream,
+    pub decoder_ty: TokenStream,
+}
+
+impl Default for Types {
+    fn default() -> Self {
+        Self {
+            state_trait: quote! { ::orga::state::State },
+            store_ty: quote! { ::orga::store::Store },
+            attacher_ty: quote! { ::orga::state::Attacher },
+            flusher_ty: quote! { ::orga::state::Flusher },
+            loader_ty: quote! { ::orga::state::Loader },
+            result_ty: quote! { ::orga::Result },
+            terminated_trait: quote! { ::orga::encoding::Terminated },
+            encode_trait: quote! { ::orga::encoding::Encode },
+            decode_trait: quote! { ::orga::encoding::Decode },
+            encoder_ty: quote! { ::orga::encoding::encoder::Encoder },
+            decoder_ty: quote! { ::orga::encoding::decoder::Decoder },
+        }
+    }
+}

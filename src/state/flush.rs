@@ -38,6 +38,10 @@ where
         Ok(self)
     }
 
+    pub fn flush_transparent_child<T: State>(self, value: T) -> Result<Self> {
+        self.flush_child(value)
+    }
+
     pub fn version(self, version: u8) -> Result<Self> {
         if !compat_mode() {
             self.out.write_all(&[version])?;
