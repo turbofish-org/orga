@@ -3,10 +3,10 @@ use super::{Address, Amount, Balance, Coin, Decimal, Give, Pool, Symbol};
 #[cfg(feature = "abci")]
 use crate::abci::{BeginBlock, EndBlock};
 use crate::call::Call;
+use crate::client::Client;
 use crate::collections::{Deque, Entry, EntryMap, Map};
 use crate::compat_mode;
 use crate::context::GetContext;
-use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, Terminated};
 use crate::migrate::MigrateFrom;
 use crate::orga;
@@ -35,7 +35,7 @@ const UNBONDING_SECONDS: u64 = 10; // 10 seconds
 const UNBONDING_SECONDS: u64 = 60 * 60 * 24 * 14; // 2 weeks
 const EDIT_INTERVAL_SECONDS: u64 = 60 * 60 * 24; // 1 day
 
-#[derive(Call, Query, Default)]
+#[derive(Call, Query, Default, Client)]
 pub struct Staking<S: Symbol> {
     validators: Pool<Address, Validator<S>, S>,
     #[call]
@@ -290,7 +290,7 @@ pub struct RedelegationEntry {
     start_seconds: i64,
 }
 
-#[derive(Entry, Serialize, Deserialize, MigrateFrom)]
+#[derive(Entry, MigrateFrom)]
 struct ValidatorPowerEntry {
     #[key]
     inverted_power: u64,
