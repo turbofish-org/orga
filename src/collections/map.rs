@@ -5,6 +5,7 @@ use std::iter::Peekable;
 use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
 use crate::call::Call;
+use crate::client::{AsyncCall, Client as ClientTrait};
 use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::query::Query;
 use crate::state::State;
@@ -703,6 +704,14 @@ impl<'a, V: Ord> Ord for Ref<'a, V> {
     }
 }
 
+impl<'a, T: ClientTrait<U>, U: Clone> ClientTrait<U> for Ref<'a, T> {
+    type Client = T::Client;
+
+    fn create_client(parent: U) -> Self::Client {
+        T::create_client(parent)
+    }
+}
+
 /// A mutable reference to an existing value in a collection.
 ///
 /// If the value is mutated, it will be retained in memory until the parent
@@ -903,6 +912,77 @@ impl<'a, K: Encode, V> From<Entry<'a, K, V>> for Option<ChildMut<'a, K, V>> {
         }
     }
 }
+
+pub struct Client<K, V, U: Clone> {
+    parent: U,
+    key: Option<K>,
+    _marker: std::marker::PhantomData<V>,
+}
+
+impl<K, V, U: Clone> ClientTrait<U> for Map<K, V> {
+    type Client = Client<K, V, U>;
+
+    fn create_client(parent: U) -> Self::Client {
+        Client {
+            parent,
+            key: None,
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<K: Clone, V, U: Clone> Clone for Client<K, V, U> {
+    fn clone(&self) -> Self {
+        Client {
+            parent: self.parent.clone(),
+            key: self.key.clone(),
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<K: Clone, V: Call, U: Clone> Client<K, V, U>
+where
+    V: ClientTrait<Self>,
+{
+    pub fn get_mut(&mut self, key: K) -> V::Client {
+        let mut adapter = self.clone();
+        adapter.key = Some(key);
+        V::create_client(adapter)
+    }
+}
+
+unsafe impl<K: Clone, V: Call, U: Clone> Send for Client<K, V, U>
+where
+    Map<K, V>: Call,
+    U: AsyncCall<Call = <Map<K, V> as Call>::Call>,
+    V::Call: Sync,
+    U: Send,
+    K: Send,
+{
+}
+
+#[async_trait::async_trait(?Send)]
+impl<K: Clone, V: Call, U: Clone> AsyncCall for Client<K, V, U>
+where
+    Map<K, V>: Call<Call = map_call::Call<K>>,
+    U: AsyncCall<Call = <Map<K, V> as Call>::Call>,
+    V::Call: Sync + Send,
+    U: Send,
+    K: Send,
+{
+    type Call = V::Call;
+
+    async fn call(&self, subcall: Self::Call) -> Result<()> {
+        let key = self.key.as_ref().unwrap().clone();
+
+        let subcall_bytes = subcall.encode()?;
+
+        let call = <Map<K, V> as Call>::Call::MethodGetMut(key, subcall_bytes);
+        self.parent.call(call).await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::deque::Deque;

@@ -3,7 +3,6 @@ use std::str::from_utf8;
 
 #[cfg(feature = "abci")]
 use crate::abci::{AbciQuery, BeginBlock};
-use crate::call::Call;
 use crate::coins::{Address, Amount};
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
@@ -12,7 +11,6 @@ use crate::plugins::BeginBlockCtx;
 #[cfg(feature = "abci")]
 use crate::plugins::Events;
 use crate::plugins::Signer;
-use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
 use client::ClientStore;
@@ -40,14 +38,14 @@ mod channel;
 mod client;
 mod connection;
 pub mod encoding;
-// #[cfg(feature = "abci")]
-// mod grpc;
+#[cfg(feature = "abci")]
+mod grpc;
 mod port;
 mod routing;
 mod transfer;
 
-// #[cfg(feature = "abci")]
-// pub use grpc::start_grpc;
+#[cfg(feature = "abci")]
+pub use grpc::start_grpc;
 
 use crate::store::Store;
 use tendermint_proto::abci::Event;
@@ -58,9 +56,9 @@ use self::connection::ConnectionStore;
 use self::port::PortStore;
 pub use self::routing::{IbcMessage, IbcTx};
 use self::transfer::{Dynom, TransferModule};
+use crate::orga;
 
-#[derive(State, Call, Query, Encode, Decode, Default)]
-// #[orga]
+#[orga]
 pub struct Ibc {
     pub clients: ClientStore,
     pub connections: ConnectionStore,
