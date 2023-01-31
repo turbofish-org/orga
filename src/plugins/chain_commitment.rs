@@ -72,6 +72,7 @@ where
     type Output = Vec<u8>;
 
     fn convert(&self, sdk_tx: &SdkTx) -> Result<Vec<u8>> {
+        Context::add(ChainId(ID));
         let id_bytes = ID.as_bytes();
         let inner_call = self.inner.convert(sdk_tx)?;
 
