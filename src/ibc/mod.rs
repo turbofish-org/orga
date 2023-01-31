@@ -58,9 +58,9 @@ use self::connection::ConnectionStore;
 use self::port::PortStore;
 pub use self::routing::{IbcMessage, IbcTx};
 use self::transfer::{Dynom, TransferModule};
+use crate::orga;
 
-#[derive(State, Call, Query, Encode, Decode, Default)]
-// #[orga]
+#[orga]
 pub struct Ibc {
     pub clients: ClientStore,
     pub connections: ConnectionStore,

@@ -275,14 +275,14 @@ impl EntryMap<ValidatorQueueEntry> {
     }
 }
 
-#[derive(State, Encode, Decode, Serialize, Deserialize, Default, Describe, MigrateFrom)]
+#[orga]
 pub struct UnbondingDelegationEntry {
     validator_address: Address,
     delegator_address: Address,
     start_seconds: i64,
 }
 
-#[derive(State, Encode, Decode, Serialize, Deserialize, Default, Describe, MigrateFrom)]
+#[orga]
 pub struct RedelegationEntry {
     src_validator_address: Address,
     dst_validator_address: Address,
