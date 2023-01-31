@@ -22,8 +22,8 @@ pub use tendermint_proto::abci as messages;
 use tendermint_proto::abci::request::Value as Req;
 use tendermint_proto::abci::response::Value as Res;
 
-// pub mod tendermint_client;
-// pub use tendermint_client::TendermintClient;
+pub mod tendermint_client;
+pub use tendermint_client::TendermintClient;
 
 /// Top-level struct for running an ABCI application. Maintains an ABCI server,
 /// mempool, and handles committing data to the store.
