@@ -75,6 +75,7 @@ impl OrgaSubStruct {
             quote! { ::orga::encoding::VersionedEncoding },
         );
         maybe_add("State", quote! { ::orga::state::State });
+        maybe_add("Client", quote! { ::orga::client::Client });
 
         if self.is_last {
             maybe_add("Call", quote! { ::orga::call::Call });
