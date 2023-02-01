@@ -21,7 +21,7 @@ use toml_edit::{value, Document};
 static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.15/tendermint_0.34.15_darwin_amd64.tar.gz";
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.15/tendermint_0.34.15_linux_amd64.tar.gz";
-#[cfg(all(target_os = "linux", target_arch = "arm"))]
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
 static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.15/tendermint_0.34.15_linux_arm64.tar.gz";
 
 #[cfg(target_os = "macos")]
@@ -30,7 +30,7 @@ static TENDERMINT_ZIP_HASH: [u8; 32] =
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 static TENDERMINT_ZIP_HASH: [u8; 32] =
     hex!("cf4bd4b5a57f49007d18b9287214daf364dbc11094dec8e4c1bc33f207c6c57c");
-#[cfg(all(target_os = "linux", target_arch = "arm"))]
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
 static TENDERMINT_ZIP_HASH: [u8; 32] =
     hex!("6d4d771ae26c207f1a4f9f1399db2cbcac2e3c8afdf5d55d15bb984bbb986d2e");
 

@@ -6,52 +6,37 @@ use crate::call::Call;
 use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Coin, Symbol};
 use crate::context::GetContext;
-use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
+use crate::migrate::MigrateFrom;
 use crate::query::Query;
 use crate::state::State;
-use crate::store::Store;
 use crate::{Error, Result};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
 pub const MIN_FEE: u64 = 10_000;
 
-#[derive(Encode, Decode, Default, Serialize, Deserialize)]
-#[serde(transparent)]
+#[derive(Encode, Decode, Default, Serialize, Deserialize, MigrateFrom, State)]
+#[state(transparent)]
 pub struct FeePlugin<S, T> {
-    #[serde(skip)]
+    #[state(skip)]
     _symbol: PhantomData<S>,
     inner: T,
 }
 
-impl<S, T> State for FeePlugin<S, T>
-where
-    S: Symbol,
-    T: State,
-{
-    fn attach(&mut self, store: Store) -> Result<()> {
-        self.inner.attach(store)
-    }
-
-    fn flush(&mut self) -> Result<()> {
-        self.inner.flush()
-    }
-}
-
-impl<S, T> Describe for FeePlugin<S, T>
-where
-    S: Symbol,
-    T: State + Describe + 'static,
-{
-    fn describe() -> crate::describe::Descriptor {
-        crate::describe::Builder::new::<Self>()
-            .named_child::<T>("inner", &[], |v| {
-                crate::describe::Builder::access(v, |v: Self| v.inner)
-            })
-            .build()
-    }
-}
+// impl<S, T> Describe for FeePlugin<S, T>
+// where
+//     S: Symbol,
+//     T: State + Describe + 'static,
+// {
+//     fn describe() -> crate::describe::Descriptor {
+//         crate::describe::Builder::new::<Self>()
+//             .named_child::<T>("inner", &[], |v| {
+//                 crate::describe::Builder::access(v, |v: Self| v.inner)
+//             })
+//             .build()
+//     }
+// }
 
 impl<S, T: Query> Query for FeePlugin<S, T> {
     type Query = T::Query;

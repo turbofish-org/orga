@@ -3,11 +3,13 @@ use super::{Address, Amount, Balance, Coin, Decimal, Give, Pool, Symbol};
 #[cfg(feature = "abci")]
 use crate::abci::{BeginBlock, EndBlock};
 use crate::call::Call;
-use crate::client::Client;
 use crate::collections::{Deque, Entry, EntryMap, Map};
+use crate::compat_mode;
 use crate::context::GetContext;
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, Terminated};
+use crate::migrate::MigrateFrom;
+use crate::orga;
 #[cfg(feature = "abci")]
 use crate::plugins::{BeginBlockCtx, EndBlockCtx, Validators};
 use crate::plugins::{Paid, Signer, Time};
@@ -33,18 +35,18 @@ const UNBONDING_SECONDS: u64 = 10; // 10 seconds
 const UNBONDING_SECONDS: u64 = 60 * 60 * 24 * 14; // 2 weeks
 const EDIT_INTERVAL_SECONDS: u64 = 60 * 60 * 24; // 1 day
 
-#[derive(Call, Query, Client, Default, Serialize, Deserialize)]
+#[derive(Call, Query, Default)]
 pub struct Staking<S: Symbol> {
     validators: Pool<Address, Validator<S>, S>,
-    consensus_keys: Map<Address, [u8; 32]>,
-    last_signed_block: Map<[u8; 20], u64>,
-    #[call]
-    pub max_validators: u64,
     #[call]
     pub min_self_delegation_min: u64,
+    consensus_keys: Map<Address, [u8; 32]>,
+    last_signed_block: Map<[u8; 20], u64>,
     validators_by_power: EntryMap<ValidatorPowerEntry>,
-    last_indexed_power: Map<Address, u64>,
     last_validator_powers: Map<Address, u64>,
+    #[call]
+    pub max_validators: u64,
+    last_indexed_power: Map<Address, u64>,
     address_for_tm_hash: Map<[u8; 20], Address>,
     unbonding_seconds: u64,
     #[call]
@@ -61,71 +63,195 @@ pub struct Staking<S: Symbol> {
     delegation_index: Map<Address, Map<Address, ()>>,
 }
 
-impl<S: Symbol> Encode for Staking<S> {
-    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
-        dest.write_all(self.max_validators.encode()?.as_slice())?;
-        dest.write_all(self.min_self_delegation_min.encode()?.as_slice())?;
-        dest.write_all(self.unbonding_seconds.encode()?.as_slice())?;
-        dest.write_all(self.max_offline_blocks.encode()?.as_slice())?;
-        dest.write_all(self.slash_fraction_double_sign.encode()?.as_slice())?;
-        dest.write_all(self.slash_fraction_downtime.encode()?.as_slice())?;
-        dest.write_all(self.downtime_jail_seconds.encode()?.as_slice())?;
-        dest.write_all(self.validators.encode()?.as_slice())?;
-        dest.write_all(self.unbonding_delegation_queue.encode()?.as_slice())?;
-        dest.write_all(self.redelegation_queue.encode()?.as_slice())?;
+impl<S: Symbol> State for Staking<S> {
+    fn attach(&mut self, store: Store) -> Result<()> {
+        ::orga::state::Attacher::new(store)
+            .attach_child(&mut self.validators)?
+            .attach_child(&mut self.min_self_delegation_min)?
+            .attach_child(&mut self.consensus_keys)?
+            .attach_child(&mut self.last_signed_block)?
+            .attach_child(&mut self.validators_by_power)?
+            .attach_child(&mut self.last_validator_powers)?
+            .attach_child(&mut self.max_validators)?
+            .attach_child(&mut self.last_indexed_power)?
+            .attach_child(&mut self.address_for_tm_hash)?
+            .attach_child(&mut self.unbonding_seconds)?
+            .attach_child(&mut self.max_offline_blocks)?
+            .attach_child(&mut self.slash_fraction_double_sign)?
+            .attach_child(&mut self.slash_fraction_downtime)?
+            .attach_child(&mut self.downtime_jail_seconds)?
+            .attach_child(&mut self.validator_queue)?
+            .attach_child(&mut self.unbonding_delegation_queue)?
+            .attach_child(&mut self.redelegation_queue)?
+            .attach_child(&mut self.delegation_index)?;
+        Ok(())
+    }
+
+    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+        if compat_mode() {
+            ::orga::state::Flusher::new(out)
+                .version(0u8)?
+                .flush_child(self.max_validators)?
+                .flush_child(self.min_self_delegation_min)?
+                .flush_child(self.unbonding_seconds)?
+                .flush_child(self.max_offline_blocks)?
+                .flush_child(self.slash_fraction_double_sign)?
+                .flush_child(self.slash_fraction_downtime)?
+                .flush_child(self.downtime_jail_seconds)?
+                .flush_child(self.validators)?
+                .flush_child(self.unbonding_delegation_queue)?
+                .flush_child(self.redelegation_queue)?
+                .flush_child(self.consensus_keys)?
+                .flush_child(self.last_signed_block)?
+                .flush_child(self.validators_by_power)?
+                .flush_child(self.last_validator_powers)?
+                .flush_child(self.last_indexed_power)?
+                .flush_child(self.address_for_tm_hash)?
+                .flush_child(self.validator_queue)?
+                .flush_child(self.delegation_index)?;
+        } else {
+            ::orga::state::Flusher::new(out)
+                .version(0u8)?
+                .flush_child(self.validators)?
+                .flush_child(self.min_self_delegation_min)?
+                .flush_child(self.consensus_keys)?
+                .flush_child(self.last_signed_block)?
+                .flush_child(self.validators_by_power)?
+                .flush_child(self.last_validator_powers)?
+                .flush_child(self.max_validators)?
+                .flush_child(self.last_indexed_power)?
+                .flush_child(self.address_for_tm_hash)?
+                .flush_child(self.unbonding_seconds)?
+                .flush_child(self.max_offline_blocks)?
+                .flush_child(self.slash_fraction_double_sign)?
+                .flush_child(self.slash_fraction_downtime)?
+                .flush_child(self.downtime_jail_seconds)?
+                .flush_child(self.validator_queue)?
+                .flush_child(self.unbonding_delegation_queue)?
+                .flush_child(self.redelegation_queue)?
+                .flush_child(self.delegation_index)?;
+        }
 
         Ok(())
     }
 
-    fn encoding_length(&self) -> ed::Result<usize> {
-        let mut len = 0;
-        len += self.max_validators.encoding_length()?;
-        len += self.min_self_delegation_min.encoding_length()?;
-        len += self.unbonding_seconds.encoding_length()?;
-        len += self.max_offline_blocks.encoding_length()?;
-        len += self.slash_fraction_double_sign.encoding_length()?;
-        len += self.slash_fraction_downtime.encoding_length()?;
-        len += self.downtime_jail_seconds.encoding_length()?;
-        len += self.validators.encoding_length()?;
-        len += self.unbonding_delegation_queue.encoding_length()?;
-        len += self.redelegation_queue.encoding_length()?;
-
-        Ok(len)
-    }
-}
-
-impl<S: Symbol> Decode for Staking<S> {
-    fn decode<R: std::io::Read>(mut input: R) -> ed::Result<Self> {
-        let max_validators = u64::decode(&mut input)?;
-        let min_self_delegation_min = u64::decode(&mut input)?;
-        let unbonding_seconds = u64::decode(&mut input)?;
-        let max_offline_blocks = u64::decode(&mut input)?;
-        let slash_fraction_double_sign = Decimal::decode(&mut input)?;
-        let slash_fraction_downtime = Decimal::decode(&mut input)?;
-        let downtime_jail_seconds = u64::decode(&mut input)?;
-        let validators = Pool::decode(&mut input)?;
-        let unbonding_delegation_queue = Deque::decode(&mut input)?;
-        let redelegation_queue = Deque::decode(&mut input)?;
-
-        Ok(Staking {
-            max_validators,
-            min_self_delegation_min,
-            unbonding_seconds,
-            max_offline_blocks,
-            slash_fraction_double_sign,
-            slash_fraction_downtime,
-            downtime_jail_seconds,
-            validators,
-            unbonding_delegation_queue,
-            redelegation_queue,
-            ..Default::default()
-        })
+    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
+        let mut loader = ::orga::state::Loader::new(store.clone(), bytes, 0u8);
+        let mut value: Self = if compat_mode() {
+            Self {
+                max_validators: loader.load_child()?,
+                min_self_delegation_min: loader.load_child()?,
+                unbonding_seconds: loader.load_child()?,
+                max_offline_blocks: loader.load_child()?,
+                slash_fraction_double_sign: loader.load_child()?,
+                slash_fraction_downtime: loader.load_child()?,
+                downtime_jail_seconds: loader.load_child()?,
+                validators: loader.load_child()?,
+                unbonding_delegation_queue: loader.load_child()?,
+                redelegation_queue: loader.load_child()?,
+                consensus_keys: loader.load_child()?,
+                last_signed_block: loader.load_child()?,
+                validators_by_power: loader.load_child()?,
+                last_validator_powers: loader.load_child()?,
+                last_indexed_power: loader.load_child()?,
+                address_for_tm_hash: loader.load_child()?,
+                validator_queue: loader.load_child()?,
+                delegation_index: loader.load_child()?,
+            }
+        } else {
+            Self {
+                validators: loader.load_child()?,
+                min_self_delegation_min: loader.load_child()?,
+                consensus_keys: loader.load_child()?,
+                last_signed_block: loader.load_child()?,
+                validators_by_power: loader.load_child()?,
+                last_validator_powers: loader.load_child()?,
+                max_validators: loader.load_child()?,
+                last_indexed_power: loader.load_child()?,
+                address_for_tm_hash: loader.load_child()?,
+                unbonding_seconds: loader.load_child()?,
+                max_offline_blocks: loader.load_child()?,
+                slash_fraction_double_sign: loader.load_child()?,
+                slash_fraction_downtime: loader.load_child()?,
+                downtime_jail_seconds: loader.load_child()?,
+                validator_queue: loader.load_child()?,
+                unbonding_delegation_queue: loader.load_child()?,
+                redelegation_queue: loader.load_child()?,
+                delegation_index: loader.load_child()?,
+            }
+        };
+        value.attach(store)?;
+        Ok(value)
     }
 }
 
 impl<S: Symbol> Terminated for Staking<S> {}
 
-#[derive(Entry, Clone, Serialize, Deserialize)]
+// impl<S: Symbol> Encode for Staking<S> {
+//     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+//         dest.write_all(self.max_validators.encode()?.as_slice())?;
+//         dest.write_all(self.min_self_delegation_min.encode()?.as_slice())?;
+//         dest.write_all(self.unbonding_seconds.encode()?.as_slice())?;
+//         dest.write_all(self.max_offline_blocks.encode()?.as_slice())?;
+//         dest.write_all(self.slash_fraction_double_sign.encode()?.as_slice())?;
+//         dest.write_all(self.slash_fraction_downtime.encode()?.as_slice())?;
+//         dest.write_all(self.downtime_jail_seconds.encode()?.as_slice())?;
+//         dest.write_all(self.validators.encode()?.as_slice())?;
+//         dest.write_all(self.unbonding_delegation_queue.encode()?.as_slice())?;
+//         dest.write_all(self.redelegation_queue.encode()?.as_slice())?;
+
+//         Ok(())
+//     }
+
+//     fn encoding_length(&self) -> ed::Result<usize> {
+//         let mut len = 0;
+//         len += self.max_validators.encoding_length()?;
+//         len += self.min_self_delegation_min.encoding_length()?;
+//         len += self.unbonding_seconds.encoding_length()?;
+//         len += self.max_offline_blocks.encoding_length()?;
+//         len += self.slash_fraction_double_sign.encoding_length()?;
+//         len += self.slash_fraction_downtime.encoding_length()?;
+//         len += self.downtime_jail_seconds.encoding_length()?;
+//         len += self.validators.encoding_length()?;
+//         len += self.unbonding_delegation_queue.encoding_length()?;
+//         len += self.redelegation_queue.encoding_length()?;
+
+//         Ok(len)
+//     }
+// }
+
+// impl<S: Symbol> Decode for Staking<S> {
+//     fn decode<R: std::io::Read>(mut input: R) -> ed::Result<Self> {
+//         let max_validators = u64::decode(&mut input)?;
+//         let min_self_delegation_min = u64::decode(&mut input)?;
+//         let unbonding_seconds = u64::decode(&mut input)?;
+//         let max_offline_blocks = u64::decode(&mut input)?;
+//         let slash_fraction_double_sign = Decimal::decode(&mut input)?;
+//         let slash_fraction_downtime = Decimal::decode(&mut input)?;
+//         let downtime_jail_seconds = u64::decode(&mut input)?;
+//         let validators = Pool::decode(&mut input)?;
+//         let unbonding_delegation_queue = Deque::decode(&mut input)?;
+//         let redelegation_queue = Deque::decode(&mut input)?;
+
+//         Ok(Staking {
+//             max_validators,
+//             min_self_delegation_min,
+//             unbonding_seconds,
+//             max_offline_blocks,
+//             slash_fraction_double_sign,
+//             slash_fraction_downtime,
+//             downtime_jail_seconds,
+//             validators,
+//             unbonding_delegation_queue,
+//             redelegation_queue,
+//             ..Default::default()
+//         })
+//     }
+// }
+
+// impl<S: Symbol> Terminated for Staking<S> {}
+
+#[derive(Entry, Clone, Serialize, Deserialize, MigrateFrom)]
 struct ValidatorQueueEntry {
     #[key]
     start_seconds: i64,
@@ -149,14 +275,14 @@ impl EntryMap<ValidatorQueueEntry> {
     }
 }
 
-#[derive(State, Encode, Decode, Serialize, Deserialize, Default, Describe)]
+#[derive(State, Encode, Decode, Serialize, Deserialize, Default, Describe, MigrateFrom)]
 pub struct UnbondingDelegationEntry {
     validator_address: Address,
     delegator_address: Address,
     start_seconds: i64,
 }
 
-#[derive(State, Encode, Decode, Serialize, Deserialize, Default, Describe)]
+#[derive(State, Encode, Decode, Serialize, Deserialize, Default, Describe, MigrateFrom)]
 pub struct RedelegationEntry {
     src_validator_address: Address,
     dst_validator_address: Address,
@@ -164,7 +290,7 @@ pub struct RedelegationEntry {
     start_seconds: i64,
 }
 
-#[derive(Entry, Serialize, Deserialize)]
+#[derive(Entry, Serialize, Deserialize, MigrateFrom)]
 struct ValidatorPowerEntry {
     #[key]
     inverted_power: u64,
@@ -182,106 +308,6 @@ impl ValidatorPowerEntry {
 impl<S: Symbol> EndBlock for Staking<S> {
     fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
         self.end_block_step(ctx)
-    }
-}
-
-impl<S: Symbol> State for Staking<S> {
-    fn attach(&mut self, store: Store) -> Result<()> {
-        self.validators.attach(store.sub(&[0]))?;
-        self.min_self_delegation_min.attach(store.sub(&[1]))?;
-        self.consensus_keys.attach(store.sub(&[2]))?;
-        self.last_signed_block.attach(store.sub(&[3]))?;
-        self.validators_by_power.attach(store.sub(&[4]))?;
-        self.last_validator_powers.attach(store.sub(&[5]))?;
-        self.max_validators.attach(store.sub(&[6]))?;
-        self.last_indexed_power.attach(store.sub(&[7]))?;
-        self.address_for_tm_hash.attach(store.sub(&[8]))?;
-        self.unbonding_seconds.attach(store.sub(&[9]))?;
-        self.max_offline_blocks.attach(store.sub(&[10]))?;
-        self.slash_fraction_double_sign.attach(store.sub(&[11]))?;
-        self.slash_fraction_downtime.attach(store.sub(&[12]))?;
-        self.downtime_jail_seconds.attach(store.sub(&[13]))?;
-        self.validator_queue.attach(store.sub(&[14]))?;
-        self.unbonding_delegation_queue.attach(store.sub(&[15]))?;
-        self.redelegation_queue.attach(store.sub(&[16]))?;
-        self.delegation_index.attach(store.sub(&[17]))
-    }
-
-    fn flush(&mut self) -> Result<()> {
-        self.consensus_keys.flush()?;
-        self.last_signed_block.flush()?;
-        self.last_validator_powers.flush()?;
-        self.last_indexed_power.flush()?;
-        self.validators_by_power.flush()?;
-        self.address_for_tm_hash.flush()?;
-        self.validator_queue.flush()?;
-        self.delegation_index.flush()?;
-        self.validators.flush()?;
-        self.unbonding_delegation_queue.flush()?;
-        self.redelegation_queue.flush()
-    }
-}
-
-impl<S: Symbol> Describe for Staking<S> {
-    fn describe() -> crate::describe::Descriptor {
-        crate::describe::Builder::new::<Self>()
-            .named_child::<Pool<Address, Validator<S>, S>>("validators", &[0], |v| {
-                crate::describe::Builder::access(v, |v: Self| v.validators)
-            })
-            .named_child::<u64>("min_self_delegation_min", &[1], |v| {
-                crate::describe::Builder::access(v, |v: Self| v.min_self_delegation_min)
-            })
-            .named_child::<Map<Address, [u8; 32]>>("consensus_keys", &[2], |v| {
-                crate::describe::Builder::access(v, |v: Self| v.consensus_keys)
-            })
-            .named_child::<Map<[u8; 20], u64>>("last_signed_block", &[3], |v| {
-                crate::describe::Builder::access(v, |v: Self| v.last_signed_block)
-            })
-            .named_child::<EntryMap<ValidatorPowerEntry>>("validators_by_power", &[4], |v| {
-                crate::describe::Builder::access(v, |v: Self| v.validators_by_power)
-            })
-            .named_child::<Map<Address, u64>>("last_validator_powers", &[5], |v| {
-                crate::describe::Builder::access(v, |v: Self| v.last_validator_powers)
-            })
-            .named_child::<u64>("max_validators", &[6], |v| {
-                crate::describe::Builder::access(v, |v: Self| v.max_validators)
-            })
-            .named_child::<Map<Address, u64>>("last_indexed_power", &[7], |v| {
-                crate::describe::Builder::access(v, |v: Self| v.last_indexed_power)
-            })
-            .named_child::<Map<[u8; 20], Address>>("address_for_tm_hash", &[8], |v| {
-                crate::describe::Builder::access(v, |v: Self| v.address_for_tm_hash)
-            })
-            .named_child::<u64>("unbonding_seconds", &[9], |v| {
-                crate::describe::Builder::access(v, |v: Self| v.unbonding_seconds)
-            })
-            .named_child::<u64>("max_offline_blocks", &[10], |v| {
-                crate::describe::Builder::access(v, |v: Self| v.max_offline_blocks)
-            })
-            .named_child::<Decimal>("slash_fraction_double_sign", &[11], |v| {
-                crate::describe::Builder::access(v, |v: Self| v.slash_fraction_double_sign)
-            })
-            .named_child::<Decimal>("slash_fraction_downtime", &[12], |v| {
-                crate::describe::Builder::access(v, |v: Self| v.slash_fraction_downtime)
-            })
-            .named_child::<u64>("downtime_jail_seconds", &[13], |v| {
-                crate::describe::Builder::access(v, |v: Self| v.downtime_jail_seconds)
-            })
-            .named_child::<EntryMap<ValidatorQueueEntry>>("validator_queue", &[14], |v| {
-                crate::describe::Builder::access(v, |v: Self| v.validator_queue)
-            })
-            .named_child::<Deque<UnbondingDelegationEntry>>(
-                "unbonding_delegation_queue",
-                &[15],
-                |v| crate::describe::Builder::access(v, |v: Self| v.unbonding_delegation_queue),
-            )
-            .named_child::<Deque<RedelegationEntry>>("redelegation_queue", &[16], |v| {
-                crate::describe::Builder::access(v, |v: Self| v.redelegation_queue)
-            })
-            .named_child::<Map<Address, Map<Address, ()>>>("delegation_index", &[17], |v| {
-                crate::describe::Builder::access(v, |v: Self| v.delegation_index)
-            })
-            .build()
     }
 }
 
@@ -1080,7 +1106,7 @@ fn assert_positive(amount: Amount) -> Result<()> {
 }
 
 fn validate_info(info: &ValidatorInfo) -> Result<()> {
-    if info.bytes.len() > 5000 {
+    if info.len() > 5000 {
         return Err(Error::Coins("Validator info too long".into()));
     }
 
@@ -1111,7 +1137,8 @@ pub struct Declaration {
     pub validator_info: ValidatorInfo,
 }
 
-#[derive(State, Default, Debug, Encode, Decode, Clone, Copy, Serialize, Deserialize, Describe)]
+#[orga]
+#[derive(Debug, Clone, Copy)]
 pub struct Commission {
     pub rate: Decimal,
     pub max: Decimal,

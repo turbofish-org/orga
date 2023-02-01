@@ -71,7 +71,8 @@ impl MerkStore {
     /// [`Merk`](https://docs.rs/merk/latest/merk/struct.Merk.html) inside the
     /// `merk_home` directory. Initializes a new Merk instance if the directory
     /// is empty
-    pub fn new(home: PathBuf) -> Self {
+    pub fn new<P: AsRef<Path>>(home: P) -> Self {
+        let home = home.as_ref().to_path_buf();
         let merk = Merk::open(home.join("db")).unwrap();
 
         // TODO: return result instead of panicking
@@ -119,7 +120,7 @@ impl MerkStore {
             .apply(batch.as_ref(), aux_batch.as_ref())?)
     }
 
-    pub(crate) fn merk(&self) -> &Merk {
+    pub fn merk(&self) -> &Merk {
         self.merk.as_ref().unwrap()
     }
 }
