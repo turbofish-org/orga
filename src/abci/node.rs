@@ -24,6 +24,7 @@ pub struct Node<A> {
     p2p_persistent_peers: Option<Vec<String>>,
     stdout: Stdio,
     stderr: Stdio,
+    logs: bool,
 }
 
 impl Node<()> {
@@ -118,6 +119,7 @@ impl<A: App> Node<A> {
             p2p_persistent_peers: None,
             stdout: Stdio::null(),
             stderr: Stdio::null(),
+            logs: false,
         }
     }
 
@@ -133,6 +135,7 @@ impl<A: App> Node<A> {
         let mut tm_process = Tendermint::new(&tm_home)
             .stdout(stdout)
             .stderr(stderr)
+            .logs(self.logs)
             .proxy_app(format!("tcp://0.0.0.0:{}", abci_port).as_str());
 
         if let Some(genesis_bytes) = maybe_genesis_bytes {
@@ -194,6 +197,13 @@ impl<A: App> Node<A> {
     #[must_use]
     pub fn stderr<T: Into<Stdio>>(mut self, stderr: T) -> Self {
         self.stderr = stderr.into();
+
+        self
+    }
+
+    #[must_use]
+    pub fn logs(mut self, logs: bool) -> Self {
+        self.logs = logs;
 
         self
     }

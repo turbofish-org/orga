@@ -110,6 +110,7 @@ pub struct Tendermint {
     home: PathBuf,
     genesis_bytes: Option<Vec<u8>>,
     config_contents: Option<toml_edit::Document>,
+    show_logs: bool,
 }
 
 impl Tendermint {
@@ -130,6 +131,7 @@ impl Tendermint {
             home: home_path.clone().into(),
             genesis_bytes: None,
             config_contents: None,
+            show_logs: false,
         };
         tendermint.home(home_path.into())
     }
@@ -540,6 +542,12 @@ impl Tendermint {
         self
     }
 
+    #[must_use]
+    pub fn logs(mut self, show: bool) -> Self {
+        self.show_logs = show;
+        self
+    }
+
     /// Calls tendermint start with configured arguments
     ///
     /// Note: This will locally install the Tendermint binary if it is
@@ -548,37 +556,46 @@ impl Tendermint {
         self.install();
         self.mutate_configuration();
         self.process.set_arg("start");
-        self.process.command.stdout(Stdio::piped());
+        if !self.show_logs {
+            self.process.command.stdout(Stdio::piped());
+        }
         self.process.spawn().unwrap();
-        let stdout = self
-            .process
-            .process
-            .as_mut()
-            .unwrap()
-            .stdout
-            .take()
-            .unwrap();
-        std::thread::spawn(move || {
-            let stdout = BufReader::new(stdout).lines();
-            for line in stdout {
-                line.as_ref()
-                    .unwrap()
-                    .parse()
-                    .map(|msg: LogMessage| {
-                        log::trace!("{:#?}", msg);
-                        match msg.message.as_str() {
-                            "Started node" => log::info!("Started Tendermint"),
-                            "executed block" => log::info!(
-                                "Executed block, height={}, txs={}",
-                                msg.meta[1].1,
-                                msg.meta[2].1
-                            ),
-                            _ => {}
-                        }
-                    })
-                    .unwrap_or_else(|_| println!("! {}", line.unwrap()));
-            }
-        });
+        if !self.show_logs {
+            let stdout = self
+                .process
+                .process
+                .as_mut()
+                .unwrap()
+                .stdout
+                .take()
+                .unwrap();
+            std::thread::spawn(move || {
+                let stdout = BufReader::new(stdout).lines();
+                for line in stdout {
+                    line.as_ref()
+                        .unwrap()
+                        .parse()
+                        .map(|msg: LogMessage| {
+                            log::trace!("{:#?}", msg);
+                            match msg.message.as_str() {
+                                "Started node" => log::info!("Started Tendermint"),
+                                "executed block" => log::info!(
+                                    "Executed block {}. txs={}",
+                                    msg.meta[1].1,
+                                    msg.meta[2].1
+                                ),
+                                "Applied snapshot chunk to ABCI app" => log::info!(
+                                    "Verified state sync chunk {}/{}",
+                                    msg.meta[3].1,
+                                    msg.meta[4].1
+                                ),
+                                _ => {}
+                            }
+                        })
+                        .unwrap_or_else(|_| println!("! {}", line.unwrap()));
+                }
+            });
+        }
         self
     }
 
@@ -666,6 +683,10 @@ impl FromStr for LogMessage {
                         into_string,
                     ),
                     map(terminated(many1(none_of(" ")), char(' ')), into_string),
+                    map(
+                        terminated(many1(none_of(" ")), nom::combinator::eof),
+                        into_string,
+                    ),
                 )),
             ),
         ))(s)
