@@ -20,6 +20,8 @@ jobs:
         with:
           toolchain: nightly-2022-06-07
           override: true
+      - name: Cache
+        uses: Swatinem/rust-cache@v2
       - name: Test
         uses: actions-rs/cargo@v1
         with:
