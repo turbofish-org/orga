@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+use crate::upgrade;
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[cfg(feature = "abci")]
@@ -67,6 +69,8 @@ pub enum Error {
     Test(String),
     #[error("Query Error: {0}")]
     Query(String),
+    #[error(transparent)]
+    Upgrade(#[from] upgrade::Error),
     #[error("Unknown Error")]
     Unknown,
 }

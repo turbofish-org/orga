@@ -1,3 +1,4 @@
+use crate::client::Client;
 use crate::migrate::MigrateFrom;
 use crate::query::Query;
 use crate::state::State;
@@ -10,7 +11,21 @@ pub mod encoder;
 use derive_more::{Deref, DerefMut, Into};
 use std::convert::{TryFrom, TryInto};
 
-#[derive(Deref, DerefMut, Encode, Into, Default, Clone, Debug, Query, MigrateFrom)]
+#[derive(
+    Deref,
+    DerefMut,
+    Encode,
+    Into,
+    Default,
+    Clone,
+    Debug,
+    Query,
+    MigrateFrom,
+    PartialEq,
+    Hash,
+    Eq,
+    Client,
+)]
 pub struct LengthVec<P, T>
 where
     P: Encode + Decode + TryInto<usize> + Terminated + Clone,
