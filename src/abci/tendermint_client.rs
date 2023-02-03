@@ -13,7 +13,7 @@ use crate::encoding::Encode;
 use crate::merk::ABCIPrefixedProofStore;
 use crate::query::Query;
 use crate::state::State;
-use crate::store::{Read, Shared, Store};
+use crate::store::{Shared, Store};
 use crate::{Error, Result};
 
 pub use tm::endpoint::broadcast::tx_commit::Response as TxResponse;
@@ -184,13 +184,12 @@ impl<T: Query + State> AsyncQuery for TendermintAdapter<T> {
         let map = merk::proofs::query::verify(proof_bytes, root_hash)?;
         // TODO: merge data into locally persisted store data for given height
 
-        let store: Shared<ABCIPrefixedProofStore> = Shared::new(ABCIPrefixedProofStore::new(map));
-        let root_value = {
-            match store.get(&[])? {
-                Some(root_value) => root_value,
-                None => return Err(Error::ABCI("Missing root value".into())),
-            }
+        let root_value = match map.get(&[])? {
+            Some(root_value) => root_value.to_vec(),
+            None => return Err(Error::ABCI("Missing root value".into())),
         };
+
+        let store: Shared<ABCIPrefixedProofStore> = Shared::new(ABCIPrefixedProofStore::new(map));
         let mut state = T::load(Store::new(store.clone().into()), &mut root_value.as_slice())?;
 
         // TODO: remove need for ABCI prefix layer since that should come from
