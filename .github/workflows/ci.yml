@@ -20,6 +20,7 @@ jobs:
         with:
           toolchain: nightly-2022-11-18
           override: true
+      - run: rustup default nightly-2022-11-18
       - name: Cache
         uses: Swatinem/rust-cache@v2
       - name: Test
