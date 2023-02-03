@@ -10,38 +10,6 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-base:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Use Nightly
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly-2022-06-07
-          override: true
-      - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --verbose
-
-  build-all-features:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Use Nightly
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly-2022-06-07
-          override: true
-      - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --verbose --all-features
-
   test-base:
     runs-on: ubuntu-latest
     steps:
@@ -50,8 +18,19 @@ jobs:
       - name: Use Nightly
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly-2022-06-07
+          toolchain: nightly-2022-11-18
           override: true
+      - name: Cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.cargo/registry/src/**/librocksdb-sys-*
+            target/
+          key: ${{ runner.os }}-test-base-${{ hashFiles('Cargo.toml') }}
       - name: Test
         uses: actions-rs/cargo@v1
         with:
@@ -66,8 +45,19 @@ jobs:
       - name: Use Nightly
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly-2022-06-07
+          toolchain: nightly-2022-11-18
           override: true
+      - name: Cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.cargo/registry/src/**/librocksdb-sys-*
+            target/
+          key: ${{ runner.os }}-test-all-features-${{ hashFiles('Cargo.toml') }}
       - name: Test
         uses: actions-rs/cargo@v1
         with:
@@ -82,14 +72,25 @@ jobs:
       - name: Use Nightly
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly-2022-06-07
+          toolchain: nightly-2022-11-18
           components: llvm-tools-preview
           override: true
+      - name: Cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.cargo/registry/src/**/librocksdb-sys-*
+            target/
+          key: ${{ runner.os }}-coverage-${{ hashFiles('Cargo.toml') }}
       - name: Install Coverage Tooling
         uses: actions-rs/cargo@v1
         with:
           command: install
-          args: cargo-llvm-cov
+          args: cargo-llvm-cov --force
       - name: Run Coverage
         uses: actions-rs/cargo@v1
         with:
@@ -109,7 +110,7 @@ jobs:
       - name: Use Nightly
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly-2022-06-07
+          toolchain: nightly-2022-11-18
           components: rustfmt
           override: true
       - name: Check
@@ -126,9 +127,20 @@ jobs:
       - name: Use Nightly
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly-2022-06-07
+          toolchain: nightly-2022-11-18
           components: clippy
           override: true
+      - name: Cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.cargo/registry/src/**/librocksdb-sys-*
+            target/
+          key: ${{ runner.os }}-clippy-${{ hashFiles('Cargo.toml') }}
       - name: Check
         uses: actions-rs/clippy-check@v1
         with:

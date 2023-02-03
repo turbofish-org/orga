@@ -115,7 +115,6 @@ pub struct TransferOpts {
     pub timeout_timestamp: Adapter<Timestamp>,
 }
 
-
 pub struct TransferArgs {
     pub channel_id: String,
     pub port_id: String,
