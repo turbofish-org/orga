@@ -65,6 +65,7 @@ pub mod context;
 #[cfg(feature = "feat-ibc")]
 pub mod ibc;
 
+#[cfg(feature = "abci")]
 pub mod upgrade;
 
 mod error;
