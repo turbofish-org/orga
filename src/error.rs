@@ -1,7 +1,5 @@
 use thiserror::Error;
 
-use crate::upgrade;
-
 #[derive(Error, Debug)]
 pub enum Error {
     #[cfg(feature = "abci")]
@@ -69,11 +67,12 @@ pub enum Error {
     Test(String),
     #[error("Query Error: {0}")]
     Query(String),
+    #[cfg(feature = "abci")]
     #[error(transparent)]
-    Upgrade(#[from] upgrade::Error),
+    Upgrade(#[from] crate::upgrade::Error),
     #[error("Unknown Error")]
     Unknown,
 }
 
-/// A result type bound to the standard orga error type.    
+/// A result type bound to the standard orga error type.
 pub type Result<T> = std::result::Result<T, Error>;
