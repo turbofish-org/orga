@@ -8,7 +8,6 @@ use syn::*;
 use super::utils::*;
 
 pub fn derive(item: TokenStream) -> TokenStream {
-    println!("force build");
     let item = parse_macro_input!(item as DeriveInput);
     let source = parse_parent();
 
