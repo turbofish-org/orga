@@ -16,15 +16,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
       - name: Cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-base-${{ hashFiles('**/Cargo.lock') }}
+        uses: Swatinem/rust-cache@v2
       - name: Use Nightly
         uses: actions-rs/toolchain@v1
         with:
@@ -42,15 +34,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
       - name: Cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-all-features-${{ hashFiles('**/Cargo.lock') }}
+        uses: Swatinem/rust-cache@v2
       - name: Use Nightly
         uses: actions-rs/toolchain@v1
         with:
@@ -68,15 +52,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
       - name: Cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-coverage-${{ hashFiles('**/Cargo.lock') }}
+        uses: Swatinem/rust-cache@v2
       - name: Use Nightly
         uses: actions-rs/toolchain@v1
         with:
@@ -105,15 +81,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
       - name: Cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-format-${{ hashFiles('**/Cargo.lock') }}
+        uses: Swatinem/rust-cache@v2
       - name: Use Nightly
         uses: actions-rs/toolchain@v1
         with:
@@ -132,15 +100,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
       - name: Cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-clippy-${{ hashFiles('**/Cargo.lock') }}
+        uses: Swatinem/rust-cache@v2
       - name: Use Nightly
         uses: actions-rs/toolchain@v1
         with:
