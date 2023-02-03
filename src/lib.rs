@@ -65,6 +65,8 @@ pub mod context;
 #[cfg(feature = "feat-ibc")]
 pub mod ibc;
 
+pub mod upgrade;
+
 mod error;
 
 pub use cosmrs;
