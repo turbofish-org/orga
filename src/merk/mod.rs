@@ -1,10 +1,16 @@
 mod backingstore;
 mod client;
-mod merkstore;
+#[cfg(feature = "merk-full")]
+mod ics23;
+#[cfg(feature = "merk-full")]
 mod proofbuilder;
+#[cfg(feature = "merk-full")]
+pub mod store;
 
 pub use backingstore::{ABCIPrefixedProofStore, BackingStore};
 pub use client::Client;
 pub use merk;
-pub use merkstore::MerkStore;
+#[cfg(feature = "merk-full")]
 pub use proofbuilder::ProofBuilder;
+#[cfg(feature = "merk-full")]
+pub use store::MerkStore;

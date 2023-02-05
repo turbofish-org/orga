@@ -1,23 +1,25 @@
-use crate::call::Call;
-use crate::client::Client;
 use crate::coins::{Address, Amount, Coin, Give, Symbol, Take};
 use crate::collections::Map;
 use crate::context::GetContext;
-use crate::encoding::{Decode, Encode};
+use crate::orga;
 use crate::plugins::Paid;
 use crate::plugins::Signer;
-use crate::query::Query;
-use crate::state::State;
 use crate::{Error, Result};
 
-#[derive(State, Encode, Decode, Call, Query, Client)]
+#[orga]
 pub struct Accounts<S: Symbol> {
+    transfers_allowed: bool,
+    transfer_exceptions: Map<Address, ()>,
     accounts: Map<Address, Coin<S>>,
 }
 
 impl<S: Symbol> Accounts<S> {
     #[call]
     pub fn transfer(&mut self, to: Address, amount: Amount) -> Result<()> {
+        let signer = self.signer()?;
+        if !self.transfers_allowed && !self.transfer_exceptions.contains_key(signer)? {
+            return Err(Error::Coins("Transfers are currently disabled".into()));
+        }
         let taken_coins = self.take_own_coins(amount)?;
         let mut receiver = self.accounts.entry(to)?.or_insert_default()?;
         receiver.give(taken_coins)?;
@@ -65,12 +67,23 @@ impl<S: Symbol> Accounts<S> {
         self.give_own_coins(taken_coins)
     }
 
+    #[call]
+    pub fn give_from_funding_all(&mut self) -> Result<()> {
+        let paid = self
+            .context::<Paid>()
+            .ok_or_else(|| Error::Coins("No Paid context found".into()))?;
+        let balance = paid.balance::<S>()?;
+        let taken_coins = paid.take(balance)?;
+
+        self.give_own_coins(taken_coins)
+    }
+
     fn give_own_coins(&mut self, coins: Coin<S>) -> Result<()> {
         let signer = self.signer()?;
 
         self.accounts
-            .get_mut(signer)?
-            .ok_or_else(|| Error::Coins("Insufficient funds".into()))?
+            .entry(signer)?
+            .or_insert_default()?
             .give(coins)?;
 
         Ok(())
@@ -82,6 +95,19 @@ impl<S: Symbol> Accounts<S> {
             Some(coin) => Ok(coin.amount),
             None => Ok(0.into()),
         }
+    }
+
+    #[query]
+    pub fn exists(&self, address: Address) -> Result<bool> {
+        Ok(self.accounts.get(address)?.is_some())
+    }
+
+    pub fn allow_transfers(&mut self, enabled: bool) {
+        self.transfers_allowed = enabled;
+    }
+
+    pub fn add_transfer_exception(&mut self, address: Address) -> Result<()> {
+        self.transfer_exceptions.insert(address, ())
     }
 
     pub fn deposit(&mut self, address: Address, coins: Coin<S>) -> Result<()> {

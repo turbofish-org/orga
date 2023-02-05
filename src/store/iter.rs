@@ -1,6 +1,3 @@
-#[cfg(test)]
-use mutagen::mutate;
-
 use crate::store::{Read, KV};
 use crate::Result;
 use std::ops::{Bound, RangeBounds};
@@ -19,17 +16,16 @@ use std::ops::{Bound, RangeBounds};
 ///
 /// Under the hood, the iterator calls `Read::get_next` and keeps track of its
 /// current position.
-pub struct Iter<'a, S: ?Sized> {
-    parent: &'a S,
+pub struct Iter<S> {
+    parent: S,
     bounds: (Bound<Vec<u8>>, Bound<Vec<u8>>),
     done: bool,
 }
 
-impl<'a, S: Read + ?Sized> Iter<'a, S> {
+impl<S: Read> Iter<S> {
     /// Creates a new iterator over entries in `parent` in the given range
     /// bounds.
-    #[cfg_attr(test, mutate)]
-    pub fn new(parent: &'a S, bounds: (Bound<Vec<u8>>, Bound<Vec<u8>>)) -> Self {
+    pub fn new(parent: S, bounds: (Bound<Vec<u8>>, Bound<Vec<u8>>)) -> Self {
         Iter {
             parent,
             bounds,
@@ -38,7 +34,7 @@ impl<'a, S: Read + ?Sized> Iter<'a, S> {
     }
 }
 
-impl<'a, S: Read> Iterator for Iter<'a, S> {
+impl<S: Read> Iterator for Iter<S> {
     type Item = Result<KV>;
 
     fn next(&mut self) -> Option<Result<KV>> {
@@ -101,7 +97,7 @@ mod tests {
     fn iter_unbounded_unbounded() {
         let store = test_store();
         let mut iter = Iter {
-            parent: &store,
+            parent: store,
             bounds: (Bound::Unbounded, Bound::Unbounded),
             done: false,
         };
@@ -115,7 +111,7 @@ mod tests {
     fn iter_included_existing() {
         let store = test_store();
         let mut iter = Iter {
-            parent: &store,
+            parent: store,
             bounds: (Bound::Included(vec![0]), Bound::Unbounded),
             done: false,
         };
@@ -129,7 +125,7 @@ mod tests {
     fn iter_included_nonexistent() {
         let store = test_store();
         let mut iter = Iter {
-            parent: &store,
+            parent: store,
             bounds: (Bound::Included(vec![0, 1]), Bound::Unbounded),
             done: false,
         };
@@ -142,7 +138,7 @@ mod tests {
     fn iter_excluded_existing() {
         let store = test_store();
         let mut iter = Iter {
-            parent: &store,
+            parent: store,
             bounds: (Bound::Excluded(vec![0]), Bound::Unbounded),
             done: false,
         };
@@ -155,7 +151,7 @@ mod tests {
     fn iter_excluded_nonexistent() {
         let store = test_store();
         let mut iter = Iter {
-            parent: &store,
+            parent: store,
             bounds: (Bound::Excluded(vec![0, 1]), Bound::Unbounded),
             done: false,
         };
@@ -178,7 +174,7 @@ mod tests {
         }
 
         let mut iter = Iter {
-            parent: &ErrorStore,
+            parent: ErrorStore,
             bounds: (Bound::Unbounded, Bound::Unbounded),
             done: false,
         };
@@ -188,7 +184,7 @@ mod tests {
         );
 
         let mut iter = Iter {
-            parent: &ErrorStore,
+            parent: ErrorStore,
             bounds: (Bound::Excluded(vec![]), Bound::Unbounded),
             done: false,
         };
@@ -202,7 +198,7 @@ mod tests {
     fn iter_end_past_range() {
         let store = test_store();
         let mut iter = Iter {
-            parent: &store,
+            parent: store,
             bounds: (Bound::Unbounded, Bound::Included(vec![1])),
             done: false,
         };
@@ -215,7 +211,7 @@ mod tests {
     fn iter_done() {
         let store = test_store();
         let mut iter = Iter {
-            parent: &store,
+            parent: store,
             bounds: (Bound::Unbounded, Bound::Unbounded),
             done: true,
         };

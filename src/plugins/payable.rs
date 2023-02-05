@@ -1,19 +1,19 @@
-use super::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
-use crate::abci::{BeginBlock, EndBlock, InitChain};
+use super::sdk_compat::{sdk::Tx as SdkTx, ConvertSdkTx};
 use crate::call::Call;
-use crate::client::{AsyncCall, Client};
+use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Amount, Coin, Symbol};
-use crate::context::Context;
+use crate::context::{Context, GetContext};
 use crate::encoding::{Decode, Encode};
+use crate::migrate::MigrateFrom;
 use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
-use std::any::TypeId;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::ops::{Deref, DerefMut};
 
-#[derive(State, Encode, Decode)]
-pub struct PayablePlugin<T: State> {
+#[derive(State, Encode, Decode, Default, MigrateFrom)]
+pub struct PayablePlugin<T> {
     inner: T,
 }
 
@@ -27,15 +27,17 @@ impl<T: State> Deref for PayablePlugin<T> {
 
 #[derive(Default)]
 pub struct Paid {
-    map: HashMap<TypeId, Amount>,
+    map: HashMap<u8, Amount>,
+    pub running_payer: bool,
 }
 
 impl Paid {
     pub fn give<S: Symbol, A: Into<Amount>>(&mut self, amount: A) -> Result<()> {
-        let entry = self
-            .map
-            .entry(TypeId::of::<S>())
-            .or_insert_with(|| 0.into());
+        self.give_denom(amount, S::INDEX)
+    }
+
+    pub fn give_denom<A: Into<Amount>>(&mut self, amount: A, denom: u8) -> Result<()> {
+        let entry = self.map.entry(denom).or_insert_with(|| 0.into());
         let amount = amount.into();
         *entry = (*entry + amount)?;
 
@@ -43,10 +45,14 @@ impl Paid {
     }
 
     pub fn take<S: Symbol, A: Into<Amount>>(&mut self, amount: A) -> Result<Coin<S>> {
-        let entry = self
-            .map
-            .entry(TypeId::of::<S>())
-            .or_insert_with(|| 0.into());
+        let amount = amount.into();
+        self.take_denom(amount, S::INDEX)?;
+
+        Ok(S::mint(amount))
+    }
+
+    pub fn take_denom<A: Into<Amount>>(&mut self, amount: A, denom: u8) -> Result<()> {
+        let entry = self.map.entry(denom).or_insert_with(|| 0.into());
         let amount = amount.into();
         if *entry < amount {
             return Err(Error::Coins("Insufficient funding for paid call".into()));
@@ -54,13 +60,23 @@ impl Paid {
 
         *entry = (*entry - amount)?;
 
-        Ok(amount.into())
+        Ok(())
+    }
+
+    pub fn balance<S: Symbol>(&self) -> Result<Amount> {
+        let entry = match self.map.get(&S::INDEX) {
+            Some(amt) => *amt,
+            None => 0.into(),
+        };
+
+        Ok(entry)
     }
 }
 
+#[derive(Debug)]
 pub struct PaidCall<T> {
-    payer: T,
-    paid: T,
+    pub payer: T,
+    pub paid: T,
 }
 
 impl<T: Encode> Encode for PaidCall<T> {
@@ -69,9 +85,15 @@ impl<T: Encode> Encode for PaidCall<T> {
     }
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
         let payer_call_bytes = self.payer.encode()?;
-        let payer_call_len = payer_call_bytes.len() as u16;
+        let payer_call_len: u16 = payer_call_bytes
+            .len()
+            .try_into()
+            .map_err(|_| ed::Error::UnexpectedByte(0))?;
         let paid_call_bytes = self.paid.encode()?;
-        let paid_call_len = paid_call_bytes.len() as u16;
+        let paid_call_len: u16 = paid_call_bytes
+            .len()
+            .try_into()
+            .map_err(|_| ed::Error::UnexpectedByte(0))?;
 
         dest.write_all(&payer_call_len.encode()?)?;
         dest.write_all(&payer_call_bytes)?;
@@ -98,7 +120,7 @@ impl<T: Decode> Decode for PaidCall<T> {
     }
 }
 
-#[derive(Encode, Decode)]
+#[derive(Debug, Encode, Decode)]
 pub enum PayableCall<T> {
     Paid(PaidCall<T>),
     Unpaid(T),
@@ -118,10 +140,17 @@ where
         match call {
             PayableCall::Unpaid(call) => self.inner.call(call),
             PayableCall::Paid(calls) => {
-                Context::add(Paid::default());
+                let ctx = Paid {
+                    running_payer: true,
+                    ..Default::default()
+                };
+                Context::add(ctx);
                 self.inner.call(calls.payer)?;
-                let res = self.inner.call(calls.paid)?;
-                Ok(res)
+
+                let ctx = self.context::<Paid>().unwrap();
+                ctx.running_payer = false;
+                self.inner.call(calls.paid)?;
+                Ok(())
             }
         }
     }
@@ -135,9 +164,21 @@ impl<T: Query + State> Query for PayablePlugin<T> {
     }
 }
 
+impl<T> ConvertSdkTx for PayablePlugin<T>
+where
+    T: State + ConvertSdkTx<Output = PaidCall<T::Call>> + Call,
+{
+    type Output = PayableCall<T::Call>;
+
+    fn convert(&self, sdk_tx: &SdkTx) -> Result<PayableCall<T::Call>> {
+        let paid_call = self.inner.convert(sdk_tx)?;
+        Ok(PayableCall::Paid(paid_call))
+    }
+}
+
 pub struct UnpaidAdapter<T, U: Clone> {
     parent: U,
-    marker: std::marker::PhantomData<T>,
+    marker: std::marker::PhantomData<fn() -> T>,
 }
 
 unsafe impl<T, U: Send + Clone> Send for UnpaidAdapter<T, U> {}
@@ -151,7 +192,7 @@ impl<T, U: Clone> Clone for UnpaidAdapter<T, U> {
     }
 }
 
-#[async_trait::async_trait]
+#[async_trait::async_trait(?Send)]
 impl<T: Call, U: AsyncCall<Call = PayableCall<T::Call>> + Clone> AsyncCall for UnpaidAdapter<T, U>
 where
     T::Call: Send,
@@ -159,22 +200,48 @@ where
 {
     type Call = T::Call;
 
-    async fn call(&mut self, call: Self::Call) -> Result<()> {
+    async fn call(&self, call: Self::Call) -> Result<()> {
         let res = self.parent.call(PayableCall::Unpaid(call));
 
         res.await
     }
 }
 
-pub struct PaidAdapter<T: Call, U: Clone> {
-    payer_call: Vec<u8>,
-    parent: U,
-    marker: std::marker::PhantomData<T>,
+#[async_trait::async_trait(?Send)]
+impl<
+        T: Query + State,
+        U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = std::rc::Rc<PayablePlugin<T>>> + Clone,
+    > AsyncQuery for UnpaidAdapter<T, U>
+{
+    type Query = T::Query;
+    type Response<'a> = std::rc::Rc<T>;
+
+    async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
+    where
+        F: FnMut(Self::Response<'_>) -> Result<R>,
+    {
+        self.parent
+            .query(query, |plugin| {
+                check(std::rc::Rc::new(
+                    std::rc::Rc::try_unwrap(plugin)
+                        .map_err(|_| ())
+                        .unwrap()
+                        .inner,
+                ))
+            })
+            .await
+    }
 }
 
-unsafe impl<T: Call, U: Send + Clone> Send for PaidAdapter<T, U> {}
+pub struct PaidAdapter<T, U: Clone> {
+    payer_call: Vec<u8>,
+    parent: U,
+    marker: std::marker::PhantomData<fn() -> T>,
+}
 
-impl<T: Call, U: Clone> Clone for PaidAdapter<T, U> {
+unsafe impl<T, U: Send + Clone> Send for PaidAdapter<T, U> {}
+
+impl<T, U: Clone> Clone for PaidAdapter<T, U> {
     fn clone(&self) -> Self {
         PaidAdapter {
             payer_call: self.payer_call.clone(),
@@ -184,7 +251,33 @@ impl<T: Call, U: Clone> Clone for PaidAdapter<T, U> {
     }
 }
 
-#[async_trait::async_trait]
+#[async_trait::async_trait(?Send)]
+impl<
+        T: Query + State,
+        U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = std::rc::Rc<PayablePlugin<T>>> + Clone,
+    > AsyncQuery for PaidAdapter<T, U>
+{
+    type Query = T::Query;
+    type Response<'a> = std::rc::Rc<T>;
+
+    async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
+    where
+        F: FnMut(Self::Response<'_>) -> Result<R>,
+    {
+        self.parent
+            .query(query, |plugin| {
+                check(std::rc::Rc::new(
+                    std::rc::Rc::try_unwrap(plugin)
+                        .map_err(|_| ())
+                        .unwrap()
+                        .inner,
+                ))
+            })
+            .await
+    }
+}
+
+#[async_trait::async_trait(?Send)]
 impl<T: Call, U: AsyncCall<Call = PayableCall<T::Call>> + Clone> AsyncCall for PaidAdapter<T, U>
 where
     T::Call: Send,
@@ -192,7 +285,7 @@ where
 {
     type Call = T::Call;
 
-    async fn call(&mut self, call: Self::Call) -> Result<()> {
+    async fn call(&self, call: Self::Call) -> Result<()> {
         let res = self.parent.call(PayableCall::Paid(PaidCall {
             payer: Decode::decode(self.payer_call.clone().as_slice())?,
             paid: call,
@@ -209,7 +302,7 @@ pub struct PayableClient<T: Client<UnpaidAdapter<T, U>>, U: Clone + Send> {
 
 pub struct PayerAdapter<T: Call> {
     intercepted_call: std::sync::Arc<std::sync::Mutex<Option<Vec<u8>>>>,
-    marker: std::marker::PhantomData<T>,
+    marker: std::marker::PhantomData<fn() -> T>,
 }
 
 unsafe impl<T: Call> Send for PayerAdapter<T> {}
@@ -223,14 +316,14 @@ impl<T: Call> Clone for PayerAdapter<T> {
     }
 }
 
-#[async_trait::async_trait]
+#[async_trait::async_trait(?Send)]
 impl<T: Call> AsyncCall for PayerAdapter<T>
 where
     T::Call: Send,
 {
     type Call = T::Call;
 
-    async fn call(&mut self, call: Self::Call) -> Result<()> {
+    async fn call(&self, call: Self::Call) -> Result<()> {
         self.intercepted_call
             .lock()
             .unwrap()
@@ -332,29 +425,48 @@ where
     }
 }
 
-impl<T> BeginBlock for PayablePlugin<T>
-where
-    T: BeginBlock + State,
-{
-    fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
-        self.inner.begin_block(ctx)
-    }
-}
+#[cfg(feature = "abci")]
+mod abci {
+    use super::super::*;
+    use super::*;
+    use crate::abci::{BeginBlock, EndBlock, InitChain};
 
-impl<T> EndBlock for PayablePlugin<T>
-where
-    T: EndBlock + State,
-{
-    fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
-        self.inner.end_block(ctx)
+    impl<T> BeginBlock for PayablePlugin<T>
+    where
+        T: BeginBlock + State,
+    {
+        fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
+            self.inner.begin_block(ctx)
+        }
     }
-}
 
-impl<T> InitChain for PayablePlugin<T>
-where
-    T: InitChain + State + Call,
-{
-    fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
-        self.inner.init_chain(ctx)
+    impl<T> EndBlock for PayablePlugin<T>
+    where
+        T: EndBlock + State,
+    {
+        fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
+            self.inner.end_block(ctx)
+        }
+    }
+
+    impl<T> InitChain for PayablePlugin<T>
+    where
+        T: InitChain + State + Call,
+    {
+        fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
+            self.inner.init_chain(ctx)
+        }
+    }
+
+    impl<T> crate::abci::AbciQuery for PayablePlugin<T>
+    where
+        T: crate::abci::AbciQuery + State + Call,
+    {
+        fn abci_query(
+            &self,
+            request: &tendermint_proto::abci::RequestQuery,
+        ) -> Result<tendermint_proto::abci::ResponseQuery> {
+            self.inner.abci_query(request)
+        }
     }
 }

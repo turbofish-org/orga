@@ -46,7 +46,7 @@ impl<T> Clone for Adapter<T> {
     }
 }
 
-#[async_trait::async_trait]
+#[async_trait::async_trait(?Send)]
 impl<T: Call> AsyncCall for Adapter<T>
 where
     T: Send + Sync,
@@ -54,7 +54,7 @@ where
 {
     type Call = T::Call;
 
-    async fn call(&mut self, call: Self::Call) -> Result<()> {
+    async fn call(&self, call: Self::Call) -> Result<()> {
         self.0.lock().unwrap().call(call)
     }
 }

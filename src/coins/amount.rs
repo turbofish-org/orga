@@ -1,23 +1,16 @@
-use crate::query::Query;
-use crate::state::State;
 use crate::{Error, Result};
-use ed::{Decode, Encode};
+use orga::orga;
 use std::convert::TryFrom;
 
-#[derive(State, Encode, Decode, Debug, Default, Clone, Copy)]
-pub struct Amount(pub(crate) u64);
-
-impl Query for Amount {
-    type Query = ();
-
-    fn query(&self, _: ()) -> Result<()> {
-        Ok(())
-    }
+#[orga]
+#[derive(Debug, Clone, Copy)]
+pub struct Amount {
+    pub(crate) value: u64,
 }
 
 impl std::fmt::Display for Amount {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", self.value)
     }
 }
 
@@ -31,7 +24,7 @@ impl Eq for Amount {}
 
 impl Amount {
     pub fn new(value: u64) -> Self {
-        Amount(value)
+        Amount { value }
     }
 }
 
@@ -43,7 +36,7 @@ impl From<u64> for Amount {
 
 impl From<Amount> for u64 {
     fn from(amount: Amount) -> Self {
-        amount.0
+        amount.value
     }
 }
 
@@ -52,27 +45,5 @@ impl TryFrom<Result<Amount>> for Amount {
 
     fn try_from(value: Result<Amount>) -> Result<Self> {
         value
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::super::{Amount, Ratio};
-    use super::*;
-    use std::convert::TryInto;
-
-    #[test]
-    fn ops() -> Result<()> {
-        let v: Amount = 2.try_into().unwrap();
-        let w: Amount = 3.into();
-        let b = v * w;
-
-        let x = Ratio::new(3, 1)?;
-        let y = Ratio::new(4, 1)?;
-        let z = Ratio::new(2, 1)?;
-
-        let a = (b * x * y * z)?;
-        assert_eq!(*a.0.numer(), 144);
-        Ok(())
     }
 }

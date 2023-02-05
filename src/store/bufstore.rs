@@ -1,6 +1,3 @@
-#[cfg(test)]
-use mutagen::mutate;
-
 use std::cmp::Ordering;
 use std::collections::{btree_map, BTreeMap};
 
@@ -23,7 +20,6 @@ impl<S: Read + Default> BufStore<S> {
     /// Constructs a `BufStore` which wraps the default value of the inner
     /// store.
     #[inline]
-    #[cfg_attr(test, mutate)]
     pub fn new() -> Self {
         Default::default()
     }
@@ -45,7 +41,6 @@ impl<S> BufStore<S> {
     /// Calls to get will first check the `BufStore` map, and if no entry is
     /// found will be passed to the underlying store.
     #[inline]
-    #[cfg_attr(test, mutate)]
     pub fn wrap(store: S) -> Self {
         BufStore {
             store,
@@ -56,7 +51,6 @@ impl<S> BufStore<S> {
     /// Creates a `BufStore` by wrapping the given store, using a pre-populated
     /// in-memory buffer of key/value entries.
     #[inline]
-    #[cfg_attr(test, mutate)]
     pub fn wrap_with_map(store: S, map: Map) -> Self {
         BufStore { store, map }
     }
@@ -64,9 +58,13 @@ impl<S> BufStore<S> {
     /// Consumes the `BufStore` and returns its in-memory buffer of key/value
     /// entries.
     #[inline]
-    #[cfg_attr(test, mutate)]
     pub fn into_map(self) -> Map {
         self.map
+    }
+
+    #[inline]
+    pub fn store(&self) -> &S {
+        &self.store
     }
 
     /// Consumes the `BufStore`'s in-memory buffer and writes all of its values
@@ -75,7 +73,6 @@ impl<S> BufStore<S> {
     /// After calling `flush`, the `BufStore` will still be valid and wrap the
     /// underlying store, but its in-memory buffer will be empty.
     #[inline]
-    #[cfg_attr(test, mutate)]
     pub fn flush(&mut self) -> Result<()>
     where
         S: Write,
@@ -106,7 +103,7 @@ impl<S: Read> Read for BufStore<S> {
         // TODO: optimize by retaining previously used iterator(s) so we don't
         // have to recreate them each iteration (if it makes a difference)
         let mut map_iter = self.map.range(exclusive_range_from(key));
-        let mut store_iter = self.store.range(exclusive_range_from(key));
+        let mut store_iter = (&self.store).into_iter(exclusive_range_from(key));
         iter_merge_next(&mut map_iter, &mut store_iter)
     }
 }
@@ -231,7 +228,7 @@ mod tests {
         buf.delete(&[2]).unwrap();
         buf.put(vec![3], vec![1]).unwrap();
 
-        let mut iter = buf.range(..);
+        let mut iter = buf.into_iter(..);
         assert_eq!(iter.next().unwrap().unwrap(), (vec![0], vec![0]));
         assert_eq!(iter.next().unwrap().unwrap(), (vec![1], vec![1]));
         assert_eq!(iter.next().unwrap().unwrap(), (vec![3], vec![1]));

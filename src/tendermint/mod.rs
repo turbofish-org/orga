@@ -13,23 +13,23 @@ use tar::Archive;
 use toml_edit::{value, Document};
 
 #[cfg(target_os = "macos")]
-static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.11/tendermint_0.34.11_darwin_amd64.tar.gz";
+static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.15/tendermint_0.34.15_darwin_amd64.tar.gz";
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.11/tendermint_0.34.11_linux_amd64.tar.gz";
-#[cfg(all(target_os = "linux", target_arch = "arm"))]
-static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.11/tendermint_0.34.11_linux_arm64.tar.gz";
+static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.15/tendermint_0.34.15_linux_amd64.tar.gz";
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.15/tendermint_0.34.15_linux_arm64.tar.gz";
 
 #[cfg(target_os = "macos")]
 static TENDERMINT_ZIP_HASH: [u8; 32] =
-    hex!("e565ec1b90a950093d7d77745f1579d87322f5900c67ec51ff2cd02b988b6d52");
+    hex!("b493354bc8a711b670763e3ddf5765c3d7e94aaf6dbd138b16b8ab288495a4d1");
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 static TENDERMINT_ZIP_HASH: [u8; 32] =
-    hex!("1496d3808ed1caaf93722983f34d4ba38392ea6530f070a09e7abf1ea4cc5106");
-#[cfg(all(target_os = "linux", target_arch = "arm"))]
+    hex!("cf4bd4b5a57f49007d18b9287214daf364dbc11094dec8e4c1bc33f207c6c57c");
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
 static TENDERMINT_ZIP_HASH: [u8; 32] =
-    hex!("01a076d3297a5381587a77621b7f45dca7acb7fc21ce2e29ca327ccdaee41757");
+    hex!("6d4d771ae26c207f1a4f9f1399db2cbcac2e3c8afdf5d55d15bb984bbb986d2e");
 
-const TENDERMINT_BINARY_NAME: &str = "tendermint-v0.34.11";
+const TENDERMINT_BINARY_NAME: &str = "tendermint-v0.34.15";
 
 fn verify_hash(tendermint_bytes: &[u8]) {
     let mut hasher = Sha256::new();
@@ -94,6 +94,7 @@ impl ProcessHandler {
             }
         };
         child.kill()?;
+        child.wait()?;
         Ok(())
     }
 }
@@ -182,6 +183,7 @@ impl Tendermint {
     ///     start
     ///     init
     ///     unsafe_reset_all
+    #[must_use]
     pub fn log_level(mut self, level: &str) -> Self {
         self.process.set_arg("--log_level");
         self.process.set_arg(level);
@@ -195,6 +197,7 @@ impl Tendermint {
     ///     start
     ///     init
     ///     unsafe_reset_all
+    #[must_use]
     pub fn trace(mut self) -> Self {
         self.process.set_arg("--trace");
         self
@@ -205,6 +208,7 @@ impl Tendermint {
     ///
     /// Compatible Commands:
     ///     start
+    #[must_use]
     pub fn moniker(mut self, moniker: &str) -> Self {
         self.process.set_arg("--moniker");
         self.process.set_arg(moniker);
@@ -221,6 +225,7 @@ impl Tendermint {
     ///
     /// Note: Using this configuration command with incompatible
     /// terminating methods will cause the tendermint process to fail
+    #[must_use]
     pub fn p2p_laddr(mut self, addr: &str) -> Self {
         self.process.set_arg("--p2p.laddr");
         self.process.set_arg(addr);
@@ -236,10 +241,11 @@ impl Tendermint {
     ///
     /// Note: Using this configuration command with incompatible
     /// terminating methods will cause the tendermint process to fail
+    #[must_use]
     pub fn p2p_persistent_peers(mut self, peers: Vec<String>) -> Self {
         self.process.set_arg("--p2p.persistent_peers");
         let mut arg: String = "".to_string();
-        peers.iter().for_each(|x| arg += &x.to_string());
+        peers.iter().for_each(|x| arg += x);
         self.process.set_arg(&arg);
         self
     }
@@ -254,6 +260,7 @@ impl Tendermint {
     ///
     /// Note: Using this configuration command with incompatible
     /// terminating methods will cause the tendermint process to fail
+    #[must_use]
     pub fn rpc_laddr(mut self, addr: &str) -> Self {
         self.process.set_arg("--rpc.laddr");
         self.process.set_arg(addr);
@@ -271,6 +278,7 @@ impl Tendermint {
     ///
     /// Note: Using this configuration command with incompatible terminating
     /// methods will cause the tendermint process to fail
+    #[must_use]
     pub fn proxy_app(mut self, addr: &str) -> Self {
         self.process.set_arg("--proxy_app");
         self.process.set_arg(addr);
@@ -304,6 +312,7 @@ impl Tendermint {
     ///     .stdout(log_file)
     ///     .start();
     /// ```
+    #[must_use]
     pub fn stdout<T: Into<Stdio>>(mut self, cfg: T) -> Self {
         self.process.command.stdout(cfg);
         self
@@ -336,6 +345,7 @@ impl Tendermint {
     ///     .stderr(log_file)
     ///     .start();
     /// ```
+    #[must_use]
     pub fn stderr<T: Into<Stdio>>(mut self, cfg: T) -> Self {
         self.process.command.stderr(cfg);
         self
@@ -348,6 +358,7 @@ impl Tendermint {
     ///
     /// Note: Using this configuration command with incompatible
     /// terminating methods will cause the tendermint process to fail
+    #[must_use]
     pub fn keep_addr_book(mut self) -> Self {
         self.process.set_arg("--keep_addr_book");
         self
@@ -366,6 +377,7 @@ impl Tendermint {
         genesis_file.write_all(genesis_bytes.as_slice()).unwrap();
     }
 
+    #[must_use]
     pub fn with_genesis(mut self, genesis_bytes: Vec<u8>) -> Self {
         self.genesis_bytes.replace(genesis_bytes);
 
@@ -407,6 +419,7 @@ impl Tendermint {
     /// Note: This update happens upon calling a terminating method in order to
     /// ensure a single file read and to ensure that the config.toml is not
     /// overwritten by called tendermint process
+    #[must_use]
     pub fn state_sync(mut self, enable: bool) -> Self {
         let mut document = match &self.config_contents {
             Some(inner) => inner.clone(),
@@ -430,6 +443,7 @@ impl Tendermint {
     /// Note: This update happens upon calling a terminating method in order to
     /// ensure a single file read and to ensure that the config.toml is not
     /// overwritten by called tendermint process
+    #[must_use]
     pub fn rpc_servers<const N: usize>(mut self, rpc_servers: [&str; N]) -> Self {
         let mut document = match &self.config_contents {
             Some(inner) => inner.clone(),
@@ -457,6 +471,7 @@ impl Tendermint {
     /// Note: This update happens upon calling a terminating method in order to
     /// ensure a single file read and to ensure that the config.toml is not
     /// overwritten by called tendermint process
+    #[must_use]
     pub fn trust_height(mut self, height: u32) -> Self {
         let mut document = match &self.config_contents {
             Some(inner) => inner.clone(),
@@ -478,6 +493,7 @@ impl Tendermint {
     /// Note: This update happens upon calling a terminating method in order to
     /// ensure a single file read and to ensure that the config.toml is not
     /// overwritten by called tendermint process
+    #[must_use]
     pub fn trust_hash(mut self, hash: &str) -> Self {
         let mut document = match &self.config_contents {
             Some(inner) => inner.clone(),
@@ -503,6 +519,7 @@ impl Tendermint {
     /// Note: This update happens upon calling a terminating method in order to
     /// ensure a single file read and to ensure that the config.toml is not
     /// overwritten by called tendermint process
+    #[must_use]
     pub fn block_time(mut self, time: &str) -> Self {
         let mut document = match &self.config_contents {
             Some(inner) => inner.clone(),
@@ -522,18 +539,19 @@ impl Tendermint {
     ///
     /// Note: This will locally install the Tendermint binary if it is
     /// not already contained in the Tendermint home directory
-    pub fn start(mut self) {
+    pub fn start(mut self) -> Self {
         self.install();
         self.mutate_configuration();
         self.process.set_arg("start");
         self.process.spawn().unwrap();
-        self.process.wait().unwrap();
+        self
     }
 
     /// Calls tendermint init with configured arguments
     ///
     /// Note: This will locally install the Tendermint binary if it is
     /// not already contained in the Tendermint home directory
+    #[must_use]
     pub fn init(mut self) -> Self {
         self.install();
         self.process.set_arg("init");
@@ -542,6 +560,10 @@ impl Tendermint {
         self.mutate_configuration();
 
         self
+    }
+
+    pub fn kill(self) -> Result<()> {
+        self.process.kill()
     }
 
     /// Calls tendermint start with configured arguments
@@ -567,7 +589,7 @@ mod tests {
     fn tendermint_init() {
         let temp_dir = TempDir::new("tendermint_test").unwrap();
         let temp_dir_path = temp_dir.path();
-        Tendermint::new(temp_dir_path).stdout(Stdio::null()).init();
+        let _ = Tendermint::new(temp_dir_path).stdout(Stdio::null()).init();
 
         let file_set: HashSet<String> = temp_dir_path
             .read_dir()

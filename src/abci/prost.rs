@@ -5,17 +5,20 @@ use prost::Message;
 use std::io::{Error as IOError, ErrorKind as IOErrorKind, Read, Write};
 
 #[derive(Debug)]
-pub struct Adapter<T: Message + Default>(T);
+pub struct Adapter<T: Message + Default>(pub(crate) T);
 
 impl<T: Message + Default> State for Adapter<T> {
-    type Encoding = Self;
-
-    fn create(_: Store, data: Self::Encoding) -> crate::Result<Self> {
-        Ok(data)
+    fn attach(&mut self, _store: Store) -> crate::Result<()> {
+        Ok(())
     }
 
-    fn flush(self) -> crate::Result<Self::Encoding> {
-        Ok(self)
+    fn flush<W: std::io::Write>(self, out: &mut W) -> crate::Result<()> {
+        self.encode_into(out)?;
+        Ok(())
+    }
+
+    fn load(_store: Store, bytes: &mut &[u8]) -> crate::Result<Self> {
+        Ok(Self::decode(bytes)?)
     }
 }
 
@@ -46,12 +49,6 @@ impl<T: Message + Default> Decode for Adapter<T> {
             T::decode(bytes.as_slice()).map_err(|e| IOError::new(IOErrorKind::InvalidData, e))?;
 
         Ok(Adapter(decoded))
-    }
-}
-
-impl<T: Message + Default> From<T> for Adapter<T> {
-    fn from(t: T) -> Self {
-        Adapter(t)
     }
 }
 

@@ -1,25 +1,17 @@
 use super::{Adjust, Amount, Balance, Decimal, Give, Symbol, Take};
-use crate::call::Call;
 use crate::context::GetContext;
+use crate::orga;
 use crate::plugins::Paid;
-use crate::state::State;
 use crate::{Error, Result};
 use std::marker::PhantomData;
 
-#[must_use = "If these coins are meant to be discarded, explicitly call the `burn` method"]
-#[derive(State, Call, Debug)]
+#[orga]
+#[derive(Debug)]
+// #[must_use = "If these coins are meant to be discarded, explicitly call the `burn` method"]
 pub struct Coin<S: Symbol> {
+    #[call]
     pub amount: Amount,
     symbol: PhantomData<S>,
-}
-
-impl<S: Symbol> Default for Coin<S> {
-    fn default() -> Self {
-        Self {
-            amount: Default::default(),
-            symbol: PhantomData,
-        }
-    }
 }
 
 impl<S: Symbol> Coin<S> {
@@ -40,13 +32,12 @@ impl<S: Symbol> Coin<S> {
         }
     }
 
-    pub fn transfer<G: Give<S>>(self, dest: &mut G) -> Result<()> {
-        dest.add(self.amount)
+    pub fn transfer<G: Give<Coin<S>>>(self, dest: &mut G) -> Result<()> {
+        dest.give(self)
     }
 
     pub fn burn(self) {}
 
-    #[call]
     pub fn take_as_funding(&mut self, amount: Amount) -> Result<()> {
         let taken_coins = self.take(amount)?;
         let paid = self
@@ -80,13 +71,16 @@ impl<S: Symbol> Adjust for Coin<S> {
 impl<S: Symbol> Take<S> for Coin<S> {
     fn take<A: Into<Amount>>(&mut self, amount: A) -> Result<Self::Value> {
         let amount = amount.into();
+        if amount > self.amount {
+            return Err(Error::Coins("Insufficient funds".into()));
+        }
         self.amount = (self.amount - amount)?;
 
         Ok(Coin::mint(amount))
     }
 }
 
-impl<S: Symbol> Give<S> for Coin<S> {
+impl<S: Symbol> Give<Self> for Coin<S> {
     fn give(&mut self, value: Coin<S>) -> Result<()> {
         self.amount = (self.amount + value.amount)?;
 

@@ -1,22 +1,19 @@
-#[cfg(test)]
-use mutagen::mutate;
-
 use std::cmp::Ordering;
 use std::collections::btree_map::Entry::{Occupied, Vacant};
 use std::collections::{btree_map, BTreeMap};
 use std::iter::Peekable;
 use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
-use super::Next;
 use crate::call::Call;
 use crate::client::{AsyncCall, Client as ClientTrait};
+use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::query::Query;
-use crate::state::*;
+use crate::state::State;
 use crate::store::*;
 use crate::{Error, Result};
 use ed::*;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MapKey<K> {
     inner: K,
     inner_bytes: Vec<u8>,
@@ -89,120 +86,68 @@ impl<K> Eq for MapKey<K> {}
 /// in an in-memory map until the call to `State::flush` which writes the
 /// changes to the backing store.
 #[derive(Query, Call)]
-pub struct Map<K, V, S = DefaultBackingStore> {
-    store: Store<S>,
+pub struct Map<K, V> {
+    store: Store,
     children: BTreeMap<MapKey<K>, Option<V>>,
 }
 
-impl<K, V, S> From<Map<K, V, S>> for () {
-    fn from(_map: Map<K, V, S>) {}
+impl<K, V> std::fmt::Debug for Map<K, V> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Map").finish()
+    }
 }
 
-impl<K, V, S> State<S> for Map<K, V, S>
+impl<K, V> Terminated for Map<K, V> {}
+
+impl<K, V> State for Map<K, V>
 where
     K: Encode + Terminated,
-    V: State<S>,
+    V: State,
 {
-    type Encoding = ();
-
-    fn create(store: Store<S>, _: ()) -> Result<Self> {
-        Ok(Map {
-            store,
-            children: Default::default(),
-        })
+    fn attach(&mut self, store: Store) -> Result<()> {
+        for (key, value) in self.children.iter_mut() {
+            value.attach(store.sub(key.inner_bytes.as_slice()))?;
+        }
+        self.store.attach(store)
     }
 
-    fn flush(mut self) -> Result<()>
-    where
-        S: Write,
-    {
-        for (key, maybe_value) in self.children {
+    fn flush<W: std::io::Write>(mut self, _out: &mut W) -> Result<()> {
+        while let Some((key, maybe_value)) = self.children.pop_first() {
             Self::apply_change(&mut self.store, &key.inner, maybe_value)?;
         }
 
         Ok(())
     }
+
+    fn load(store: Store, _bytes: &mut &[u8]) -> Result<Self> {
+        let mut map = Self::default();
+        map.attach(store)?;
+
+        Ok(map)
+    }
 }
 
-pub struct Client<K, V, U: Clone> {
-    parent: U,
-    key: Option<K>,
-    _marker: std::marker::PhantomData<V>,
+impl<K, V> Map<K, V> {
+    pub fn new() -> Self {
+        Self::default()
+    }
 }
 
-impl<K, V, S, U: Clone> ClientTrait<U> for Map<K, V, S> {
-    type Client = Client<K, V, U>;
-
-    fn create_client(parent: U) -> Self::Client {
-        Client {
-            parent,
-            key: None,
-            _marker: std::marker::PhantomData,
+impl<K, V> Default for Map<K, V> {
+    fn default() -> Self {
+        Map {
+            store: Store::default(),
+            children: BTreeMap::default(),
         }
     }
 }
 
-impl<K: Clone, V, U: Clone> Clone for Client<K, V, U> {
-    fn clone(&self) -> Self {
-        Client {
-            parent: self.parent.clone(),
-            key: self.key.clone(),
-            _marker: std::marker::PhantomData,
-        }
-    }
-}
-
-impl<K: Clone, V: Call, U: Clone> Client<K, V, U>
-where
-    V: ClientTrait<Self>,
-{
-    #[cfg_attr(test, mutate)]
-    pub fn get_mut(&mut self, key: K) -> V::Client {
-        let mut adapter = self.clone();
-        adapter.key = Some(key);
-        V::create_client(adapter)
-    }
-}
-
-unsafe impl<K: Clone, V: Call, U: Clone> Send for Client<K, V, U>
-where
-    U: AsyncCall<Call = <Map<K, V> as Call>::Call>,
-    K: Encode + Decode + Terminated,
-    V::Call: Sync,
-    U: Send,
-    K: Send,
-{
-}
-
-#[async_trait::async_trait]
-impl<K: Clone, V: Call, U: Clone> AsyncCall for Client<K, V, U>
-where
-    U: AsyncCall<Call = <Map<K, V> as Call>::Call>,
-    K: Encode + Decode + Terminated,
-    V::Call: Sync + Send,
-    U: Send,
-    K: Send,
-{
-    type Call = V::Call;
-
-    async fn call(&mut self, subcall: Self::Call) -> Result<()> {
-        let key = self.key.as_ref().unwrap().clone();
-
-        let subcall_bytes = subcall.encode()?;
-
-        let call = <Map<K, V> as Call>::Call::MethodGetMut(key, subcall_bytes);
-        self.parent.call(call).await
-    }
-}
-
-impl<K, V, S> Map<K, V, S>
+impl<K, V> Map<K, V>
 where
     K: Encode + Terminated,
-    V: State<S>,
-    S: Read,
+    V: State,
 {
     #[query]
-    #[cfg_attr(test, mutate)]
     pub fn contains_key(&self, key: K) -> Result<bool> {
         let map_key = MapKey::<K>::new(key)?;
         let child_contains = self.children.contains_key(&map_key);
@@ -229,19 +174,18 @@ where
             .get(key_bytes.as_slice())?
             .map(|value_bytes| {
                 let substore = self.store.sub(key_bytes.as_slice());
-                let decoded = V::Encoding::decode(value_bytes.as_slice())?;
-                V::create(substore, decoded)
+                let value = V::load(substore, &mut value_bytes.as_slice())?;
+                Ok(value)
             })
             .transpose()
     }
 
-    #[cfg_attr(test, mutate)]
-    pub fn insert(&mut self, key: K, value: V::Encoding) -> Result<()> {
+    pub fn insert(&mut self, key: K, mut value: V) -> Result<()> {
         let map_key = MapKey::<K>::new(key)?;
 
-        let value_store = self.store.sub(map_key.inner_bytes.as_slice());
-        self.children
-            .insert(map_key, Some(V::create(value_store, value)?));
+        let substore = self.store.sub(map_key.inner_bytes.as_slice());
+        value.attach(substore)?;
+        self.children.insert(map_key, Some(value));
 
         Ok(())
     }
@@ -253,7 +197,6 @@ where
     /// the value was inserted, modified, or deleted since the last time the map
     /// was flushed.
     #[query]
-    #[cfg_attr(test, mutate)]
     pub fn get(&self, key: K) -> Result<Option<Ref<V>>> {
         let map_key = MapKey::<K>::new(key)?;
         Ok(if self.children.contains_key(&map_key) {
@@ -270,35 +213,69 @@ where
     }
 }
 
-impl<K, V, S, D> Map<K, V, S>
+impl<K1, V1, K2, V2> MigrateFrom<Map<K1, V1>> for Map<K2, V2>
+where
+    K1: MigrateInto<K2> + Encode + Decode + Terminated + Clone,
+    V1: MigrateInto<V2> + State,
+    K2: Encode + Decode + Terminated + Clone,
+    V2: State,
+{
+    fn migrate_from(mut other: Map<K1, V1>) -> Result<Self> {
+        let mut map = Self::default();
+        let mut old_keys = vec![];
+        for entry in other.iter()? {
+            let (key, _value) = entry?;
+            old_keys.push(key.clone());
+        }
+
+        for key in old_keys.iter() {
+            let old_key_bytes = key.encode()?;
+            let mut value_bytes = vec![];
+            let value = other.remove(key.clone())?.unwrap().into_inner();
+            value.flush(&mut value_bytes)?;
+            let value = V1::load(
+                other.store.sub(old_key_bytes.as_slice()),
+                &mut value_bytes.as_slice(),
+            )?;
+            let new_key = key.clone().migrate_into()?;
+            let new_value = value.migrate_into()?;
+
+            map.insert(new_key, new_value)?;
+        }
+        let mut out = vec![];
+        other.flush(&mut out)?;
+
+        Ok(map)
+    }
+}
+
+impl<K, V> Map<K, V>
 where
     K: Encode + Terminated,
-    V: State<S, Encoding = D>,
-    S: Read,
-    D: Default,
+    V: State + Default,
 {
-    #[cfg_attr(test, mutate)]
     pub fn get_or_default(&self, key: K) -> Result<Ref<V>> {
         let key_bytes = key.encode()?;
         let maybe_value = self.get(key)?;
 
         let value = match maybe_value {
             Some(value) => value,
-            None => Ref::Owned(V::create(
-                self.store.sub(key_bytes.as_slice()),
-                D::default(),
-            )?),
+            None => {
+                let mut value = V::default();
+                let substore = self.store.sub(key_bytes.as_slice());
+                value.attach(substore)?;
+                Ref::Owned(value)
+            }
         };
 
         Ok(value)
     }
 }
 
-impl<K, V, S> Map<K, V, S>
+impl<K, V> Map<K, V>
 where
     K: Encode + Terminated + Clone,
-    V: State<S>,
-    S: Read,
+    V: State,
 {
     /// Gets a mutable reference to the value in the map for the given key, or
     /// `None` if the key has no value.
@@ -310,14 +287,12 @@ where
     /// the value was inserted, modified, or deleted since the last time the map
     /// was flushed.
     #[call]
-    #[cfg_attr(test, mutate)]
-    pub fn get_mut(&mut self, key: K) -> Result<Option<ChildMut<K, V, S>>> {
+    pub fn get_mut(&mut self, key: K) -> Result<Option<ChildMut<K, V>>> {
         Ok(self.entry(key)?.into())
     }
 
     /// Returns a mutable reference to the key/value entry for the given key.
-    #[cfg_attr(test, mutate)]
-    pub fn entry(&mut self, key: K) -> Result<Entry<K, V, S>> {
+    pub fn entry(&mut self, key: K) -> Result<Entry<K, V>> {
         let map_key = MapKey::<K>::new(key)?;
         Ok(if self.children.contains_key(&map_key) {
             // value is already retained in memory (was modified)
@@ -344,7 +319,6 @@ where
     }
 
     /// Removes the value at the given key, if any.
-    #[cfg_attr(test, mutate)]
     pub fn remove(&mut self, key: K) -> Result<Option<ReadOnly<V>>> {
         let map_key = MapKey::<K>::new(key)?;
         if self.children.contains_key(&map_key) {
@@ -357,25 +331,22 @@ where
         } else {
             Ok(self.get_from_store(&map_key.inner)?.map(|val| {
                 self.children.insert(map_key, None);
-                val.into()
+                ReadOnly::new(val)
             }))
         }
     }
 }
 
-impl<'a, 'b, K, V, S> Map<K, V, S>
+impl<'a, K, V> Map<K, V>
 where
-    K: Encode + Decode + Terminated + Next + Clone,
-    V: State<S>,
-    S: Read,
+    K: Encode + Decode + Terminated + Clone,
+    V: State,
 {
-    #[cfg_attr(test, mutate)]
-    pub fn iter(&'a self) -> Result<Iter<'a, K, V, S>> {
+    pub fn iter(&'a self) -> Result<Iter<'a, K, V>> {
         self.range(..)
     }
 
-    #[cfg_attr(test, mutate)]
-    pub fn range<B: RangeBounds<K>>(&'a self, range: B) -> Result<Iter<'a, K, V, S>> {
+    pub fn range<B: RangeBounds<K>>(&'a self, range: B) -> Result<Iter<'a, K, V>> {
         let map_start = range
             .start_bound()
             .map(|inner| MapKey::<K>::new(inner.clone()).unwrap());
@@ -384,7 +355,11 @@ where
             .map(|inner| MapKey::<K>::new(inner.clone()).unwrap());
         let map_iter = self.children.range((map_start, map_end)).peekable();
 
-        let store_iter = StoreNextIter::new(&self.store, range)?.peekable();
+        let encoded_range = (
+            encode_bound(range.start_bound())?,
+            encode_bound(range.end_bound())?,
+        );
+        let store_iter = StoreNextIter::new(&self.store, encoded_range)?.peekable();
 
         Ok(Iter {
             parent_store: &self.store,
@@ -402,11 +377,10 @@ fn encode_bound<K: Encode>(bound: Bound<&K>) -> Result<Bound<Vec<u8>>> {
     }
 }
 
-impl<K, V, S> Map<K, V, S>
+impl<K, V> Map<K, V>
 where
     K: Encode + Terminated,
-    V: State<S>,
-    S: Write,
+    V: State,
 {
     /// Removes all values with the given prefix from the key/value store.
     /// Iterates until reaching the first key that does not have the given
@@ -414,17 +388,15 @@ where
     ///
     /// This method is used to delete a child value and all of its child entries
     /// (if any).
-    fn remove_from_store(store: &mut Store<S>, prefix: &[u8]) -> Result<bool> {
-        let entries = store.range(prefix.to_vec()..);
-        // TODO: make so we don't have to collect (should be able to delete
-        // while iterating, either a .drain() iterator or an entry type with a
-        // delete method)
-        let to_delete: Vec<_> = entries
-            .collect::<Result<Vec<_>>>()?
-            .into_iter()
-            .take_while(|(key, _)| key.starts_with(prefix))
-            .map(|(key, _)| key.to_vec())
-            .collect();
+    fn remove_from_store(store: &mut Store, prefix: &[u8]) -> Result<bool> {
+        let mut to_delete = vec![];
+        for entry in store.range(prefix.to_vec()..) {
+            let (key, _) = entry?;
+            if !key.starts_with(prefix) {
+                break;
+            }
+            to_delete.push(key);
+        }
 
         let exists = !to_delete.is_empty();
         for key in to_delete {
@@ -439,13 +411,14 @@ where
     /// called then its binary encoding is written to `key`. If `maybe_value` is
     /// `None`, the value is removed by deleting all entries which start with
     /// `key`.
-    fn apply_change(store: &mut Store<S>, key: &K, maybe_value: Option<V>) -> Result<()> {
+    fn apply_change(store: &mut Store, key: &K, maybe_value: Option<V>) -> Result<()> {
         let key_bytes = key.encode()?;
 
         match maybe_value {
             Some(value) => {
                 // insert/update
-                let value_bytes = value.flush()?.encode()?;
+                let mut value_bytes = vec![];
+                value.flush(&mut value_bytes)?;
                 store.put(key_bytes, value_bytes)?;
             }
             None => {
@@ -458,22 +431,20 @@ where
     }
 }
 
-pub struct Iter<'a, K, V, S>
+pub struct Iter<'a, K, V>
 where
-    K: Next + Decode + Encode + Terminated,
-    V: State<S>,
-    S: Read,
+    K: Decode + Encode + Terminated,
+    V: State,
 {
-    parent_store: &'a Store<S>,
+    parent_store: &'a Store,
     map_iter: Peekable<btree_map::Range<'a, MapKey<K>, Option<V>>>,
-    store_iter: Peekable<StoreNextIter<'a, K, Store<S>>>,
+    store_iter: Peekable<StoreNextIter<'a, Store>>,
 }
 
-impl<'a, K, V, S> Iter<'a, K, V, S>
+impl<'a, K, V> Iter<'a, K, V>
 where
-    K: Encode + Decode + Terminated + Next,
-    V: State<S>,
-    S: Read,
+    K: Encode + Decode + Terminated,
+    V: State,
 {
     fn iter_merge_next(&mut self) -> Result<Option<(Ref<'a, K>, Ref<'a, V>)>> {
         loop {
@@ -505,16 +476,14 @@ where
                         .transpose()?
                         .expect("Peek ensures this arm is unreachable");
 
-                    let decoded_key: K = Decode::decode(entry.0.as_slice())?;
-                    let decoded_value: <V as State<S>>::Encoding =
-                        Decode::decode(entry.1.as_slice())?;
+                    let key = Decode::decode(entry.0.as_slice())?;
 
-                    let value_store = self.parent_store.sub(entry.0.as_slice());
+                    let value = V::load(
+                        self.parent_store.sub(entry.0.as_slice()),
+                        &mut entry.1.as_slice(),
+                    )?;
 
-                    Some((
-                        Ref::Owned(decoded_key),
-                        Ref::Owned(V::create(value_store, decoded_value)?),
-                    ))
+                    Some((Ref::Owned(key), Ref::Owned(value)))
                 }
 
                 // merge values from both iterators
@@ -527,7 +496,7 @@ where
                         Ok((ref key, _)) => key,
                     };
 
-                    let decoded_backing_key: K = Decode::decode(backing_key.as_slice())?;
+                    let decoded_backing_key = Decode::decode(backing_key.as_slice())?;
 
                     //so compare backing_key with map_key.inner_bytes
                     let key_cmp = map_key.inner_bytes.cmp(backing_key);
@@ -535,15 +504,14 @@ where
                     // map_key > backing_key, emit the backing entry
                     if key_cmp == Ordering::Greater {
                         let entry = self.store_iter.next().unwrap()?;
-                        let decoded_key: K = decoded_backing_key;
-                        let decoded_value: <V as State<S>>::Encoding =
-                            Decode::decode(entry.1.as_slice())?;
+                        let key: K = decoded_backing_key;
 
-                        let value_store = self.parent_store.sub(entry.0.as_slice());
-                        return Ok(Some((
-                            Ref::Owned(decoded_key),
-                            Ref::Owned(V::create(value_store, decoded_value)?),
-                        )));
+                        let value = V::load(
+                            self.parent_store.sub(entry.0.as_slice()),
+                            &mut entry.1.as_slice(),
+                        )?;
+
+                        return Ok(Some((Ref::Owned(key), Ref::Owned(value))));
                     }
 
                     // map_key == backing_key, map entry shadows backing entry
@@ -566,11 +534,10 @@ where
     }
 }
 
-impl<'a, K, V, S> Iterator for Iter<'a, K, V, S>
+impl<'a, K, V> Iterator for Iter<'a, K, V>
 where
-    K: Next + Decode + Encode + Terminated,
-    V: State<S>,
-    S: Read,
+    K: Decode + Encode + Terminated,
+    V: State,
 {
     type Item = Result<(Ref<'a, K>, Ref<'a, V>)>;
 
@@ -579,63 +546,53 @@ where
     }
 }
 
-struct StoreNextIter<'a, K, S>
-where
-    K: Next + Encode + Decode,
-    S: Read,
-{
+struct StoreNextIter<'a, S: Default + Read> {
     store: &'a S,
-    next_key: Option<K>,
-    end_key_bytes: Bound<Vec<u8>>,
-    done: bool,
+    next_key: Option<Vec<u8>>,
+    end_key: Bound<Vec<u8>>,
 }
 
-impl<'a, K, S> StoreNextIter<'a, K, S>
-where
-    K: Next + Encode + Decode,
-    S: Read,
-{
-    fn new<B: RangeBounds<K>>(store: &'a S, range: B) -> Result<Self> {
+fn increment_bytes(mut bytes: Vec<u8>) -> Vec<u8> {
+    for byte in bytes.iter_mut().rev() {
+        if *byte == 255 {
+            *byte = 0;
+        } else {
+            *byte += 1;
+            return bytes;
+        }
+    }
+
+    bytes.push(0);
+    if bytes.len() > 1 {
+        bytes[0] += 1;
+    }
+
+    bytes
+}
+
+impl<'a, S: Default + Read> StoreNextIter<'a, S> {
+    fn new<B: RangeBounds<Vec<u8>>>(store: &'a S, range: B) -> Result<Self> {
         let next_key = match range.start_bound() {
-            Bound::Included(inner) => {
-                let key_bytes = inner.encode()?;
-                let key = K::decode(key_bytes.as_slice())?;
-                Some(key)
-            }
-            Bound::Excluded(inner) => inner.next(),
+            Bound::Included(inner) => Some(inner.encode()?),
+            Bound::Excluded(inner) => Some(increment_bytes(inner.encode()?)),
             Bound::Unbounded => None,
         };
 
-        let end_key_bytes = encode_bound(range.end_bound())?;
+        let end_key = encode_bound(range.end_bound())?;
 
         Ok(StoreNextIter {
             store,
             next_key,
-            end_key_bytes,
-            done: false,
+            end_key,
         })
     }
 }
 
-impl<'a, K, S> Iterator for StoreNextIter<'a, K, S>
-where
-    K: Next + Encode + Decode,
-    S: Read,
-{
+impl<'a, S: Default + Read> Iterator for StoreNextIter<'a, S> {
     type Item = Result<(Vec<u8>, Vec<u8>)>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.done {
-            return None;
-        }
-
-        let next_key = self.next_key.as_ref();
-        let key = match next_key.map(|k| k.encode()).transpose() {
-            Err(e) => return Some(Err(e.into())),
-            Ok(key) => key,
-        };
-
-        let get_res = match key {
+        let get_res = match self.next_key.as_ref() {
             Some(key) => self.store.get_next_inclusive(key.as_slice()),
 
             // this will be None if the iter had an unbounded start range. start
@@ -649,31 +606,21 @@ where
             Ok(Some((key, value))) => (key, value),
         };
 
-        match &self.end_key_bytes {
+        match &self.end_key {
             Bound::Excluded(end) => {
                 if key >= *end {
-                    self.done = true;
                     return None;
                 }
             }
             Bound::Included(end) => {
                 if key > *end {
-                    self.done = true;
                     return None;
                 }
             }
             _ => {}
         };
 
-        let decoded_key = match K::decode(key.as_slice()) {
-            Err(e) => return Some(Err(e.into())),
-            Ok(key) => key,
-        };
-        self.next_key = decoded_key.next();
-        if self.next_key.is_none() {
-            self.done = true;
-        }
-
+        self.next_key = Some(increment_bytes(key.clone()));
         Some(Ok((key, value)))
     }
 }
@@ -691,15 +638,13 @@ impl<V> Deref for ReadOnly<V> {
     }
 }
 
-impl<V> From<V> for ReadOnly<V> {
-    fn from(value: V) -> Self {
-        ReadOnly { inner: value }
-    }
-}
-
 impl<V> ReadOnly<V> {
     pub fn new(inner: V) -> Self {
         ReadOnly { inner }
+    }
+
+    pub fn into_inner(self) -> V {
+        self.inner
     }
 }
 
@@ -739,28 +684,54 @@ impl<'a, V: Default> Default for Ref<'a, V> {
     }
 }
 
+impl<'a, V: PartialEq> PartialEq for Ref<'a, V> {
+    fn eq(&self, other: &Self) -> bool {
+        self.deref().eq(other)
+    }
+}
+
+impl<'a, V: Eq> Eq for Ref<'a, V> {}
+
+impl<'a, V: PartialOrd> PartialOrd for Ref<'a, V> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.deref().partial_cmp(other)
+    }
+}
+
+impl<'a, V: Ord> Ord for Ref<'a, V> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.deref().cmp(other)
+    }
+}
+
+impl<'a, T: ClientTrait<U>, U: Clone> ClientTrait<U> for Ref<'a, T> {
+    type Client = T::Client;
+
+    fn create_client(parent: U) -> Self::Client {
+        T::create_client(parent)
+    }
+}
+
 /// A mutable reference to an existing value in a collection.
 ///
 /// If the value is mutated, it will be retained in memory until the parent
 /// collection is flushed.
-pub enum ChildMut<'a, K, V, S = DefaultBackingStore> {
+pub enum ChildMut<'a, K, V> {
     /// An existing value which was loaded from the store.
-    Unmodified(Option<(K, V, &'a mut Map<K, V, S>)>),
+    Unmodified(Option<(K, V, &'a mut Map<K, V>)>),
 
     /// A mutable reference to an existing value which is being retained in
     /// memory because it was modified.
     Modified(btree_map::OccupiedEntry<'a, MapKey<K>, Option<V>>),
 }
 
-impl<'a, K, V, S> ChildMut<'a, K, V, S>
+impl<'a, K, V> ChildMut<'a, K, V>
 where
     K: Encode + Terminated + Clone,
-    V: State<S>,
-    S: Read,
+    V: State,
 {
     /// Removes the value and all of its child key/value entries (if any) from
     /// the parent collection.
-    #[cfg_attr(test, mutate)]
     pub fn remove(self) -> Result<()> {
         match self {
             ChildMut::Unmodified(mut inner) => {
@@ -776,9 +747,9 @@ where
     }
 }
 
-impl<'a, K, V: Call, S> Call for ChildMut<'a, K, V, S>
+impl<'a, K, V: Call> Call for ChildMut<'a, K, V>
 where
-    K: Encode + Clone,
+    K: State + Clone + Encode,
 {
     type Call = V::Call;
 
@@ -787,20 +758,7 @@ where
     }
 }
 
-impl<'a, K, V, S, U> ClientTrait<U> for ChildMut<'a, K, V, S>
-where
-    V: ClientTrait<U>,
-    K: Encode,
-    U: Clone,
-{
-    type Client = V::Client;
-
-    fn create_client(parent: U) -> Self::Client {
-        V::create_client(parent)
-    }
-}
-
-impl<'a, K: Encode, V, S> Deref for ChildMut<'a, K, V, S> {
+impl<'a, K: Encode, V> Deref for ChildMut<'a, K, V> {
     type Target = V;
 
     fn deref(&self) -> &V {
@@ -811,7 +769,7 @@ impl<'a, K: Encode, V, S> Deref for ChildMut<'a, K, V, S> {
     }
 }
 
-impl<'a, K, V, S> DerefMut for ChildMut<'a, K, V, S>
+impl<'a, K, V> DerefMut for ChildMut<'a, K, V>
 where
     K: Clone + Encode,
 {
@@ -840,22 +798,18 @@ where
 
 /// A mutable reference to a key/value entry in a collection, which may be
 /// empty.
-pub enum Entry<'a, K: Encode, V, S> {
+pub enum Entry<'a, K: Encode, V> {
     /// References an entry in the collection which does not have a value.
-    Vacant {
-        key: K,
-        parent: &'a mut Map<K, V, S>,
-    },
+    Vacant { key: K, parent: &'a mut Map<K, V> },
 
     /// References an entry in the collection which has a value.
-    Occupied { child: ChildMut<'a, K, V, S> },
+    Occupied { child: ChildMut<'a, K, V> },
 }
 
-impl<'a, K, V, S> Entry<'a, K, V, S>
+impl<'a, K, V> Entry<'a, K, V>
 where
     K: Encode + Terminated + Clone,
-    V: State<S>,
-    S: Read,
+    V: State,
 {
     /// If the `Entry` is empty, this method creates a new instance based on the
     /// given data. If not empty, this method returns a mutable reference to the
@@ -865,13 +819,12 @@ where
     /// store during the flush step unless the value gets modified. See
     /// `or_insert` for a variation which will always write the newly created
     /// value.
-    #[cfg_attr(test, mutate)]
-    pub fn or_create(self, data: V::Encoding) -> Result<ChildMut<'a, K, V, S>> {
+    pub fn or_create(self, mut value: V) -> Result<ChildMut<'a, K, V>> {
         Ok(match self {
             Entry::Vacant { key, parent } => {
                 let key_bytes = key.encode()?;
                 let substore = parent.store.sub(key_bytes.as_slice());
-                let value = V::create(substore, data)?;
+                value.attach(substore)?;
                 ChildMut::Unmodified(Some((key, value, parent)))
             }
             Entry::Occupied { child } => child,
@@ -886,24 +839,29 @@ where
     /// store during the flush step even if the value never gets modified. See
     /// `or_create` for a variation which will only write the newly created
     /// value if it gets modified.
-    #[cfg_attr(test, mutate)]
-    pub fn or_insert(self, data: V::Encoding) -> Result<ChildMut<'a, K, V, S>> {
-        let mut child = self.or_create(data)?;
+    pub fn or_insert(self, value: V) -> Result<ChildMut<'a, K, V>> {
+        let mut child = self.or_create(value)?;
         child.deref_mut();
         Ok(child)
     }
 }
 
-impl<'a, K, V, S> Entry<'a, K, V, S>
+impl<K: Encode + Decode + Terminated, V: State> Map<K, V> {
+    pub fn with_store(store: Store) -> Result<Self> {
+        let mut map = Map::new();
+        State::attach(&mut map, store)?;
+        Ok(map)
+    }
+}
+
+impl<'a, K, V> Entry<'a, K, V>
 where
     K: Encode + Terminated + Clone,
-    V: State<S>,
-    S: Write,
+    V: State,
 {
     /// Removes the value for the `Entry` if it exists. Returns a boolean which
     /// is `true` if a value previously existed for the entry, `false`
     /// otherwise.
-    #[cfg_attr(test, mutate)]
     pub fn remove(self) -> Result<bool> {
         Ok(match self {
             Entry::Occupied { child } => {
@@ -915,12 +873,10 @@ where
     }
 }
 
-impl<'a, K, V, S, D> Entry<'a, K, V, S>
+impl<'a, K, V> Entry<'a, K, V>
 where
     K: Encode + Terminated + Clone,
-    V: State<S, Encoding = D>,
-    S: Read,
-    D: Default,
+    V: State + Default,
 {
     /// If the `Entry` is empty, this method creates a new instance based on the
     /// default for the value's data encoding. If not empty, this method returns
@@ -930,9 +886,8 @@ where
     /// store during the flush step unless the value gets modified. See
     /// `or_insert_default` for a variation which will always write the newly
     /// created value.
-    #[cfg_attr(test, mutate)]
-    pub fn or_default(self) -> Result<ChildMut<'a, K, V, S>> {
-        self.or_create(D::default())
+    pub fn or_default(self) -> Result<ChildMut<'a, K, V>> {
+        self.or_create(V::default())
     }
 
     /// If the `Entry` is empty, this method creates a new instance based on the
@@ -943,14 +898,14 @@ where
     /// store during the flush step even if the value never gets modified. See
     /// `or_default` for a variation which will only write the newly created
     /// value if it gets modified.
-    #[cfg_attr(test, mutate)]
-    pub fn or_insert_default(self) -> Result<ChildMut<'a, K, V, S>> {
-        self.or_insert(D::default())
+    pub fn or_insert_default(self) -> Result<ChildMut<'a, K, V>> {
+        #[allow(clippy::or_fun_call)]
+        self.or_insert(V::default())
     }
 }
 
-impl<'a, K: Encode, V, S> From<Entry<'a, K, V, S>> for Option<ChildMut<'a, K, V, S>> {
-    fn from(entry: Entry<'a, K, V, S>) -> Self {
+impl<'a, K: Encode, V> From<Entry<'a, K, V>> for Option<ChildMut<'a, K, V>> {
+    fn from(entry: Entry<'a, K, V>) -> Self {
         match entry {
             Entry::Vacant { .. } => None,
             Entry::Occupied { child } => Some(child),
@@ -958,22 +913,101 @@ impl<'a, K: Encode, V, S> From<Entry<'a, K, V, S>> for Option<ChildMut<'a, K, V,
     }
 }
 
+pub struct Client<K, V, U: Clone> {
+    parent: U,
+    key: Option<K>,
+    _marker: std::marker::PhantomData<V>,
+}
+
+impl<K, V, U: Clone> ClientTrait<U> for Map<K, V> {
+    type Client = Client<K, V, U>;
+
+    fn create_client(parent: U) -> Self::Client {
+        Client {
+            parent,
+            key: None,
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<K: Clone, V, U: Clone> Clone for Client<K, V, U> {
+    fn clone(&self) -> Self {
+        Client {
+            parent: self.parent.clone(),
+            key: self.key.clone(),
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<K: Clone, V: Call, U: Clone> Client<K, V, U>
+where
+    V: ClientTrait<Self>,
+{
+    pub fn get_mut(&mut self, key: K) -> V::Client {
+        let mut adapter = self.clone();
+        adapter.key = Some(key);
+        V::create_client(adapter)
+    }
+}
+
+unsafe impl<K: Clone, V: Call, U: Clone> Send for Client<K, V, U>
+where
+    Map<K, V>: Call,
+    U: AsyncCall<Call = <Map<K, V> as Call>::Call>,
+    V::Call: Sync,
+    U: Send,
+    K: Send,
+{
+}
+
+#[async_trait::async_trait(?Send)]
+impl<K: Clone, V: Call, U: Clone> AsyncCall for Client<K, V, U>
+where
+    Map<K, V>: Call<Call = map_call::Call<K>>,
+    U: AsyncCall<Call = <Map<K, V> as Call>::Call>,
+    V::Call: Sync + Send,
+    U: Send,
+    K: Send,
+{
+    type Call = V::Call;
+
+    async fn call(&self, subcall: Self::Call) -> Result<()> {
+        let key = self.key.as_ref().unwrap().clone();
+
+        let subcall_bytes = subcall.encode()?;
+
+        let call = <Map<K, V> as Call>::Call::MethodGetMut(key, subcall_bytes);
+        self.parent.call(call).await
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::super::deque::{Deque as OrgaDeque, Meta};
-    use super::{Map as OrgaMap, *};
+    use super::super::deque::Deque;
+    use super::{Map, *};
     use crate::store::{MapStore, Store};
-    type Map<K, V> = OrgaMap<K, V, MapStore>;
-    type Deque<T> = OrgaDeque<T, MapStore>;
 
     fn enc(n: u32) -> Vec<u8> {
-        n.encode().unwrap()
+        Encode::encode(&n).unwrap()
+    }
+
+    fn setup() -> (Store, Map<u32, u32>) {
+        let store = mapstore();
+        let mut map: Map<u32, u32> = Default::default();
+        map.attach(store.clone()).unwrap();
+        (store, map)
+    }
+
+    // TODO: move this to store, backingstore, or testutils
+    fn mapstore() -> Store {
+        Store::new(Shared::new(MapStore::new()).into())
     }
 
     #[test]
     fn nonexistent() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut map) = setup();
         assert!(map.get(3).unwrap().is_none());
         assert!(map.get_mut(3).unwrap().is_none());
         assert!(store.get(&enc(3)).unwrap().is_none());
@@ -981,23 +1015,22 @@ mod tests {
 
     #[test]
     fn store_only() {
-        let mut store = Store::new(MapStore::new());
+        let (mut store, mut map) = setup();
         store.put(enc(1), enc(2)).unwrap();
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
 
         assert_eq!(*map.get(1).unwrap().unwrap(), 2);
         let mut v = map.get_mut(1).unwrap().unwrap();
         *v = 3;
         assert_eq!(store.get(&enc(1)).unwrap().unwrap(), enc(2));
 
-        map.flush().unwrap();
+        let mut buf = vec![];
+        map.flush(&mut buf).unwrap();
         assert_eq!(store.get(&enc(1)).unwrap().unwrap(), enc(3));
     }
 
     #[test]
     fn mem_unmodified() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut map) = setup();
 
         map.entry(4).unwrap().or_create(5).unwrap();
         assert!(map.get(4).unwrap().is_none());
@@ -1008,8 +1041,7 @@ mod tests {
 
     #[test]
     fn mem_modified() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut map) = setup();
 
         let mut v = map.entry(6).unwrap().or_create(7).unwrap();
         *v = 8;
@@ -1018,14 +1050,14 @@ mod tests {
         assert!(map.children.contains_key(&map_key));
         assert!(store.get(&enc(6)).unwrap().is_none());
 
-        map.flush().unwrap();
+        let mut buf = vec![];
+        map.flush(&mut buf).unwrap();
         assert_eq!(store.get(&enc(6)).unwrap().unwrap(), enc(8));
     }
 
     #[test]
     fn or_insert() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut map) = setup();
 
         map.entry(9).unwrap().or_insert(10).unwrap();
         assert_eq!(*map.get(9).unwrap().unwrap(), 10);
@@ -1033,14 +1065,14 @@ mod tests {
         assert!(map.children.contains_key(&map_key));
         assert!(store.get(&enc(9)).unwrap().is_none());
 
-        map.flush().unwrap();
+        let mut buf = vec![];
+        map.flush(&mut buf).unwrap();
         assert_eq!(store.get(&enc(9)).unwrap().unwrap(), enc(10));
     }
 
     #[test]
     fn or_insert_default() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut map) = setup();
 
         map.entry(11).unwrap().or_insert_default().unwrap();
         assert_eq!(*map.get(11).unwrap().unwrap(), u32::default());
@@ -1048,14 +1080,14 @@ mod tests {
         assert!(map.children.contains_key(&map_key));
         assert!(store.get(&enc(11)).unwrap().is_none());
 
-        map.flush().unwrap();
+        let mut buf = vec![];
+        map.flush(&mut buf).unwrap();
         assert_eq!(store.get(&enc(11)).unwrap().unwrap(), enc(u32::default()));
     }
 
     #[test]
     fn remove() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(13).unwrap();
         map.entry(14).unwrap().or_insert(15).unwrap();
@@ -1065,26 +1097,27 @@ mod tests {
         map.remove(12).unwrap();
         let map_key = MapKey::<u32>::new(12).unwrap();
         assert!(map.children.get(&map_key).unwrap().is_none());
-        map.flush().unwrap();
+        let mut buf = vec![];
+        map.flush(&mut buf).unwrap();
         assert!(store.get(&enc(12)).unwrap().is_none());
 
         // Remove a value that was in the store before map's creation
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut map: Map<u32, u32> = Map::with_store(store.clone()).unwrap();
         assert_eq!(*map.get(14).unwrap().unwrap(), 15);
         assert_eq!(*map.get(16).unwrap().unwrap(), 17);
         map.remove(14).unwrap();
         // Also remove a value by entry
         let entry = map.entry(16).unwrap();
         assert!(entry.remove().unwrap());
-        map.flush().unwrap();
+        let mut buf = vec![];
+        map.flush(&mut buf).unwrap();
         assert!(store.get(&enc(14)).unwrap().is_none());
         assert!(store.get(&enc(16)).unwrap().is_none());
     }
 
     #[test]
     fn iter_merge_next_map_only() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1132,16 +1165,16 @@ mod tests {
 
     #[test]
     fn iter_merge_next_store_only() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(12).unwrap().or_insert(24).unwrap();
         edit_map.entry(13).unwrap().or_insert(26).unwrap();
         edit_map.entry(14).unwrap().or_insert(28).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
-        let read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let read_map: Map<u32, u32> = Map::with_store(store.clone()).unwrap();
 
         let map_iter = read_map.children.range(..).peekable();
         let store_iter = StoreNextIter::new(&store, ..).unwrap().peekable();
@@ -1170,14 +1203,14 @@ mod tests {
 
     #[test]
     fn iter_merge_next_store_update() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(12).unwrap().or_insert(24).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::with_store(store.clone()).unwrap();
 
         read_map.insert(12, 26).unwrap();
 
@@ -1202,14 +1235,14 @@ mod tests {
 
     #[test]
     fn iter_merge_next_mem_remove() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(12).unwrap().or_insert(24).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::with_store(store.clone()).unwrap();
 
         read_map.remove(12).unwrap();
 
@@ -1228,14 +1261,14 @@ mod tests {
 
     #[test]
     fn iter_merge_next_out_of_store_range() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(12).unwrap().or_insert(24).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::with_store(store.clone()).unwrap();
 
         read_map.entry(14).unwrap().or_insert(28).unwrap();
 
@@ -1271,14 +1304,14 @@ mod tests {
 
     #[test]
     fn iter_merge_next_store_key_in_map_range() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(13).unwrap().or_insert(26).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::with_store(store.clone()).unwrap();
 
         read_map.entry(12).unwrap().or_insert(24).unwrap();
         read_map.entry(14).unwrap().or_insert(28).unwrap();
@@ -1315,8 +1348,7 @@ mod tests {
 
     #[test]
     fn iter_merge_next_map_key_none() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1344,14 +1376,14 @@ mod tests {
 
     #[test]
     fn iter_merge_next_map_key_none_store_non_empty() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(13).unwrap().or_insert(26).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::with_store(store.clone()).unwrap();
 
         read_map.entry(12).unwrap().or_insert(24).unwrap();
         read_map.remove(12).unwrap();
@@ -1377,8 +1409,7 @@ mod tests {
 
     #[test]
     fn map_iter_map_only() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let (_store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1398,16 +1429,16 @@ mod tests {
 
     #[test]
     fn map_iter_store_only() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(12).unwrap().or_insert(24).unwrap();
         edit_map.entry(13).unwrap().or_insert(26).unwrap();
         edit_map.entry(14).unwrap().or_insert(28).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
-        let read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let read_map: Map<u32, u32> = Map::with_store(store).unwrap();
 
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
         read_map
@@ -1423,14 +1454,14 @@ mod tests {
 
     #[test]
     fn map_iter_mem_remove() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(12).unwrap().or_insert(24).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::with_store(store).unwrap();
 
         read_map.remove(12).unwrap();
 
@@ -1448,14 +1479,14 @@ mod tests {
 
     #[test]
     fn map_iter_out_of_store_range() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(12).unwrap().or_insert(24).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::with_store(store).unwrap();
 
         read_map.entry(14).unwrap().or_insert(28).unwrap();
 
@@ -1473,14 +1504,14 @@ mod tests {
 
     #[test]
     fn map_iter_store_key_in_map_range() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(13).unwrap().or_insert(26).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::with_store(store).unwrap();
 
         read_map.entry(12).unwrap().or_insert(24).unwrap();
         read_map.entry(14).unwrap().or_insert(28).unwrap();
@@ -1499,8 +1530,7 @@ mod tests {
 
     #[test]
     fn map_iter_map_key_none() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let (_store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1520,14 +1550,14 @@ mod tests {
 
     #[test]
     fn map_iter_map_key_none_store_non_empty() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(13).unwrap().or_insert(26).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let mut read_map: Map<u32, u32> = Map::with_store(store).unwrap();
 
         read_map.entry(12).unwrap().or_insert(24).unwrap();
         read_map.remove(12).unwrap();
@@ -1546,8 +1576,7 @@ mod tests {
 
     #[test]
     fn map_range_map_only_unbounded() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let (_store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1567,8 +1596,7 @@ mod tests {
 
     #[test]
     fn map_range_map_only_start_bounded() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let (_store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1588,8 +1616,7 @@ mod tests {
 
     #[test]
     fn map_range_map_only_end_bounded_non_inclusive() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let (_store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1609,8 +1636,7 @@ mod tests {
 
     #[test]
     fn map_range_map_only_end_bounded_inclusive() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let (_store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1630,8 +1656,7 @@ mod tests {
 
     #[test]
     fn map_range_map_only_bounded_non_inclusive() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let (_store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1651,8 +1676,7 @@ mod tests {
 
     #[test]
     fn map_range_map_only_bounded_inclusive() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let (_store, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1672,16 +1696,16 @@ mod tests {
 
     #[test]
     fn map_range_store_only_bounded_non_inclusive() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(12).unwrap().or_insert(24).unwrap();
         edit_map.entry(13).unwrap().or_insert(26).unwrap();
         edit_map.entry(14).unwrap().or_insert(28).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
-        let read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let read_map: Map<u32, u32> = Map::with_store(store).unwrap();
 
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
 
@@ -1698,16 +1722,16 @@ mod tests {
 
     #[test]
     fn map_range_store_only_bounded_inclusive() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(12).unwrap().or_insert(24).unwrap();
         edit_map.entry(13).unwrap().or_insert(26).unwrap();
         edit_map.entry(14).unwrap().or_insert(28).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
-        let read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let read_map: Map<u32, u32> = Map::with_store(store).unwrap();
 
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
 
@@ -1724,15 +1748,16 @@ mod tests {
 
     #[test]
     fn map_range_bounded() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let (store, mut edit_map) = setup();
 
         edit_map.entry(12).unwrap().or_insert(24).unwrap();
         edit_map.entry(14).unwrap().or_insert(28).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let mut read_map: Map<u32, u32> = Default::default();
+        read_map.attach(store).unwrap();
         read_map.entry(13).unwrap().or_insert(26).unwrap();
 
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
@@ -1750,8 +1775,7 @@ mod tests {
 
     #[test]
     fn map_range_empty() {
-        let store = Store::new(MapStore::new());
-        let map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let (_store, map) = setup();
 
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
 
@@ -1767,10 +1791,11 @@ mod tests {
 
     #[test]
     fn map_of_map() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, Map<u32, u32>> = Map::create(store, ()).unwrap();
+        let store = mapstore();
+        let mut map: Map<u32, Map<u32, u32>> = Default::default();
+        map.attach(store).unwrap();
 
-        map.entry(42).unwrap().or_insert(()).unwrap();
+        map.entry(42).unwrap().or_insert_default().unwrap();
 
         let mut sub_map = map.get_mut(42).unwrap().unwrap();
         sub_map.entry(13).unwrap().or_insert(26).unwrap();
@@ -1783,17 +1808,19 @@ mod tests {
 
     #[test]
     fn map_of_map_from_store() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, Map<u32, u32>> = Map::create(store.clone(), ()).unwrap();
+        let store = mapstore();
+        let mut edit_map: Map<u32, Map<u32, u32>> = Default::default();
+        edit_map.attach(store.clone()).unwrap();
 
-        edit_map.entry(42).unwrap().or_insert(()).unwrap();
+        edit_map.entry(42).unwrap().or_insert_default().unwrap();
 
         let mut sub_map = edit_map.get_mut(42).unwrap().unwrap();
         sub_map.entry(13).unwrap().or_insert(26).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
-        let read_map: Map<u32, Map<u32, u32>> = Map::create(store, ()).unwrap();
+        let read_map: Map<u32, Map<u32, u32>> = Map::with_store(store).unwrap();
         let inner_map = read_map.get(42).unwrap().unwrap();
         let actual = inner_map.get(13).unwrap().unwrap();
 
@@ -1802,21 +1829,19 @@ mod tests {
 
     #[test]
     fn map_of_deque() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, Deque<u32>> = Map::create(store.clone(), ()).unwrap();
+        let store = mapstore();
+        let mut edit_map: Map<u32, Deque<u32>> = Default::default();
+        edit_map.attach(store.clone()).unwrap();
 
-        edit_map
-            .entry(42)
-            .unwrap()
-            .or_insert(Meta::default())
-            .unwrap();
+        edit_map.entry(42).unwrap().or_insert_default().unwrap();
 
         let mut deque = edit_map.get_mut(42).unwrap().unwrap();
         deque.push_front(84).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
-        let mut read_map: Map<u32, Deque<u32>> = Map::create(store, ()).unwrap();
+        let mut read_map: Map<u32, Deque<u32>> = Map::with_store(store).unwrap();
         let actual = read_map
             .get_mut(42)
             .unwrap()
@@ -1830,8 +1855,9 @@ mod tests {
 
     #[test]
     fn map_of_map_iter() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, Map<u32, u32>> = Map::create(store.clone(), ()).unwrap();
+        let store = mapstore();
+        let mut edit_map: Map<u32, Map<u32, u32>> = Default::default();
+        edit_map.attach(store.clone()).unwrap();
 
         edit_map.entry(42).unwrap().or_insert_default().unwrap();
         let mut sub_map = edit_map.get_mut(42).unwrap().unwrap();
@@ -1845,9 +1871,11 @@ mod tests {
 
         edit_map.entry(45).unwrap().or_insert_default().unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
-        let read_map: Map<u32, Map<u32, u32>> = Map::create(store, ()).unwrap();
+        let mut read_map: Map<u32, Map<u32, u32>> = Default::default();
+        read_map.attach(store).unwrap();
 
         let mut iter = read_map.iter().unwrap();
 
@@ -1867,8 +1895,7 @@ mod tests {
 
     #[test]
     fn map_insert() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let (_store, mut map) = setup();
 
         map.insert(12, 24).unwrap();
         map.insert(13, 26).unwrap();
@@ -1887,10 +1914,11 @@ mod tests {
 
     #[test]
     fn map_insert_complex_type() {
-        let store = Store::new(MapStore::new());
-        let mut map: Map<u32, Deque<u32>> = Map::create(store, ()).unwrap();
+        let store = mapstore();
+        let mut map: Map<u32, Deque<u32>> = Default::default();
+        map.attach(store).unwrap();
 
-        map.insert(12, Meta::default()).unwrap();
+        map.insert(12, Default::default()).unwrap();
 
         let mut deque = map.get_mut(12).unwrap().unwrap();
         deque.push_front(12).unwrap();
@@ -1900,15 +1928,18 @@ mod tests {
 
     #[test]
     fn map_insert_with_flush() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let store = mapstore();
+        let mut edit_map: Map<u32, u32> = Default::default();
+        edit_map.attach(store.clone()).unwrap();
 
         edit_map.insert(12, 24).unwrap();
         edit_map.insert(13, 26).unwrap();
 
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
-        let read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let mut read_map: Map<u32, u32> = Default::default();
+        read_map.attach(store).unwrap();
 
         let mut actual: Vec<(u32, u32)> = Vec::with_capacity(2);
 
@@ -1925,13 +1956,16 @@ mod tests {
 
     #[test]
     fn map_insert_store_overwrite() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let store = mapstore();
+        let mut edit_map: Map<u32, u32> = Default::default();
+        edit_map.attach(store.clone()).unwrap();
 
         edit_map.insert(12, 24).unwrap();
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let mut read_map: Map<u32, u32> = Default::default();
+        read_map.attach(store).unwrap();
         read_map.insert(12, 26).unwrap();
 
         assert_eq!(26, *read_map.get(12).unwrap().unwrap());
@@ -1939,13 +1973,16 @@ mod tests {
 
     #[test]
     fn map_insert_store_overwrite_get_entry() {
-        let store = Store::new(MapStore::new());
-        let mut edit_map: Map<u32, u32> = Map::create(store.clone(), ()).unwrap();
+        let store = mapstore();
+        let mut edit_map: Map<u32, u32> = Default::default();
+        edit_map.attach(store.clone()).unwrap();
 
         edit_map.insert(12, 24).unwrap();
-        edit_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
 
-        let mut read_map: Map<u32, u32> = Map::create(store, ()).unwrap();
+        let mut read_map: Map<u32, u32> = Default::default();
+        read_map.attach(store).unwrap();
         read_map.insert(12, 26).unwrap();
 
         let actual = read_map.entry(12).unwrap().or_insert(28).unwrap();

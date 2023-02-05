@@ -1,3 +1,4 @@
+use super::utils::{parse_parent, relevant_methods};
 use heck::{CamelCase, SnakeCase};
 use proc_macro::TokenStream;
 use proc_macro2::{Literal, Span, TokenStream as TokenStream2};
@@ -15,8 +16,8 @@ pub fn derive(item: TokenStream) -> TokenStream {
         Span::call_site(),
     );
 
-    let query_enum = create_query_enum(&item, &source);
-    let query_impl = create_query_impl(&item, &source, &query_enum);
+    let (query_enum, query_enum_item) = create_query_enum(&item, &source);
+    let query_impl = create_query_impl(&item, &source, &query_enum_item).0;
 
     let output = quote!(
         use ::orga::macros::*;
@@ -53,7 +54,11 @@ pub fn attr(_args: TokenStream, input: TokenStream) -> TokenStream {
     quote!(#method).into()
 }
 
-fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -> TokenStream2 {
+pub(crate) fn create_query_impl(
+    item: &DeriveInput,
+    source: &File,
+    query_enum: &ItemEnum,
+) -> (TokenStream2, ItemImpl) {
     let name = &item.ident;
     let generics = &item.generics;
     let mut generics_sanitized = generics.clone();
@@ -107,6 +112,25 @@ fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -
         })
         .map(|t| quote!(#t: ::orga::query::Query,));
     let query_bounds = quote!(#(#query_bounds)*);
+
+    let parameter_bounds = relevant_methods(name, "query", source)
+        .into_iter()
+        .flat_map(|(method, _)| {
+            let inputs: Vec<_> = method
+                .sig
+                .inputs
+                .iter()
+                .skip(1)
+                .map(|input| match input {
+                    FnArg::Typed(input) => *input.ty.clone(),
+                    _ => panic!("unexpected input"),
+                })
+                .collect();
+            inputs
+        })
+        .map(|t| quote!(#t: std::fmt::Debug,))
+        .collect::<Vec<_>>();
+    let parameter_bounds = quote!(#(#parameter_bounds)*);
 
     let fields = match &item.data {
         Data::Struct(data) => data.fields.iter(),
@@ -232,9 +256,9 @@ fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -
         })
         .collect();
 
-    quote! {
+    let impl_output = quote! {
         impl#generics_sanitized ::orga::query::Query for #name#generic_params
-        where #where_preds #encoding_bounds #query_bounds
+        where #where_preds #encoding_bounds #query_bounds #parameter_bounds
         {
             type Query = #query_type#query_generics;
 
@@ -246,11 +270,17 @@ fn create_query_impl(item: &DeriveInput, source: &File, query_enum: &ItemEnum) -
                 }
             }
         }
+    };
+
+    let output = quote! {
+        #impl_output
         #(#maybe_call_defs)*
-    }
+    };
+
+    (output, syn::parse2(impl_output).unwrap())
 }
 
-fn create_query_enum(item: &DeriveInput, source: &File) -> ItemEnum {
+pub(crate) fn create_query_enum(item: &DeriveInput, source: &File) -> (TokenStream2, ItemEnum) {
     let name = &item.ident;
     let generics = &item.generics;
 
@@ -334,8 +364,8 @@ fn create_query_enum(item: &DeriveInput, source: &File) -> ItemEnum {
 
     let query_preds = quote!(#(#query_params: ::orga::query::Query),*);
 
-    let output = quote! {
-        #[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
+    let item_output = quote! {
+        #[derive(::orga::encoding::Encode, ::orga::encoding::Decode, std::fmt::Debug)]
         pub enum Query#generic_params
         where #query_preds
         {
@@ -345,13 +375,23 @@ fn create_query_enum(item: &DeriveInput, source: &File) -> ItemEnum {
         }
     };
 
-    syn::parse2(output).unwrap()
-}
+    let query_enum: ItemEnum = syn::parse2(item_output.clone()).unwrap();
+    let query_generics = &query_enum.generics;
 
-fn parse_parent() -> File {
-    let path = proc_macro::Span::call_site().source_file().path();
-    let source = std::fs::read_to_string(path).unwrap();
-    parse_file(source.as_str()).unwrap()
+    let output = quote! {
+        #item_output
+
+        impl#generic_params std::default::Default for Query#query_generics
+        where
+            #query_preds
+        {
+            fn default() -> Self {
+                Query::This
+            }
+        }
+    };
+
+    (output, query_enum)
 }
 
 fn get_generic_requirements<I, J>(inputs: I, params: J) -> Vec<Ident>
@@ -408,66 +448,6 @@ where
             });
     }
     requirements
-}
-
-fn relevant_impls(name: &Ident, source: &File) -> Vec<ItemImpl> {
-    source
-        .items
-        .iter()
-        .filter_map(|item| match item {
-            Item::Impl(item) => Some(item),
-            _ => None,
-        })
-        .filter(|item| item.trait_.is_none())
-        .filter(|item| {
-            let path = match &*item.self_ty {
-                Type::Path(path) => path,
-                _ => return false,
-            };
-
-            if path.qself.is_some() {
-                return false;
-            }
-            if path.path.segments.len() != 1 {
-                return false;
-            }
-            if path.path.segments[0].ident != *name {
-                return false;
-            }
-
-            true
-        })
-        .cloned()
-        .collect()
-}
-
-fn relevant_methods(name: &Ident, attr: &str, source: &File) -> Vec<(ImplItemMethod, ItemImpl)> {
-    let get_methods = |item: ItemImpl| -> Vec<_> {
-        item.items
-            .iter()
-            .filter_map(|item| match item {
-                ImplItem::Method(method) => Some(method),
-                _ => None,
-            })
-            .filter(|method| {
-                method
-                    .attrs
-                    .iter()
-                    .find(|a| a.path.is_ident(&attr))
-                    .is_some()
-            })
-            .filter(|method| matches!(method.vis, Visibility::Public(_)))
-            .filter(|method| method.sig.unsafety.is_none())
-            .filter(|method| method.sig.asyncness.is_none())
-            .filter(|method| method.sig.abi.is_none())
-            .map(|method| (method.clone(), item.clone()))
-            .collect()
-    };
-
-    relevant_impls(name, source)
-        .into_iter()
-        .flat_map(get_methods)
-        .collect()
 }
 
 fn gen_param_input(generics: &Generics, bracketed: bool) -> TokenStream2 {

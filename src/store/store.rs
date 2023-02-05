@@ -1,7 +1,9 @@
-#[cfg(test)]
-use mutagen::mutate;
+use serde::{Deserialize, Serialize};
+use std::ops::RangeBounds;
 
-use super::{Read, Shared, Write, KV};
+use super::{Iter, Read, Shared, Write, KV};
+use crate::encoding::{Decode, Encode, Terminated};
+use crate::state::State;
 use crate::{Error, Result};
 
 // TODO: figure out how to let users set DefaultBackingStore, similar to setting
@@ -10,9 +12,9 @@ use crate::{Error, Result};
 /// The default backing store used as the type parameter given to `Store`. This
 /// is used to prevent generic parameters bubbling up to the application level
 /// for state types when they often all use the same backing store.
-#[cfg(feature = "merk")]
+#[cfg(any(feature = "merk", feature = "merk-verify"))]
 pub type DefaultBackingStore = crate::merk::BackingStore;
-#[cfg(not(feature = "merk"))]
+#[cfg(all(not(feature = "merk"), not(feature = "merk-verify")))]
 pub type DefaultBackingStore = Shared<super::MapStore>;
 
 /// Wraps a "backing store" (an implementation of `Read` and possibly `Write`),
@@ -22,10 +24,40 @@ pub type DefaultBackingStore = Shared<super::MapStore>;
 /// This type is how high-level state types interact with the store, since they
 /// will often need to create substores (through the `store.sub(prefix)`
 /// method).
+#[derive(Default, Serialize, Deserialize)]
 pub struct Store<S = DefaultBackingStore> {
+    #[serde(skip)]
     prefix: Vec<u8>,
+    #[serde(skip)]
     store: Shared<S>,
 }
+
+// impl<S> Describe for Store<S>
+// where
+//     Self: State + 'static,
+// {
+//     fn describe() -> crate::describe::Descriptor {
+//         crate::describe::Builder::new::<Self>().build()
+//     }
+// }
+
+impl<S> Encode for Store<S> {
+    fn encode_into<W: std::io::Write>(&self, _dest: &mut W) -> ed::Result<()> {
+        Ok(())
+    }
+
+    fn encoding_length(&self) -> ed::Result<usize> {
+        Ok(0)
+    }
+}
+
+impl<S: Default> Decode for Store<S> {
+    fn decode<R: std::io::Read>(_input: R) -> ed::Result<Self> {
+        Ok(Self::default())
+    }
+}
+
+impl<S> Terminated for Store<S> {}
 
 impl<S> Clone for Store<S> {
     fn clone(&self) -> Self {
@@ -40,7 +72,6 @@ impl<S> Store<S> {
     /// Creates a new `Store` with no prefix, with `backing` as its backing
     /// store.
     #[inline]
-    #[cfg_attr(test, mutate)]
     pub fn new(backing: S) -> Self {
         Store {
             prefix: vec![],
@@ -51,12 +82,54 @@ impl<S> Store<S> {
     /// Creates a substore of this store by concatenating `prefix` to this
     /// store's own prefix, and pointing to the same backing store.
     #[inline]
-    #[cfg_attr(test, mutate)]
+    #[must_use]
     pub fn sub(&self, prefix: &[u8]) -> Self {
         Store {
             prefix: concat(self.prefix.as_slice(), prefix),
             store: self.store.clone(),
         }
+    }
+
+    pub fn prefix(&self) -> &[u8] {
+        self.prefix.as_slice()
+    }
+
+    /// # Safety
+    /// Overrides the store's prefix, potentially causing key collisions.
+    pub unsafe fn with_prefix(&self, prefix: Vec<u8>) -> Self {
+        let mut store = self.clone();
+        store.prefix = prefix;
+
+        store
+    }
+
+    pub fn backing_store(&self) -> Shared<S> {
+        self.store.clone()
+    }
+
+    pub fn range<B: RangeBounds<Vec<u8>>>(&self, bounds: B) -> Iter<Self>
+    where
+        Self: Read,
+    {
+        Read::into_iter(self.clone(), bounds)
+    }
+}
+
+impl State for Store {
+    fn attach(&mut self, store: Store) -> Result<()> {
+        self.prefix = store.prefix;
+        self.store = store.store;
+        Ok(())
+    }
+
+    fn load(store: Store, _bytes: &mut &[u8]) -> Result<Self> {
+        let mut value = store.clone();
+        value.attach(store)?;
+        Ok(value)
+    }
+
+    fn flush<W: std::io::Write>(self, _out: &mut W) -> Result<()> {
+        Ok(())
     }
 }
 

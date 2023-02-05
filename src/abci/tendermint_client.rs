@@ -1,12 +1,15 @@
+use std::cell::Cell;
 use std::convert::TryInto;
 use std::ops::{Deref, DerefMut};
+use std::sync::{Arc, Mutex};
 
 use tendermint_rpc as tm;
+use tm::endpoint::abci_query::AbciQuery;
 use tm::Client as _;
 
 use crate::call::Call;
-use crate::client::{AsyncCall, Client};
-use crate::encoding::{Decode, Encode};
+use crate::client::{AsyncCall, AsyncQuery, Client};
+use crate::encoding::Encode;
 use crate::merk::ABCIPrefixedProofStore;
 use crate::query::Query;
 use crate::state::State;
@@ -20,17 +23,61 @@ pub struct TendermintClient<T: Client<TendermintAdapter<T>>> {
     tm_client: tm::HttpClient,
 }
 
+impl<T> Clone for TendermintClient<T>
+where
+    T: Client<TendermintAdapter<T>>,
+{
+    fn clone(&self) -> Self {
+        let state_client = T::create_client(TendermintAdapter {
+            marker: std::marker::PhantomData,
+            client: self.tm_client.clone(),
+            res_store: None,
+        });
+
+        Self {
+            state_client,
+            tm_client: self.tm_client.clone(),
+        }
+    }
+}
+
 impl<T: Client<TendermintAdapter<T>>> TendermintClient<T> {
     pub fn new(addr: &str) -> Result<Self> {
         let tm_client = tm::HttpClient::new(addr)?;
         let state_client = T::create_client(TendermintAdapter {
             marker: std::marker::PhantomData,
             client: tm_client.clone(),
+            res_store: None,
         });
         Ok(TendermintClient {
             state_client,
             tm_client,
         })
+    }
+
+    //this should await something
+    pub async fn with_response<F, R, X: std::future::Future<Output = Result<R>>>(
+        &self,
+        f: F,
+    ) -> Result<(R, AbciQuery)>
+    where
+        F: FnOnce(T::Client) -> X,
+    {
+        let res_store = Arc::new(Mutex::new(Cell::new(None)));
+        let state_client = T::create_client(TendermintAdapter {
+            marker: std::marker::PhantomData,
+            client: self.tm_client.clone(),
+            res_store: Some(res_store.clone()),
+        });
+
+        let query_res = f(state_client).await?;
+
+        let response = res_store
+            .lock()
+            .map_err(|e| Error::Poison(e.to_string()))?
+            .take()
+            .ok_or_else(|| Error::Query("No query preformed in closure".to_string()))?;
+        Ok((query_res, response))
     }
 }
 
@@ -48,16 +95,82 @@ impl<T: Client<TendermintAdapter<T>>> DerefMut for TendermintClient<T> {
     }
 }
 
-impl<T: Client<TendermintAdapter<T>> + Query + State> TendermintClient<T> {
-    pub async fn query<F, R>(&self, query: T::Query, check: F) -> Result<R>
+pub struct TendermintAdapter<T> {
+    marker: std::marker::PhantomData<fn() -> T>,
+    client: tm::HttpClient,
+    res_store: Option<Arc<Mutex<Cell<Option<AbciQuery>>>>>,
+}
+
+impl<T> Clone for TendermintAdapter<T> {
+    fn clone(&self) -> TendermintAdapter<T> {
+        TendermintAdapter {
+            marker: self.marker,
+            client: self.client.clone(),
+            res_store: self.res_store.clone(),
+        }
+    }
+}
+
+#[async_trait::async_trait(?Send)]
+impl<T: Call> AsyncCall for TendermintAdapter<T>
+where
+    T::Call: Send,
+{
+    type Call = T::Call;
+
+    async fn call(&self, call: Self::Call) -> Result<()> {
+        let tx = call.encode()?.into();
+        let tx_res = self.client.broadcast_tx_commit(tx).await?;
+
+        if tx_res.check_tx.code.is_err() {
+            Err(Error::ABCI(format!(
+                "CheckTx failed: {}",
+                tx_res.check_tx.log
+            )))
+        } else if tx_res.deliver_tx.code.is_err() {
+            Err(Error::ABCI(format!(
+                "DeliverTx failed: {}",
+                tx_res.deliver_tx.log
+            )))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+#[async_trait::async_trait(?Send)]
+impl<T: Query + State> AsyncQuery for TendermintAdapter<T> {
+    type Query = T::Query;
+    type Response<'a> = std::rc::Rc<T>;
+
+    async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
     where
-        F: Fn(&T) -> Result<R>,
+        F: FnMut(Self::Response<'_>) -> Result<R>,
     {
+        // TODO: attempt query against locally persisted store data for this
+        // height, only issue query if we are missing data (belongs in a
+        // different type)
+
         let query_bytes = query.encode()?;
         let res = self
-            .tm_client
+            .client
             .abci_query(None, query_bytes, None, true)
             .await?;
+
+        if let Some(res_store) = &self.res_store {
+            res_store
+                .lock()
+                .map_err(|e| Error::Poison(e.to_string()))?
+                .replace(Some(res.clone()));
+        }
+
+        if let tendermint::abci::Code::Err(code) = res.code {
+            let msg = format!("code {}: {}", code, res.log);
+            return Err(Error::Query(msg));
+        }
+
+        // TODO: we shouldn't need to include the root hash in the result, it
+        // should come from a trusted source
         let root_hash = match res.value[0..32].try_into() {
             Ok(inner) => inner,
             _ => {
@@ -69,82 +182,21 @@ impl<T: Client<TendermintAdapter<T>> + Query + State> TendermintClient<T> {
         let proof_bytes = &res.value[32..];
 
         let map = merk::proofs::query::verify(proof_bytes, root_hash)?;
+        // TODO: merge data into locally persisted store data for given height
+
         let root_value = match map.get(&[])? {
-            Some(root_value) => root_value,
+            Some(root_value) => root_value.to_vec(),
             None => return Err(Error::ABCI("Missing root value".into())),
         };
-        let encoding = T::Encoding::decode(root_value)?;
+
         let store: Shared<ABCIPrefixedProofStore> = Shared::new(ABCIPrefixedProofStore::new(map));
-        let state = T::create(Store::new(store.into()), encoding)?;
+        let mut state = T::load(Store::new(store.clone().into()), &mut root_value.as_slice())?;
+
+        // TODO: remove need for ABCI prefix layer since that should come from
+        // ABCIPlugin Client impl and should be part of app type
+        state.attach(Store::new(store.into()))?;
 
         // TODO: retry logic
-        check(&state)
-    }
-}
-
-pub struct TendermintAdapter<T> {
-    marker: std::marker::PhantomData<T>,
-    client: tm::HttpClient,
-}
-
-impl<T> Clone for TendermintAdapter<T> {
-    fn clone(&self) -> TendermintAdapter<T> {
-        TendermintAdapter {
-            marker: self.marker,
-            client: self.client.clone(),
-        }
-    }
-}
-
-unsafe impl<T> Send for TendermintAdapter<T> {}
-
-#[async_trait::async_trait]
-impl<T: Call> AsyncCall for TendermintAdapter<T>
-where
-    T::Call: Send,
-{
-    type Call = T::Call;
-
-    async fn call(&mut self, call: Self::Call) -> Result<()> {
-        let tx = call.encode()?.into();
-        let fut = self.client.broadcast_tx_commit(tx);
-        NoReturn(fut).await
-    }
-}
-
-pub struct NoReturn<'a>(
-    std::pin::Pin<Box<dyn std::future::Future<Output = tm::Result<TxResponse>> + Send + 'a>>,
-);
-
-impl<'a> std::future::Future for NoReturn<'a> {
-    type Output = Result<()>;
-
-    fn poll(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context,
-    ) -> std::task::Poll<Self::Output> {
-        unsafe {
-            let mut_ref = self.get_unchecked_mut();
-            let res = mut_ref.0.as_mut().poll(cx);
-            match res {
-                std::task::Poll::Ready(Ok(tx_res)) => {
-                    if tx_res.check_tx.code.is_err() {
-                        std::task::Poll::Ready(Err(Error::ABCI(format!(
-                            "CheckTx failed: {}",
-                            tx_res.check_tx.log
-                        ))))
-                    } else if tx_res.deliver_tx.code.is_err() {
-                        std::task::Poll::Ready(Err(Error::ABCI(format!(
-                            "DeliverTx failed: {}",
-                            tx_res.deliver_tx.log
-                        ))))
-                    } else {
-                        std::task::Poll::Ready(Ok(()))
-                    }
-                }
-                std::task::Poll::Ready(Err(e)) => std::task::Poll::Ready(Err(e.into())),
-                std::task::Poll::Pending => std::task::Poll::Pending,
-            }
-        }
+        check(std::rc::Rc::new(state))
     }
 }

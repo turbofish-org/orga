@@ -1,11 +1,13 @@
 use proc_macro2::TokenStream;
 use quote::quote;
+use regex::Regex;
 use std::collections::HashSet;
+use syn::Ident;
 use syn::*;
 
 pub fn parse_parent() -> File {
     let path = proc_macro::Span::call_site().source_file().path();
-    let source = std::fs::read_to_string(path).unwrap();
+    let source = std::fs::read_to_string(path).unwrap_or_default();
     parse_file(source.as_str()).unwrap()
 }
 
@@ -66,7 +68,7 @@ where
     req_set.into_iter().collect()
 }
 
-pub fn relevant_impls(name: &Ident, source: &File) -> Vec<ItemImpl> {
+pub fn relevant_impls(names: Vec<&Ident>, source: &File) -> Vec<ItemImpl> {
     source
         .items
         .iter()
@@ -87,7 +89,7 @@ pub fn relevant_impls(name: &Ident, source: &File) -> Vec<ItemImpl> {
             if path.path.segments.len() != 1 {
                 return false;
             }
-            if path.path.segments[0].ident != *name {
+            if !names.contains(&&path.path.segments[0].ident) {
                 return false;
             }
 
@@ -124,7 +126,7 @@ pub fn relevant_methods(
             .collect()
     };
 
-    relevant_impls(name, source)
+    relevant_impls(vec![name, &strip_version(name)], source)
         .into_iter()
         .flat_map(get_methods)
         .collect()
@@ -152,5 +154,66 @@ pub fn gen_param_input(generics: &Generics, bracketed: bool) -> TokenStream {
         quote!(<#(#gen_params),*>)
     } else {
         quote!(#(#gen_params),*)
+    }
+}
+
+pub fn strip_version(ident: &Ident) -> Ident {
+    let name = ident.to_string();
+    let re = Regex::new(r"V([0-9]+)").unwrap();
+    let stripped_name = re.replace_all(&name, "").to_string();
+    Ident::new(stripped_name.as_str(), ident.span())
+}
+
+macro_rules! named_fields {
+    ($target:ident) => {
+        $target
+            .data
+            .as_ref()
+            .take_struct()
+            .unwrap()
+            .fields
+            .clone()
+            .into_iter()
+            .enumerate()
+            .map(|(i, f)| {
+                (f.ident.as_ref().map(|v| quote!(#v)).unwrap_or_else(|| {
+                    let i = syn::Index::from(i);
+                    quote!(#i)
+                }), f)
+            })
+    };
+}
+
+pub(crate) use named_fields;
+
+pub struct Types {
+    pub state_trait: TokenStream,
+    pub store_ty: TokenStream,
+    pub attacher_ty: TokenStream,
+    pub flusher_ty: TokenStream,
+    pub loader_ty: TokenStream,
+    pub result_ty: TokenStream,
+    pub terminated_trait: TokenStream,
+    pub encode_trait: TokenStream,
+    pub decode_trait: TokenStream,
+    pub encoder_ty: TokenStream,
+    pub decoder_ty: TokenStream,
+}
+
+impl Default for Types {
+    fn default() -> Self {
+        Self {
+            state_trait: quote! { ::orga::state::State },
+            store_ty: quote! { ::orga::store::Store },
+            attacher_ty: quote! { ::orga::state::Attacher },
+            flusher_ty: quote! { ::orga::state::Flusher },
+            loader_ty: quote! { ::orga::state::Loader },
+            result_ty: quote! { ::orga::Result },
+            terminated_trait: quote! { ::orga::encoding::Terminated },
+            encode_trait: quote! { ::orga::encoding::Encode },
+            decode_trait: quote! { ::orga::encoding::Decode },
+            encoder_ty: quote! { ::orga::encoding::encoder::Encoder },
+            decoder_ty: quote! { ::orga::encoding::decoder::Decoder },
+        }
     }
 }

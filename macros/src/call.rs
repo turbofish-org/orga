@@ -22,9 +22,9 @@ pub fn derive(item: TokenStream) -> TokenStream {
 
     let output = quote!(
         use ::orga::macros::*;
-
         pub mod #modname {
             use super::*;
+
             #call_enum_tokens
             #call_impl_tokens
         }
@@ -114,13 +114,41 @@ pub(super) fn create_call_impl(
         .map(|t| quote!(#t: ::orga::call::Call,));
     let call_bounds = quote!(#(#call_bounds)*);
 
+    let parameter_bounds = relevant_methods(name, "call", source)
+        .into_iter()
+        .flat_map(|(method, _)| {
+            let inputs: Vec<_> = method
+                .sig
+                .inputs
+                .iter()
+                .skip(1)
+                .map(|input| match input {
+                    FnArg::Typed(input) => *input.ty.clone(),
+                    _ => panic!("unexpected input"),
+                })
+                .collect();
+
+            inputs
+        })
+        .map(|t| quote!(#t: std::fmt::Debug,))
+        .collect::<Vec<_>>();
+    let parameter_bounds = quote!(#(#parameter_bounds)*);
+
     let fields = match &item.data {
         Data::Struct(data) => data.fields.iter(),
         Data::Enum(_) => todo!("Enums are not supported yet"),
         Data::Union(_) => panic!("Unions are not supported"),
     };
     let field_call_arms: Vec<_> = fields
-        .filter(|field| matches!(field.vis, Visibility::Public(_)))
+        .filter(|field| {
+            let field_names: Vec<String> = field
+                .attrs
+                .iter()
+                .map(|attr| attr.path.get_ident().unwrap().to_string())
+                .collect();
+
+            field_names.contains(&("call".into()))
+        })
         .enumerate()
         .map(|(i, field)| {
             let variant_name = field.ident.as_ref().map_or(
@@ -237,7 +265,7 @@ pub(super) fn create_call_impl(
 
     let impl_output = quote! {
         impl#generics_sanitized ::orga::call::Call for #name#generic_params
-        where #where_preds #encoding_bounds
+        where #where_preds #encoding_bounds #parameter_bounds
         {
             type Call = #call_type#call_generics;
 
@@ -271,7 +299,15 @@ pub(super) fn create_call_enum(item: &DeriveInput, source: &File) -> (TokenStrea
         Data::Union(_) => panic!("Unions are not supported"),
     };
     let field_variants: Vec<_> = fields
-        .filter(|field| matches!(field.vis, Visibility::Public(_)))
+        .filter(|field| {
+            let field_names: Vec<String> = field
+                .attrs
+                .iter()
+                .map(|attr| attr.path.get_ident().unwrap().to_string())
+                .collect();
+
+            field_names.contains(&("call".into()))
+        })
         .enumerate()
         .map(|(i, field)| {
             let name = field.ident.as_ref().map_or(
@@ -338,7 +374,7 @@ pub(super) fn create_call_enum(item: &DeriveInput, source: &File) -> (TokenStrea
     };
 
     let struct_output = quote! {
-        #[derive(::orga::encoding::Encode, ::orga::encoding::Decode)]
+        #[derive(::orga::encoding::Encode, ::orga::encoding::Decode, std::fmt::Debug)]
         pub enum Call#generic_params {
             Noop,
             #(#field_variants,)*
@@ -348,7 +384,6 @@ pub(super) fn create_call_enum(item: &DeriveInput, source: &File) -> (TokenStrea
 
     let output = quote! {
         #struct_output
-
         impl#generic_params Default for Call#generic_params {
             fn default() -> Self {
                 Call::Noop

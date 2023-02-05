@@ -1,6 +1,3 @@
-#[cfg(test)]
-use mutagen::mutate;
-
 use super::{Read, Write, KV};
 use crate::Result;
 use std::cell::{Ref, RefCell, RefMut};
@@ -17,17 +14,16 @@ use std::rc::Rc;
 /// since `get`, `get_next`, `put`, and `delete` all operate atomically so there
 /// will never be more than one reference borrowing the underlying store at a
 /// time.
+#[derive(Default)]
 pub struct Shared<T>(Rc<RefCell<T>>);
 
 impl<T> Shared<T> {
     /// Constructs a `Shared` by wrapping the given store.
     #[inline]
-    #[cfg_attr(test, mutate)]
     pub fn new(inner: T) -> Self {
         Shared(Rc::new(RefCell::new(inner)))
     }
 
-    #[cfg_attr(test, mutate)]
     pub fn into_inner(self) -> T {
         match Rc::try_unwrap(self.0) {
             Ok(inner) => inner.into_inner(),
@@ -35,12 +31,10 @@ impl<T> Shared<T> {
         }
     }
 
-    #[cfg_attr(test, mutate)]
     pub fn borrow_mut(&mut self) -> RefMut<T> {
         self.0.borrow_mut()
     }
 
-    #[cfg_attr(test, mutate)]
     pub fn borrow(&self) -> Ref<T> {
         self.0.borrow()
     }
@@ -111,7 +105,7 @@ mod tests {
         store.put(vec![2], vec![20]).unwrap();
         store.put(vec![3], vec![30]).unwrap();
 
-        let mut iter = store.range(..);
+        let mut iter = store.into_iter(..);
         assert_eq!(iter.next().unwrap().unwrap(), (vec![1], vec![10]));
         assert_eq!(iter.next().unwrap().unwrap(), (vec![2], vec![20]));
         assert_eq!(iter.next().unwrap().unwrap(), (vec![3], vec![30]));
@@ -127,7 +121,7 @@ mod tests {
         store.put(vec![2], vec![20]).unwrap();
         store.put(vec![3], vec![30]).unwrap();
 
-        let mut iter = store.range(..);
+        let mut iter = store.into_iter(..);
         assert_eq!(iter.next().unwrap().unwrap(), (vec![1], vec![10]));
         assert_eq!(store2.get(&[2]).unwrap(), Some(vec![20]));
         assert_eq!(iter.next().unwrap().unwrap(), (vec![2], vec![20]));

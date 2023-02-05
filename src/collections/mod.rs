@@ -1,4 +1,5 @@
 use crate::encoding::{Decode, Encode};
+use crate::state::State;
 
 pub use crate::macros::{Entry, Next};
 
@@ -21,7 +22,7 @@ pub trait Entry {
     type Key: Encode + Decode;
 
     /// Represents the value type for the key/value pair.
-    type Value: Encode + Decode;
+    type Value: State;
 
     /// Converts the entry type into its corresponding key and value types.
     fn into_entry(self) -> (Self::Key, Self::Value);
@@ -32,6 +33,15 @@ pub trait Entry {
 
 pub trait Next: Sized {
     fn next(&self) -> Option<Self>;
+}
+
+impl Next for bool {
+    fn next(&self) -> Option<Self> {
+        match self {
+            false => Some(true),
+            true => None,
+        }
+    }
 }
 
 macro_rules! impl_next {
@@ -57,9 +67,9 @@ impl_next!(i128);
 
 macro_rules! tuple_next {
     ($($type:ident),*; $($length:tt),*) => {
-        impl<$($type: Next + Default,)*> Next for ($($type,)*) {
+        impl<$($type: Next + Default + Clone,)*> Next for ($($type,)*) {
             fn next(&self) -> Option<Self> {
-                    let mut return_tuple: ($($type,)*)  = Default::default();
+                    let mut return_tuple: ($($type,)*) = self.clone();
 
                     $(match self.$length.next() {
                         Some(value) => {
@@ -91,10 +101,10 @@ tuple_next!(A, B, C, D, E, F, G, H, I, J, K, L; 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 
 
 impl<T, const N: usize> Next for [T; N]
 where
-    T: Default + Next + Copy,
+    T: Default + Next + Clone,
 {
     fn next(&self) -> Option<[T; N]> {
-        let mut return_key: [T; N] = *self;
+        let mut return_key: [T; N] = self.clone();
         for (i, value) in self.iter().enumerate().rev() {
             match <T>::next(value) {
                 Some(new_value) => {

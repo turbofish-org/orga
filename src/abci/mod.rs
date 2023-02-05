@@ -2,7 +2,7 @@
 use std::clone::Clone;
 use std::env;
 use std::net::ToSocketAddrs;
-use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+use std::sync::mpsc::{self, Receiver, Sender, SyncSender};
 
 use log::info;
 
@@ -22,7 +22,7 @@ pub use tendermint_proto::abci as messages;
 use tendermint_proto::abci::request::Value as Req;
 use tendermint_proto::abci::response::Value as Res;
 
-mod tendermint_client;
+pub mod tendermint_client;
 pub use tendermint_client::TendermintClient;
 
 /// Top-level struct for running an ABCI application. Maintains an ABCI server,
@@ -42,7 +42,7 @@ impl<A: Application> ABCIStateMachine<A> {
     /// for transactions and blocks), and store (a key/value store to persist
     /// the state data).
     pub fn new(app: A, store: MerkStore) -> Self {
-        let (sender, receiver) = sync_channel(0);
+        let (sender, receiver) = mpsc::sync_channel(0);
         ABCIStateMachine {
             app: Some(app),
             store: Some(Shared::new(store)),
@@ -98,10 +98,23 @@ impl<A: Application> ABCIStateMachine<A> {
                 let store = self.store.take().unwrap();
                 let app = self.app.take().unwrap();
 
-                let res = app.query(store.clone(), req)?;
+                let res = app
+                    .query(store.clone(), req)
+                    .unwrap_or_else(|err| ResponseQuery {
+                        code: 1,
+                        log: err.to_string(),
+                        info: err.to_string(),
+                        codespace: "".to_string(),
+                        height: self.height as i64,
+                        index: 0,
+                        key: vec![],
+                        proof_ops: None,
+                        value: vec![],
+                    });
 
                 self.store.replace(store);
                 self.app.replace(app);
+
                 Ok(Res::Query(res))
             }
             Req::InitChain(req) => {
@@ -125,8 +138,7 @@ impl<A: Application> ABCIStateMachine<A> {
                 };
 
                 store.unwrap().into_inner().flush()?;
-                let mut self_store = self_store_shared.into_inner();
-                self_store.commit(self.height)?;
+                let self_store = self_store_shared.into_inner();
 
                 self.app.replace(app);
                 self.consensus_state.replace(Default::default());
@@ -251,6 +263,7 @@ impl<A: Application> ABCIStateMachine<A> {
 
                 let mut res_commit = ResponseCommit::default();
                 let self_store = self_store_shared.into_inner();
+
                 res_commit.data = self_store.root_hash()?;
                 self.store = Some(Shared::new(self_store));
                 Ok(Res::Commit(res_commit))
@@ -322,14 +335,22 @@ impl<A: Application> ABCIStateMachine<A> {
     pub fn listen<SA: ToSocketAddrs>(mut self, addr: SA) -> Result<()> {
         let server = abci2::Server::listen(addr)?;
 
+        let (err_sender, err_receiver) = mpsc::channel();
+
         // TODO: keep workers in struct
         // TODO: more intelligently handle connections, e.g. handle tendermint dying/reconnecting?
-        self.create_worker(server.accept()?)?;
-        self.create_worker(server.accept()?)?;
-        self.create_worker(server.accept()?)?;
-        self.create_worker(server.accept()?)?;
+        self.create_worker(server.accept()?, err_sender.clone())?;
+        self.create_worker(server.accept()?, err_sender.clone())?;
+        self.create_worker(server.accept()?, err_sender.clone())?;
+        self.create_worker(server.accept()?, err_sender)?;
 
         loop {
+            match err_receiver.try_recv() {
+                Err(mpsc::TryRecvError::Empty) => {}
+                Err(err) => Err(err).unwrap(),
+                _ => {}
+            }
+
             let (req, cb) = self.receiver.recv().unwrap();
             let res = Response {
                 value: Some(self.run(req)?),
@@ -340,8 +361,8 @@ impl<A: Application> ABCIStateMachine<A> {
 
     /// Creates a new worker to handle the incoming ABCI requests for `conn`
     /// within its own threads.
-    fn create_worker(&self, conn: abci2::Connection) -> Result<Worker> {
-        Ok(Worker::new(self.sender.clone(), conn))
+    fn create_worker(&self, conn: abci2::Connection, err_channel: Sender<Error>) -> Result<Worker> {
+        Ok(Worker::new(self.sender.clone(), conn, err_channel))
     }
 }
 
@@ -353,13 +374,19 @@ struct Worker {
 impl Worker {
     fn new(
         req_sender: SyncSender<(Request, SyncSender<Response>)>,
-        conn: abci2::Connection,
+        mut conn: abci2::Connection,
+        err_sender: Sender<Error>,
     ) -> Self {
         let thread = std::thread::spawn(move || {
-            let (res_sender, res_receiver) = sync_channel(0);
+            let (res_sender, res_receiver) = mpsc::sync_channel(0);
             loop {
-                // TODO: pass errors through a channel instead of panicking
-                let req = conn.read().unwrap();
+                let req = match conn.read() {
+                    Ok(req) => req,
+                    Err(e) => {
+                        err_sender.send(e.into()).unwrap_or(());
+                        return;
+                    }
+                };
                 req_sender
                     .send((req, res_sender.clone()))
                     .expect("failed to send request");
@@ -529,8 +556,20 @@ impl<S: State> InitChain for S {
     }
 }
 
-pub trait App: BeginBlock + EndBlock + InitChain + State + Call + Query {}
-impl<T: BeginBlock + EndBlock + InitChain + State + Call + Query> App for T where
-    <T as State>::Encoding: Default
-{
+pub trait AbciQuery {
+    fn abci_query(&self, request: &RequestQuery) -> Result<ResponseQuery>;
 }
+
+impl<S: State> AbciQuery for S {
+    default fn abci_query(&self, request: &RequestQuery) -> Result<ResponseQuery> {
+        Ok(ResponseQuery {
+            code: 1,
+            height: request.height,
+            log: format!("Query path not handled: {}", request.path),
+            ..Default::default()
+        })
+    }
+}
+
+pub trait App: BeginBlock + EndBlock + InitChain + State + Call + Query + Default {}
+impl<T: Default + BeginBlock + EndBlock + InitChain + State + Call + Query> App for T {}
