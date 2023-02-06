@@ -9,6 +9,7 @@
 #![feature(adt_const_params)]
 #![feature(fn_traits)]
 #![feature(async_closure)]
+#![feature(local_key_cell_methods)]
 
 extern crate self as orga;
 pub use orga_macros::orga;
@@ -64,6 +65,9 @@ pub mod context;
 
 #[cfg(feature = "feat-ibc")]
 pub mod ibc;
+
+#[cfg(feature = "abci")]
+pub mod upgrade;
 
 mod error;
 

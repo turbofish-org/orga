@@ -4,7 +4,7 @@ use super::{
 };
 use crate::call::Call;
 use crate::client::{AsyncCall, AsyncQuery, Client};
-use crate::coins::Address;
+use crate::coins::{Address, Symbol};
 use crate::context::{Context, GetContext};
 use crate::encoding::{Decode, Encode};
 use crate::migrate::MigrateFrom;
@@ -18,7 +18,7 @@ use std::ops::Deref;
 #[derive(Default, Encode, Decode, MigrateFrom, State)]
 #[state(transparent)]
 pub struct SignerPlugin<T> {
-    inner: T,
+    pub(crate) inner: T,
 }
 
 impl<T: State> Deref for SignerPlugin<T> {
@@ -41,12 +41,34 @@ pub struct SignerCall {
     pub call_bytes: Vec<u8>,
 }
 
+impl SignerCall {
+    pub fn address(&self) -> Result<Address> {
+        let pubkey_bytes = self
+            .pubkey
+            .ok_or_else(|| Error::Signer("No pubkey specified".to_string()))?;
+        match &self.sigtype {
+            SigType::EthPersonalSign(_) => {
+                let pubkey = PublicKey::from_slice(pubkey_bytes.as_slice())?;
+                let pubkey_bytes = pubkey.serialize_uncompressed();
+                let mut eth_pubkey = [0; 64];
+                eth_pubkey.copy_from_slice(&pubkey_bytes[1..]);
+                Ok(Address::from_pubkey_eth(eth_pubkey))
+            }
+            _ => Ok(Address::from_pubkey(pubkey_bytes)),
+        }
+    }
+}
+
 #[derive(Debug, Encode, Decode)]
 pub enum SigType {
     Native,
     Adr36,
     #[skip]
     Sdk(Box<sdk_compat::sdk::Tx>),
+    #[skip]
+    Adr36WrappedSdk(Box<sdk_compat::sdk::Tx>),
+    #[skip]
+    EthPersonalSign(Box<sdk_compat::sdk::Tx>),
 }
 
 #[derive(Serialize)]
@@ -116,25 +138,67 @@ where
     }
 
     fn verify(&mut self, call: &SignerCall) -> Result<Option<Address>> {
-        match (call.pubkey, call.signature) {
+        match (call.pubkey.as_ref(), call.signature) {
             (Some(pubkey_bytes), Some(signature)) => {
                 use secp256k1::hashes::sha256;
                 let secp = Secp256k1::verification_only();
-                let pubkey = PublicKey::from_slice(&pubkey_bytes)?;
-                let address = Address::from_pubkey(pubkey_bytes);
+                let pubkey = PublicKey::from_slice(pubkey_bytes.as_slice())?;
 
-                let bytes = match &call.sigtype {
-                    SigType::Native => call.call_bytes.to_vec(),
-                    SigType::Adr36 => adr36_bytes(call.call_bytes.as_slice(), address)?,
-                    SigType::Sdk(tx) => self.sdk_sign_bytes(tx, address)?,
+                let (msg, addr) = match &call.sigtype {
+                    SigType::Native => {
+                        let addr = Address::from_pubkey(*pubkey_bytes);
+                        let msg = Message::from_hashed_data::<sha256::Hash>(&call.call_bytes);
+                        (msg, addr)
+                    }
+                    SigType::Adr36 => {
+                        let addr = Address::from_pubkey(*pubkey_bytes);
+                        let bytes = adr36_bytes(call.call_bytes.as_slice(), addr)?;
+                        let msg = Message::from_hashed_data::<sha256::Hash>(bytes.as_slice());
+                        (msg, addr)
+                    }
+                    SigType::Sdk(tx) => {
+                        let addr = Address::from_pubkey(*pubkey_bytes);
+                        let bytes = self.sdk_sign_bytes(tx, addr)?;
+                        let msg = Message::from_hashed_data::<sha256::Hash>(bytes.as_slice());
+                        (msg, addr)
+                    }
+                    SigType::Adr36WrappedSdk(tx) => {
+                        let addr = Address::from_pubkey(*pubkey_bytes);
+                        let inner_bytes = self.sdk_sign_bytes(tx, addr)?;
+                        let outer_bytes = adr36_bytes(inner_bytes.as_slice(), addr)?;
+                        let msg = Message::from_hashed_data::<sha256::Hash>(outer_bytes.as_slice());
+                        (msg, addr)
+                    }
+                    SigType::EthPersonalSign(tx) => {
+                        let pubkey_bytes = pubkey.serialize_uncompressed();
+                        let mut eth_pubkey = [0; 64];
+                        eth_pubkey.copy_from_slice(&pubkey_bytes[1..]);
+                        let addr = Address::from_pubkey_eth(eth_pubkey);
+
+                        let prefix = b"\x19Ethereum Signed Message:\n";
+                        let mut sdk_bytes = self.sdk_sign_bytes(tx, addr)?;
+                        let mut len_bytes = sdk_bytes.len().to_string().as_bytes().to_vec();
+
+                        let mut bytes = prefix.to_vec();
+                        bytes.append(&mut len_bytes);
+                        bytes.append(&mut sdk_bytes);
+
+                        use sha3::{Digest, Keccak256};
+                        let mut hasher = Keccak256::new();
+                        hasher.update(&bytes);
+                        let hash = hasher.finalize();
+
+                        let msg = Message::from_slice(&hash)?;
+
+                        (msg, addr)
+                    }
                 };
 
-                let msg = Message::from_hashed_data::<sha256::Hash>(bytes.as_slice());
                 let signature = Signature::from_compact(&signature)?;
                 #[cfg(not(fuzzing))]
                 secp.verify_ecdsa(&msg, &signature, &pubkey)?;
 
-                Ok(Some(address))
+                Ok(Some(addr))
             }
             (None, None) => Ok(None),
             _ => Err(Error::Signer("Malformed transaction".into())),
@@ -169,6 +233,27 @@ impl<T: Query> Query for SignerPlugin<T> {
     }
 }
 
+pub(crate) fn sdk_to_signercall(sdk_tx: &SdkTx) -> Result<SignerCall> {
+    let signature = sdk_tx.signature()?;
+    let pubkey = sdk_tx.sender_pubkey()?;
+    let sig_type = sdk_tx.sig_type()?;
+
+    let sdk_tx = Box::new(sdk_tx.clone());
+    let sigtype = match sig_type {
+        None | Some("sdk") => SigType::Sdk(sdk_tx),
+        Some("adr36") => SigType::Adr36WrappedSdk(sdk_tx),
+        Some("eth") => SigType::EthPersonalSign(sdk_tx),
+        Some(_) => return Err(Error::App("Unknown signature type".to_string())),
+    };
+
+    Ok(SignerCall {
+        signature: Some(signature),
+        pubkey: Some(pubkey),
+        sigtype,
+        call_bytes: vec![],
+    })
+}
+
 impl<T> ConvertSdkTx for SignerPlugin<T>
 where
     T: State + ConvertSdkTx<Output = T::Call> + Call,
@@ -176,16 +261,9 @@ where
     type Output = SignerCall;
 
     fn convert(&self, sdk_tx: &SdkTx) -> Result<SignerCall> {
-        let signature = sdk_tx.signature()?;
-        let pubkey = sdk_tx.sender_pubkey()?;
-        let inner_call = self.inner.convert(sdk_tx)?.encode()?;
-
-        Ok(SignerCall {
-            signature: Some(signature),
-            pubkey: Some(pubkey),
-            sigtype: SigType::Sdk(Box::new(sdk_tx.clone())),
-            call_bytes: inner_call,
-        })
+        let mut signer_call = sdk_to_signercall(sdk_tx)?;
+        signer_call.call_bytes = self.inner.convert(sdk_tx)?.encode()?;
+        Ok(signer_call)
     }
 }
 
@@ -581,75 +659,128 @@ mod abci {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use crate::call::Call;
-//     use crate::contexts::GetContext;
-//     use crate::state::State;
+#[derive(State, Call, Query, Client, Clone, Encode, Decode)]
+pub struct Counter {
+    pub count: u64,
+    pub last_signer: Address,
+    nonce: NonceNoop,
+}
 
-//     #[derive(State, Clone)]
-//     struct Counter {
-//         pub count: u64,
-//         pub last_signer: Option<Address>,
-//     }
+impl Counter {
+    #[call]
+    pub fn increment(&mut self) -> Result<()> {
+        self.count += 1;
+        let signer = self.context::<Signer>().unwrap().signer.unwrap();
+        self.last_signer = signer;
 
-//     impl Counter {
-//         fn increment(&mut self) -> Result<()> {
-//             self.count += 1;
-//             let signer = self.context::<Signer>().unwrap().signer.unwrap();
-//             self.last_signer.replace(signer);
+        Ok(())
+    }
+}
 
-//             Ok(())
-//         }
-//     }
+impl Deref for Counter {
+    type Target = NonceNoop;
 
-//     #[derive(Encode, Decode)]
-//     pub enum CounterCall {
-//         Increment,
-//     }
+    fn deref(&self) -> &Self::Target {
+        &self.nonce
+    }
+}
 
-//     impl Call for Counter {
-//         type Call = CounterCall;
+#[derive(State, Clone, Debug, Encode, Decode)]
+pub struct NonceNoop(());
+impl GetNonce for NonceNoop {
+    fn nonce(&self, _: Address) -> Result<u64> {
+        Ok(0)
+    }
+}
 
-//         fn call(&mut self, call: Self::Call) -> Result<()> {
-//             match call {
-//                 CounterCall::Increment => self.increment(),
-//             }
-//         }
-//     }
+#[derive(State, Clone, Debug, Encode, Decode, Default, MigrateFrom)]
+pub struct X(());
+impl Symbol for X {
+    const INDEX: u8 = 99;
+}
 
-//     #[derive(Clone)]
-//     struct CounterClient<T> {
-//         parent: T,
-//     }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::call::Call;
+    use crate::plugins::{sdk_compat, ConvertSdkTx, SdkCompatPlugin};
+    use serial_test::serial;
 
-//     impl<T: Call<Call = CounterCall> + Clone> CounterClient<T> {
-//         pub fn increment(&mut self) -> Result<()> {
-//             self.parent.call(CounterCall::Increment)
-//         }
-//     }
+    impl ConvertSdkTx for Counter {
+        type Output = <Counter as Call>::Call;
 
-//     impl<T: Clone> Client<T> for Counter {
-//         type Client = CounterClient<T>;
+        fn convert(&self, _msg: &sdk_compat::sdk::Tx) -> Result<Self::Output> {
+            Ok(<Counter as Call>::Call::MethodIncrement(vec![]))
+        }
+    }
 
-//         fn create_client(parent: T) -> Self::Client {
-//             CounterClient { parent }
-//         }
-//     }
+    #[test]
+    #[serial]
+    fn adr36_wrapped_sdk() {
+        let mut state = SdkCompatPlugin {
+            symbol: std::marker::PhantomData::<X>,
+            inner: SignerPlugin {
+                inner: Counter {
+                    count: 0,
+                    last_signer: Address::NULL,
+                    nonce: NonceNoop(()),
+                },
+            },
+        };
 
-// #[test]
-// fn signed_increment() {
-//     let state = Rc::new(RefCell::new(SignerProvider {
-//         inner: Counter {
-//             count: 0,
-//             last_signer: None,
-//         },
-//     }));
-//     let mut client = SignerProvider::<Counter>::create_client(state.clone());
-//     client.increment().unwrap();
-//     assert_eq!(state.borrow().inner.count, 1);
-//     let pub_key = load_keypair().unwrap().public.to_bytes();
-//     assert_eq!(state.borrow().inner.last_signer, Some(pub_key));
-// }
-// }
+        Context::add(ChainId("testchain"));
+
+        // sign bytes: {"account_number":"0","chain_id":"testchain","fee":{"amount":[{"amount":"0","denom":"unom"}],"gas":"10000"},"memo":"","msgs":[{"type":"x","value":{}}],"sequence":"1"}
+        // signature and pubkey taken from keplr
+        let call_bytes = br#"{"msg":[{"type":"x","value":{}}],"fee":{"amount":[{"amount":"0","denom":"unom"}],"gas":"10000"},"memo":"","signatures":[{"pub_key":{"type":"tendermint/PubKeySecp256k1","value":"A8zft66O7FIkDwbAf8Ebqaj5rqShkrIdkCw7f3O33hqk"},"signature":"uDffKLG/gWeSIy3RUl7Vv8TwGL9ZjOU1ZcvJgJO8f+EvpYPzLgRU92lGKNgbk5qpESD5MghkI5xmP3+uazRtDg==","type":"adr36"}]}"#;
+        let call = Decode::decode(call_bytes.as_slice()).unwrap();
+
+        SdkCompatPlugin::<_, _>::call(&mut state, call).unwrap();
+
+        assert_eq!(state.count, 1);
+        assert_eq!(
+            state.last_signer,
+            [
+                62, 46, 35, 97, 6, 46, 116, 239, 232, 168, 72, 36, 226, 246, 13, 67, 210, 250, 99,
+                31
+            ]
+            .into()
+        );
+
+        Context::remove::<ChainId>();
+    }
+
+    #[test]
+    fn eth_personal_sign() {
+        let mut state = SdkCompatPlugin {
+            symbol: std::marker::PhantomData::<X>,
+            inner: SignerPlugin {
+                inner: Counter {
+                    count: 0,
+                    last_signer: Address::NULL,
+                    nonce: NonceNoop(()),
+                },
+            },
+        };
+
+        Context::add(ChainId("testchain"));
+
+        // sign bytes: {"account_number":"0","chain_id":"testchain","fee":{"amount":[{"amount":"0","denom":"unom"}],"gas":"10000"},"memo":"","msgs":[{"type":"x","value":{}}],"sequence":"1"}
+        // signature and pubkey taken from metamask
+        let call_bytes = br#"{"msg":[{"type":"x","value":{}}],"fee":{"amount":[{"amount":"0","denom":"unom"}],"gas":"10000"},"memo":"","signatures":[{"pub_key":{"type":"tendermint/PubKeySecp256k1","value":"AgixpAV7cl5HPnmZC5qmJekVd5E8VZUioqrJoaj36p90"},"signature":"w+ZKyFdmhDOoqLIlhZq+yj8Z+eMOZnyjYKQ5rXr/fS4Imt4n5rTbwgHR1TmF6mGdFvZrmeJFedUjyMjnRYV4bA==","type":"eth"}]}"#;
+        let call = Decode::decode(call_bytes.as_slice()).unwrap();
+
+        SdkCompatPlugin::<_, _>::call(&mut state, call).unwrap();
+
+        assert_eq!(state.count, 1);
+        assert_eq!(
+            state.last_signer,
+            [
+                147, 54, 126, 195, 164, 236, 108, 70, 107, 218, 16, 43, 121, 200, 38, 174, 234,
+                199, 157, 75
+            ]
+            .into()
+        );
+        Context::remove::<ChainId>();
+    }
+}

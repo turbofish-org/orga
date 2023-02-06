@@ -5,7 +5,7 @@ use super::Paid;
 use crate::call::Call;
 use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Coin, Symbol};
-use crate::context::GetContext;
+use crate::context::{Context, GetContext};
 use crate::encoding::{Decode, Encode};
 use crate::migrate::MigrateFrom;
 use crate::query::Query;
@@ -54,12 +54,18 @@ impl<S: Symbol, T: Call + State> Call for FeePlugin<S, T> {
             .context::<Paid>()
             .ok_or_else(|| Error::Coins("Minimum fee not paid".into()))?;
 
-        if !paid.running_payer {
+        if !paid.running_payer && !paid.fee_disabled {
             let fee_payment: Coin<S> = paid.take(MIN_FEE)?;
             fee_payment.burn();
         }
 
         self.inner.call(call)
+    }
+}
+
+pub fn disable_fee() {
+    if let Some(paid_ctx) = Context::resolve::<Paid>() {
+        paid_ctx.fee_disabled = true;
     }
 }
 
