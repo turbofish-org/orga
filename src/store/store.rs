@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 use std::ops::RangeBounds;
 
 use super::{Iter, Read, Shared, Write, KV};
-use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, Terminated};
 use crate::state::State;
 use crate::{Error, Result};
@@ -33,14 +32,14 @@ pub struct Store<S = DefaultBackingStore> {
     store: Shared<S>,
 }
 
-impl<S> Describe for Store<S>
-where
-    Self: State + 'static,
-{
-    fn describe() -> crate::describe::Descriptor {
-        crate::describe::Builder::new::<Self>().build()
-    }
-}
+// impl<S> Describe for Store<S>
+// where
+//     Self: State + 'static,
+// {
+//     fn describe() -> crate::describe::Descriptor {
+//         crate::describe::Builder::new::<Self>().build()
+//     }
+// }
 
 impl<S> Encode for Store<S> {
     fn encode_into<W: std::io::Write>(&self, _dest: &mut W) -> ed::Result<()> {
@@ -116,20 +115,20 @@ impl<S> Store<S> {
     }
 }
 
-impl<S: Default> State<S> for Store<S> {
-    fn attach(&mut self, store: Store<S>) -> Result<()>
-    where
-        S: Read,
-    {
+impl State for Store {
+    fn attach(&mut self, store: Store) -> Result<()> {
         self.prefix = store.prefix;
         self.store = store.store;
         Ok(())
     }
 
-    fn flush(&mut self) -> Result<()>
-    where
-        S: Write,
-    {
+    fn load(store: Store, _bytes: &mut &[u8]) -> Result<Self> {
+        let mut value = store.clone();
+        value.attach(store)?;
+        Ok(value)
+    }
+
+    fn flush<W: std::io::Write>(self, _out: &mut W) -> Result<()> {
         Ok(())
     }
 }

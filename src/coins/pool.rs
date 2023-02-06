@@ -1,139 +1,36 @@
 use super::{Amount, Balance, Coin, Decimal, Give, Symbol};
 use crate::collections::map::{ChildMut as MapChildMut, Ref as MapRef};
 use crate::collections::{Map, Next};
-use crate::describe::{Builder, Describe, Descriptor};
 use crate::encoding::{Decode, Encode, Terminated};
-use crate::query::Query;
+use crate::orga;
 use crate::state::State;
-use crate::store::Store;
 use crate::{Error, Result};
-use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Drop, RangeBounds};
 
-#[derive(Query, Default, Serialize, Deserialize)]
+#[orga]
 pub struct Pool<K, V, S>
 where
-    K: Terminated + Encode,
+    K: Terminated + Encode + Decode + Clone,
     V: State,
     S: Symbol,
 {
     contributions: Decimal,
     rewards: Map<u8, Decimal>,
-    symbol: PhantomData<S>,
     shares_issued: Decimal,
     map: Map<K, RefCell<Entry<V>>>,
     rewards_this_period: Map<u8, Decimal>,
     last_period_entry: Map<u8, Decimal>,
+    #[state(skip)]
     drop_errored: bool,
-}
-
-impl<K, V, S> Decode for Pool<K, V, S>
-where
-    K: Terminated + Encode,
-    V: State,
-    S: Symbol,
-{
-    fn decode<R: std::io::Read>(mut input: R) -> ed::Result<Self> {
-        Ok(Self {
-            contributions: Decode::decode(&mut input)?,
-            rewards: Default::default(),
-            symbol: Default::default(),
-            shares_issued: Decode::decode(&mut input)?,
-            map: Default::default(),
-            rewards_this_period: Default::default(),
-            last_period_entry: Default::default(),
-            drop_errored: false,
-        })
-    }
-}
-
-impl<K, V, S> Encode for Pool<K, V, S>
-where
-    K: Terminated + Encode,
-    V: State,
-    S: Symbol,
-{
-    fn encoding_length(&self) -> ed::Result<usize> {
-        Ok(self.contributions.encoding_length()? + self.shares_issued.encoding_length()?)
-    }
-    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
-        dest.write_all(self.contributions.encode()?.as_slice())?;
-        dest.write_all(self.shares_issued.encode()?.as_slice())?;
-
-        Ok(())
-    }
-}
-
-impl<K, V, S> Terminated for Pool<K, V, S>
-where
-    K: Terminated + Encode,
-    V: State,
-    S: Symbol,
-{
-}
-
-impl<K, V, S> State for Pool<K, V, S>
-where
-    K: Terminated + Encode,
-    V: State,
-    S: Symbol,
-{
-    fn attach(&mut self, store: Store) -> Result<()> {
-        self.contributions.attach(store.sub(&[0]))?;
-        self.rewards.attach(store.sub(&[1]))?;
-        self.shares_issued.attach(store.sub(&[2]))?;
-        self.map.attach(store.sub(&[3]))?;
-        self.rewards_this_period.attach(store.sub(&[4]))?;
-        self.last_period_entry.attach(store.sub(&[5]))
-    }
-
-    fn flush(&mut self) -> Result<()> {
-        self.assert_no_unhandled_drop_err()?;
-        self.map.flush()?;
-        self.rewards.flush()?;
-        self.rewards_this_period.flush()?;
-        self.last_period_entry.flush()?;
-        self.contributions.flush()?;
-        self.shares_issued.flush()
-    }
-}
-
-impl<K, V, S> Describe for Pool<K, V, S>
-where
-    K: Terminated + Encode + Describe + 'static,
-    V: State + Describe + 'static,
-    S: Symbol,
-{
-    fn describe() -> Descriptor {
-        Builder::new::<Self>()
-            .named_child::<Decimal>("contributions", &[0], |v| {
-                Builder::access(v, |v: Self| v.contributions)
-            })
-            .named_child::<Map<u8, Decimal>>("rewards", &[1], |v| {
-                Builder::access(v, |v: Self| v.rewards)
-            })
-            .named_child::<Decimal>("shares_issued", &[2], |v| {
-                Builder::access(v, |v: Self| v.shares_issued)
-            })
-            .named_child::<Map<K, RefCell<Entry<V>>>>("map", &[3], |v| {
-                Builder::access(v, |v: Self| v.map)
-            })
-            .named_child::<Map<u8, Decimal>>("rewards_this_period", &[4], |v| {
-                Builder::access(v, |v: Self| v.rewards_this_period)
-            })
-            .named_child::<Map<u8, Decimal>>("last_period_entry", &[5], |v| {
-                Builder::access(v, |v: Self| v.last_period_entry)
-            })
-            .build()
-    }
+    symbol: PhantomData<S>,
 }
 
 impl<K, V, S> Balance<S, Decimal> for Pool<K, V, S>
 where
-    K: Terminated + Encode,
+    K: Terminated + Encode + Decode + Clone,
     V: State,
     S: Symbol,
 {
@@ -142,7 +39,7 @@ where
     }
 }
 
-#[derive(State, Encode, Decode, Default, Serialize, Deserialize, Describe)]
+#[orga]
 pub struct Entry<T>
 where
     T: State,
@@ -168,7 +65,7 @@ impl<T: State> DerefMut for Entry<T> {
 
 impl<K, V, S> Pool<K, V, S>
 where
-    K: Terminated + Encode,
+    K: Terminated + Encode + Decode + Clone,
     V: State,
     S: Symbol,
 {
@@ -182,7 +79,7 @@ where
 
 impl<K, V, S> Pool<K, V, S>
 where
-    K: Encode + Terminated + Clone,
+    K: Encode + Decode + Terminated + Clone,
     V: State + Balance<S, Decimal> + Give<(u8, Amount)> + Default,
     S: Symbol,
 {
@@ -334,7 +231,7 @@ impl<K, V, S, T> Give<Coin<T>> for Pool<K, V, S>
 where
     S: Symbol,
     T: Symbol,
-    K: Encode + Terminated,
+    K: Encode + Terminated + Decode + Clone,
     V: State,
 {
     fn give(&mut self, coin: Coin<T>) -> Result<()> {
@@ -352,7 +249,7 @@ where
 impl<K, V, S> Give<(u8, Amount)> for Pool<K, V, S>
 where
     S: Symbol,
-    K: Encode + Terminated,
+    K: Encode + Terminated + Decode + Clone,
     V: State,
 {
     fn give(&mut self, coin: (u8, Amount)) -> Result<()> {
@@ -404,8 +301,8 @@ where
             }
         };
 
-        if !balance_change.0.is_zero() {
-            let new_shares = if self.parent_num_tokens.0.is_zero() {
+        if !balance_change.value.is_zero() {
+            let new_shares = if self.parent_num_tokens.value.is_zero() {
                 balance_change
             } else {
                 match (*self.parent_shares_issued * balance_change / *self.parent_num_tokens)
@@ -520,22 +417,13 @@ mod tests {
     use super::*;
     use crate::coins::{Address, Amount, Share};
     use crate::encoding::{Decode, Encode};
-    use crate::store::Store;
+    use crate::orga;
 
-    #[derive(Encode, Decode, Debug, Clone, Default)]
+    #[orga]
+    #[derive(Clone, Debug)]
     struct Simp;
     impl Symbol for Simp {
         const INDEX: u8 = 0;
-    }
-
-    impl State for Simp {
-        fn attach(&mut self, _store: Store) -> Result<()> {
-            Ok(())
-        }
-
-        fn flush(&mut self) -> Result<()> {
-            Ok(())
-        }
     }
 
     #[test]

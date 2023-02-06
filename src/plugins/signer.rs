@@ -6,23 +6,22 @@ use crate::call::Call;
 use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Address, Symbol};
 use crate::context::{Context, GetContext};
-use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
+use crate::migrate::MigrateFrom;
 use crate::query::Query;
 use crate::state::State;
-use crate::store::Store;
 use crate::{Error, Result};
 use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::ops::Deref;
 
-#[derive(Default, Encode, Decode, Serialize, Deserialize)]
-#[serde(transparent)]
+#[derive(Default, Encode, Decode, MigrateFrom, State)]
+#[state(transparent)]
 pub struct SignerPlugin<T> {
     pub(crate) inner: T,
 }
 
-impl<T> Deref for SignerPlugin<T> {
+impl<T: State> Deref for SignerPlugin<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -381,28 +380,39 @@ impl<T: Client<SignerClient<T, U>>, U: Clone> Client<U> for SignerPlugin<T> {
     }
 }
 
-impl<T: State> State for SignerPlugin<T> {
-    fn attach(&mut self, store: Store) -> Result<()> {
-        self.inner.attach(store)
-    }
+// impl<T> State for SignerPlugin<T>
+// where
+//     T: State,
+// {
+//     fn attach(&mut self, store: Store) -> Result<()> {
+//         self.inner.attach(store)
+//     }
 
-    fn flush(&mut self) -> Result<()> {
-        self.inner.flush()
-    }
-}
+//     fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+//         self.inner.flush(out)
+//     }
 
-impl<T> Describe for SignerPlugin<T>
-where
-    T: State + Describe + 'static,
-{
-    fn describe() -> crate::describe::Descriptor {
-        crate::describe::Builder::new::<Self>()
-            .named_child::<T>("inner", &[], |v| {
-                crate::describe::Builder::access(v, |v: Self| v.inner)
-            })
-            .build()
-    }
-}
+//     fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
+//         let inner = T::load(store, bytes)?;
+//         Ok(Self {
+//             inner,
+//             // ..Default::default()
+//         })
+//     }
+// }
+
+// impl<T> Describe for SignerPlugin<T>
+// where
+//     T: State + Describe + 'static,
+// {
+//     fn describe() -> crate::describe::Descriptor {
+//         crate::describe::Builder::new::<Self>()
+//             .named_child::<T>("inner", &[], |v| {
+//                 crate::describe::Builder::access(v, |v: Self| v.inner)
+//             })
+//             .build()
+//     }
+// }
 
 #[cfg(target_arch = "wasm32")]
 pub mod keplr {
@@ -683,7 +693,7 @@ impl GetNonce for NonceNoop {
     }
 }
 
-#[derive(State, Clone, Debug, Encode, Decode, Default)]
+#[derive(State, Clone, Debug, Encode, Decode, Default, MigrateFrom)]
 pub struct X(());
 impl Symbol for X {
     const INDEX: u8 = 99;

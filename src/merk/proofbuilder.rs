@@ -73,7 +73,7 @@ mod tests {
 
     fn temp_merk_store() -> MerkStore {
         let temp_dir = TempDir::new("TempMerkStore").unwrap();
-        MerkStore::new(temp_dir.path().into())
+        MerkStore::new(temp_dir.path())
     }
 
     #[test]

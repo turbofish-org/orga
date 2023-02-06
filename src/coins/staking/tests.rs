@@ -1,6 +1,7 @@
 use super::*;
 use crate::coins::MultiShare;
 use crate::context::Context;
+use crate::orga;
 #[cfg(feature = "abci")]
 use crate::plugins::Time;
 use crate::Result;
@@ -9,8 +10,11 @@ use serial_test::serial;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-#[derive(State, Encode, Decode, Debug, Clone, Default, Serialize, Deserialize)]
-struct Simp(());
+// #[derive(State, Encode, Decode, Debug, Clone, Default, Serialize,
+// Deserialize, MigrateFrom)]
+#[orga]
+#[derive(Debug, Clone)]
+struct Simp;
 impl Symbol for Simp {
     const INDEX: u8 = 0;
 }
@@ -87,7 +91,7 @@ fn staking() -> Result<()> {
             },
             amount: 50.into(),
             min_self_delegation: 1.into(),
-            validator_info: vec![].into(),
+            validator_info: vec![].try_into()?,
         },
         50.into(),
     )?;
@@ -103,7 +107,7 @@ fn staking() -> Result<()> {
                 },
                 amount: 50.into(),
                 min_self_delegation: 1.into(),
-                validator_info: vec![].into(),
+                validator_info: vec![].try_into()?,
             },
             50.into(),
         )
@@ -120,7 +124,7 @@ fn staking() -> Result<()> {
                 },
                 amount: 50.into(),
                 min_self_delegation: 1.into(),
-                validator_info: vec![].into(),
+                validator_info: vec![].try_into()?,
             },
             50.into(),
         )
@@ -141,7 +145,7 @@ fn staking() -> Result<()> {
             },
             amount: 50.into(),
             min_self_delegation: 1.into(),
-            validator_info: vec![].into(),
+            validator_info: vec![].try_into()?,
         },
         50.into(),
     )?;
@@ -280,7 +284,7 @@ fn staking() -> Result<()> {
             },
             amount: 300.into(),
             min_self_delegation: 1.into(),
-            validator_info: vec![].into(),
+            validator_info: vec![].try_into()?,
         },
         300.into(),
     )?;
@@ -314,7 +318,7 @@ fn staking() -> Result<()> {
             },
             amount: 550.into(),
             min_self_delegation: 1.into(),
-            validator_info: vec![].into(),
+            validator_info: vec![].try_into()?,
         },
         550.into(),
     )?;
@@ -362,7 +366,7 @@ fn val_size_limit() -> Result<()> {
                 },
                 amount: Amount::new(i as u64 * 100),
                 min_self_delegation: 1.into(),
-                validator_info: vec![].into(),
+                validator_info: vec![].try_into()?,
             },
             Amount::new(i as u64 * 100).into(),
         )?;
@@ -412,7 +416,7 @@ fn val_size_limit() -> Result<()> {
             },
             amount: 1000.into(),
             min_self_delegation: 1.into(),
-            validator_info: vec![].into(),
+            validator_info: vec![].try_into()?,
         },
         1000.into(),
     )?;
@@ -470,7 +474,7 @@ fn undelegate() -> Result<()> {
             },
             amount: Amount::new(100),
             min_self_delegation: 1.into(),
-            validator_info: vec![].into(),
+            validator_info: vec![].try_into()?,
         },
         Amount::new(100).into(),
     )?;
@@ -512,7 +516,7 @@ fn undelegate_slash_before_unbond() -> Result<()> {
             },
             amount: Amount::new(100),
             min_self_delegation: 1.into(),
-            validator_info: vec![].into(),
+            validator_info: vec![].try_into()?,
         },
         Amount::new(100).into(),
     )?;
@@ -565,7 +569,7 @@ fn undelegate_slash_after_unbond() -> Result<()> {
             },
             amount: Amount::new(100),
             min_self_delegation: 1.into(),
-            validator_info: vec![].into(),
+            validator_info: vec![].try_into()?,
         },
         Amount::new(100).into(),
     )?;
@@ -617,7 +621,7 @@ fn redelegate() -> Result<()> {
                 },
                 amount: Amount::new(100),
                 min_self_delegation: 1.into(),
-                validator_info: vec![].into(),
+                validator_info: vec![].try_into()?,
             },
             Amount::new(100).into(),
         )?;
@@ -664,7 +668,7 @@ fn redelegate_slash_before_unbond() -> Result<()> {
                 },
                 amount: Amount::new(100),
                 min_self_delegation: 1.into(),
-                validator_info: vec![].into(),
+                validator_info: vec![].try_into()?,
             },
             Amount::new(100).into(),
         )?;
@@ -723,7 +727,7 @@ fn redelegate_slash_after_unbond() -> Result<()> {
                 },
                 amount: Amount::new(100),
                 min_self_delegation: 1.into(),
-                validator_info: vec![].into(),
+                validator_info: vec![].try_into()?,
             },
             Amount::new(100).into(),
         )?;
@@ -785,7 +789,7 @@ fn redelegation_slash() -> Result<()> {
                 },
                 amount: Amount::new(100),
                 min_self_delegation: 1.into(),
-                validator_info: vec![].into(),
+                validator_info: vec![].try_into()?,
             },
             Amount::new(100).into(),
         )?;
@@ -882,7 +886,7 @@ fn redelegation_double_slash() -> Result<()> {
                 },
                 amount: Amount::new(100),
                 min_self_delegation: 1.into(),
-                validator_info: vec![].into(),
+                validator_info: vec![].try_into()?,
             },
             Amount::new(100).into(),
         )?;
@@ -933,7 +937,7 @@ fn redelegation_slash_with_unbond() -> Result<()> {
                 },
                 amount: Amount::new(100),
                 min_self_delegation: 1.into(),
-                validator_info: vec![].into(),
+                validator_info: vec![].try_into()?,
             },
             Amount::new(100).into(),
         )?;
@@ -1039,7 +1043,7 @@ fn redelegation_slash_with_slash_unbond_overflow() -> Result<()> {
                 },
                 amount: Amount::new(100),
                 min_self_delegation: 1.into(),
-                validator_info: vec![].into(),
+                validator_info: vec![].try_into()?,
             },
             Amount::new(100).into(),
         )?;
@@ -1151,7 +1155,7 @@ fn delegate_slashed_fail() {
                 },
                 amount: Amount::new(0),
                 min_self_delegation: 1.into(),
-                validator_info: vec![].into(),
+                validator_info: vec![].try_into().unwrap(),
             },
             Amount::new(100).into(),
         )
@@ -1188,7 +1192,7 @@ fn min_delegation_fall_below() -> Result<()> {
             },
             amount: Amount::new(0),
             min_self_delegation: 75.into(),
-            validator_info: vec![].into(),
+            validator_info: vec![].try_into()?,
         },
         Amount::new(100).into(),
     )?;
@@ -1238,7 +1242,7 @@ fn min_delegation_fall_below_unbond() -> Result<()> {
                 },
                 amount: Amount::new(0),
                 min_self_delegation: 75.into(),
-                validator_info: vec![].into(),
+                validator_info: vec![].try_into()?,
             },
             Amount::new(100).into(),
         )?;
@@ -1300,7 +1304,7 @@ fn punish_downtime_jailed() -> Result<()> {
             },
             amount: Amount::new(0),
             min_self_delegation: 75.into(),
-            validator_info: vec![].into(),
+            validator_info: vec![].try_into()?,
         },
         Amount::new(100).into(),
     )?;
@@ -1337,7 +1341,7 @@ fn unclaimed_rewards_slash() -> Result<()> {
             },
             amount: Amount::new(100),
             min_self_delegation: 1.into(),
-            validator_info: vec![].into(),
+            validator_info: vec![].try_into()?,
         },
         Amount::new(100).into(),
     )?;
@@ -1381,7 +1385,7 @@ fn reward_with_unbond() -> Result<()> {
                 },
                 amount: Amount::new(100),
                 min_self_delegation: 1.into(),
-                validator_info: vec![].into(),
+                validator_info: vec![].try_into()?,
             },
             Amount::new(100).into(),
         )?;
@@ -1432,7 +1436,7 @@ fn redelegate_from_to_failure() {
                     },
                     amount: Amount::new(100),
                     min_self_delegation: 1.into(),
-                    validator_info: vec![].into(),
+                    validator_info: vec![].try_into().unwrap(),
                 },
                 Amount::new(100).into(),
             )
@@ -1479,7 +1483,7 @@ fn redelegate_from_to_two_stakers() {
                     },
                     amount: Amount::new(100),
                     min_self_delegation: 1.into(),
-                    validator_info: vec![].into(),
+                    validator_info: vec![].try_into().unwrap(),
                 },
                 Amount::new(100).into(),
             )
@@ -1507,8 +1511,9 @@ fn redelegate_from_to_two_stakers() {
         .unwrap();
 }
 
-#[derive(State, Debug, Encode, Decode, Clone, Default)]
-struct Alt(());
+#[orga]
+#[derive(Clone, Debug)]
+struct Alt;
 impl Symbol for Alt {
     const INDEX: u8 = 1;
 }
@@ -1532,7 +1537,7 @@ fn alt_coin_rewards() -> Result<()> {
                     },
                     amount: Amount::new(100),
                     min_self_delegation: 1.into(),
-                    validator_info: vec![].into(),
+                    validator_info: vec![].try_into()?,
                 },
                 Amount::new(100).into(),
             )

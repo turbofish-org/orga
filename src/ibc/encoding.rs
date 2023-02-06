@@ -3,6 +3,7 @@ use crate::client::Client;
 use crate::collections::Next;
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, Terminated};
+use crate::migrate::MigrateFrom;
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
@@ -21,6 +22,12 @@ use tendermint_proto::Protobuf;
 #[derive(Clone, Call, Client, Query, Debug, Serialize, Deserialize, Default)]
 pub struct Adapter<T> {
     pub(crate) inner: T,
+}
+
+impl<T> MigrateFrom for Adapter<T> {
+    fn migrate_from(other: Self) -> crate::Result<Self> {
+        Ok(other)
+    }
 }
 
 unsafe impl<T> Send for Adapter<T> {}
@@ -131,12 +138,16 @@ where
         Ok(())
     }
 
-    fn flush(&mut self) -> crate::Result<()> {
-        Ok(())
+    fn flush<W: std::io::Write>(self, dest: &mut W) -> crate::Result<()> {
+        Ok(self.encode_into(dest)?)
+    }
+
+    fn load(_store: Store, bytes: &mut &[u8]) -> crate::Result<Self> {
+        Ok(Decode::decode(bytes)?)
     }
 }
 
-#[derive(Call, Query, Client, Default, Serialize, Deserialize)]
+#[derive(Call, Query, Client, Default)]
 pub struct ProtobufAdapter<T> {
     inner: T,
 }
@@ -176,6 +187,37 @@ where
         let inner: T = T::decode(bytes.as_slice()).map_err(|_e| ed::Error::UnexpectedByte(0))?;
 
         Ok(Self { inner })
+    }
+}
+
+impl<T> Serialize for ProtobufAdapter<T>
+where
+    T: IbcProto,
+    T: Protobuf<<T as IbcProto>::Proto>,
+    <T as std::convert::TryFrom<<T as IbcProto>::Proto>>::Error: std::fmt::Display,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.encode()
+            .map_err(serde::ser::Error::custom)?
+            .serialize(serializer)
+    }
+}
+
+impl<'de, T> Deserialize<'de> for ProtobufAdapter<T>
+where
+    T: IbcProto,
+    T: Protobuf<<T as IbcProto>::Proto>,
+    <T as std::convert::TryFrom<<T as IbcProto>::Proto>>::Error: std::fmt::Display,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let bytes = Vec::<u8>::deserialize(deserializer)?;
+        Self::decode(bytes.as_slice()).map_err(serde::de::Error::custom)
     }
 }
 
@@ -228,6 +270,12 @@ impl<T> ProtobufAdapter<T> {
     }
 }
 
+impl<T> MigrateFrom for ProtobufAdapter<T> {
+    fn migrate_from(other: Self) -> crate::Result<Self> {
+        Ok(other)
+    }
+}
+
 impl<T> std::ops::Deref for ProtobufAdapter<T> {
     type Target = T;
 
@@ -252,8 +300,12 @@ where
         Ok(())
     }
 
-    fn flush(&mut self) -> crate::Result<()> {
-        Ok(())
+    fn flush<W: std::io::Write>(self, dest: &mut W) -> crate::Result<()> {
+        Ok(self.encode_into(dest)?)
+    }
+
+    fn load(_store: Store, bytes: &mut &[u8]) -> crate::Result<Self> {
+        Ok(Decode::decode(bytes)?)
     }
 }
 

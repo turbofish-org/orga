@@ -1,20 +1,17 @@
-use serde::{Deserialize, Serialize};
-
 use super::{sdk_compat::sdk::Tx as SdkTx, ConvertSdkTx};
 use crate::call::Call as CallTrait;
 use crate::client::{AsyncCall, AsyncQuery, Client as ClientTrait};
 use crate::context::Context;
-use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
+use crate::migrate::MigrateFrom;
 use crate::query::Query;
 use crate::state::State;
-use crate::store::Store;
 use crate::{Error, Result};
 use std::marker::PhantomData;
 use std::ops::Deref;
 
-#[derive(Encode, Decode, Default, Serialize, Deserialize)]
-#[serde(transparent)]
+#[derive(Encode, Decode, Default, MigrateFrom, State)]
+#[state(transparent)]
 pub struct ChainCommitmentPlugin<T, const ID: &'static str> {
     inner: T,
 }
@@ -41,6 +38,7 @@ impl<T: CallTrait, const ID: &'static str> CallTrait for ChainCommitmentPlugin<T
     type Call = Vec<u8>;
 
     fn call(&mut self, call: Self::Call) -> Result<()> {
+        Context::add(ChainId(ID));
         let expected_id: Vec<u8> = ID.bytes().collect();
         if call.len() < expected_id.len() {
             return Err(Error::App("Invalid chain ID length".into()));
@@ -74,6 +72,7 @@ where
     type Output = Vec<u8>;
 
     fn convert(&self, sdk_tx: &SdkTx) -> Result<Vec<u8>> {
+        Context::add(ChainId(ID));
         let id_bytes = ID.as_bytes();
         let inner_call = self.inner.convert(sdk_tx)?;
 
@@ -164,33 +163,18 @@ impl<T: ClientTrait<Client<T, U, ID>>, U: Clone, const ID: &'static str> ClientT
     }
 }
 
-impl<T, const ID: &'static str> State for ChainCommitmentPlugin<T, ID>
-where
-    T: State,
-{
-    fn attach(&mut self, store: Store) -> Result<()> {
-        Context::add(ChainId(ID));
-
-        self.inner.attach(store)
-    }
-
-    fn flush(&mut self) -> Result<()> {
-        self.inner.flush()
-    }
-}
-
-impl<T, const ID: &'static str> Describe for ChainCommitmentPlugin<T, ID>
-where
-    T: State + Describe + 'static,
-{
-    fn describe() -> crate::describe::Descriptor {
-        crate::describe::Builder::new::<Self>()
-            .named_child::<T>("inner", &[], |v| {
-                crate::describe::Builder::access(v, |v: Self| v.inner)
-            })
-            .build()
-    }
-}
+// impl<T, const ID: &'static str> Describe for ChainCommitmentPlugin<T, ID>
+// where
+//     T: State + Describe + 'static,
+// {
+//     fn describe() -> crate::describe::Descriptor {
+//         crate::describe::Builder::new::<Self>()
+//             .named_child::<T>("inner", &[], |v| {
+//                 crate::describe::Builder::access(v, |v: Self| v.inner)
+//             })
+//             .build()
+//     }
+// }
 
 // TODO: In the future, this plugin shouldn't need to know about ABCI, but
 // implementing passthrough of ABCI lifecycle methods as below seems preferable

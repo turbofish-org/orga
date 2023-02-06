@@ -11,6 +11,7 @@
 #![feature(async_closure)]
 
 extern crate self as orga;
+pub use orga_macros::orga;
 
 /// Integration with ABCI (gated by `abci` feature).
 #[cfg(feature = "abci")]
@@ -51,6 +52,8 @@ pub mod store;
 #[cfg(feature = "abci")]
 pub mod tendermint;
 
+pub mod migrate;
+
 #[cfg(any(target_arch = "wasm32", feature = "abci"))]
 pub mod plugins;
 
@@ -62,15 +65,22 @@ pub mod context;
 #[cfg(feature = "feat-ibc")]
 pub mod ibc;
 
+#[cfg(feature = "abci")]
+pub mod upgrade;
+
 mod error;
 
 pub use cosmrs;
+
+mod compat;
+pub use compat::{compat_mode, set_compat_mode};
 
 // re-exports
 pub use async_trait::async_trait;
 pub use error::*;
 pub use futures_lite::future::Boxed as BoxFuture;
 pub use orga_macros as macros;
+pub use serde_json::Value as JsonValue;
 
 pub mod prelude {
     pub use secp256k1;

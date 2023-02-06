@@ -1,15 +1,12 @@
 use super::{Amount, Coin, Decimal, Symbol};
 use crate::context::GetContext;
-use crate::describe::Describe;
-use crate::encoding::{Decode, Encode};
+use crate::orga;
 use crate::plugins::Time;
-use crate::state::State;
 use crate::{Error, Result};
-use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::time::Duration;
 
-#[derive(State, Encode, Decode, Default, Serialize, Deserialize, Describe)]
+#[orga]
 pub struct Faucet<S: Symbol> {
     _symbol: PhantomData<S>,
     configured: bool,
@@ -110,24 +107,13 @@ pub struct FaucetOptions {
 mod tests {
     use super::*;
     use crate::context::Context;
-    use crate::encoding::{Decode, Encode};
-    use crate::store::Store;
     use serial_test::serial;
 
-    #[derive(Encode, Decode, Debug, Clone, Default, Serialize, Deserialize)]
+    #[orga]
+    #[derive(Clone, Debug)]
     struct Simp;
     impl Symbol for Simp {
         const INDEX: u8 = 0;
-    }
-
-    impl State for Simp {
-        fn attach(&mut self, _store: Store) -> Result<()> {
-            Ok(())
-        }
-
-        fn flush(&mut self) -> Result<()> {
-            Ok(())
-        }
     }
 
     #[test]

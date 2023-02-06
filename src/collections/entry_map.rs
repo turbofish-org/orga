@@ -1,22 +1,20 @@
 use super::map::Iter as MapIter;
 use super::map::Map;
 use super::map::ReadOnly;
-use serde::Deserialize;
-use serde::Serialize;
 
 use crate::encoding::{Decode, Encode, Terminated};
+use crate::migrate::{MigrateFrom, MigrateInto};
 use std::ops::RangeBounds;
 
 use super::{Entry, Next};
 use crate::call::Call;
-use crate::describe::Describe;
 use crate::query::Query;
 use crate::state::*;
 use crate::store::*;
 use crate::Result;
 
-#[derive(Query, Call, Encode, Decode, Serialize, Deserialize)]
-#[serde(bound = "")]
+#[derive(Query, Call, Encode, Decode)]
+
 pub struct EntryMap<T: Entry> {
     map: Map<T::Key, T::Value>,
 }
@@ -30,24 +28,31 @@ where
         self.map.attach(store)
     }
 
-    fn flush(&mut self) -> Result<()> {
-        self.map.flush()
+    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+        self.map.flush(out)
+    }
+
+    fn load(store: Store, _bytes: &mut &[u8]) -> Result<Self> {
+        let mut entry_map = EntryMap::default();
+        entry_map.map.attach(store)?;
+
+        Ok(entry_map)
     }
 }
 
-impl<T: Entry + 'static> Describe for EntryMap<T>
-where
-    T::Key: Encode + Terminated + Describe + 'static,
-    T::Value: State + Describe + 'static,
-{
-    fn describe() -> crate::describe::Descriptor {
-        crate::describe::Builder::new::<Self>()
-            .named_child::<Map<T::Key, T::Value>>("map", &[], |v| {
-                crate::describe::Builder::access(v, |v: Self| v.map)
-            })
-            .build()
-    }
-}
+// impl<T: Entry + 'static> Describe for EntryMap<T>
+// where
+//     T::Key: Encode + Terminated + Describe + 'static,
+//     T::Value: State + Describe + 'static,
+// {
+//     fn describe() -> crate::describe::Descriptor {
+//         crate::describe::Builder::new::<Self>()
+//             .named_child::<Map<T::Key, T::Value>>("map", &[], |v| {
+//                 crate::describe::Builder::access(v, |v: Self| v.map)
+//             })
+//             .build()
+//     }
+// }
 
 impl<T: Entry> Default for EntryMap<T> {
     fn default() -> Self {
@@ -181,6 +186,30 @@ where
     }
 }
 
+impl<T1, T2> MigrateFrom<EntryMap<T1>> for EntryMap<T2>
+where
+    T1: Entry,
+    T1::Key: Next + Decode + Encode + Terminated + Clone,
+    T1::Value: State + Clone,
+    T2: Entry + MigrateFrom<T1>,
+    T2::Key: Encode + Terminated,
+    T2::Value: State,
+{
+    fn migrate_from(other: EntryMap<T1>) -> Result<Self> {
+        // TODO: clone bound shouldn't be required on T1::Value, but there's currently no
+        // way to access the inner map's store, so we need the
+        // clone bound to create the entry map's iterator
+        let mut entry_map = Self::default();
+        for entry in other.map.iter()? {
+            let (k, v) = entry?;
+            let entry = T1::from_entry((k.clone(), v.clone()));
+            entry_map.insert(entry.migrate_into()?)?;
+        }
+
+        Ok(entry_map)
+    }
+}
+
 #[cfg(all(test, feature = "merk"))]
 mod tests {
     use crate::merk::BackingStore;
@@ -226,7 +255,8 @@ mod tests {
             .insert(MapEntry { key: 42, value: 84 })
             .unwrap();
 
-        edit_entry_map.flush().unwrap();
+        let mut buf = vec![];
+        edit_entry_map.flush(&mut buf).unwrap();
 
         let mut read_entry_map: EntryMap<MapEntry> = Default::default();
         read_entry_map.attach(store).unwrap();
@@ -254,7 +284,8 @@ mod tests {
         entry_map.insert(entry).unwrap();
         entry_map.delete(MapEntry { key: 42, value: 84 }).unwrap();
 
-        entry_map.flush().unwrap();
+        let mut buf = vec![];
+        entry_map.flush(&mut buf).unwrap();
 
         let read_map: EntryMap<MapEntry> = EntryMap::with_store(store).unwrap();
 
@@ -534,7 +565,9 @@ mod tests {
                 value: 4,
             })
             .unwrap();
-        entry_map.flush().unwrap();
+
+        let mut buf = vec![];
+        entry_map.flush(&mut buf).unwrap();
 
         let expected: Vec<MultiKeyMapEntry> = vec![
             MultiKeyMapEntry {
