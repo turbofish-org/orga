@@ -11,7 +11,7 @@ use crate::Result;
 use home::home_dir;
 use std::borrow::Borrow;
 use std::marker::PhantomData;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use tendermint_proto::abci::*;
 
@@ -24,6 +24,7 @@ pub struct Node<A> {
     p2p_persistent_peers: Option<Vec<String>>,
     stdout: Stdio,
     stderr: Stdio,
+    skip_init_chain: bool,
 }
 
 impl Node<()> {
@@ -109,6 +110,7 @@ impl<A: App> Node<A> {
         } else {
             26658
         };
+
         Node {
             _app: PhantomData,
             merk_home,
@@ -116,6 +118,7 @@ impl<A: App> Node<A> {
             abci_port,
             genesis_bytes: None,
             p2p_persistent_peers: None,
+            skip_init_chain: false,
             stdout: Stdio::null(),
             stderr: Stdio::null(),
         }
@@ -148,14 +151,14 @@ impl<A: App> Node<A> {
         let app = InternalApp::<ABCIPlugin<A>>::new();
         let store = MerkStore::new(self.merk_home.clone());
 
-        let res = ABCIStateMachine::new(app, store).listen(format!("127.0.0.1:{}", self.abci_port));
+        let res = ABCIStateMachine::new(app, store, self.skip_init_chain)
+            .listen(format!("127.0.0.1:{}", self.abci_port));
 
         tm_process.kill()?;
 
         res
     }
 
-    #[cfg(debug_assertions)]
     #[must_use]
     pub fn reset(self) -> Self {
         if self.merk_home.exists() {
@@ -165,6 +168,18 @@ impl<A: App> Node<A> {
         Tendermint::new(&self.tm_home)
             .stdout(std::process::Stdio::null())
             .unsafe_reset_all();
+
+        self
+    }
+
+    pub fn skip_init_chain(mut self) -> Self {
+        self.skip_init_chain = true;
+
+        self
+    }
+
+    pub fn init_from_store(self, source: impl AsRef<Path>) -> Self {
+        MerkStore::init_from(source, &self.merk_home).unwrap();
 
         self
     }

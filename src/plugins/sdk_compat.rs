@@ -15,8 +15,8 @@ pub const NATIVE_CALL_FLAG: u8 = 0xff;
 
 #[derive(Clone, Encode, Decode, Default, MigrateFrom)]
 pub struct SdkCompatPlugin<S, T: State> {
-    symbol: PhantomData<S>,
-    inner: T,
+    pub(crate) symbol: PhantomData<S>,
+    pub(crate) inner: T,
 }
 
 impl<S, T> State for SdkCompatPlugin<S, T>
@@ -249,7 +249,8 @@ pub mod sdk {
         }
 
         pub fn sender_address(&self) -> Result<Address> {
-            Ok(Address::from_pubkey(self.sender_pubkey()?))
+            let signer_call = super::super::signer::sdk_to_signercall(self)?;
+            signer_call.address()
         }
 
         pub fn signature(&self) -> Result<[u8; 64]> {
@@ -274,6 +275,19 @@ pub mod sdk {
             sig_arr.copy_from_slice(&sig_vec);
 
             Ok(sig_arr)
+        }
+
+        pub fn sig_type(&self) -> Result<Option<&str>> {
+            Ok(match self {
+                Tx::Amino(tx) => tx
+                    .signatures
+                    .first()
+                    .ok_or_else(|| Error::App("No signatures provided".to_string()))?
+                    .r#type
+                    .as_deref(),
+
+                Tx::Protobuf(_) => None,
+            })
         }
     }
 
@@ -310,6 +324,7 @@ pub mod sdk {
     pub struct Signature {
         pub pub_key: PubKey,
         pub signature: String,
+        pub r#type: Option<String>,
     }
 
     #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]

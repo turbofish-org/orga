@@ -97,6 +97,27 @@ impl MerkStore {
         }
     }
 
+    pub fn init_from(source: impl AsRef<Path>, dest: impl AsRef<Path>) -> Result<Self> {
+        let source = source.as_ref();
+        let dest = dest.as_ref();
+
+        let source = Merk::open(source.join("db"))?;
+        if !dest.exists() {
+            std::fs::create_dir_all(dest)?;
+        }
+        source.checkpoint(dest.join("db"))?;
+        let mut merk_store = Self::new(dest);
+
+        merk_store
+            .write(vec![(
+                b"height".to_vec(),
+                Some(0u64.to_be_bytes().to_vec()),
+            )])
+            .unwrap();
+
+        Ok(merk_store)
+    }
+
     fn path<T: ToString>(&self, name: T) -> PathBuf {
         self.home.join(name.to_string())
     }

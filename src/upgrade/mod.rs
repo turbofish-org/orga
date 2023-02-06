@@ -49,6 +49,7 @@ impl Default for Upgrade {
 impl Upgrade {
     #[call]
     pub fn signal(&mut self, version: Version) -> Result<()> {
+        crate::plugins::disable_fee();
         let cons_key = self.signer_cons_key()?;
         let now = self.current_seconds()?;
 
