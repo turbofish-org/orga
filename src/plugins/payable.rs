@@ -29,6 +29,7 @@ impl<T: State> Deref for PayablePlugin<T> {
 pub struct Paid {
     map: HashMap<u8, Amount>,
     pub running_payer: bool,
+    pub fee_disabled: bool,
 }
 
 impl Paid {
