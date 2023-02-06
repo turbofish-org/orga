@@ -35,13 +35,14 @@ pub struct ABCIStateMachine<A: Application> {
     mempool_state: Option<BufStoreMap>,
     consensus_state: Option<BufStoreMap>,
     height: u64,
+    skip_init_chain: bool,
 }
 
 impl<A: Application> ABCIStateMachine<A> {
     /// Constructs an `ABCIStateMachine` from the given app (a set of handlers
     /// for transactions and blocks), and store (a key/value store to persist
     /// the state data).
-    pub fn new(app: A, store: MerkStore) -> Self {
+    pub fn new(app: A, store: MerkStore, skip_init_chain: bool) -> Self {
         let (sender, receiver) = mpsc::sync_channel(0);
         ABCIStateMachine {
             app: Some(app),
@@ -51,6 +52,7 @@ impl<A: Application> ABCIStateMachine<A> {
             mempool_state: Some(Default::default()),
             consensus_state: Some(Default::default()),
             height: 0,
+            skip_init_chain,
         }
     }
 
@@ -118,6 +120,9 @@ impl<A: Application> ABCIStateMachine<A> {
                 Ok(Res::Query(res))
             }
             Req::InitChain(req) => {
+                if self.skip_init_chain {
+                    return Ok(Res::InitChain(Default::default()));
+                }
                 let app = self.app.take().unwrap();
                 let self_store = self.store.take().unwrap().into_inner();
                 let self_store_shared = Shared::new(self_store);
