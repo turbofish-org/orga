@@ -112,7 +112,7 @@ impl Address {
     pub fn from_pubkey_eth(bytes: [u8; 64]) -> Self {
         use sha3::{Digest, Keccak256};
         let mut hasher = Keccak256::new();
-        hasher.update(&bytes);
+        hasher.update(bytes);
         let hash = hasher.finalize();
 
         let mut bytes = [0; Address::LENGTH];
