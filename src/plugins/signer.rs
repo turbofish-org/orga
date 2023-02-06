@@ -704,16 +704,18 @@ mod tests {
     use super::*;
     use crate::call::Call;
     use crate::plugins::{sdk_compat, ConvertSdkTx, SdkCompatPlugin};
+    use serial_test::serial;
 
     impl ConvertSdkTx for Counter {
         type Output = <Counter as Call>::Call;
 
-        fn convert(&self, msg: &sdk_compat::sdk::Tx) -> Result<Self::Output> {
+        fn convert(&self, _msg: &sdk_compat::sdk::Tx) -> Result<Self::Output> {
             Ok(<Counter as Call>::Call::MethodIncrement(vec![]))
         }
     }
 
     #[test]
+    #[serial]
     fn adr36_wrapped_sdk() {
         let mut state = SdkCompatPlugin {
             symbol: std::marker::PhantomData::<X>,
@@ -744,6 +746,8 @@ mod tests {
             ]
             .into()
         );
+
+        Context::remove::<ChainId>();
     }
 
     #[test]
@@ -777,5 +781,6 @@ mod tests {
             ]
             .into()
         );
+        Context::remove::<ChainId>();
     }
 }
