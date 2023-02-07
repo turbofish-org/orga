@@ -17,7 +17,7 @@ pub enum Error {
 }
 
 type PubKey = [u8; 32];
-type Version = LengthVec<u8, u8>;
+pub type Version = LengthVec<u8, u8>;
 
 #[orga]
 pub struct Signal {

@@ -1,7 +1,9 @@
+use std::any::type_name;
+
 use crate::compat_mode;
 use crate::migrate::MigrateInto;
 use crate::store::Store;
-use crate::Result;
+use crate::{Error, Result};
 
 use super::State;
 
@@ -43,6 +45,18 @@ impl<'a, 'b> Loader<'a, 'b> {
         U: State,
     {
         if !compat_mode() && self.field_count == 0 {
+            if self.bytes.is_empty() {
+                return Err(Error::State("Unexpected EOF".to_string()));
+            }
+
+            if self.bytes[0] != self.version {
+                return Err(Error::State(format!(
+                    "Expected version {}, got {} for {}",
+                    self.version,
+                    self.bytes[0],
+                    type_name::<U>()
+                )));
+            }
             *self.bytes = &self.bytes[1..];
         }
 
@@ -67,6 +81,9 @@ impl<'a, 'b> Loader<'a, 'b> {
     }
 
     pub fn load_transparent_child_inner<T: State>(&mut self) -> Result<T> {
+        if !compat_mode() {
+            *self.bytes = &self.bytes[1..];
+        }
         T::load(self.store.clone(), self.bytes)
     }
 

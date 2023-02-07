@@ -70,7 +70,7 @@ pub struct Ibc {
     pub(super) lunchbox: Lunchbox,
 }
 
-#[derive(Encode, Decode, Default, Serialize, Deserialize)]
+#[derive(Encode, Decode, Default, Serialize, Deserialize, MigrateFrom)]
 pub struct Lunchbox(pub(super) Store);
 
 impl State for Lunchbox {
