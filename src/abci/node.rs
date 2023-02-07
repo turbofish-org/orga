@@ -279,6 +279,11 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
         // Write back validator updates
         let mut res: ResponseEndBlock = Default::default();
         updates.drain().for_each(|(_key, update)| {
+            if let Ok(flag) = std::env::var("ORGA_STATIC_VALSET") {
+                if flag != "0" && flag != "false" {
+                    return;
+                }
+            }
             res.validator_updates.push(update);
         });
 
