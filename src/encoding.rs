@@ -1,3 +1,4 @@
+use crate::call::Call;
 use crate::client::Client;
 use crate::migrate::MigrateFrom;
 use crate::query::Query;
@@ -19,6 +20,7 @@ use std::convert::{TryFrom, TryInto};
     Default,
     Clone,
     Debug,
+    Call,
     Query,
     MigrateFrom,
     PartialEq,
