@@ -296,6 +296,7 @@ mod full {
             use ABCICall::*;
             let validators =
                 Validators::new(self.current_vp.clone(), self.cons_key_by_op_addr.clone());
+            let context_remover = ContextRemover;
             Context::add(validators);
             let create_time_ctx = |time: &Option<Timestamp>| {
                 if let Some(timestamp) = time {
@@ -367,8 +368,22 @@ mod full {
             }
 
             self.build_updates()?;
-            Context::remove::<Validators>();
+            context_remover.remove();
             Ok(())
+        }
+    }
+
+    struct ContextRemover;
+
+    impl ContextRemover {
+        fn remove(&self) {
+            Context::remove::<Validators>();
+        }
+    }
+
+    impl Drop for ContextRemover {
+        fn drop(&mut self) {
+            self.remove();
         }
     }
 
