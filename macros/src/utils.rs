@@ -217,3 +217,9 @@ impl Default for Types {
         }
     }
 }
+
+pub fn is_attr_with_ident(attr: &Attribute, ident: &str) -> bool {
+    attr.path
+        .get_ident()
+        .map_or(false, |attr_ident| attr_ident.to_string() == ident)
+}

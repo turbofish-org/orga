@@ -1,3 +1,4 @@
+use super::utils::is_attr_with_ident;
 use darling::{ast, FromDeriveInput, FromField, FromMeta, ToTokens};
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
@@ -75,11 +76,11 @@ impl OrgaSubStruct {
             quote! { ::orga::encoding::VersionedEncoding },
         );
         maybe_add("State", quote! { ::orga::state::State });
-        maybe_add("Client", quote! { ::orga::client::Client });
 
         if self.is_last {
             maybe_add("Call", quote! { ::orga::call::Call });
             maybe_add("Query", quote! { ::orga::query::Query });
+            maybe_add("Client", quote! { ::orga::client::Client });
         }
 
         let mut attrs: Vec<Attribute> = vec![parse_quote! {#[derive(#(#derives),*)]}];
@@ -163,7 +164,10 @@ impl ToTokens for OrgaSubStruct {
                 ..
             } = &f;
             let field_ident = ident.as_ref().map_or(quote! {#i}, |ident| quote! {#ident});
-            let attrs = attrs.iter().map(|attr| quote! {#attr});
+            let attrs = attrs
+                .iter()
+                .filter(|attr| !(is_attr_with_ident(attr, "call") && !is_last))
+                .map(|attr| quote! {#attr});
             quote! {
                 #(#attrs)*
                 #vis #field_ident: #ty,
