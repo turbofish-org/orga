@@ -107,6 +107,10 @@ impl<S> Store<S> {
         self.store.clone()
     }
 
+    pub fn into_backing_store(self) -> Shared<S> {
+        self.store
+    }
+
     pub fn range<B: RangeBounds<Vec<u8>>>(&self, bounds: B) -> Iter<Self>
     where
         Self: Read,

@@ -19,10 +19,11 @@ mod full {
     use crate::collections::{Entry, EntryMap, Map};
     use crate::context::Context;
     use crate::encoding::{Decode, Encode};
+    use crate::migrate::{MigrateFrom, MigrateInto};
     use crate::query::Query;
     use crate::state::State;
     use crate::store::Store;
-    use crate::{Error, Result};
+    use crate::{compat_mode, Error, Result};
     use std::cell::{Ref, RefCell};
     use std::collections::HashMap;
     use std::convert::TryInto;
@@ -46,13 +47,30 @@ mod full {
     type UpdateMap = Map<[u8; 32], Adapter<ValidatorUpdate>>;
 
     pub struct ABCIPlugin<T> {
-        inner: T,
+        pub inner: T,
         pub(crate) validator_updates: Option<HashMap<[u8; 32], ValidatorUpdate>>,
         updates: UpdateMap,
         time: Option<Timestamp>,
         pub(crate) events: Option<Vec<Event>>,
         current_vp: Rc<RefCell<Option<EntryMap<ValidatorEntry>>>>,
         cons_key_by_op_addr: Rc<RefCell<Option<OperatorMap>>>,
+    }
+
+    impl<T1, T2> MigrateFrom<ABCIPlugin<T1>> for ABCIPlugin<T2>
+    where
+        T1: MigrateInto<T2>,
+    {
+        fn migrate_from(other: ABCIPlugin<T1>) -> Result<Self> {
+            Ok(Self {
+                inner: other.inner.migrate_into()?,
+                validator_updates: other.validator_updates,
+                updates: other.updates,
+                time: other.time,
+                events: other.events,
+                current_vp: other.current_vp,
+                cons_key_by_op_addr: other.cons_key_by_op_addr,
+            })
+        }
     }
 
     impl<T: Default> Default for ABCIPlugin<T> {
