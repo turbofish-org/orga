@@ -428,6 +428,9 @@ mod full {
         }
 
         fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+            if !compat_mode() {
+                out.write_all(&[0])?;
+            }
             self.inner.flush(out)?;
             self.updates.flush(out)?;
             self.current_vp.take().flush(&mut vec![])?;

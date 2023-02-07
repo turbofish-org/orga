@@ -2,7 +2,6 @@ use super::{
     sdk_compat::{self, sdk::Tx as SdkTx, ConvertSdkTx},
     ChainId, GetNonce,
 };
-use crate::call::Call;
 use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Address, Symbol};
 use crate::context::{Context, GetContext};
@@ -10,15 +9,27 @@ use crate::encoding::{Decode, Encode};
 use crate::migrate::MigrateFrom;
 use crate::query::Query;
 use crate::state::State;
+use crate::{call::Call, migrate::MigrateInto};
 use crate::{Error, Result};
 use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
 use serde::Serialize;
 use std::ops::Deref;
 
-#[derive(Default, Encode, Decode, MigrateFrom, State)]
+#[derive(Default, Encode, Decode, State)]
 #[state(transparent)]
 pub struct SignerPlugin<T> {
     pub(crate) inner: T,
+}
+
+impl<T1, T2> MigrateFrom<SignerPlugin<T1>> for SignerPlugin<T2>
+where
+    T1: MigrateInto<T2>,
+{
+    fn migrate_from(other: SignerPlugin<T1>) -> Result<Self> {
+        Ok(Self {
+            inner: other.inner.migrate_into()?,
+        })
+    }
 }
 
 impl<T: State> Deref for SignerPlugin<T> {

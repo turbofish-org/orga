@@ -7,7 +7,7 @@ use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Coin, Symbol};
 use crate::context::{Context, GetContext};
 use crate::encoding::{Decode, Encode};
-use crate::migrate::MigrateFrom;
+use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
@@ -16,12 +16,24 @@ use std::ops::{Deref, DerefMut};
 
 pub const MIN_FEE: u64 = 10_000;
 
-#[derive(Encode, Decode, Default, Serialize, Deserialize, MigrateFrom, State)]
+#[derive(Encode, Decode, Default, Serialize, Deserialize, State)]
 #[state(transparent)]
 pub struct FeePlugin<S, T> {
     #[state(skip)]
     _symbol: PhantomData<S>,
     inner: T,
+}
+
+impl<S1, S2, T1, T2> MigrateFrom<FeePlugin<S1, T1>> for FeePlugin<S2, T2>
+where
+    T1: MigrateInto<T2>,
+{
+    fn migrate_from(other: FeePlugin<S1, T1>) -> Result<Self> {
+        Ok(Self {
+            _symbol: other._symbol.migrate_into()?,
+            inner: other.inner.migrate_into()?,
+        })
+    }
 }
 
 // impl<S, T> Describe for FeePlugin<S, T>

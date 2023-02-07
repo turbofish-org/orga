@@ -3,17 +3,29 @@ use crate::call::Call as CallTrait;
 use crate::client::{AsyncCall, AsyncQuery, Client as ClientTrait};
 use crate::context::Context;
 use crate::encoding::{Decode, Encode};
-use crate::migrate::MigrateFrom;
+use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
 use std::marker::PhantomData;
 use std::ops::Deref;
 
-#[derive(Encode, Decode, Default, MigrateFrom, State)]
+#[derive(Encode, Decode, Default, State)]
 #[state(transparent)]
 pub struct ChainCommitmentPlugin<T, const ID: &'static str> {
     inner: T,
+}
+
+impl<T1, T2, const ID1: &'static str, const ID2: &'static str>
+    MigrateFrom<ChainCommitmentPlugin<T1, ID1>> for ChainCommitmentPlugin<T2, ID2>
+where
+    T1: MigrateInto<T2>,
+{
+    fn migrate_from(other: ChainCommitmentPlugin<T1, ID1>) -> Result<Self> {
+        Ok(Self {
+            inner: other.inner.migrate_into()?,
+        })
+    }
 }
 
 pub struct ChainId(pub &'static str);
