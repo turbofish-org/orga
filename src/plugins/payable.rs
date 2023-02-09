@@ -4,7 +4,7 @@ use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Amount, Coin, Symbol};
 use crate::context::{Context, GetContext};
 use crate::encoding::{Decode, Encode};
-use crate::migrate::MigrateFrom;
+use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
@@ -12,9 +12,20 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::ops::{Deref, DerefMut};
 
-#[derive(State, Encode, Decode, Default, MigrateFrom)]
+#[derive(State, Encode, Decode, Default)]
 pub struct PayablePlugin<T> {
     inner: T,
+}
+
+impl<T1, T2> MigrateFrom<PayablePlugin<T1>> for PayablePlugin<T2>
+where
+    T1: MigrateInto<T2>,
+{
+    fn migrate_from(other: PayablePlugin<T1>) -> Result<Self> {
+        Ok(Self {
+            inner: other.inner.migrate_into()?,
+        })
+    }
 }
 
 impl<T: State> Deref for PayablePlugin<T> {
@@ -29,6 +40,7 @@ impl<T: State> Deref for PayablePlugin<T> {
 pub struct Paid {
     map: HashMap<u8, Amount>,
     pub running_payer: bool,
+    pub fee_disabled: bool,
 }
 
 impl Paid {

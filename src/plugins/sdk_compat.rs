@@ -2,10 +2,9 @@ use crate::call::Call as CallTrait;
 use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Address, Symbol};
 use crate::encoding::{Decode, Encode};
-use crate::migrate::MigrateFrom;
+use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::query::Query;
 use crate::state::State;
-use crate::store::Store;
 use crate::{Error, Result};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
@@ -13,29 +12,20 @@ use std::ops::{Deref, DerefMut};
 pub const MAX_CALL_SIZE: usize = 65_535;
 pub const NATIVE_CALL_FLAG: u8 = 0xff;
 
-#[derive(Clone, Encode, Decode, Default, MigrateFrom)]
+#[derive(State, Default, Clone)]
 pub struct SdkCompatPlugin<S, T: State> {
-    symbol: PhantomData<S>,
-    inner: T,
+    pub(crate) symbol: PhantomData<S>,
+    pub(crate) inner: T,
 }
 
-impl<S, T> State for SdkCompatPlugin<S, T>
+impl<S1, S2, T1: State, T2: State> MigrateFrom<SdkCompatPlugin<S1, T1>> for SdkCompatPlugin<S2, T2>
 where
-    T: State,
+    T1: MigrateInto<T2>,
 {
-    fn attach(&mut self, store: Store) -> Result<()> {
-        self.inner.attach(store.sub(&[1]))
-    }
-
-    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
-        self.inner.flush(out)
-    }
-
-    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
-        let inner = T::load(store.sub(&[1]), bytes)?;
+    fn migrate_from(other: SdkCompatPlugin<S1, T1>) -> Result<Self> {
         Ok(Self {
-            inner,
-            symbol: Default::default(),
+            symbol: other.symbol.migrate_into()?,
+            inner: other.inner.migrate_into()?,
         })
     }
 }
@@ -249,7 +239,8 @@ pub mod sdk {
         }
 
         pub fn sender_address(&self) -> Result<Address> {
-            Ok(Address::from_pubkey(self.sender_pubkey()?))
+            let signer_call = super::super::signer::sdk_to_signercall(self)?;
+            signer_call.address()
         }
 
         pub fn signature(&self) -> Result<[u8; 64]> {
@@ -274,6 +265,19 @@ pub mod sdk {
             sig_arr.copy_from_slice(&sig_vec);
 
             Ok(sig_arr)
+        }
+
+        pub fn sig_type(&self) -> Result<Option<&str>> {
+            Ok(match self {
+                Tx::Amino(tx) => tx
+                    .signatures
+                    .first()
+                    .ok_or_else(|| Error::App("No signatures provided".to_string()))?
+                    .r#type
+                    .as_deref(),
+
+                Tx::Protobuf(_) => None,
+            })
         }
     }
 
@@ -310,6 +314,7 @@ pub mod sdk {
     pub struct Signature {
         pub pub_key: PubKey,
         pub signature: String,
+        pub r#type: Option<String>,
     }
 
     #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]

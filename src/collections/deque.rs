@@ -1,6 +1,7 @@
 use super::map::{ChildMut, Map, ReadOnly, Ref};
 use crate::call::Call;
 use crate::client::Client;
+use crate::collections::map::Iter as MapIter;
 use crate::encoding::{Decode, Encode};
 use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::orga;
@@ -137,6 +138,14 @@ impl<T: State> Deque<T> {
     }
 }
 
+impl<'a, T: State> Deque<T> {
+    pub fn iter(&'a self) -> Result<Iter<'a, T>> {
+        Ok(Iter {
+            map_iter: self.map.iter()?,
+        })
+    }
+}
+
 impl<T: State> Deque<T> {
     pub fn get_mut(&mut self, index: u64) -> Result<Option<ChildMut<u64, T>>> {
         self.map.get_mut(index + self.meta.head)
@@ -203,10 +212,33 @@ where
     }
 }
 
+pub struct Iter<'a, T>
+where
+    T: State,
+{
+    map_iter: MapIter<'a, u64, T>,
+}
+
+impl<'a, T> Iterator for Iter<'a, T>
+where
+    T: State,
+{
+    type Item = Result<Ref<'a, T>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.map_iter.next().map(|entry| match entry {
+            Ok(entry) => Ok(entry.1),
+            Err(err) => Err(err),
+        })
+    }
+}
+
 #[allow(unused_imports)]
 mod test {
-    use super::{Deque, Map};
+    use super::{Deque, Map, Meta};
+    use crate::state::State;
     use crate::store::MapStore;
+    use crate::store::Store;
 
     #[test]
     fn deque_u32_push_front() {
@@ -230,7 +262,6 @@ mod test {
 
         assert!(deque.pop_front().unwrap().is_none());
     }
-
     #[test]
     fn deque_u32_pop_front() {
         let mut deque: Deque<u32> = Deque::new();
@@ -325,5 +356,21 @@ mod test {
         let map = deque.pop_front().unwrap().unwrap();
 
         assert!(map.get(1).unwrap().is_none());
+    }
+
+    #[test]
+    fn deque_u32_iter() {
+        let mut deque: Deque<u32> = Deque::new();
+
+        deque.push_front(42).unwrap();
+        deque.push_back(43).unwrap();
+        deque.push_front(1).unwrap();
+
+        let mut iter = deque.iter().unwrap();
+
+        assert_eq!(*iter.next().unwrap().unwrap(), 1);
+        assert_eq!(*iter.next().unwrap().unwrap(), 42);
+        assert_eq!(*iter.next().unwrap().unwrap(), 43);
+        assert!(iter.next().is_none());
     }
 }

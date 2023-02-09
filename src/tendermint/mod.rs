@@ -2,7 +2,7 @@ use crate::error::{Error, Result};
 use flate2::read::GzDecoder;
 use hex_literal::hex;
 use is_executable::IsExecutable;
-use log::{info, trace};
+use log::{debug, info, trace};
 use nom::bytes::complete::take_until;
 use nom::character::complete::alphanumeric1;
 use nom::multi::{many0, many1};
@@ -140,7 +140,7 @@ impl Tendermint {
         let tendermint_path = self.home.join(TENDERMINT_BINARY_NAME);
 
         if tendermint_path.is_executable() {
-            trace!("Tendermint already installed");
+            debug!("Tendermint already installed");
             return;
         }
 
@@ -576,7 +576,7 @@ impl Tendermint {
                         .unwrap()
                         .parse()
                         .map(|msg: LogMessage| {
-                            log::trace!("{:#?}", msg);
+                            log::debug!("{:#?}", msg);
                             match msg.message.as_str() {
                                 "Started node" => log::info!("Started Tendermint"),
                                 "executed block" => log::info!(

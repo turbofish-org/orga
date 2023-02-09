@@ -7,7 +7,7 @@ mod proofbuilder;
 #[cfg(feature = "merk-full")]
 pub mod store;
 
-pub use backingstore::{ABCIPrefixedProofStore, BackingStore};
+pub use backingstore::{BackingStore, ProofStore};
 pub use client::Client;
 pub use merk;
 #[cfg(feature = "merk-full")]

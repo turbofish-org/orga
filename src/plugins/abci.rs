@@ -19,10 +19,11 @@ mod full {
     use crate::collections::{Entry, EntryMap, Map};
     use crate::context::Context;
     use crate::encoding::{Decode, Encode};
+    use crate::migrate::{MigrateFrom, MigrateInto};
     use crate::query::Query;
     use crate::state::State;
     use crate::store::Store;
-    use crate::Result;
+    use crate::{compat_mode, Error, Result};
     use std::cell::{Ref, RefCell};
     use std::collections::HashMap;
     use std::convert::TryInto;
@@ -36,7 +37,7 @@ mod full {
     use tendermint_proto::google::protobuf::Timestamp;
     use tendermint_proto::types::Header;
 
-    #[derive(Entry)]
+    #[derive(Entry, Clone)]
     pub struct ValidatorEntry {
         #[key]
         pub pubkey: [u8; 32],
@@ -46,13 +47,30 @@ mod full {
     type UpdateMap = Map<[u8; 32], Adapter<ValidatorUpdate>>;
 
     pub struct ABCIPlugin<T> {
-        inner: T,
+        pub inner: T,
         pub(crate) validator_updates: Option<HashMap<[u8; 32], ValidatorUpdate>>,
         updates: UpdateMap,
         time: Option<Timestamp>,
         pub(crate) events: Option<Vec<Event>>,
         current_vp: Rc<RefCell<Option<EntryMap<ValidatorEntry>>>>,
         cons_key_by_op_addr: Rc<RefCell<Option<OperatorMap>>>,
+    }
+
+    impl<T1, T2> MigrateFrom<ABCIPlugin<T1>> for ABCIPlugin<T2>
+    where
+        T1: MigrateInto<T2>,
+    {
+        fn migrate_from(other: ABCIPlugin<T1>) -> Result<Self> {
+            Ok(Self {
+                inner: other.inner.migrate_into()?,
+                validator_updates: other.validator_updates,
+                updates: other.updates,
+                time: other.time,
+                events: other.events,
+                current_vp: other.current_vp,
+                cons_key_by_op_addr: other.cons_key_by_op_addr,
+            })
+        }
     }
 
     impl<T: Default> Default for ABCIPlugin<T> {
@@ -217,6 +235,38 @@ mod full {
         pub fn current_set(&mut self) -> Ref<Option<EntryMap<ValidatorEntry>>> {
             self.current_vp.borrow()
         }
+
+        pub fn total_voting_power(&mut self) -> Result<u64> {
+            let mut sum = 0;
+            for entry in self
+                .current_vp
+                .borrow()
+                .as_ref()
+                .ok_or_else(|| Error::App("Validator set not available".to_string()))?
+                .iter()?
+            {
+                let v = entry?;
+                sum += v.power;
+            }
+
+            Ok(sum)
+        }
+
+        pub fn entries(&mut self) -> Result<Vec<ValidatorEntry>> {
+            let mut res = vec![];
+            for entry in self
+                .current_vp
+                .borrow()
+                .as_ref()
+                .ok_or_else(|| Error::App("Validator set not available".to_string()))?
+                .iter()?
+            {
+                let v = entry?;
+                res.push(v.clone());
+            }
+
+            Ok(res)
+        }
     }
 
     #[derive(Default)]
@@ -264,6 +314,7 @@ mod full {
             use ABCICall::*;
             let validators =
                 Validators::new(self.current_vp.clone(), self.cons_key_by_op_addr.clone());
+            let context_remover = ContextRemover;
             Context::add(validators);
             let create_time_ctx = |time: &Option<Timestamp>| {
                 if let Some(timestamp) = time {
@@ -335,8 +386,22 @@ mod full {
             }
 
             self.build_updates()?;
-            Context::remove::<Validators>();
+            context_remover.remove();
             Ok(())
+        }
+    }
+
+    struct ContextRemover;
+
+    impl ContextRemover {
+        fn remove(&self) {
+            Context::remove::<Validators>();
+        }
+    }
+
+    impl Drop for ContextRemover {
+        fn drop(&mut self) {
+            self.remove();
         }
     }
 
@@ -381,6 +446,9 @@ mod full {
         }
 
         fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+            if !compat_mode() {
+                out.write_all(&[0])?;
+            }
             self.inner.flush(out)?;
             self.updates.flush(out)?;
             self.current_vp.take().flush(&mut vec![])?;

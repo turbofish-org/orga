@@ -6,7 +6,7 @@ use crate::coins::Address;
 use crate::collections::Map;
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
-use crate::migrate::MigrateFrom;
+use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
@@ -14,10 +14,22 @@ use std::ops::{Deref, DerefMut};
 
 const NONCE_INCREASE_LIMIT: u64 = 1000;
 
-#[derive(State, Encode, Decode, Default, MigrateFrom)]
+#[derive(State, Encode, Decode, Default)]
 pub struct NoncePlugin<T: State> {
     map: Map<Address, u64>,
     inner: T,
+}
+
+impl<T1: State, T2: State> MigrateFrom<NoncePlugin<T1>> for NoncePlugin<T2>
+where
+    T1: MigrateInto<T2>,
+{
+    fn migrate_from(other: NoncePlugin<T1>) -> Result<Self> {
+        Ok(Self {
+            map: other.map.migrate_into()?,
+            inner: other.inner.migrate_into()?,
+        })
+    }
 }
 
 impl<T: State> NoncePlugin<T> {

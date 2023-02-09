@@ -3,6 +3,7 @@ use std::ops::RangeBounds;
 
 use super::{Iter, Read, Shared, Write, KV};
 use crate::encoding::{Decode, Encode, Terminated};
+use crate::migrate::MigrateFrom;
 use crate::state::State;
 use crate::{Error, Result};
 
@@ -30,6 +31,12 @@ pub struct Store<S = DefaultBackingStore> {
     prefix: Vec<u8>,
     #[serde(skip)]
     store: Shared<S>,
+}
+
+impl MigrateFrom for Store {
+    fn migrate_from(other: Self) -> Result<Self> {
+        Ok(other)
+    }
 }
 
 // impl<S> Describe for Store<S>
@@ -105,6 +112,10 @@ impl<S> Store<S> {
 
     pub fn backing_store(&self) -> Shared<S> {
         self.store.clone()
+    }
+
+    pub fn into_backing_store(self) -> Shared<S> {
+        self.store
     }
 
     pub fn range<B: RangeBounds<Vec<u8>>>(&self, bounds: B) -> Iter<Self>

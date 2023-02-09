@@ -17,7 +17,7 @@ pub enum BackingStore {
     #[cfg(feature = "merk-full")]
     Merk(Shared<MerkStore>),
     MapStore(Shared<MapStore>),
-    ProofMap(Shared<ABCIPrefixedProofStore>),
+    ProofMap(Shared<ProofStore>),
     Null(NullStore),
 }
 
@@ -127,15 +127,6 @@ impl BackingStore {
         }
     }
 
-    pub fn into_abci_prefixed_proof_map(self) -> Result<Shared<ABCIPrefixedProofStore>> {
-        match self {
-            BackingStore::ProofMap(store) => Ok(store),
-            _ => Err(Error::Downcast(
-                "Failed to downcast backing store to ABCI-prefixed proof map".into(),
-            )),
-        }
-    }
-
     #[cfg(feature = "merk-full")]
     pub fn use_merkstore<F: FnOnce(&MerkStore) -> T, T>(&self, f: F) -> T {
         let wrapped_store = match self {
@@ -171,12 +162,6 @@ impl From<Shared<MapStore>> for BackingStore {
     }
 }
 
-impl From<Shared<ABCIPrefixedProofStore>> for BackingStore {
-    fn from(store: Shared<ABCIPrefixedProofStore>) -> BackingStore {
-        BackingStore::ProofMap(store)
-    }
-}
-
 pub struct ProofStore(pub ProofMap);
 
 impl Read for ProofStore {
@@ -189,47 +174,5 @@ impl Read for ProofStore {
         let mut iter = self.0.range((Bound::Excluded(key), Bound::Unbounded));
         let item = iter.next().transpose()?;
         Ok(item.map(|(k, v)| (k.to_vec(), v.to_vec())))
-    }
-}
-
-pub struct ABCIPrefixedProofStore(pub ProofStore);
-
-impl ABCIPrefixedProofStore {
-    pub fn new(map: ProofMap) -> Self {
-        ABCIPrefixedProofStore(ProofStore(map))
-    }
-
-    fn prefix_key(key: &[u8]) -> Vec<u8> {
-        if !key.is_empty() && key[0] > 3 {
-            return key.to_vec();
-        }
-        let mut prefixed_key = Vec::with_capacity(key.len() + 1);
-        prefixed_key.push(0);
-        prefixed_key.extend_from_slice(key);
-        prefixed_key
-    }
-
-    fn deprefix_key(mut key: Vec<u8>) -> Vec<u8> {
-        if !key.is_empty() && key[0] == 0 {
-            key.remove(0);
-        }
-
-        key
-    }
-}
-
-impl Read for ABCIPrefixedProofStore {
-    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        let key = Self::prefix_key(key);
-        self.0.get(key.as_slice())
-    }
-
-    fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
-        let key = Self::prefix_key(key);
-        let maybe_kv = self
-            .0
-            .get_next(key.as_slice())?
-            .map(|(key, value)| (Self::deprefix_key(key), value));
-        Ok(maybe_kv)
     }
 }
