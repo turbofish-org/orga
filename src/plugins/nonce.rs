@@ -281,6 +281,7 @@ impl<T: Client<NonceAdapter<T, U>> + State, U: Clone> Client<U> for NoncePlugin<
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "abci")]
 fn nonce_path() -> Result<std::path::PathBuf> {
     let orga_home = home::home_dir()
         .expect("No home directory set")
@@ -307,6 +308,7 @@ fn load_nonce() -> Result<u64> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "abci")]
 fn load_nonce() -> Result<u64> {
     let nonce_path = nonce_path()?;
     if nonce_path.exists() {
@@ -317,6 +319,12 @@ fn load_nonce() -> Result<u64> {
         std::fs::write(&nonce_path, bytes)?;
         Ok(1)
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(feature = "abci"))]
+fn load_nonce() -> Result<u64> {
+    unimplemented!()
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -333,9 +341,16 @@ fn write_nonce(nonce: u64) -> Result<()> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "abci")]
 fn write_nonce(nonce: u64) -> Result<()> {
     let nonce_path = nonce_path()?;
     Ok(std::fs::write(nonce_path, nonce.encode()?)?)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(feature = "abci"))]
+fn write_nonce(nonce: u64) -> Result<()> {
+    unimplemented!()
 }
 
 // TODO: Remove dependency on ABCI for this otherwise-pure plugin.

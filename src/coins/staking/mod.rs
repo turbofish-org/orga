@@ -1,6 +1,5 @@
 use super::pool::{Child as PoolChild, ChildMut as PoolChildMut};
 use super::{Address, Amount, Balance, Coin, Decimal, Give, Pool, Symbol};
-#[cfg(feature = "abci")]
 use crate::abci::{BeginBlock, EndBlock};
 use crate::call::Call;
 use crate::client::Client;
@@ -10,7 +9,6 @@ use crate::context::GetContext;
 use crate::encoding::{Decode, Encode, Terminated};
 use crate::migrate::MigrateFrom;
 use crate::orga;
-#[cfg(feature = "abci")]
 use crate::plugins::{BeginBlockCtx, EndBlockCtx, Validators};
 use crate::plugins::{Paid, Signer, Time};
 use crate::query::Query;
@@ -20,7 +18,6 @@ use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::convert::TryInto;
-#[cfg(feature = "abci")]
 use tendermint_proto::abci::EvidenceType;
 
 mod delegator;
@@ -187,70 +184,6 @@ impl<S: Symbol> State for Staking<S> {
 
 impl<S: Symbol> Terminated for Staking<S> {}
 
-// impl<S: Symbol> Encode for Staking<S> {
-//     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
-//         dest.write_all(self.max_validators.encode()?.as_slice())?;
-//         dest.write_all(self.min_self_delegation_min.encode()?.as_slice())?;
-//         dest.write_all(self.unbonding_seconds.encode()?.as_slice())?;
-//         dest.write_all(self.max_offline_blocks.encode()?.as_slice())?;
-//         dest.write_all(self.slash_fraction_double_sign.encode()?.as_slice())?;
-//         dest.write_all(self.slash_fraction_downtime.encode()?.as_slice())?;
-//         dest.write_all(self.downtime_jail_seconds.encode()?.as_slice())?;
-//         dest.write_all(self.validators.encode()?.as_slice())?;
-//         dest.write_all(self.unbonding_delegation_queue.encode()?.as_slice())?;
-//         dest.write_all(self.redelegation_queue.encode()?.as_slice())?;
-
-//         Ok(())
-//     }
-
-//     fn encoding_length(&self) -> ed::Result<usize> {
-//         let mut len = 0;
-//         len += self.max_validators.encoding_length()?;
-//         len += self.min_self_delegation_min.encoding_length()?;
-//         len += self.unbonding_seconds.encoding_length()?;
-//         len += self.max_offline_blocks.encoding_length()?;
-//         len += self.slash_fraction_double_sign.encoding_length()?;
-//         len += self.slash_fraction_downtime.encoding_length()?;
-//         len += self.downtime_jail_seconds.encoding_length()?;
-//         len += self.validators.encoding_length()?;
-//         len += self.unbonding_delegation_queue.encoding_length()?;
-//         len += self.redelegation_queue.encoding_length()?;
-
-//         Ok(len)
-//     }
-// }
-
-// impl<S: Symbol> Decode for Staking<S> {
-//     fn decode<R: std::io::Read>(mut input: R) -> ed::Result<Self> {
-//         let max_validators = u64::decode(&mut input)?;
-//         let min_self_delegation_min = u64::decode(&mut input)?;
-//         let unbonding_seconds = u64::decode(&mut input)?;
-//         let max_offline_blocks = u64::decode(&mut input)?;
-//         let slash_fraction_double_sign = Decimal::decode(&mut input)?;
-//         let slash_fraction_downtime = Decimal::decode(&mut input)?;
-//         let downtime_jail_seconds = u64::decode(&mut input)?;
-//         let validators = Pool::decode(&mut input)?;
-//         let unbonding_delegation_queue = Deque::decode(&mut input)?;
-//         let redelegation_queue = Deque::decode(&mut input)?;
-
-//         Ok(Staking {
-//             max_validators,
-//             min_self_delegation_min,
-//             unbonding_seconds,
-//             max_offline_blocks,
-//             slash_fraction_double_sign,
-//             slash_fraction_downtime,
-//             downtime_jail_seconds,
-//             validators,
-//             unbonding_delegation_queue,
-//             redelegation_queue,
-//             ..Default::default()
-//         })
-//     }
-// }
-
-// impl<S: Symbol> Terminated for Staking<S> {}
-
 #[derive(Entry, Clone, Serialize, Deserialize, MigrateFrom)]
 struct ValidatorQueueEntry {
     #[key]
@@ -304,14 +237,12 @@ impl ValidatorPowerEntry {
     }
 }
 
-#[cfg(feature = "abci")]
 impl<S: Symbol> EndBlock for Staking<S> {
     fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
         self.end_block_step(ctx)
     }
 }
 
-#[cfg(feature = "abci")]
 impl<S: Symbol> BeginBlock for Staking<S> {
     fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
         if let Some(last_commit_info) = &ctx.last_commit_info {
@@ -487,12 +418,10 @@ impl<S: Symbol> Staking<S> {
 
         self.address_for_tm_hash.insert(tm_hash, val_address)?;
 
-        #[cfg(feature = "abci")]
         let val_ctx = self
             .context::<Validators>()
             .ok_or_else(|| Error::Coins("No Validators context available".into()))?;
 
-        #[cfg(feature = "abci")]
         val_ctx.set_operator(consensus_key, val_address)?;
 
         let mut validator = self.validators.get_mut(val_address)?;
@@ -956,7 +885,6 @@ impl<S: Symbol> Staking<S> {
         Ok(())
     }
 
-    #[cfg(feature = "abci")]
     fn end_block_step(&mut self, ctx: &EndBlockCtx) -> Result<()> {
         self.process_all_queues()?;
         use std::collections::HashSet;

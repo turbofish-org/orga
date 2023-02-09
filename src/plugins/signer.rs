@@ -282,6 +282,7 @@ pub struct SignerClient<T, U: Clone> {
     parent: U,
     marker: std::marker::PhantomData<fn() -> T>,
     #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(feature = "abci")]
     privkey: SecretKey,
     #[cfg(target_arch = "wasm32")]
     signer: keplr::Signer,
@@ -293,6 +294,7 @@ impl<T, U: Clone> Clone for SignerClient<T, U> {
             parent: self.parent.clone(),
             marker: std::marker::PhantomData,
             #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(feature = "abci")]
             privkey: SecretKey::from_slice(&self.privkey.secret_bytes()).unwrap(),
             #[cfg(target_arch = "wasm32")]
             signer: keplr::Signer,
@@ -311,6 +313,13 @@ where
     type Call = T::Call;
 
     #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(feature = "abci"))]
+    async fn call(&self, call: Self::Call) -> Result<()> {
+        unimplemented!()
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(feature = "abci")]
     async fn call(&self, call: Self::Call) -> Result<()> {
         use secp256k1::hashes::sha256;
         let secp = Secp256k1::signing_only();
@@ -384,6 +393,7 @@ impl<T: Client<SignerClient<T, U>>, U: Clone> Client<U> for SignerPlugin<T> {
             parent,
             marker: std::marker::PhantomData,
             #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(feature = "abci")]
             privkey: load_privkey().expect("Failed to load private key"),
             #[cfg(target_arch = "wasm32")]
             signer: keplr::Signer,
@@ -582,6 +592,7 @@ pub mod keplr {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "abci")]
 pub fn load_privkey() -> Result<SecretKey> {
     // Ensure orga home directory exists
     let orga_home = home::home_dir()
@@ -610,6 +621,7 @@ pub struct KeyPair {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "abci")]
 pub fn load_keypair() -> Result<KeyPair> {
     let secp = Secp256k1::new();
     let privkey = load_privkey()?;

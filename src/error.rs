@@ -67,7 +67,6 @@ pub enum Error {
     Test(String),
     #[error("Query Error: {0}")]
     Query(String),
-    #[cfg(feature = "abci")]
     #[error(transparent)]
     Upgrade(#[from] crate::upgrade::Error),
     #[error("Unknown Error")]

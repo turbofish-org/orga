@@ -14,8 +14,7 @@
 extern crate self as orga;
 pub use orga_macros::orga;
 
-/// Integration with ABCI (gated by `abci` feature).
-#[cfg(feature = "abci")]
+/// Integration with ABCI.
 pub mod abci;
 
 pub mod call;
@@ -55,10 +54,8 @@ pub mod tendermint;
 
 pub mod migrate;
 
-#[cfg(any(target_arch = "wasm32", feature = "abci"))]
 pub mod plugins;
 
-#[cfg(any(target_arch = "wasm32", feature = "abci"))]
 pub mod coins;
 
 pub mod context;
@@ -66,7 +63,6 @@ pub mod context;
 #[cfg(feature = "feat-ibc")]
 pub mod ibc;
 
-#[cfg(feature = "abci")]
 pub mod upgrade;
 
 mod error;
@@ -86,18 +82,15 @@ pub use serde_json::Value as JsonValue;
 pub mod prelude {
     pub use secp256k1;
 
-    #[cfg(feature = "abci")]
     pub use crate::abci::*;
     pub use crate::call::*;
     pub use crate::client::{AsyncCall, Client};
-    #[cfg(any(target_arch = "wasm32", feature = "abci"))]
     pub use crate::coins::*;
     pub use crate::collections::*;
     pub use crate::context::*;
     pub use crate::encoding::*;
     #[cfg(merk)]
     pub use crate::merk;
-    #[cfg(any(target_arch = "wasm32", feature = "abci"))]
     pub use crate::plugins::*;
     pub use crate::query::*;
     pub use crate::state::*;

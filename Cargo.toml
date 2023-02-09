@@ -11,7 +11,7 @@ abci2 = { git = "https://github.com/nomic-io/abci2", rev="e9d12675bcc8baffe45c97
 merk = { git = "https://github.com/nomic-io/merk", rev = "8009dff26de5718eec709d3aea6d71f7c5188adb", optional = true, default-features = false }
 tendermint-rpc = { version = "=0.23.7", features = ["http-client"], optional = true }
 tendermint = { version = "=0.23.7", optional = true }
-tendermint-proto = { version = "=0.23.7", optional = true }
+tendermint-proto = { version = "=0.23.7" }
 orga-macros = { path = "macros", version = "0.3.1" }
 seq-macro = "0.1.4"
 log = "0.4.8"
@@ -23,7 +23,7 @@ flate2 = "1.0.20"
 tar = "0.4.33"
 ed = { git = "https://github.com/nomic-io/ed", rev = "9c0e206ffdb59dacb90f083e004e8080713e6ad8" }
 toml_edit = "0.2.0"
-prost = {version = "=0.10", optional = true}
+prost = {version = "=0.10"}
 home = { version = "0.5.3", optional = true }
 ed25519-dalek = "1"
 thiserror = "1.0.29"
@@ -65,11 +65,11 @@ serial_test = "0.5.1"
 features = ["abci", "merk/full"]
 
 [features]
-abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto", "prost", "is_executable", "home", "secp256k1/rand-std", "tokio", "tonic", "ibc-proto/server"]
+abci = ["abci2", "tendermint", "tendermint-rpc", "is_executable", "home", "secp256k1/rand-std", "tokio", "tonic", "ibc-proto/server"]
 merk-verify = ["merk/verify"]
 merk-full = ["merk/full", "ics23"]
 state-sync = []
-feat-ibc = ["ibc", "bincode", "ics23", "prost-types", "prost", "ibc-proto", "tendermint-proto", "tendermint"]
+feat-ibc = ["ibc", "bincode", "ics23", "prost-types", "ibc-proto", "tendermint"]
 
 [profile.release]
 lto = true

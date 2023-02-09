@@ -2,7 +2,6 @@ use super::*;
 use crate::coins::MultiShare;
 use crate::context::Context;
 use crate::orga;
-#[cfg(feature = "abci")]
 use crate::plugins::Time;
 use crate::Result;
 use rust_decimal_macros::dec;
@@ -48,7 +47,6 @@ fn setup_state() -> Result<Staking<Simp>> {
     Ok(staking)
 }
 
-#[cfg(feature = "abci")]
 #[test]
 #[serial]
 fn staking() -> Result<()> {
