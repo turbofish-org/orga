@@ -37,8 +37,8 @@ impl Node<()> {
             .join(format!(".{}", name).as_str())
     }
 
-    pub fn height(name: &str) -> Result<u64> {
-        let home = Node::home(name);
+    pub fn height<P: AsRef<Path>>(home: P) -> Result<u64> {
+        let home = home.as_ref();
 
         if !home.exists() {
             return Ok(0);
@@ -56,13 +56,14 @@ pub struct DefaultConfig {
 }
 
 impl<A: App> Node<A> {
-    pub fn new(name: &str, cfg_defaults: DefaultConfig) -> Self {
-        let home = Node::home(name);
+    pub fn new<P: AsRef<Path>>(home: P, cfg_defaults: DefaultConfig) -> Self {
+        let home = home.as_ref();
         let merk_home = home.join("merk");
         let tm_home = home.join("tendermint");
 
         if !home.exists() {
-            std::fs::create_dir(&home).expect("Failed to initialize application home directory");
+            std::fs::create_dir_all(&home)
+                .expect("Failed to initialize application home directory");
         }
 
         let cfg_path = tm_home.join("config/config.toml");
