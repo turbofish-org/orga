@@ -97,7 +97,12 @@ impl MerkStore {
         }
     }
 
-    pub fn init_from(source: impl AsRef<Path>, dest: impl AsRef<Path>) -> Result<Self> {
+    pub fn init_from(
+        source: impl AsRef<Path>,
+        dest: impl AsRef<Path>,
+        height: Option<u64>,
+    ) -> Result<Self> {
+        // TODO: error if source isn't already a merk (currently creates a new merk when opening with `new`)
         let source = source.as_ref();
         let dest = dest.as_ref();
 
@@ -108,12 +113,14 @@ impl MerkStore {
         source.checkpoint(dest.join("db"))?;
         let mut merk_store = Self::new(dest);
 
-        merk_store
-            .write(vec![(
-                b"height".to_vec(),
-                Some(0u64.to_be_bytes().to_vec()),
-            )])
-            .unwrap();
+        if let Some(height) = height {
+            merk_store
+                .write(vec![(
+                    b"height".to_vec(),
+                    Some(height.to_be_bytes().to_vec()),
+                )])
+                .unwrap();
+        }
 
         Ok(merk_store)
     }

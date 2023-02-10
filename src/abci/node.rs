@@ -213,8 +213,8 @@ impl<A: App> Node<A> {
         self
     }
 
-    pub fn init_from_store(self, source: impl AsRef<Path>) -> Self {
-        MerkStore::init_from(source, &self.merk_home).unwrap();
+    pub fn init_from_store(self, source: impl AsRef<Path>, height: Option<u64>) -> Self {
+        MerkStore::init_from(source, &self.merk_home, height).unwrap();
 
         self
     }
