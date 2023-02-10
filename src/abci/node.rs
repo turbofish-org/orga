@@ -249,7 +249,7 @@ impl<A: App> Node<A> {
     }
 
     #[must_use]
-    pub fn logs(mut self, logs: bool) -> Self {
+    pub fn print_tendermint_logs(mut self, logs: bool) -> Self {
         self.logs = logs;
 
         self
