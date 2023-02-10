@@ -176,6 +176,13 @@ impl Tendermint {
         }
     }
 
+    pub fn flags(mut self, flags: Vec<String>) -> Self {
+        for flag in flags {
+            self.process.set_arg(flag.trim());
+        }
+        self
+    }
+
     fn home(mut self, home_path: PathBuf) -> Self {
         let new_home = home_path.to_str().unwrap();
         self.process.set_arg("--home");

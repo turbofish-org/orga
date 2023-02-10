@@ -27,6 +27,7 @@ pub struct Node<A> {
     stderr: Stdio,
     logs: bool,
     skip_init_chain: bool,
+    flags: Vec<String>,
 }
 
 impl Node<()> {
@@ -124,6 +125,7 @@ impl<A: App> Node<A> {
             stdout: Stdio::null(),
             stderr: Stdio::null(),
             logs: false,
+            flags: vec![],
         }
     }
 
@@ -140,6 +142,7 @@ impl<A: App> Node<A> {
             .stdout(stdout)
             .stderr(stderr)
             .logs(self.logs)
+            .flags(self.flags)
             .proxy_app(format!("tcp://0.0.0.0:{}", abci_port).as_str());
 
         if let Some(genesis_bytes) = maybe_genesis_bytes {
@@ -247,6 +250,13 @@ impl<A: App> Node<A> {
     #[must_use]
     pub fn logs(mut self, logs: bool) -> Self {
         self.logs = logs;
+
+        self
+    }
+
+    #[must_use]
+    pub fn tendermint_flags(mut self, flags: Vec<String>) -> Self {
+        self.flags = flags;
 
         self
     }
