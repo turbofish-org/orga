@@ -68,6 +68,7 @@ impl ProcessHandler {
     }
 
     pub fn spawn(&mut self) -> Result<()> {
+        log::debug!("Spawning tendermint: {:#?}", self.command);
         match self.process {
             Some(_) => {
                 return Err(Error::Tendermint("Child process already spawned".into()));
