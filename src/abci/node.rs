@@ -2,6 +2,7 @@ use super::{ABCIStateMachine, ABCIStore, AbciQuery, App, Application, WrappedMer
 use crate::call::Call;
 use crate::encoding::Decode;
 use crate::merk::{BackingStore, MerkStore};
+use crate::migrate::MigrateInto;
 use crate::plugins::{ABCICall, ABCIPlugin};
 use crate::query::Query;
 use crate::state::State;
@@ -171,6 +172,33 @@ impl<A: App> Node<A> {
         Tendermint::new(&self.tm_home)
             .stdout(std::process::Stdio::null())
             .unsafe_reset_all();
+
+        self
+    }
+
+    pub fn migrate<O: State>(self) -> Self
+    where
+        ABCIPlugin<O>: MigrateInto<ABCIPlugin<A>>,
+    {
+        log::info!("Migrating store data... (This might take a while)");
+
+        let merk_store = crate::merk::MerkStore::new(&self.merk_home);
+        let store = Shared::new(merk_store);
+        let mut store = Store::new(BackingStore::Merk(store));
+        let bytes = store.get(&[]).unwrap().unwrap();
+
+        orga::set_compat_mode(true);
+        let app = ABCIPlugin::<O>::load(store.clone(), &mut bytes.as_slice()).unwrap();
+        let mut app = app.migrate_into().unwrap();
+        orga::set_compat_mode(false);
+
+        app.attach(store.clone()).unwrap();
+        let mut bytes = vec![];
+        app.flush(&mut bytes).unwrap();
+        store.put(vec![], bytes).unwrap();
+        if let BackingStore::Merk(merk_store) = store.into_backing_store().into_inner() {
+            merk_store.into_inner().write(vec![]).unwrap();
+        }
 
         self
     }
