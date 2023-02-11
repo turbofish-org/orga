@@ -2,6 +2,7 @@ use super::{ABCIStateMachine, ABCIStore, AbciQuery, App, Application, WrappedMer
 use crate::call::Call;
 use crate::encoding::Decode;
 use crate::merk::{BackingStore, MerkStore};
+use crate::migrate::MigrateInto;
 use crate::plugins::{ABCICall, ABCIPlugin};
 use crate::query::Query;
 use crate::state::State;
@@ -24,7 +25,9 @@ pub struct Node<A> {
     p2p_persistent_peers: Option<Vec<String>>,
     stdout: Stdio,
     stderr: Stdio,
+    logs: bool,
     skip_init_chain: bool,
+    flags: Vec<String>,
 }
 
 impl Node<()> {
@@ -34,8 +37,8 @@ impl Node<()> {
             .join(format!(".{}", name).as_str())
     }
 
-    pub fn height(name: &str) -> Result<u64> {
-        let home = Node::home(name);
+    pub fn height<P: AsRef<Path>>(home: P) -> Result<u64> {
+        let home = home.as_ref();
 
         if !home.exists() {
             return Ok(0);
@@ -53,13 +56,14 @@ pub struct DefaultConfig {
 }
 
 impl<A: App> Node<A> {
-    pub fn new(name: &str, cfg_defaults: DefaultConfig) -> Self {
-        let home = Node::home(name);
+    pub fn new<P: AsRef<Path>>(home: P, cfg_defaults: DefaultConfig) -> Self {
+        let home = home.as_ref();
         let merk_home = home.join("merk");
         let tm_home = home.join("tendermint");
 
         if !home.exists() {
-            std::fs::create_dir(&home).expect("Failed to initialize application home directory");
+            std::fs::create_dir_all(&home)
+                .expect("Failed to initialize application home directory");
         }
 
         let cfg_path = tm_home.join("config/config.toml");
@@ -121,6 +125,8 @@ impl<A: App> Node<A> {
             skip_init_chain: false,
             stdout: Stdio::null(),
             stderr: Stdio::null(),
+            logs: false,
+            flags: vec![],
         }
     }
 
@@ -136,6 +142,8 @@ impl<A: App> Node<A> {
         let mut tm_process = Tendermint::new(&tm_home)
             .stdout(stdout)
             .stderr(stderr)
+            .logs(self.logs)
+            .flags(self.flags)
             .proxy_app(format!("tcp://0.0.0.0:{}", abci_port).as_str());
 
         if let Some(genesis_bytes) = maybe_genesis_bytes {
@@ -172,14 +180,41 @@ impl<A: App> Node<A> {
         self
     }
 
+    pub fn migrate<O: State>(self) -> Self
+    where
+        ABCIPlugin<O>: MigrateInto<ABCIPlugin<A>>,
+    {
+        log::info!("Migrating store data... (This might take a while)");
+
+        let merk_store = crate::merk::MerkStore::new(&self.merk_home);
+        let store = Shared::new(merk_store);
+        let mut store = Store::new(BackingStore::Merk(store));
+        let bytes = store.get(&[]).unwrap().unwrap();
+
+        orga::set_compat_mode(true);
+        let app = ABCIPlugin::<O>::load(store.clone(), &mut bytes.as_slice()).unwrap();
+        let mut app = app.migrate_into().unwrap();
+        orga::set_compat_mode(false);
+
+        app.attach(store.clone()).unwrap();
+        let mut bytes = vec![];
+        app.flush(&mut bytes).unwrap();
+        store.put(vec![], bytes).unwrap();
+        if let BackingStore::Merk(merk_store) = store.into_backing_store().into_inner() {
+            merk_store.into_inner().write(vec![]).unwrap();
+        }
+
+        self
+    }
+
     pub fn skip_init_chain(mut self) -> Self {
         self.skip_init_chain = true;
 
         self
     }
 
-    pub fn init_from_store(self, source: impl AsRef<Path>) -> Self {
-        MerkStore::init_from(source, &self.merk_home).unwrap();
+    pub fn init_from_store(self, source: impl AsRef<Path>, height: Option<u64>) -> Self {
+        MerkStore::init_from(source, &self.merk_home, height).unwrap();
 
         self
     }
@@ -209,6 +244,20 @@ impl<A: App> Node<A> {
     #[must_use]
     pub fn stderr<T: Into<Stdio>>(mut self, stderr: T) -> Self {
         self.stderr = stderr.into();
+
+        self
+    }
+
+    #[must_use]
+    pub fn print_tendermint_logs(mut self, logs: bool) -> Self {
+        self.logs = logs;
+
+        self
+    }
+
+    #[must_use]
+    pub fn tendermint_flags(mut self, flags: Vec<String>) -> Self {
+        self.flags = flags;
 
         self
     }

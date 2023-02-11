@@ -2,13 +2,18 @@ use crate::error::{Error, Result};
 use flate2::read::GzDecoder;
 use hex_literal::hex;
 use is_executable::IsExecutable;
-use log::info;
+use log::{debug, info, trace};
+use nom::bytes::complete::take_until;
+use nom::character::complete::alphanumeric1;
+use nom::multi::{many0, many1};
+use nom::sequence::separated_pair;
 use sha2::{Digest, Sha256};
 use std::fs;
-use std::io::prelude::*;
+use std::io::{prelude::*, BufReader};
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::str::FromStr;
 use tar::Archive;
 use toml_edit::{value, Document};
 
@@ -63,6 +68,7 @@ impl ProcessHandler {
     }
 
     pub fn spawn(&mut self) -> Result<()> {
+        log::debug!("Spawning tendermint: {:#?}", self.command);
         match self.process {
             Some(_) => {
                 return Err(Error::Tendermint("Child process already spawned".into()));
@@ -105,6 +111,7 @@ pub struct Tendermint {
     home: PathBuf,
     genesis_bytes: Option<Vec<u8>>,
     config_contents: Option<toml_edit::Document>,
+    show_logs: bool,
 }
 
 impl Tendermint {
@@ -125,6 +132,7 @@ impl Tendermint {
             home: home_path.clone().into(),
             genesis_bytes: None,
             config_contents: None,
+            show_logs: false,
         };
         tendermint.home(home_path.into())
     }
@@ -133,7 +141,7 @@ impl Tendermint {
         let tendermint_path = self.home.join(TENDERMINT_BINARY_NAME);
 
         if tendermint_path.is_executable() {
-            info!("Tendermint already installed");
+            debug!("Tendermint already installed");
             return;
         }
 
@@ -167,6 +175,13 @@ impl Tendermint {
                 break;
             }
         }
+    }
+
+    pub fn flags(mut self, flags: Vec<String>) -> Self {
+        for flag in flags {
+            self.process.set_arg(flag.trim());
+        }
+        self
     }
 
     fn home(mut self, home_path: PathBuf) -> Self {
@@ -535,6 +550,12 @@ impl Tendermint {
         self
     }
 
+    #[must_use]
+    pub fn logs(mut self, show: bool) -> Self {
+        self.show_logs = show;
+        self
+    }
+
     /// Calls tendermint start with configured arguments
     ///
     /// Note: This will locally install the Tendermint binary if it is
@@ -543,7 +564,46 @@ impl Tendermint {
         self.install();
         self.mutate_configuration();
         self.process.set_arg("start");
+        if !self.show_logs {
+            self.process.command.stdout(Stdio::piped());
+        }
         self.process.spawn().unwrap();
+        if !self.show_logs {
+            let stdout = self
+                .process
+                .process
+                .as_mut()
+                .unwrap()
+                .stdout
+                .take()
+                .unwrap();
+            std::thread::spawn(move || {
+                let stdout = BufReader::new(stdout).lines();
+                for line in stdout {
+                    line.as_ref()
+                        .unwrap()
+                        .parse()
+                        .map(|msg: LogMessage| {
+                            log::debug!("{:#?}", msg);
+                            match msg.message.as_str() {
+                                "Started node" => log::info!("Started Tendermint"),
+                                "executed block" => log::info!(
+                                    "Executed block {}. txs={}",
+                                    msg.meta[1].1,
+                                    msg.meta[2].1
+                                ),
+                                "Applied snapshot chunk to ABCI app" => log::info!(
+                                    "Verified state sync chunk {}/{}",
+                                    msg.meta[3].1,
+                                    msg.meta[4].1
+                                ),
+                                _ => {}
+                            }
+                        })
+                        .unwrap_or_else(|_| println!("! {}", line.unwrap()));
+                }
+            });
+        }
         self
     }
 
@@ -575,6 +635,77 @@ impl Tendermint {
         self.process.set_arg("unsafe_reset_all");
         self.process.spawn().unwrap();
         self.process.wait().unwrap();
+    }
+}
+
+#[derive(Debug)]
+struct LogMessage {
+    level: String,
+    timestamp: String,
+    message: String,
+    meta: Vec<(String, String)>,
+}
+
+impl FromStr for LogMessage {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        use nom::{
+            branch::alt,
+            bytes::complete::{tag, take, take_while_m_n},
+            character::complete::{anychar, char, none_of},
+            combinator::{cut, map, map_res},
+            sequence::{delimited, preceded, terminated},
+            IResult, Parser,
+        };
+
+        let into_string = |chars: Vec<char>| chars.into_iter().collect::<String>();
+
+        let (s, level) = take::<_, _, nom::error::Error<_>>(1usize)(s)
+            .map_err(|_| Error::App("Could not parse log line".to_string()))?;
+        let (s, (date, time)) = separated_pair(
+            preceded(
+                char::<_, nom::error::Error<_>>('['),
+                map(many1(none_of("|")), into_string),
+            ),
+            char('|'),
+            terminated(map(many1(none_of("]")), into_string), char(']')),
+        )(s)
+        .map_err(|_| Error::App("Could not parse log line".to_string()))?;
+        let (s, message) =
+            preceded(char::<_, nom::error::Error<_>>(' '), take_until(" module="))(s)
+                .map_err(|_| Error::App("Could not parse log line".to_string()))?;
+        let (s, _) = many1::<_, _, nom::error::Error<_>, _>(tag(" "))(s)
+            .map_err(|_| Error::App("Could not parse log line".to_string()))?;
+        let (_, meta) = many1(preceded(
+            many0(char(' ')),
+            separated_pair(
+                map(
+                    many1(none_of::<_, _, nom::error::Error<_>>("=")),
+                    into_string,
+                ),
+                char('='),
+                alt((
+                    map(
+                        preceded(char('"'), terminated(many1(none_of("\"")), char('"'))),
+                        into_string,
+                    ),
+                    map(terminated(many1(none_of(" ")), char(' ')), into_string),
+                    map(
+                        terminated(many1(none_of(" ")), nom::combinator::eof),
+                        into_string,
+                    ),
+                )),
+            ),
+        ))(s)
+        .map_err(|_| Error::App("Could not parse log line".to_string()))?;
+
+        Ok(LogMessage {
+            level: level.to_string(),
+            timestamp: format!("{date} {time}"),
+            message: message.trim().to_string(),
+            meta,
+        })
     }
 }
 
