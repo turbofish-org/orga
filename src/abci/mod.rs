@@ -35,6 +35,7 @@ pub struct ABCIStateMachine<A: Application> {
     mempool_state: Option<BufStoreMap>,
     consensus_state: Option<BufStoreMap>,
     height: u64,
+    timestamp: i64,
 }
 
 impl<A: Application> ABCIStateMachine<A> {
@@ -51,6 +52,7 @@ impl<A: Application> ABCIStateMachine<A> {
             mempool_state: Some(Default::default()),
             consensus_state: Some(Default::default()),
             height: 0,
+            timestamp: 0,
         }
     }
 
@@ -149,6 +151,7 @@ impl<A: Application> ABCIStateMachine<A> {
                 let app = self.app.take().unwrap();
                 let self_store = self.store.take().unwrap().into_inner();
                 let self_store_shared = Shared::new(self_store);
+                self.timestamp = req.header.as_ref().unwrap().time.as_ref().unwrap().seconds;
 
                 let mut store = Some(Shared::new(BufStore::wrap_with_map(
                     self_store_shared.clone(),
@@ -243,7 +246,9 @@ impl<A: Application> ABCIStateMachine<A> {
                     store.flush()?;
                 }
 
-                self_store_shared.borrow_mut().commit(self.height)?;
+                self_store_shared
+                    .borrow_mut()
+                    .commit(self.height, self.timestamp)?;
 
                 if let Some(stop_height_str) = env::var_os("STOP_HEIGHT") {
                     let stop_height: u64 = stop_height_str
@@ -442,7 +447,7 @@ pub trait ABCIStore: Read + Write {
 
     fn root_hash(&self) -> Result<Vec<u8>>;
 
-    fn commit(&mut self, height: u64) -> Result<()>;
+    fn commit(&mut self, height: u64, timestamp: i64) -> Result<()>;
 
     fn list_snapshots(&self) -> Result<Vec<Snapshot>>;
 
@@ -457,6 +462,7 @@ pub trait ABCIStore: Read + Write {
 /// data in memory (mostly for use in testing).
 pub struct MemStore {
     height: u64,
+    timestamp: i64,
     store: MapStore,
 }
 
@@ -464,6 +470,7 @@ impl MemStore {
     pub fn new() -> Self {
         MemStore {
             height: 0,
+            timestamp: 0,
             store: MapStore::new(),
         }
     }
@@ -505,8 +512,9 @@ impl ABCIStore for MemStore {
         Ok(vec![])
     }
 
-    fn commit(&mut self, height: u64) -> Result<()> {
+    fn commit(&mut self, height: u64, timestamp: i64) -> Result<()> {
         self.height = height;
+        self.timestamp = timestamp;
         Ok(())
     }
 

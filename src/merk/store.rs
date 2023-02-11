@@ -244,10 +244,14 @@ impl ABCIStore for MerkStore {
         Ok(calc_app_hash(merk_root.as_slice()))
     }
 
-    fn commit(&mut self, height: u64) -> Result<()> {
+    fn commit(&mut self, height: u64, timestamp: i64) -> Result<()> {
         let height_bytes = height.to_be_bytes();
+        let timestamp_bytes = timestamp.to_be_bytes();
 
-        let metadata = vec![(b"height".to_vec(), Some(height_bytes.to_vec()))];
+        let metadata = vec![
+            (b"height".to_vec(), Some(height_bytes.to_vec())),
+            (b"timestamp".to_vec(), Some(timestamp_bytes.to_vec())),
+        ];
 
         self.write(metadata)?;
         self.merk.as_mut().unwrap().flush()?;
