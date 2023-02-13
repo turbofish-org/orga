@@ -122,154 +122,182 @@ migrate_tuple_impl!(A, B, C, D, E, F, G, H, I, J; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
 migrate_tuple_impl!(A, B, C, D, E, F, G, H, I, J, K; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
 migrate_tuple_impl!(A, B, C, D, E, F, G, H, I, J, K, L; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
 
-// #[cfg(test)]
-// mod tests {
-//     use serde::{Deserialize, Serialize};
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        collections::{Deque, Entry, EntryMap, Map},
+        encoding::Encode,
+        orga,
+        state::State,
+        store::{DefaultBackingStore, MapStore, Read, Shared, Store, Write},
+        Result,
+    };
 
-//     use crate::{
-//         collections::Map,
-//         describe::{Describe, Value},
-//         encoding::{Decode, Encode},
-//         state::State,
-//         store::{DefaultBackingStore, MapStore, Shared, Store, Write},
-//         Result,
-//     };
+    #[orga(version = 1)]
+    #[derive(Clone)]
+    struct Number {
+        #[orga(version(V0))]
+        value: u16,
+        #[orga(version(V1))]
+        value: u32,
+    }
+    impl MigrateFrom<NumberV0> for NumberV1 {
+        fn migrate_from(other: NumberV0) -> Result<Self> {
+            let value: u32 = other.value.into();
 
-//     #[derive(State, Encode, Decode, Describe, Default, Serialize, Deserialize)]
-//     struct FooV0 {
-//         bar: u32,
-//         baz: Map<u32, u32>,
-//         beep: Map<u32, Map<bool, u8>>,
-//     }
+            Ok(Self { value: value * 2 })
+        }
+    }
 
-//     fn create_foo_v0_value() -> Result<Value> {
-//         let mut store = Store::new(DefaultBackingStore::MapStore(Shared::new(MapStore::new())));
+    #[orga(version = 1)]
+    #[derive(Entry)]
+    struct NumberEntry {
+        #[key]
+        index: u8,
+        #[orga(version(V0))]
+        inner: NumberV0,
+        #[orga(version(V1))]
+        inner: NumberV1,
+    }
 
-//         let mut foo = FooV0::default();
-//         // TODO: remove this prefix after ABCI refactor
-//         foo.attach(store.sub(&[0]))?;
+    impl MigrateFrom<NumberEntryV0> for NumberEntryV1 {
+        fn migrate_from(other: NumberEntryV0) -> Result<Self> {
+            Ok(Self {
+                index: other.index,
+                inner: other.inner.migrate_into()?,
+            })
+        }
+    }
 
-//         foo.baz.insert(123, 456)?;
-//         foo.baz.insert(789, 1)?;
-//         foo.baz.insert(1000, 2)?;
-//         foo.baz.insert(1001, 3)?;
+    #[orga(version = 1)]
+    struct Foo {
+        #[orga(version(V0))]
+        bar: u32,
+        #[orga(version(V1))]
+        bar: u64,
 
-//         foo.beep.insert(10, Map::new())?;
-//         foo.beep.get_mut(10)?.unwrap().insert(true, 1)?;
-//         foo.beep.get_mut(10)?.unwrap().insert(false, 0)?;
-//         foo.beep.insert(20, Map::new()).unwrap();
-//         foo.beep.get_mut(20)?.unwrap().insert(true, 0)?;
-//         foo.beep.get_mut(20)?.unwrap().insert(false, 1)?;
+        #[orga(version(V1))]
+        boop: u32,
 
-//         foo.flush()?;
-//         store.put(vec![], foo.encode()?)?;
+        #[orga(version(V0))]
+        baz: Map<u32, u32>,
+        #[orga(version(V1))]
+        baz: Map<u32, u32>,
 
-//         let mut value = Value::new(foo);
-//         // TODO: remove this prefix after ABCI refactor
-//         value.attach(store.sub(&[0]))?;
+        #[orga(version(V0))]
+        beep: Map<NumberV0, Deque<EntryMap<NumberEntryV0>>>,
+        #[orga(version(V1))]
+        beep: Map<NumberV1, Deque<EntryMap<NumberEntryV1>>>,
+    }
 
-//         Ok(value)
-//     }
+    impl MigrateFrom<FooV0> for FooV1 {
+        fn migrate_from(other: FooV0) -> Result<Self> {
+            Ok(Self {
+                bar: other.bar.try_into().unwrap(),
+                boop: 43,
+                baz: other.baz.migrate_into()?,
+                beep: other.beep.migrate_into()?,
+            })
+        }
+    }
 
-//     #[test]
-//     pub fn migrate_identity() -> Result<()> {
-//         let foo = create_foo_v0_value()?;
-//         let json = foo.to_json()?.to_string();
+    fn create_foo_v0_store() -> Result<Store> {
+        let mut store = Store::new(DefaultBackingStore::MapStore(Shared::new(MapStore::new())));
 
-//         let store = Store::new(DefaultBackingStore::MapStore(Shared::new(MapStore::new())));
-//         super::migrate::<_, FooV0>(0, json.as_bytes(), store.clone())?;
+        let mut foo = FooV0 {
+            bar: 42,
+            ..Default::default()
+        };
 
-//         let mut iter = store.range(..);
-//         let mut assert_next = |k: &[u8], v: &[u8]| {
-//             assert_eq!(
-//                 iter.next().transpose().unwrap(),
-//                 Some((k.to_vec(), v.to_vec()))
-//             )
-//         };
-//         assert_next(&[], &[0, 0, 0, 0]);
-//         assert_next(&[1, 0, 0, 0, 123], &[0, 0, 1, 200]);
-//         assert_next(&[1, 0, 0, 3, 21], &[0, 0, 0, 1]);
-//         assert_next(&[1, 0, 0, 3, 232], &[0, 0, 0, 2]);
-//         assert_next(&[1, 0, 0, 3, 233], &[0, 0, 0, 3]);
-//         assert_next(&[2, 0, 0, 0, 10], &[]);
-//         assert_next(&[2, 0, 0, 0, 10, 0], &[0]);
-//         assert_next(&[2, 0, 0, 0, 10, 1], &[1]);
-//         assert_next(&[2, 0, 0, 0, 20], &[]);
-//         assert_next(&[2, 0, 0, 0, 20, 0], &[1]);
-//         assert_next(&[2, 0, 0, 0, 20, 1], &[0]);
-//         assert_eq!(iter.next().transpose()?, None);
+        foo.baz.insert(12, 34)?;
+        foo.baz.insert(789, 1)?;
+        foo.baz.insert(1000, 2)?;
+        foo.baz.insert(1001, 3)?;
+        let key = NumberV0 { value: 10 };
+        let mut em = EntryMap::new();
+        let entry = NumberEntryV0 {
+            index: 11,
+            inner: NumberV0 { value: 12 },
+        };
+        em.insert(entry)?;
+        foo.beep.entry(key)?.or_insert_default()?.push_back(em)?;
 
-//         Ok(())
-//     }
+        let mut bytes = vec![];
+        foo.attach(store.clone())?;
+        foo.flush(&mut bytes)?;
+        store.put(vec![], bytes)?;
 
-//     #[derive(State, Encode, Decode, Describe, Default, Serialize, Deserialize)]
-//     #[state(version = 1, transform = "transform_foo")]
-//     struct FooV1 {
-//         bar: u64,
-//         baz: Map<u32, u32>,
-//         beep: Map<u32, Map<u8, u8>>,
-//     }
+        Ok(store)
+    }
 
-//     fn transform_foo(version: u32, value: &mut crate::JsonValue) -> Result<()> {
-//         match version {
-//             0 => value["beep"]
-//                 .as_array_mut()
-//                 .unwrap()
-//                 .iter_mut()
-//                 .for_each(|arr| {
-//                     arr.as_array_mut().unwrap()[1]
-//                         .as_array_mut()
-//                         .unwrap()
-//                         .iter_mut()
-//                         .for_each(|arr| {
-//                             let key = &mut arr.as_array_mut().unwrap()[0];
-//                             *key = serde_json::to_value(match key.as_bool().unwrap() {
-//                                 false => 0,
-//                                 true => 1,
-//                             })
-//                             .unwrap();
-//                         })
-//                 }),
-//             1 => {}
-//             _ => {
-//                 return Err(crate::Error::State(format!(
-//                     "Cannot upgrade from version {}",
-//                     version
-//                 )))
-//             }
-//         };
+    #[test]
+    fn basic_migration() -> Result<()> {
+        let mut store = create_foo_v0_store()?;
+        let bytes = store.get(&[])?.unwrap();
+        let foo = FooV0::load(store.clone(), &mut bytes.as_slice())?;
 
-//         Ok(())
-//     }
+        assert_eq!(foo.bar, 42);
+        assert_eq!(foo.baz.get(12)?.unwrap().clone(), 34);
+        assert_eq!(store.get(&[1, 0, 0, 0, 12])?.unwrap(), vec![0, 0, 0, 34]);
+        assert_eq!(
+            store
+                .get(&[2, 0, 0, 10, 127, 255, 255, 255, 255, 255, 255, 255, 11])?
+                .unwrap(),
+            vec![0, 0, 12]
+        );
+        let key = NumberV0 { value: 10 };
+        assert!(foo
+            .beep
+            .get(key.clone())?
+            .unwrap()
+            .back()?
+            .unwrap()
+            .contains_entry_key(NumberEntryV0 {
+                index: 11,
+                ..Default::default()
+            })?);
 
-//     #[test]
-//     fn migrate_transform() -> Result<()> {
-//         let foo = create_foo_v0_value()?;
-//         let json = foo.to_json()?.to_string();
+        let mut foo = FooV1::load(store.clone(), &mut bytes.as_slice())?;
+        assert_eq!(foo.bar, 42);
+        assert_eq!(foo.boop, 43);
+        assert_eq!(foo.baz.get(12)?.unwrap().clone(), 34);
+        assert!(store.get(&[1, 0, 0, 0, 12])?.is_none());
+        assert!(store
+            .get(&[2, 0, 0, 10, 127, 255, 255, 255, 255, 255, 255, 255, 11])?
+            .is_none());
+        let key: NumberV1 = key.migrate_into()?;
+        assert_eq!(key.encode()?, vec![1, 0, 0, 0, 20]);
+        assert_eq!(key.value, 20);
+        let entry = foo
+            .beep
+            .get(key)?
+            .unwrap()
+            .back()?
+            .unwrap()
+            .iter()?
+            .next()
+            .unwrap()
+            .unwrap();
+        assert_eq!(entry.index, 11);
+        assert_eq!(entry.inner.value, 24);
 
-//         let store = Store::new(DefaultBackingStore::MapStore(Shared::new(MapStore::new())));
-//         super::migrate::<_, FooV1>(0, json.as_bytes(), store.clone())?;
+        let mut bytes = vec![];
+        foo.attach(store.clone())?;
+        foo.flush(&mut bytes)?;
+        store.put(vec![], bytes)?;
+        assert!(store.get(&[1, 0, 0, 0, 12])?.is_none());
+        assert_eq!(store.get(&[2, 0, 0, 0, 12])?.unwrap(), vec![0, 0, 0, 34]);
+        assert!(store
+            .get(&[2, 0, 0, 10, 127, 255, 255, 255, 255, 255, 255, 255, 11])?
+            .is_none());
+        assert_eq!(
+            store
+                .get(&[3, 1, 0, 0, 0, 20, 127, 255, 255, 255, 255, 255, 255, 255, 11])?
+                .unwrap(),
+            vec![1, 0, 0, 0, 24]
+        );
 
-//         let mut iter = store.range(..);
-//         let mut assert_next = |k: &[u8], v: &[u8]| {
-//             assert_eq!(
-//                 iter.next().transpose().unwrap(),
-//                 Some((k.to_vec(), v.to_vec()))
-//             )
-//         };
-//         assert_next(&[], &[0, 0, 0, 0, 0, 0, 0, 0]);
-//         assert_next(&[1, 0, 0, 0, 123], &[0, 0, 1, 200]);
-//         assert_next(&[1, 0, 0, 3, 21], &[0, 0, 0, 1]);
-//         assert_next(&[1, 0, 0, 3, 232], &[0, 0, 0, 2]);
-//         assert_next(&[1, 0, 0, 3, 233], &[0, 0, 0, 3]);
-//         assert_next(&[2, 0, 0, 0, 10], &[]);
-//         assert_next(&[2, 0, 0, 0, 10, 0], &[0]);
-//         assert_next(&[2, 0, 0, 0, 10, 1], &[1]);
-//         assert_next(&[2, 0, 0, 0, 20], &[]);
-//         assert_next(&[2, 0, 0, 0, 20, 0], &[1]);
-//         assert_next(&[2, 0, 0, 0, 20, 1], &[0]);
-//         assert_eq!(iter.next().transpose()?, None);
-
-//         Ok(())
-//     }
-// }
+        Ok(())
+    }
+}
