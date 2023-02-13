@@ -235,16 +235,23 @@ mod tests {
     fn basic_migration() -> Result<()> {
         let mut store = create_foo_v0_store()?;
         let bytes = store.get(&[])?.unwrap();
+        assert_eq!(bytes, vec![0, 0, 0, 0, 42]);
         let foo = FooV0::load(store.clone(), &mut bytes.as_slice())?;
 
         assert_eq!(foo.bar, 42);
         assert_eq!(foo.baz.get(12)?.unwrap().clone(), 34);
         assert_eq!(store.get(&[1, 0, 0, 0, 12])?.unwrap(), vec![0, 0, 0, 34]);
+        // Entry
         assert_eq!(
             store
                 .get(&[2, 0, 0, 10, 127, 255, 255, 255, 255, 255, 255, 255, 11])?
                 .unwrap(),
             vec![0, 0, 12]
+        );
+        // Deque meta
+        assert_eq!(
+            store.get(&[2, 0, 0, 10])?.unwrap(),
+            vec![0, 127, 255, 255, 255, 255, 255, 255, 255, 128, 0, 0, 0, 0, 0, 0, 0]
         );
         let key = NumberV0 { value: 10 };
         assert!(foo
@@ -266,6 +273,7 @@ mod tests {
         assert!(store
             .get(&[2, 0, 0, 10, 127, 255, 255, 255, 255, 255, 255, 255, 11])?
             .is_none());
+        assert!(store.get(&[2, 0, 0, 10])?.is_none());
         let key: NumberV1 = key.migrate_into()?;
         assert_eq!(key.encode()?, vec![1, 0, 0, 0, 20]);
         assert_eq!(key.value, 20);
@@ -285,12 +293,18 @@ mod tests {
         let mut bytes = vec![];
         foo.attach(store.clone())?;
         foo.flush(&mut bytes)?;
+        assert_eq!(bytes, vec![1, 0, 0, 0, 0, 0, 0, 0, 42, 0, 0, 0, 43]);
         store.put(vec![], bytes)?;
         assert!(store.get(&[1, 0, 0, 0, 12])?.is_none());
         assert_eq!(store.get(&[2, 0, 0, 0, 12])?.unwrap(), vec![0, 0, 0, 34]);
         assert!(store
             .get(&[2, 0, 0, 10, 127, 255, 255, 255, 255, 255, 255, 255, 11])?
             .is_none());
+        assert!(store.get(&[2, 0, 0, 10])?.is_none());
+        assert_eq!(
+            store.get(&[3, 1, 0, 0, 0, 20])?.unwrap(),
+            vec![0, 127, 255, 255, 255, 255, 255, 255, 255, 128, 0, 0, 0, 0, 0, 0, 0]
+        );
         assert_eq!(
             store
                 .get(&[3, 1, 0, 0, 0, 20, 127, 255, 255, 255, 255, 255, 255, 255, 11])?
