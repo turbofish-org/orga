@@ -86,8 +86,8 @@ impl OrgaSubStruct {
         let mut attrs: Vec<Attribute> = vec![parse_quote! {#[derive(#(#derives),*)]}];
 
         attrs.push(self.state_attr());
+        attrs.push(self.encoding_attr());
         if self.simple {
-            attrs.push(self.encoding_attr());
             attrs.push(self.migrate_from_attr());
             attrs.push(parse_quote! {#[derive(Clone)]})
         }
