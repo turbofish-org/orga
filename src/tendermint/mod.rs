@@ -2,9 +2,8 @@ use crate::error::{Error, Result};
 use flate2::read::GzDecoder;
 use hex_literal::hex;
 use is_executable::IsExecutable;
-use log::{debug, info, trace};
+use log::{debug, info};
 use nom::bytes::complete::take_until;
-use nom::character::complete::alphanumeric1;
 use nom::multi::{many0, many1};
 use nom::sequence::separated_pair;
 use sha2::{Digest, Sha256};
@@ -640,8 +639,6 @@ impl Tendermint {
 
 #[derive(Debug)]
 struct LogMessage {
-    level: String,
-    timestamp: String,
     message: String,
     meta: Vec<(String, String)>,
 }
@@ -652,18 +649,17 @@ impl FromStr for LogMessage {
     fn from_str(s: &str) -> Result<Self> {
         use nom::{
             branch::alt,
-            bytes::complete::{tag, take, take_while_m_n},
-            character::complete::{anychar, char, none_of},
-            combinator::{cut, map, map_res},
-            sequence::{delimited, preceded, terminated},
-            IResult, Parser,
+            bytes::complete::{tag, take},
+            character::complete::{char, none_of},
+            combinator::map,
+            sequence::{preceded, terminated},
         };
 
         let into_string = |chars: Vec<char>| chars.into_iter().collect::<String>();
 
-        let (s, level) = take::<_, _, nom::error::Error<_>>(1usize)(s)
+        let (s, _level) = take::<_, _, nom::error::Error<_>>(1usize)(s)
             .map_err(|_| Error::App("Could not parse log line".to_string()))?;
-        let (s, (date, time)) = separated_pair(
+        let (s, _) = separated_pair(
             preceded(
                 char::<_, nom::error::Error<_>>('['),
                 map(many1(none_of("|")), into_string),
@@ -701,8 +697,6 @@ impl FromStr for LogMessage {
         .map_err(|_| Error::App("Could not parse log line".to_string()))?;
 
         Ok(LogMessage {
-            level: level.to_string(),
-            timestamp: format!("{date} {time}"),
             message: message.trim().to_string(),
             meta,
         })
