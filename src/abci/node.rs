@@ -20,6 +20,7 @@ pub struct Node<A> {
     _app: PhantomData<A>,
     tm_home: PathBuf,
     merk_home: PathBuf,
+    home: PathBuf,
     abci_port: u16,
     genesis_bytes: Option<Vec<u8>>,
     p2p_persistent_peers: Option<Vec<String>>,
@@ -57,7 +58,7 @@ pub struct DefaultConfig {
 
 impl<A: App> Node<A> {
     pub fn new<P: AsRef<Path>>(home: P, cfg_defaults: DefaultConfig) -> Self {
-        let home = home.as_ref();
+        let home = home.as_ref().to_path_buf();
         let merk_home = home.join("merk");
         let tm_home = home.join("tendermint");
 
@@ -119,6 +120,7 @@ impl<A: App> Node<A> {
             _app: PhantomData,
             merk_home,
             tm_home,
+            home,
             abci_port,
             genesis_bytes: None,
             p2p_persistent_peers: None,
@@ -161,8 +163,23 @@ impl<A: App> Node<A> {
 
         let res = ABCIStateMachine::new(app, store, self.skip_init_chain)
             .listen(format!("127.0.0.1:{}", self.abci_port));
-
         tm_process.kill()?;
+
+        if let Err(crate::Error::Upgrade(crate::upgrade::Error::Version { expected, actual })) = res
+        {
+            log::warn!(
+                "Node is version {}, but network is version {}",
+                hex::encode(actual.to_vec()),
+                hex::encode(expected.to_vec()),
+            );
+
+            std::fs::write(
+                self.home.join("network_version"),
+                format!("{}\n", hex::encode(expected.to_vec())),
+            )?;
+
+            std::process::exit(138);
+        }
 
         res
     }
