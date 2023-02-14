@@ -68,7 +68,7 @@ impl ToTokens for EncodingInputReceiver {
             });
             quote! {
                 fn encoding_length(&self) -> #result_ty<usize> {
-                    Ok(0 #(#child_encoding_lens)*)
+                    Ok(1 #(#child_encoding_lens)*)
                 }
             }
         };

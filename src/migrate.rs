@@ -127,26 +127,35 @@ mod tests {
     use super::*;
     use crate::{
         collections::{Deque, Entry, EntryMap, Map},
-        encoding::Encode,
+        encoding::{Decode, Encode},
         orga,
         state::State,
         store::{DefaultBackingStore, MapStore, Read, Shared, Store, Write},
         Result,
     };
 
-    #[orga(version = 1)]
+    #[orga(version = 2)]
     #[derive(Clone)]
     struct Number {
         #[orga(version(V0))]
         value: u16,
-        #[orga(version(V1))]
+        #[orga(version(V1, V2))]
         value: u32,
     }
+
     impl MigrateFrom<NumberV0> for NumberV1 {
         fn migrate_from(other: NumberV0) -> Result<Self> {
             let value: u32 = other.value.into();
 
             Ok(Self { value: value * 2 })
+        }
+    }
+
+    impl MigrateFrom<NumberV1> for NumberV2 {
+        fn migrate_from(other: NumberV1) -> Result<Self> {
+            Ok(Self {
+                value: other.value * 2,
+            })
         }
     }
 
@@ -311,6 +320,23 @@ mod tests {
                 .unwrap(),
             vec![1, 0, 0, 0, 24]
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn encoding_migration() -> Result<()> {
+        let num = NumberV0 { value: 10 };
+        let v0_bytes = num.encode()?;
+        assert_eq!(v0_bytes, vec![0, 0, 10]);
+        let num = NumberV1::decode(v0_bytes.as_slice())?;
+        assert_eq!(num.value, 20);
+        let bytes = num.encode()?;
+        assert_eq!(bytes, vec![1, 0, 0, 0, 20]);
+        let num = NumberV1::decode(bytes.as_slice())?;
+        assert_eq!(num.value, 20);
+        let num = NumberV2::decode(v0_bytes.as_slice())?;
+        assert_eq!(num.value, 40);
 
         Ok(())
     }

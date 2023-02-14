@@ -44,11 +44,8 @@ impl<R: Read> Decoder<R> {
     where
         U: Decode,
     {
-        if self.field_count == 0 && !compat_mode() {
-            let version_byte = u8::decode(&mut self.bytes)?;
-            if version_byte != self.version {
-                return Err(Error::UnexpectedByte(version_byte));
-            }
+        if self.field_count == 0 && !compat_mode() && self.version == 0 {
+            let _version_byte = u8::decode(&mut self.bytes)?;
         }
         let res = U::decode(&mut self.bytes);
         self.field_count += 1;
