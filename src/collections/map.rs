@@ -222,28 +222,28 @@ where
 {
     fn migrate_from(mut other: Map<K1, V1>) -> Result<Self> {
         let mut map = Self::default();
-        let mut old_keys = vec![];
-        for entry in other.iter()? {
-            let (key, _value) = entry?;
-            old_keys.push(key.clone());
-        }
 
-        for key in old_keys.iter() {
-            let old_key_bytes = key.encode()?;
-            let mut value_bytes = vec![];
-            let value = other.remove(key.clone())?.unwrap().into_inner();
-            value.flush(&mut value_bytes)?;
-            let value = V1::load(
-                other.store.sub(old_key_bytes.as_slice()),
-                &mut value_bytes.as_slice(),
-            )?;
-            let new_key = key.clone().migrate_into()?;
+        // TODO: create Map draining iterator (implementation will be similar to this)
+
+        let mut kv = other.store.get_next(&[])?;
+        while let Some((key_bytes, value_bytes)) = kv {
+            let key = K1::decode(key_bytes.as_slice())?;
+            let value = V1::load(other.store.sub(&key_bytes), &mut value_bytes.as_slice())?;
+
+            let new_key = key.migrate_into()?;
             let new_value = value.migrate_into()?;
-
             map.insert(new_key, new_value)?;
+
+            Self::remove_from_store(&mut other.store, &key_bytes)?;
+
+            let key_len = key_bytes.len();
+            let next_key = increment_bytes(key_bytes);
+            if next_key.len() > key_len {
+                break;
+            }
+
+            kv = other.store.get_next_inclusive(&next_key)?;
         }
-        let mut out = vec![];
-        other.flush(&mut out)?;
 
         Ok(map)
     }
