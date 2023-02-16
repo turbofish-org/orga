@@ -34,6 +34,7 @@ macro_rules! state_impl {
                 Ok(self.encode_into(out)?)
             }
 
+            #[inline]
             fn load(_store: Store, bytes: &mut &[u8]) -> Result<Self> {
                 Ok(Self::decode(bytes)?)
             }
@@ -67,10 +68,12 @@ fn varint(n: usize, max: usize) -> Vec<u8> {
 }
 
 impl<T: State> State for Option<T> {
+    #[inline]
     fn attach(&mut self, store: Store) -> Result<()> {
         self.as_mut().map_or(Ok(()), |inner| inner.attach(store))
     }
 
+    #[inline]
     fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
         match self {
             Some(inner) => {
@@ -84,6 +87,7 @@ impl<T: State> State for Option<T> {
         }
     }
 
+    #[inline]
     fn load(store: Store, mut bytes: &mut &[u8]) -> Result<Self> {
         let variant_byte = u8::decode(&mut bytes)?;
         if variant_byte == 0 {
@@ -95,6 +99,7 @@ impl<T: State> State for Option<T> {
 }
 
 impl<T: State + Terminated, const N: usize> State for [T; N] {
+    #[inline]
     fn attach(&mut self, store: Store) -> Result<()> {
         for (i, value) in self.iter_mut().enumerate() {
             let prefix = varint(i, N);
@@ -104,6 +109,7 @@ impl<T: State + Terminated, const N: usize> State for [T; N] {
         Ok(())
     }
 
+    #[inline]
     fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
         for value in self.into_iter() {
             value.flush(out)?;
@@ -111,6 +117,7 @@ impl<T: State + Terminated, const N: usize> State for [T; N] {
         Ok(())
     }
 
+    #[inline]
     fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
         let items: Vec<T> = (0..N)
             .map(|i| {
@@ -128,6 +135,7 @@ impl<T: State + Terminated, const N: usize> State for [T; N] {
 }
 
 impl<T: State + Terminated> State for Vec<T> {
+    #[inline]
     fn attach(&mut self, store: Store) -> Result<()> {
         for (i, value) in self.iter_mut().enumerate() {
             let prefix = (i as u64).to_be_bytes();
@@ -137,6 +145,7 @@ impl<T: State + Terminated> State for Vec<T> {
         Ok(())
     }
 
+    #[inline]
     fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
         for value in self.into_iter() {
             value.flush(out)?;
@@ -144,6 +153,7 @@ impl<T: State + Terminated> State for Vec<T> {
         Ok(())
     }
 
+    #[inline]
     fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
         let mut value = vec![];
         while !bytes.is_empty() {
@@ -158,28 +168,34 @@ impl<T: State + Terminated> State for Vec<T> {
 }
 
 impl<T: State> State for RefCell<T> {
+    #[inline]
     fn attach(&mut self, store: Store) -> Result<()> {
         self.get_mut().attach(store)
     }
 
+    #[inline]
     fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
         self.into_inner().flush(out)
     }
 
+    #[inline]
     fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
         Ok(RefCell::new(T::load(store, bytes)?))
     }
 }
 
 impl<T> State for PhantomData<T> {
+    #[inline]
     fn attach(&mut self, _store: Store) -> Result<()> {
         Ok(())
     }
 
+    #[inline]
     fn flush<W: std::io::Write>(self, _out: &mut W) -> Result<()> {
         Ok(())
     }
 
+    #[inline]
     fn load(_store: Store, _bytes: &mut &[u8]) -> Result<Self> {
         Ok(PhantomData::default())
     }
