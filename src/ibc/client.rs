@@ -27,6 +27,8 @@ use ibc::Height;
 use ibc_proto::ibc::core::client::v1::ConsensusStateWithHeight;
 use ibc_proto::ibc::core::client::v1::IdentifiedClientState;
 
+const MAX_HOST_CONSENSUS_STATES: u64 = 100_000;
+
 impl From<crate::Error> for Error {
     fn from(_err: crate::Error) -> Error {
         dbg!(_err);
@@ -381,6 +383,12 @@ impl BeginBlock for ClientStore {
             time,
             next_vals_hash,
         );
+
+        if self.height >= MAX_HOST_CONSENSUS_STATES {
+            self.host_consensus_state
+                .remove(self.height - MAX_HOST_CONSENSUS_STATES)?;
+        }
+
         self.host_consensus_state
             .insert(self.height, consensus_state.into())
     }
@@ -415,6 +423,17 @@ impl Next for Adapter<Height> {
 }
 
 impl ClientStore {
+    pub fn prune_host_consensus_states(&mut self) -> crate::Result<()> {
+        if self.height >= MAX_HOST_CONSENSUS_STATES {
+            for h in (0..self.height - MAX_HOST_CONSENSUS_STATES).rev() {
+                if self.host_consensus_state.remove(h)?.is_none() {
+                    break;
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn get_update_time(
         &self,
         client_id: &ClientId,
