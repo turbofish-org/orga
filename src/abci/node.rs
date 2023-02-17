@@ -197,13 +197,22 @@ impl<A: App> Node<A> {
         self
     }
 
-    pub fn migrate<O: State>(self) -> Self
+    // TODO: remove when we don't require compat migrations
+    pub fn migrate<O: State>(self, version: Vec<u8>) -> Self
     where
         ABCIPlugin<O>: MigrateInto<ABCIPlugin<A>>,
     {
-        log::info!("Migrating store data... (This might take a while)");
-
         let merk_store = crate::merk::MerkStore::new(&self.merk_home);
+        if merk_store
+            .merk()
+            .get_aux(b"consensus_version")
+            .unwrap()
+            .is_some()
+        {
+            return self;
+        }
+
+        log::info!("Migrating store data... (This might take a while)");
         let store = Shared::new(merk_store);
         let mut store = Store::new(BackingStore::Merk(store));
         let bytes = store.get(&[]).unwrap().unwrap();
@@ -218,7 +227,12 @@ impl<A: App> Node<A> {
         app.flush(&mut bytes).unwrap();
         store.put(vec![], bytes).unwrap();
         if let BackingStore::Merk(merk_store) = store.into_backing_store().into_inner() {
-            merk_store.into_inner().write(vec![]).unwrap();
+            merk_store
+                .into_inner()
+                .write(vec![(b"consensus_version".to_vec(), Some(version))])
+                .unwrap();
+        } else {
+            unreachable!();
         }
 
         self
