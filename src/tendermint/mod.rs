@@ -17,23 +17,23 @@ use tar::Archive;
 use toml_edit::{value, Document};
 
 #[cfg(target_os = "macos")]
-static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.15/tendermint_0.34.15_darwin_amd64.tar.gz";
+static TENDERMINT_BINARY_URL: &str = "https://github.com/informalsystems/tendermint/releases/download/v0.34.26/tendermint_0.34.26_darwin_amd64.tar.gz";
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.15/tendermint_0.34.15_linux_amd64.tar.gz";
+static TENDERMINT_BINARY_URL: &str = "https://github.com/informalsystems/tendermint/releases/download/v0.34.26/tendermint_0.34.26_linux_amd64.tar.gz";
 #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-static TENDERMINT_BINARY_URL: &str = "https://github.com/tendermint/tendermint/releases/download/v0.34.15/tendermint_0.34.15_linux_arm64.tar.gz";
+static TENDERMINT_BINARY_URL: &str = "https://github.com/informalsystems/tendermint/releases/download/v0.34.26/tendermint_0.34.26_linux_arm64.tar.gz";
 
 #[cfg(target_os = "macos")]
 static TENDERMINT_ZIP_HASH: [u8; 32] =
-    hex!("b493354bc8a711b670763e3ddf5765c3d7e94aaf6dbd138b16b8ab288495a4d1");
+    hex!("39dfde6ccc2c8b4cb699d1f3788b97da16cc8495156c39c82e94fa3834187909");
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 static TENDERMINT_ZIP_HASH: [u8; 32] =
-    hex!("cf4bd4b5a57f49007d18b9287214daf364dbc11094dec8e4c1bc33f207c6c57c");
+    hex!("70415c1d20f48e4c19d8317ec7befd924681bb2d144ad8fded429041b80b3f79");
 #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
 static TENDERMINT_ZIP_HASH: [u8; 32] =
-    hex!("6d4d771ae26c207f1a4f9f1399db2cbcac2e3c8afdf5d55d15bb984bbb986d2e");
+    hex!("b0c9b5fae8a7dc53d84d62867204927ef37b1f91be5617f33a8f7fe378dfc5b9");
 
-const TENDERMINT_BINARY_NAME: &str = "tendermint-v0.34.15";
+const TENDERMINT_BINARY_NAME: &str = "tendermint-v0.34.26";
 
 fn verify_hash(tendermint_bytes: &[u8]) {
     let mut hasher = Sha256::new();
