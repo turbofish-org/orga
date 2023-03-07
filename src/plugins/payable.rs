@@ -12,6 +12,8 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::ops::{Deref, DerefMut};
 
+const MAX_SUBCALL_LEN: u32 = 200_000;
+
 #[derive(State, Encode, Decode, Default)]
 pub struct PayablePlugin<T> {
     inner: T,
@@ -97,12 +99,12 @@ impl<T: Encode> Encode for PaidCall<T> {
     }
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
         let payer_call_bytes = self.payer.encode()?;
-        let payer_call_len: u16 = payer_call_bytes
+        let payer_call_len: u32 = payer_call_bytes
             .len()
             .try_into()
             .map_err(|_| ed::Error::UnexpectedByte(0))?;
         let paid_call_bytes = self.paid.encode()?;
-        let paid_call_len: u16 = paid_call_bytes
+        let paid_call_len: u32 = paid_call_bytes
             .len()
             .try_into()
             .map_err(|_| ed::Error::UnexpectedByte(0))?;
@@ -118,10 +120,16 @@ impl<T: Encode> Encode for PaidCall<T> {
 
 impl<T: Decode> Decode for PaidCall<T> {
     fn decode<R: std::io::Read>(mut reader: R) -> ed::Result<Self> {
-        let payer_call_len = u16::decode(&mut reader)?;
+        let payer_call_len = u32::decode(&mut reader)?;
+        if payer_call_len > MAX_SUBCALL_LEN {
+            return Err(ed::Error::UnexpectedByte(32));
+        }
         let mut payer_call_bytes = vec![0u8; payer_call_len as usize];
         reader.read_exact(&mut payer_call_bytes)?;
-        let paid_call_len = u16::decode(&mut reader)?;
+        let paid_call_len = u32::decode(&mut reader)?;
+        if payer_call_len > MAX_SUBCALL_LEN {
+            return Err(ed::Error::UnexpectedByte(32));
+        }
         let mut paid_call_bytes = vec![0u8; paid_call_len as usize];
         reader.read_exact(&mut paid_call_bytes)?;
 
