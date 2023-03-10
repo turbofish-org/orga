@@ -25,6 +25,36 @@ impl Attacher {
         Ok(self)
     }
 
+    pub fn attach_child_with_relative_prefix<U>(
+        mut self,
+        value: &mut U,
+        prefix: &[u8],
+    ) -> Result<Self>
+    where
+        U: State,
+    {
+        let substore = self.store.sub(prefix);
+        value.attach(substore)?;
+        self.field_count += 1;
+
+        Ok(self)
+    }
+
+    pub fn attach_child_with_absolute_prefix<U>(
+        mut self,
+        value: &mut U,
+        prefix: Vec<u8>,
+    ) -> Result<Self>
+    where
+        U: State,
+    {
+        let substore = unsafe { self.store.with_prefix(prefix) };
+        value.attach(substore)?;
+        self.field_count += 1;
+
+        Ok(self)
+    }
+
     pub fn attach_child_as<T, U>(mut self, _value: U) -> Result<Self> {
         self.field_count += 1;
         Ok(self)
