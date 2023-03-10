@@ -194,6 +194,8 @@ where
 
         // TODO: ABCI shouldn't be messing up the error variant
         // if let Err(Error::Nonce(_)) = res {
+        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(feature = "abci")]
         if let Err(err) = &res {
             if err.to_string().contains("Nonce Error:") {
                 let privkey = super::signer::load_privkey().unwrap();
