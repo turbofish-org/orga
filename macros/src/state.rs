@@ -13,7 +13,11 @@ use quote::{quote, ToTokens};
 use syn::*;
 
 #[derive(Debug, FromDeriveInput, Clone)]
-#[darling(attributes(state), supports(struct_any), and_then="StateInputReceiver::ensure_prefixes")]
+#[darling(
+    attributes(state),
+    supports(struct_any),
+    and_then = "StateInputReceiver::ensure_prefixes"
+)]
 pub struct StateInputReceiver {
     ident: Ident,
     generics: syn::Generics,
@@ -289,7 +293,7 @@ impl StateInputReceiver {
             if !prefixes.insert(prefix) && !self.allow_prefix_overlap {
                 panic!("Store prefix overlap detected. Consider adding `#[state(allow_prefix_overlap)]` to the parent if this is intended.");
             }
-            
+
             field_count += 1;
             field
         });
