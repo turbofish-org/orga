@@ -250,7 +250,6 @@ impl OrgaMetaStruct {
                         .unwrap()
                         .contains_key(&format_ident!("V{}", version))
             })
-            .map(|field| field)
             .collect();
         let data = ast::Data::Struct(ast::Fields::new(style, fields));
 
