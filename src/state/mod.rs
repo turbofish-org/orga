@@ -263,3 +263,33 @@ state_tuple_impl!(A, B, C, D, E, F, G, H; I; 0, 1, 2, 3, 4, 5, 6, 7, 8);
 state_tuple_impl!(A, B, C, D, E, F, G, H, I; J; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
 state_tuple_impl!(A, B, C, D, E, F, G, H, I, J; K; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
 state_tuple_impl!(A, B, C, D, E, F, G, H, I, J, K; L; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::orga;
+    use crate::store::Store;
+
+    #[orga]
+    struct ExplicitPrefixes {
+        a: u32,
+
+        #[state(prefix(6))]
+        store: Store,
+
+        b: u32,
+
+        #[state(absolute_prefix(1))]
+        other_store: Store,
+    }
+
+    #[test]
+    fn explicit_prefixes() -> Result<()> {
+        let store = Store::default();
+        let mut value = <(ExplicitPrefixes, u32)>::default();
+        value.attach(store)?;
+        assert_eq!(value.0.store.prefix(), &[0, 6]);
+        assert_eq!(value.0.other_store.prefix(), &[1]);
+        Ok(())
+    }
+}

@@ -167,10 +167,13 @@ impl<T, U: Clone> Clone for NonceAdapter<T, U> {
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Call, U: AsyncCall<Call = NonceCall<T::Call>> + Clone> AsyncCall for NonceAdapter<T, U>
+impl<T: Call + Query + State, U> AsyncCall for NonceAdapter<T, U>
 where
     T::Call: Send,
-    U: Send,
+    U: Send
+        + AsyncCall<Call = NonceCall<T::Call>>
+        + Clone
+        + for<'a> AsyncQuery<Query = NonceQuery<T::Query>, Response<'a> = std::rc::Rc<NoncePlugin<T>>>,
 {
     type Call = T::Call;
 
@@ -178,7 +181,8 @@ where
         // Load nonce from file
         let nonce = load_nonce()?;
 
-        let res = self.parent.call(NonceCall {
+        let call_bytes = call.encode()?;
+        let fut = self.parent.call(NonceCall {
             inner_call: call,
             nonce: Some(nonce),
         });
@@ -186,7 +190,37 @@ where
         // Increment the local nonce
         write_nonce(nonce + 1)?;
 
-        res.await
+        let res = fut.await;
+
+        // TODO: ABCI shouldn't be messing up the error variant
+        // if let Err(Error::Nonce(_)) = res {
+        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(feature = "abci")]
+        if let Err(err) = &res {
+            if err.to_string().contains("Nonce Error:") {
+                let privkey = super::signer::load_privkey().unwrap();
+                let pubkey =
+                    secp256k1::PublicKey::from_secret_key(&secp256k1::Secp256k1::new(), &privkey);
+                let my_addr = Address::from_pubkey(pubkey.serialize());
+                let nonce = self
+                    .parent
+                    .query(NonceQuery::Nonce(my_addr), |n| n.nonce(my_addr))
+                    .await?;
+
+                let call = Self::Call::decode(call_bytes.as_slice())?;
+                let fut = self.parent.call(NonceCall {
+                    inner_call: call,
+                    nonce: Some(nonce + 1),
+                });
+
+                // Increment the local nonce
+                write_nonce(nonce + 2)?;
+
+                return fut.await;
+            }
+        }
+
+        res
     }
 }
 

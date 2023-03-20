@@ -212,7 +212,10 @@ mod tests {
     }
 
     fn create_foo_v0_store() -> Result<Store> {
+        #[cfg(any(feature = "merk", feature = "merk-verify"))]
         let mut store = Store::new(DefaultBackingStore::MapStore(Shared::new(MapStore::new())));
+        #[cfg(all(not(feature = "merk"), not(feature = "merk-verify")))]
+        let mut store = Store::new(DefaultBackingStore::new(MapStore::new()));
 
         let mut foo = FooV0 {
             bar: 42,

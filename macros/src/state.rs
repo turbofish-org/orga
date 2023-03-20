@@ -1,16 +1,23 @@
+use std::collections::HashSet;
+
 use super::utils::{named_fields, Types};
 use darling::{
     ast,
     usage::{GenericsExt, Options, Purpose, UsesTypeParams},
-    uses_type_params, FromDeriveInput, FromField,
+    uses_type_params, FromDeriveInput, FromField, FromMeta,
 };
 use proc_macro::TokenStream;
+
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{quote, ToTokens};
 use syn::*;
 
-#[derive(Debug, FromDeriveInput)]
-#[darling(attributes(state), supports(struct_any))]
+#[derive(Debug, FromDeriveInput, Clone)]
+#[darling(
+    attributes(state),
+    supports(struct_any),
+    and_then = "StateInputReceiver::ensure_prefixes"
+)]
 pub struct StateInputReceiver {
     ident: Ident,
     generics: syn::Generics,
@@ -22,6 +29,8 @@ pub struct StateInputReceiver {
     pub as_type: Option<Path>,
     #[darling(default)]
     transparent: bool,
+    #[darling(default)]
+    allow_prefix_overlap: bool,
 }
 
 impl StateInputReceiver {
@@ -83,7 +92,21 @@ impl StateInputReceiver {
                 None => {
                     if field.skip {
                         quote! { .attach_skipped_child(&mut self.#name)?}
-                    } else {
+                    } else if let Some(ref pfx) = field.prefix() {
+                        match pfx {
+                            Prefix::Relative(bytes) => {
+                                let byte_seq = bytes.iter().map(|b| quote! {#b});
+                                let prefix = quote! {&[#(#byte_seq),*]};
+                                quote! {.attach_child_with_relative_prefix(&mut self.#name, #prefix)?}
+                            }
+                            Prefix::Absolute(bytes) => {
+                                let byte_seq = bytes.iter().map(|b| quote! {#b});
+                                let prefix = quote! {vec![#(#byte_seq),*]};
+                                quote! {.attach_child_with_absolute_prefix(&mut self.#name, #prefix)?}
+                            },
+                        }
+                    }
+                    else {
                         quote! {.attach_child(&mut self.#name)?}
                     }
                 }
@@ -250,6 +273,33 @@ impl StateInputReceiver {
                 .collect()
         }
     }
+
+    fn ensure_prefixes(mut self) -> darling::Result<Self> {
+        let mut prefixes: HashSet<Vec<u8>> = HashSet::new();
+        let mut field_count = 0;
+        self.data = self.data.clone().map_struct_fields(|field| {
+            let mut field = field.clone();
+            if matches!(field.prefix(), Some(Prefix::Absolute(_))) || field.skip {
+                return field
+            }
+            let prefix = if let Some(ref prefix) = field.prefix {
+                prefix.0.clone()
+            } else if field.transparent {
+                vec![]
+            } else {
+                vec![field_count]
+            };
+            field.prefix.replace(PrefixBytes(prefix.clone()));
+            if !prefixes.insert(prefix) && !self.allow_prefix_overlap {
+                panic!("Store prefix overlap detected. Consider adding `#[state(allow_prefix_overlap)]` to the parent if this is intended.");
+            }
+
+            field_count += 1;
+            field
+        });
+
+        Ok(self)
+    }
 }
 
 impl ToTokens for StateInputReceiver {
@@ -295,8 +345,43 @@ struct StateFieldReceiver {
     skip: bool,
     #[darling(default)]
     transparent: bool,
+    prefix: Option<PrefixBytes>,
+    absolute_prefix: Option<PrefixBytes>,
 }
 uses_type_params!(StateFieldReceiver, ty);
+
+impl StateFieldReceiver {
+    fn prefix(&self) -> Option<Prefix> {
+        match (self.prefix.as_ref(), self.absolute_prefix.as_ref()) {
+            (Some(prefix_rel), None) => Some(Prefix::Relative(prefix_rel.0.clone())),
+            (None, Some(prefix_abs)) => Some(Prefix::Absolute(prefix_abs.0.clone())),
+            (None, None) => None,
+            _ => panic!("cannot have both prefix and prefix_absolute"),
+        }
+    }
+}
+
+enum Prefix {
+    Relative(Vec<u8>),
+    Absolute(Vec<u8>),
+}
+
+#[derive(Debug, Clone)]
+struct PrefixBytes(Vec<u8>);
+
+impl FromMeta for PrefixBytes {
+    fn from_list(items: &[NestedMeta]) -> darling::Result<Self> {
+        let mut bytes = vec![];
+        for item in items.iter() {
+            match item {
+                NestedMeta::Lit(Lit::Int(pfx)) => bytes.push(pfx.base10_parse().unwrap()),
+                NestedMeta::Lit(Lit::ByteStr(pfx)) => bytes.extend(pfx.value()),
+                _ => unimplemented!(),
+            }
+        }
+        Ok(PrefixBytes(bytes))
+    }
+}
 
 pub fn derive(item: TokenStream) -> TokenStream {
     let item = parse_macro_input!(item as DeriveInput);
