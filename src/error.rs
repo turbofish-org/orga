@@ -1,3 +1,4 @@
+use std::num::TryFromIntError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -50,6 +51,8 @@ pub enum Error {
     #[cfg(feature = "abci")]
     #[error(transparent)]
     TendermintRPC(#[from] tendermint_rpc::Error),
+    #[error(transparent)]
+    TryFromInt(#[from] TryFromIntError),
     #[cfg(feature = "merk-full")]
     #[error(transparent)]
     RocksDB(#[from] merk::rocksdb::Error),
