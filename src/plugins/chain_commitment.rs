@@ -8,7 +8,7 @@ use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
 use std::marker::PhantomData;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
 #[derive(Encode, Decode, Default, State)]
 #[state(transparent)]
@@ -43,6 +43,12 @@ impl<T, const ID: &'static str> Deref for ChainCommitmentPlugin<T, ID> {
 
     fn deref(&self) -> &Self::Target {
         &self.inner
+    }
+}
+
+impl<T, const ID: &'static str> DerefMut for ChainCommitmentPlugin<T, ID> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
     }
 }
 
