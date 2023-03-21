@@ -38,6 +38,12 @@ impl<T: State> Deref for PayablePlugin<T> {
     }
 }
 
+impl<T: State> DerefMut for PayablePlugin<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
 #[derive(Default)]
 pub struct Paid {
     map: HashMap<u8, Amount>,
