@@ -475,7 +475,9 @@ where
                         .transpose()?
                         .expect("Peek ensures this arm is unreachable");
 
-                    let key = Decode::decode(entry.0.as_slice())?;
+                    let mut key_bytes = &entry.0[..];
+                    let key = Decode::decode(&mut key_bytes)?;
+                    debug_assert!(key_bytes.is_empty());
 
                     let value = V::load(
                         self.parent_store.sub(entry.0.as_slice()),
@@ -495,7 +497,14 @@ where
                         Ok((ref key, _)) => key,
                     };
 
-                    let decoded_backing_key = Decode::decode(backing_key.as_slice())?;
+                    let mut key_bytes = backing_key.as_slice();
+                    let key = Decode::decode(&mut key_bytes)?;
+                    debug_assert!(
+                        key_bytes.is_empty(),
+                        "Key had leftover bytes after decode: key={} leftover={}",
+                        hex::encode(backing_key),
+                        hex::encode(key_bytes),
+                    );
 
                     //so compare backing_key with map_key.inner_bytes
                     let key_cmp = map_key.inner_bytes.cmp(backing_key);
@@ -503,7 +512,6 @@ where
                     // map_key > backing_key, emit the backing entry
                     if key_cmp == Ordering::Greater {
                         let entry = self.store_iter.next().unwrap()?;
-                        let key: K = decoded_backing_key;
 
                         let value = V::load(
                             self.parent_store.sub(entry.0.as_slice()),
