@@ -3,19 +3,69 @@ use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Address, Symbol};
 use crate::encoding::{Decode, Encode};
 use crate::migrate::{MigrateFrom, MigrateInto};
+use crate::prelude::{Attacher, Flusher, Loader, Store};
 use crate::query::Query;
 use crate::state::State;
-use crate::{Error, Result};
+use crate::{compat_mode, Error, Result};
+
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
 pub const MAX_CALL_SIZE: usize = 65_535;
 pub const NATIVE_CALL_FLAG: u8 = 0xff;
 
-#[derive(State, Default, Clone)]
+// TODO: add version 1 so that plugin is transparent on `inner`
+
+#[derive(Default, Clone)]
 pub struct SdkCompatPlugin<S, T: State> {
     pub(crate) symbol: PhantomData<S>,
     pub(crate) inner: T,
+}
+
+impl<S, T: State> State for SdkCompatPlugin<S, T> {
+    fn attach(&mut self, store: Store) -> Result<()> {
+        if compat_mode() {
+            Attacher::new(store).attach_transparent_child(&mut self.inner)?;
+            return Ok(());
+        }
+
+        Attacher::new(store)
+            .attach_child(&mut self.symbol)?
+            .attach_child(&mut self.inner)?;
+        Ok(())
+    }
+
+    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+        if compat_mode() {
+            Flusher::new(out)
+                .version(0u8)?
+                .flush_transparent_child(self.inner)?;
+            return Ok(());
+        }
+
+        Flusher::new(out)
+            .version(0u8)?
+            .flush_child(self.symbol)?
+            .flush_child(self.inner)?;
+        Ok(())
+    }
+
+    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
+        let mut loader = Loader::new(store.clone(), bytes, 0u8);
+        let mut value: Self = if compat_mode() {
+            Self {
+                symbol: loader.load_transparent_child_other()?,
+                inner: loader.load_transparent_child_inner()?,
+            }
+        } else {
+            Self {
+                symbol: loader.load_child()?,
+                inner: loader.load_child()?,
+            }
+        };
+        value.attach(store)?;
+        Ok(value)
+    }
 }
 
 impl<S1, S2, T1: State, T2: State> MigrateFrom<SdkCompatPlugin<S1, T1>> for SdkCompatPlugin<S2, T2>
