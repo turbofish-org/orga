@@ -46,6 +46,12 @@ impl<T: State> Deref for NoncePlugin<T> {
     }
 }
 
+impl<T: State> DerefMut for NoncePlugin<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
 pub trait GetNonce {
     fn nonce(&self, address: Address) -> Result<u64>;
 }

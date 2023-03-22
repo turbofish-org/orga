@@ -13,7 +13,7 @@ use crate::{call::Call, migrate::MigrateInto};
 use crate::{Error, Result};
 use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
 use serde::Serialize;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
 #[derive(Default, Encode, Decode, State)]
 #[state(transparent)]
@@ -37,6 +37,12 @@ impl<T: State> Deref for SignerPlugin<T> {
 
     fn deref(&self) -> &Self::Target {
         &self.inner
+    }
+}
+
+impl<T: State> DerefMut for SignerPlugin<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
     }
 }
 
