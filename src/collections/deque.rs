@@ -1,3 +1,5 @@
+use serde::Serialize;
+
 use super::map::{ChildMut, Map, ReadOnly, Ref};
 use crate::call::Call;
 use crate::client::Client;
@@ -10,7 +12,11 @@ use crate::state::State;
 use crate::store::Store;
 use crate::Result;
 
-#[derive(Query, Encode, Decode)]
+#[derive(Query, Encode, Decode, Serialize)]
+#[serde(bound(
+    serialize = "T: Serialize + State",
+    deserialize = "T: Deserialize<'de> + State",
+))]
 pub struct Deque<T> {
     meta: Meta,
     map: Map<u64, T>,

@@ -5,12 +5,17 @@ use crate::encoding::{Decode, Encode, Terminated};
 use crate::orga;
 use crate::state::State;
 use crate::{Error, Result};
+use serde::Serialize;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Drop, RangeBounds};
 
 #[orga]
+#[serde(bound(
+    serialize = "K: Serialize + Decode + Clone, V: Serialize",
+    deserialize = "K: Deserialize<'de> + Decode + Clone, V: Deserialize<'de>",
+))]
 pub struct Pool<K, V, S>
 where
     K: Terminated + Encode + Decode + Clone,

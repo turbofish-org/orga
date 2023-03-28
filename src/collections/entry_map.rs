@@ -1,3 +1,5 @@
+use serde::Serialize;
+
 use super::map::Iter as MapIter;
 use super::map::Map;
 use super::map::ReadOnly;
@@ -13,7 +15,11 @@ use crate::state::*;
 use crate::store::*;
 use crate::Result;
 
-#[derive(Query, Call, Encode, Decode)]
+#[derive(Query, Call, Encode, Decode, Serialize)]
+#[serde(bound(
+    serialize = "T::Key: Serialize + Terminated + Clone, T::Value: Serialize + State",
+    deserialize = "T::Key: Deserialize<'de> + Terminated + Clone, T::Value: Deserialize<'de> + State",
+))]
 
 pub struct EntryMap<T: Entry> {
     map: Map<T::Key, T::Value>,

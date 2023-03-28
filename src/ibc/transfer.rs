@@ -32,6 +32,7 @@ use ibc::timestamp::Timestamp;
 use ibc::Height;
 use ibc_proto::ibc::core::channel::v1::PacketState;
 use ripemd::Digest;
+use serde::Serialize;
 use std::str::FromStr;
 
 use super::{Adapter, Lunchbox};
@@ -554,7 +555,7 @@ impl TransferModule {
     }
 }
 
-#[derive(State, Encode, Decode, Clone, Debug, Describe, MigrateFrom)]
+#[derive(State, Encode, Decode, Clone, Debug, Describe, MigrateFrom, Serialize)]
 pub struct Dynom(pub LengthVec<u8, u8>);
 
 impl FromStr for Dynom {

@@ -8,6 +8,7 @@ use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::{compat_mode, Error, Result};
+use serde::Serialize;
 use std::cell::{Ref, RefCell};
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -42,13 +43,20 @@ pub struct ValidatorEntry {
 
 type UpdateMap = Map<[u8; 32], Adapter<ValidatorUpdate>>;
 
+#[derive(Serialize)]
 pub struct ABCIPlugin<T> {
     pub inner: T,
+    #[serde(skip)]
     pub(crate) validator_updates: Option<HashMap<[u8; 32], ValidatorUpdate>>,
+    #[serde(skip)]
     updates: UpdateMap,
+    #[serde(skip)]
     time: Option<Timestamp>,
+    #[serde(skip)]
     pub(crate) events: Option<Vec<Event>>,
+    #[serde(skip)]
     current_vp: Rc<RefCell<Option<EntryMap<ValidatorEntry>>>>,
+    #[serde(skip)]
     cons_key_by_op_addr: Rc<RefCell<Option<OperatorMap>>>,
 }
 

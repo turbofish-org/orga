@@ -15,7 +15,7 @@ use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
 use serde::Serialize;
 use std::ops::{Deref, DerefMut};
 
-#[derive(Default, Encode, Decode, State)]
+#[derive(Default, Encode, Decode, State, Serialize)]
 #[state(transparent)]
 pub struct SignerPlugin<T> {
     pub(crate) inner: T,
