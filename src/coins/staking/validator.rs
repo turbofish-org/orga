@@ -9,12 +9,13 @@ use crate::state::State;
 use crate::store::Store;
 use crate::{Error, Result};
 use ed::Terminated;
+use serde::Serialize;
 
 use super::{Commission, Delegator, Redelegation};
 
 type Delegators<S> = Pool<Address, Delegator<S>, S>;
 
-#[derive(State)]
+#[derive(State, Serialize)]
 pub struct Validator<S: Symbol> {
     pub(super) jailed_until: Option<i64>,
     pub(super) tombstoned: bool,
@@ -45,7 +46,7 @@ pub struct ValidatorQueryInfo {
     pub amount_staked: Amount,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Serialize)]
 pub struct ValidatorInfo {
     pub bytes: Vec<u8>,
 }

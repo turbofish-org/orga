@@ -1,3 +1,5 @@
+use serde::Serialize;
+
 use super::{sdk_compat::sdk::Tx as SdkTx, ConvertSdkTx};
 use crate::call::Call as CallTrait;
 use crate::client::{AsyncCall, AsyncQuery, Client as ClientTrait};
@@ -10,6 +12,7 @@ use crate::{Error, Result};
 use std::marker::PhantomData;
 use std::ops::Deref;
 
+#[derive(Serialize)]
 pub struct ChainCommitmentPlugin<T, const ID: &'static str> {
     inner: T,
 }

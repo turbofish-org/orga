@@ -1,3 +1,5 @@
+use serde::Serialize;
+
 use crate::call::Call as CallTrait;
 use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Address, Symbol};
@@ -10,6 +12,7 @@ use std::ops::{Deref, DerefMut};
 
 pub const MAX_CALL_SIZE: usize = 65_535;
 
+#[derive(Serialize)]
 pub struct SdkCompatPlugin<S, T> {
     inner: T,
     symbol: PhantomData<S>,
@@ -298,8 +301,12 @@ where
 }
 
 #[async_trait::async_trait(?Send)]
-impl<T: Query, U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = std::rc::Rc<SdkCompatPlugin<S, T>>> + Clone, S>
-    AsyncQuery for SdkCompatAdapter<T, U, S>
+impl<
+        T: Query,
+        U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = std::rc::Rc<SdkCompatPlugin<S, T>>>
+            + Clone,
+        S,
+    > AsyncQuery for SdkCompatAdapter<T, U, S>
 {
     type Query = T::Query;
     type Response<'a> = std::rc::Rc<T>;
@@ -308,7 +315,16 @@ impl<T: Query, U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = std::rc::R
     where
         F: FnMut(Self::Response<'_>) -> Result<R>,
     {
-        self.parent.query(query, |plugin| check(std::rc::Rc::new(std::rc::Rc::try_unwrap(plugin).map_err(|_| ()).unwrap().inner))).await
+        self.parent
+            .query(query, |plugin| {
+                check(std::rc::Rc::new(
+                    std::rc::Rc::try_unwrap(plugin)
+                        .map_err(|_| ())
+                        .unwrap()
+                        .inner,
+                ))
+            })
+            .await
     }
 }
 
@@ -341,7 +357,10 @@ impl<
     > SdkCompatClient<T, U, S>
 {
     #[cfg(target_arch = "wasm32")]
-    pub async fn send_sdk_tx(&mut self, sign_doc: sdk::SignDoc) -> std::result::Result<(), JsValue> {
+    pub async fn send_sdk_tx(
+        &mut self,
+        sign_doc: sdk::SignDoc,
+    ) -> std::result::Result<(), JsValue> {
         let signer = crate::plugins::signer::keplr::Signer;
         let sig = signer.sign_sdk(sign_doc.clone()).await?;
 
@@ -351,7 +370,10 @@ impl<
             fee: sign_doc.fee,
             memo: sign_doc.memo,
         };
-        self._parent.call(Call::Sdk(tx)).await.map_err(|e| e.to_string().into())
+        self._parent
+            .call(Call::Sdk(tx))
+            .await
+            .map_err(|e| e.to_string().into())
     }
 }
 

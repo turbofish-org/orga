@@ -1,3 +1,5 @@
+use serde::Serialize;
+
 use crate::coins::{Address, MultiShare};
 use crate::coins::{Amount, Balance, Coin, Decimal, Give, Share, Symbol, Take};
 use crate::collections::Deque;
@@ -9,20 +11,20 @@ use crate::{Error, Result};
 
 use super::UNBONDING_SECONDS;
 
-#[derive(State)]
+#[derive(State, Serialize)]
 pub struct Unbond<S: Symbol> {
     pub(super) coins: Share<S>,
     pub(super) start_seconds: i64,
 }
 
-#[derive(State, Clone)]
+#[derive(State, Clone, Serialize)]
 pub struct Redelegation {
     pub(super) amount: Amount,
     pub(super) address: Address,
     pub(super) start_seconds: i64,
 }
 
-#[derive(State)]
+#[derive(State, Serialize)]
 pub struct Delegator<S: Symbol> {
     pub(super) liquid: MultiShare,
     pub(super) staked: Share<S>,

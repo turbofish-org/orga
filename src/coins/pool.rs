@@ -9,12 +9,18 @@ use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::{Error, Result};
+use serde::Serialize;
+use std::cell::RefCell;
 use std::cell::UnsafeCell;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Drop, RangeBounds};
 
-#[derive(Query)]
+#[derive(Query, Serialize)]
+#[serde(bound(
+    serialize = "K: Serialize + Decode + Clone + Next, V: Serialize",
+    deserialize = "K: Deserialize<'de> + Decode + Clone, V: Deserialize<'de>",
+))]
 pub struct Pool<K, V, S>
 where
     K: Terminated + Encode,
@@ -25,9 +31,10 @@ where
     rewards: Map<u8, Decimal>,
     symbol: PhantomData<S>,
     shares_issued: Decimal,
-    map: Map<K, UnsafeCell<Entry<V>>>,
+    map: Map<K, RefCell<Entry<V>>>,
     rewards_this_period: Map<u8, Decimal>,
     last_period_entry: Map<u8, Decimal>,
+    #[serde(skip)]
     maybe_drop_err: Option<Error>,
 }
 
@@ -107,7 +114,7 @@ where
     }
 }
 
-#[derive(State)]
+#[derive(State, Serialize)]
 pub struct Entry<T>
 where
     T: State,
@@ -259,7 +266,7 @@ where
             }
         }
         let entry = self.map.get_or_default(key)?;
-        let entry_mut = unsafe { &mut *entry.get() };
+        let entry_mut = unsafe { &mut *entry.as_ptr() };
         Self::adjust_entry(
             self.contributions,
             self.shares_issued,
@@ -344,7 +351,7 @@ where
     parent_num_tokens: &'a mut Decimal,
     parent_shares_issued: &'a mut Decimal,
     maybe_drop_err: &'a mut Option<Error>,
-    entry: MapChildMut<'a, K, UnsafeCell<Entry<V>>>,
+    entry: MapChildMut<'a, K, RefCell<Entry<V>>>,
     initial_balance: Decimal,
     _symbol: PhantomData<S>,
 }
@@ -431,7 +438,7 @@ where
     type Target = V;
 
     fn deref(&self) -> &Self::Target {
-        let v = self.entry.get();
+        let v = self.entry.as_ptr();
         &unsafe { &*v }.inner
     }
 }
@@ -459,7 +466,7 @@ mod child {
         V: State + Balance<S, Decimal>,
         V::Encoding: Default,
     {
-        entry: MapRef<'a, UnsafeCell<Entry<V>>>,
+        entry: MapRef<'a, RefCell<Entry<V>>>,
         _symbol: PhantomData<S>,
     }
 
@@ -470,7 +477,7 @@ mod child {
         V::Encoding: Default,
     {
         #[cfg_attr(test, mutate)]
-        pub fn new(entry_ref: MapRef<'a, UnsafeCell<Entry<V>>>) -> Result<Self> {
+        pub fn new(entry_ref: MapRef<'a, RefCell<Entry<V>>>) -> Result<Self> {
             Ok(Child {
                 entry: entry_ref,
                 _symbol: PhantomData,
@@ -487,7 +494,7 @@ mod child {
         type Target = V;
 
         fn deref(&self) -> &Self::Target {
-            let v = self.entry.get();
+            let v = self.entry.as_ptr();
             &unsafe { &*v }.inner
         }
     }

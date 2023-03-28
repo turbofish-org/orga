@@ -1,3 +1,5 @@
+use serde::Serialize;
+
 use super::{Amount, Coin, Decimal, Symbol};
 use crate::context::GetContext;
 #[cfg(feature = "abci")]
@@ -8,7 +10,7 @@ use crate::{Error, Result};
 use std::marker::PhantomData;
 use std::time::Duration;
 
-#[derive(State)]
+#[derive(State, Serialize)]
 pub struct Faucet<S: Symbol> {
     _symbol: PhantomData<S>,
     configured: bool,
@@ -103,26 +105,6 @@ pub struct FaucetOptions {
     pub total_coins: Amount,
     pub period_decay: Decimal,
     pub start_seconds: i64,
-}
-
-#[cfg(feature = "abci")]
-impl<S: Symbol, T: v2::coins::Symbol> Migrate<v2::coins::Faucet<T>> for Faucet<S> {
-    fn migrate(&mut self, legacy: v2::coins::Faucet<T>) -> Result<()> {
-        use crate::encoding::Decode;
-        use v2::encoding::Encode;
-        let data: <v2::coins::Faucet<T> as v2::state::State>::Encoding = legacy.into();
-
-        self.configured = data.1;
-        self.amount_minted = data.2 .0.into();
-        self.start_seconds = data.3;
-        self.multiplier_total = Decode::decode(data.4.encode().unwrap().as_slice())?;
-        self.total_to_mint = data.5 .0.into();
-        self.period_decay = Decode::decode(data.6.encode().unwrap().as_slice())?;
-        self.seconds_per_period = data.7;
-        self.num_periods = data.8;
-
-        Ok(())
-    }
 }
 
 #[cfg(test)]

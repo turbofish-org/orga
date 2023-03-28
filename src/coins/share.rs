@@ -1,9 +1,11 @@
+use serde::Serialize;
+
 use super::{Adjust, Amount, Balance, Coin, Decimal, Give, Symbol, Take};
 use crate::state::State;
 use crate::{Error, Result};
 use std::marker::PhantomData;
 
-#[derive(State, Debug)]
+#[derive(State, Debug, Serialize)]
 pub struct Share<S: Symbol> {
     pub shares: Decimal,
     symbol: PhantomData<S>,

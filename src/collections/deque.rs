@@ -1,5 +1,6 @@
 #[cfg(test)]
 use mutagen::mutate;
+use serde::Serialize;
 
 use super::map::{ChildMut, Map, ReadOnly, Ref};
 use crate::call::Call;
@@ -11,7 +12,11 @@ use crate::store::DefaultBackingStore;
 use crate::store::{Read, Store, Write};
 use crate::Result;
 
-#[derive(Query)]
+#[derive(Query, Serialize)]
+#[serde(bound(
+    serialize = "T: Serialize + State<S>, S: Read",
+    deserialize = "T: Deserialize<'de> + State",
+))]
 pub struct Deque<T, S = DefaultBackingStore> {
     meta: Meta,
     map: Map<u64, T, S>,
@@ -19,13 +24,11 @@ pub struct Deque<T, S = DefaultBackingStore> {
 
 impl<T, S> std::fmt::Debug for Deque<T, S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Deque")
-            .field("meta", &self.meta)
-            .finish()
+        f.debug_struct("Deque").field("meta", &self.meta).finish()
     }
 }
 
-#[derive(Encode, Decode, Clone, Debug)]
+#[derive(Encode, Decode, Clone, Debug, Serialize)]
 pub struct Meta {
     head: u64,
     tail: u64,

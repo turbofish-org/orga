@@ -15,6 +15,7 @@ use crate::state::*;
 use crate::store::*;
 use crate::{Error, Result};
 use ed::*;
+use serde::Serialize;
 
 #[derive(Clone)]
 pub struct MapKey<K> {
@@ -455,6 +456,40 @@ where
         }
 
         Ok(())
+    }
+}
+
+impl<K: Serialize, V: Serialize, S: Read> Serialize for Map<K, V, S>
+where
+    K: Encode + Decode + Terminated + Clone + Next,
+    V: State<S>,
+{
+    fn serialize<S2: serde::Serializer>(
+        &self,
+        serializer: S2,
+    ) -> std::result::Result<S2::Ok, S2::Error> {
+        use serde::ser::{Error, SerializeSeq};
+        let mut seq = serializer.serialize_seq(None)?;
+        for entry in self.iter().map_err(Error::custom)? {
+            let (key, value) = entry.map_err(Error::custom)?;
+            seq.serialize_element(&(&*key, &*value))?;
+        }
+        seq.end()
+    }
+}
+
+impl<'a, V: Serialize> Serialize for Ref<'a, V>
+where
+    V: State,
+{
+    fn serialize<S2: serde::Serializer>(
+        &self,
+        serializer: S2,
+    ) -> std::result::Result<S2::Ok, S2::Error> {
+        match self {
+            Ref::Owned(v) => v.serialize(serializer),
+            Ref::Borrowed(v) => v.serialize(serializer),
+        }
     }
 }
 

@@ -16,6 +16,7 @@ use crate::state::State;
 use crate::store::Store;
 use crate::{Error, Result};
 use rust_decimal_macros::dec;
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::convert::TryInto;
 #[cfg(feature = "abci")]
@@ -40,7 +41,7 @@ const MIN_SELF_DELEGATION_MIN: u64 = 0;
 const DOWNTIME_JAIL_SECONDS: u64 = 60 * 60 * 24; // 1 day
 const EDIT_INTERVAL_SECONDS: u64 = 60 * 60 * 24; // 1 day
 
-#[derive(Call, Query, Client)]
+#[derive(Call, Query, Client, Serialize)]
 pub struct Staking<S: Symbol> {
     validators: Pool<Address, Validator<S>, S>,
     consensus_keys: Map<Address, [u8; 32]>,
@@ -86,14 +87,14 @@ impl EntryMap<ValidatorQueueEntry> {
     }
 }
 
-#[derive(State)]
+#[derive(State, Serialize)]
 pub struct UnbondingDelegationEntry {
     validator_address: Address,
     delegator_address: Address,
     start_seconds: i64,
 }
 
-#[derive(State)]
+#[derive(State, Serialize)]
 pub struct RedelegationEntry {
     src_validator_address: Address,
     dst_validator_address: Address,
@@ -1061,7 +1062,7 @@ pub struct Declaration {
     pub validator_info: ValidatorInfo,
 }
 
-#[derive(State, Default, Encode, Decode, Clone, Copy)]
+#[derive(State, Default, Encode, Decode, Clone, Copy, Serialize)]
 pub struct Commission {
     pub rate: Decimal,
     pub max: Decimal,

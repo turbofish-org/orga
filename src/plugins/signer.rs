@@ -14,6 +14,7 @@ use crate::{Error, Result};
 use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
 use std::ops::Deref;
 
+#[derive(Serialize)]
 pub struct SignerPlugin<T> {
     inner: T,
 }
@@ -351,7 +352,7 @@ pub mod keplr {
             unsafe {
                 let window = web_sys::window().expect("no global `window` exists");
                 let keplr = window.get("keplr").expect("no `keplr` in global `window`");
-                
+
                 let storage = window
                     .local_storage()
                     .expect("no `localStorage` in global `window`")
@@ -468,7 +469,8 @@ pub mod keplr {
 
                 let handle = self.handle();
 
-                let sign_amino: Function = get(&handle.keplr, &"signAmino".to_string().into())?.into();
+                let sign_amino: Function =
+                    get(&handle.keplr, &"signAmino".to_string().into())?.into();
                 let sign_promise: Promise =
                     apply(&sign_amino, &handle.keplr, &args).unwrap().into();
                 let res = JsFuture::from(sign_promise).await.unwrap();

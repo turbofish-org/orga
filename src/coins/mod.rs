@@ -4,6 +4,7 @@ use std::{fmt::Display, str::FromStr};
 pub use amount::*;
 
 pub mod symbol;
+use serde::Serialize;
 pub use symbol::*;
 
 pub mod coin;
@@ -81,6 +82,7 @@ use sha2::{Digest as _, Sha256};
     Copy,
     Client,
     Call,
+    Serialize,
 )]
 pub struct Address {
     bytes: [u8; Address::LENGTH],

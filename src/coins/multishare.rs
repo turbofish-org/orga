@@ -1,9 +1,11 @@
+use serde::Serialize;
+
 use super::{Amount, Balance, Coin, Decimal, Give, Symbol, Take};
 use crate::collections::Map;
 use crate::state::State;
 use crate::{Error, Result};
 
-#[derive(State)]
+#[derive(State, Serialize)]
 pub struct MultiShare {
     pub shares: Map<u8, Decimal>,
 }

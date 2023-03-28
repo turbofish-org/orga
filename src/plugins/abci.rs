@@ -1,3 +1,25 @@
+use crate::abci::{prost::Adapter, App};
+use crate::call::Call;
+use crate::collections::{Entry, EntryMap, Map};
+use crate::context::Context;
+use crate::encoding::{Decode, Encode};
+use crate::query::Query;
+use crate::state::State;
+use crate::store::Store;
+use crate::{Error, Result};
+use serde::Serialize;
+use std::cell::{Ref, RefCell};
+use std::collections::HashMap;
+use std::convert::TryInto;
+use std::rc::Rc;
+use tendermint_proto::abci::{Event, RequestQuery, ResponseQuery};
+use tendermint_proto::abci::{
+    Evidence, LastCommitInfo, RequestBeginBlock, RequestEndBlock, RequestInitChain, ValidatorUpdate,
+};
+use tendermint_proto::crypto::{public_key::Sum, PublicKey};
+use tendermint_proto::google::protobuf::Timestamp;
+use tendermint_proto::types::Header;
+
 pub struct Time {
     pub seconds: i64,
     pub nanos: i32,
@@ -23,6 +45,7 @@ mod full {
     use crate::state::State;
     use crate::store::Store;
     use crate::Result;
+    use serde::Serialize;
     use std::cell::{Ref, RefCell};
     use std::collections::HashMap;
     use std::convert::TryInto;
@@ -43,12 +66,18 @@ mod full {
     }
 
     type UpdateMap = Map<[u8; 32], Adapter<ValidatorUpdate>>;
+    #[derive(Serialize)]
     pub struct ABCIPlugin<T> {
         inner: T,
+        #[serde(skip)]
         pub(crate) validator_updates: Option<HashMap<[u8; 32], ValidatorUpdate>>,
+        #[serde(skip)]
         updates: UpdateMap,
+        #[serde(skip)]
         time: Option<Timestamp>,
+        #[serde(skip)]
         current_vp: Rc<RefCell<Option<EntryMap<ValidatorEntry>>>>,
+        #[serde(skip)]
         cons_key_by_op_addr: Rc<RefCell<Option<OperatorMap>>>,
     }
 

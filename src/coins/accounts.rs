@@ -1,3 +1,5 @@
+use serde::Serialize;
+
 use crate::call::Call;
 use crate::client::Client;
 use crate::coins::{Address, Amount, Coin, Give, Symbol, Take};
@@ -12,7 +14,7 @@ use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
 
-#[derive(State, Encode, Decode, Call, Query, Client)]
+#[derive(State, Encode, Decode, Call, Query, Client, Serialize)]
 pub struct Accounts<S: Symbol> {
     transfers_allowed: bool,
     transfer_exceptions: Map<Address, ()>,
@@ -126,21 +128,5 @@ impl<S: Symbol> Accounts<S> {
     pub fn withdraw(&mut self, address: Address, amount: Amount) -> Result<Coin<S>> {
         let mut account = self.accounts.entry(address)?.or_insert_default()?;
         account.take(amount)
-    }
-}
-
-#[cfg(feature = "abci")]
-impl<S: Symbol, T: v2::coins::Symbol> Migrate<v2::coins::Accounts<T>> for Accounts<S> {
-    fn migrate(&mut self, legacy: v2::coins::Accounts<T>) -> Result<()> {
-        let accounts = legacy.accounts();
-        for entry in accounts.iter().unwrap() {
-            let (addr, coins) = entry.unwrap();
-            let amt: u64 = coins.amount.into();
-            if amt > 0 {
-                self.deposit(addr.bytes().into(), amt.into())?;
-            }
-        }
-
-        Ok(())
     }
 }
