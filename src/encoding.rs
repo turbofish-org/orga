@@ -1,5 +1,4 @@
-use crate::call::Call;
-use crate::client::Client;
+use crate::describe::Describe;
 use crate::migrate::MigrateFrom;
 use crate::query::Query;
 use crate::state::State;
@@ -20,13 +19,12 @@ use std::convert::{TryFrom, TryInto};
     Default,
     Clone,
     Debug,
-    Call,
     Query,
     MigrateFrom,
     PartialEq,
     Hash,
     Eq,
-    Client,
+    Describe,
 )]
 pub struct LengthVec<P, T>
 where
@@ -85,6 +83,7 @@ impl<P, T> State for LengthVec<P, T>
 where
     P: Encode + Decode + TryInto<usize> + Terminated + Clone,
     T: Encode + Decode + Terminated,
+    Self: 'static,
 {
     fn attach(&mut self, _store: Store) -> crate::Result<()> {
         Ok(())
@@ -144,7 +143,7 @@ pub struct Adapter<T>(pub T);
 
 impl<T> State for Adapter<T>
 where
-    Self: Encode + Decode,
+    Self: Encode + Decode + 'static,
 {
     fn attach(&mut self, _store: crate::store::Store) -> crate::Result<()> {
         Ok(())

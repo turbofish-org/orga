@@ -10,6 +10,8 @@
 #![feature(fn_traits)]
 #![feature(async_closure)]
 #![feature(local_key_cell_methods)]
+#![feature(auto_traits)]
+#![feature(negative_impls)]
 
 extern crate self as orga;
 pub use orga_macros::orga;

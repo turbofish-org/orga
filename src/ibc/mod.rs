@@ -38,14 +38,14 @@ mod channel;
 mod client;
 mod connection;
 pub mod encoding;
-#[cfg(feature = "abci")]
-mod grpc;
+// #[cfg(feature = "abci")]
+// mod grpc;
 mod port;
 mod routing;
 mod transfer;
 
-#[cfg(feature = "abci")]
-pub use grpc::start_grpc;
+// #[cfg(feature = "abci")]
+// pub use grpc::start_grpc;
 
 use crate::store::Store;
 use tendermint_proto::abci::Event;
@@ -65,7 +65,6 @@ pub struct Ibc {
     pub channels: ChannelStore,
     ports: PortStore,
     height: u64,
-    #[call]
     pub transfers: TransferModule,
     pub(super) lunchbox: Lunchbox,
 }
@@ -153,6 +152,7 @@ impl TryFrom<TransferArgs> for TransferOpts {
     }
 }
 
+#[orga]
 impl Ibc {
     #[call]
     pub fn deliver_tx(&mut self, msg: IbcTx) -> Result<()> {

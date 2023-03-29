@@ -9,8 +9,6 @@ use serial_test::serial;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-// #[derive(State, Encode, Decode, Debug, Clone, Default, Serialize,
-// Deserialize, MigrateFrom)]
 #[orga]
 #[derive(Debug, Clone)]
 struct Simp;

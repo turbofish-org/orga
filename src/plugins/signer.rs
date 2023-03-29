@@ -7,6 +7,7 @@ use crate::coins::{Address, Symbol};
 use crate::context::{Context, GetContext};
 use crate::encoding::{Decode, Encode};
 use crate::migrate::MigrateFrom;
+use crate::orga;
 use crate::query::Query;
 use crate::state::State;
 use crate::{call::Call, migrate::MigrateInto};
@@ -672,13 +673,14 @@ mod abci {
     }
 }
 
-#[derive(State, Call, Query, Client, Clone, Encode, Decode)]
-pub struct Counter {
+#[orga]
+struct Counter {
     pub count: u64,
     pub last_signer: Address,
     nonce: NonceNoop,
 }
 
+#[orga]
 impl Counter {
     #[call]
     pub fn increment(&mut self) -> Result<()> {
@@ -698,7 +700,7 @@ impl Deref for Counter {
     }
 }
 
-#[derive(State, Clone, Debug, Encode, Decode)]
+#[derive(State, Clone, Debug, Encode, Decode, Default, Describe)]
 pub struct NonceNoop(());
 impl GetNonce for NonceNoop {
     fn nonce(&self, _: Address) -> Result<u64> {
@@ -722,7 +724,9 @@ mod tests {
         type Output = <Counter as Call>::Call;
 
         fn convert(&self, _msg: &sdk_compat::sdk::Tx) -> Result<Self::Output> {
-            Ok(<Counter as Call>::Call::MethodIncrement(vec![]))
+            Ok(<Counter as Call>::Call::Method(
+                CounterMethodCall::Increment(),
+            ))
         }
     }
 
@@ -745,7 +749,6 @@ mod tests {
         // signature and pubkey taken from metamask
         let call_bytes = br#"{"msg":[{"type":"x","value":{}}],"fee":{"amount":[{"amount":"0","denom":"unom"}],"gas":"10000"},"memo":"","signatures":[{"pub_key":{"type":"tendermint/PubKeySecp256k1","value":"AgixpAV7cl5HPnmZC5qmJekVd5E8VZUioqrJoaj36p90"},"signature":"w+ZKyFdmhDOoqLIlhZq+yj8Z+eMOZnyjYKQ5rXr/fS4Imt4n5rTbwgHR1TmF6mGdFvZrmeJFedUjyMjnRYV4bA==","type":"eth"}]}"#;
         let call = Decode::decode(call_bytes.as_slice()).unwrap();
-
         SdkCompatPlugin::<_, _>::call(&mut state, call).unwrap();
 
         assert_eq!(state.count, 1);

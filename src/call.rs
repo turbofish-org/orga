@@ -2,23 +2,17 @@ use crate::encoding::{Decode, Encode};
 use crate::{Error, Result};
 use std::cell::RefCell;
 use std::error::Error as StdError;
+use std::io::Read;
 use std::rc::Rc;
 use std::result::Result as StdResult;
 
-pub use orga_macros::{call, Call};
+pub use orga_macros::{call_block, FieldCall};
+pub const PREFIX_OFFSET: u8 = 0x40;
 
 pub trait Call {
     type Call: Encode + Decode + std::fmt::Debug;
 
     fn call(&mut self, call: Self::Call) -> Result<()>;
-}
-
-impl<T: Call> Call for &mut T {
-    type Call = T::Call;
-
-    fn call(&mut self, call: Self::Call) -> Result<()> {
-        (*self).call(call)
-    }
 }
 
 impl<T: Call> Call for Rc<RefCell<T>> {
@@ -225,5 +219,103 @@ impl<T: Call> MaybeCall for MaybeCallWrapper<T> {
     fn maybe_call(&mut self, call_bytes: Vec<u8>) -> Result<()> {
         let call = Decode::decode(call_bytes.as_slice())?;
         self.0.call(call)
+    }
+}
+
+pub enum Item<T, U> {
+    Field(T),
+    Method(U),
+}
+impl<T: std::fmt::Debug, U: std::fmt::Debug> std::fmt::Debug for Item<T, U> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Item::Field(field) => write!(f, "{:?}", field),
+            Item::Method(method) => write!(f, "{:?}", method),
+        }
+    }
+}
+
+impl<T: Encode, U: Encode> Encode for Item<T, U> {
+    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+        match self {
+            Item::Field(field) => {
+                field.encode_into(dest)?;
+            }
+            Item::Method(method) => {
+                let mut bytes = method.encode()?;
+                if !bytes.is_empty() && bytes[0] < PREFIX_OFFSET {
+                    bytes[0] += PREFIX_OFFSET;
+                } else {
+                    return Err(ed::Error::UnencodableVariant);
+                }
+                dest.write_all(&bytes)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn encoding_length(&self) -> ed::Result<usize> {
+        match self {
+            Item::Field(field) => field.encoding_length(),
+            Item::Method(method) => method.encoding_length(),
+        }
+    }
+}
+
+impl<T: Decode, U: Decode> Decode for Item<T, U> {
+    fn decode<R: std::io::Read>(input: R) -> ed::Result<Self> {
+        let mut input = input;
+        let mut buf = [0u8; 1];
+        input.read_exact(&mut buf)?;
+        let prefix = buf[0];
+
+        if prefix < PREFIX_OFFSET {
+            let input = buf.chain(input);
+            let field = T::decode(input)?;
+            Ok(Item::Field(field))
+        } else {
+            let bytes = [prefix - PREFIX_OFFSET; 1];
+            let input = bytes.chain(input);
+            let method = U::decode(input)?;
+            Ok(Item::Method(method))
+        }
+    }
+}
+
+pub trait FieldCall {
+    type FieldCall: Encode + Decode + std::fmt::Debug = ();
+
+    fn field_call(&mut self, call: Self::FieldCall) -> Result<()>;
+}
+
+pub trait MethodCall {
+    type MethodCall: Encode + Decode + std::fmt::Debug = ();
+
+    fn method_call(&mut self, call: Self::MethodCall) -> Result<()>;
+}
+
+impl<T> Call for T
+where
+    T: FieldCall + MethodCall,
+{
+    type Call = Item<T::FieldCall, T::MethodCall>;
+
+    fn call(&mut self, call: Self::Call) -> Result<()> {
+        match call {
+            Item::Field(call) => self.field_call(call),
+            Item::Method(call) => self.method_call(call),
+        }
+    }
+}
+
+pub auto trait MethodCallMarker {}
+
+impl<T> MethodCall for T
+where
+    T: FieldCall + MethodCallMarker,
+{
+    fn method_call(&mut self, _call: Self::MethodCall) -> Result<()> {
+        Err(Error::Call("Method not found".to_string()))
     }
 }

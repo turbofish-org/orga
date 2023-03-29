@@ -1,15 +1,12 @@
-// use crate::call::Call;
-// use crate::query::Query;
-// use crate::Error;
 use crate::Result;
 
 pub use crate::call::Call;
-pub use crate::macros::Client;
 pub use chain::{CallChain, QueryChain};
 pub use mock::Mock;
 pub use primitive_client::PrimitiveClient;
 
 mod chain;
+pub mod experimental;
 mod mock;
 mod primitive_client;
 

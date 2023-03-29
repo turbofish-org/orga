@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+use crate::client::experimental::StoreOp;
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[cfg(feature = "abci")]
@@ -14,6 +16,8 @@ pub enum Error {
     Call(String),
     #[error("Client Error: {0}")]
     Client(String),
+    #[error("Client Store Error")]
+    ClientStore { store_op: StoreOp },
     #[error("Coins Error: {0}")]
     Coins(String),
     #[error(transparent)]

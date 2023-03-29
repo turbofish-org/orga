@@ -1,4 +1,5 @@
 use super::Amount;
+use crate::describe::{Builder, Describe};
 use crate::encoding::Adapter;
 use crate::encoding::{Decode, Encode};
 use crate::orga;
@@ -8,17 +9,17 @@ use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::str::FromStr;
 
-#[orga(simple)]
+#[orga(simple, skip(Describe))]
 #[derive(Copy, Debug)]
 pub struct Decimal {
     pub(crate) value: NumDecimal,
 }
 
-// impl Describe for Decimal {
-//     fn describe() -> crate::describe::Descriptor {
-//         Builder::new::<Self>().build()
-//     }
-// }
+impl Describe for Decimal {
+    fn describe() -> crate::describe::Descriptor {
+        Builder::new::<Self>().build()
+    }
+}
 
 impl std::fmt::Display for Decimal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

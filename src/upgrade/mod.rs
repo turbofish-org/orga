@@ -46,6 +46,7 @@ impl Default for Upgrade {
     }
 }
 
+#[orga]
 impl Upgrade {
     #[call]
     pub fn signal(&mut self, version: Version) -> Result<()> {

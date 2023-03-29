@@ -135,7 +135,7 @@ mod tests {
     };
 
     #[orga(version = 2)]
-    #[derive(Clone)]
+    #[derive(Clone, PartialEq, Eq)]
     struct Number {
         #[orga(version(V0))]
         value: u16,
@@ -160,7 +160,7 @@ mod tests {
     }
 
     #[orga(version = 1)]
-    #[derive(Entry)]
+    #[derive(Entry, Eq, PartialEq)]
     struct NumberEntry {
         #[key]
         index: u8,

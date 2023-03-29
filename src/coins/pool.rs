@@ -13,7 +13,7 @@ use std::ops::{Deref, DerefMut, Drop, RangeBounds};
 #[orga]
 pub struct Pool<K, V, S>
 where
-    K: Terminated + Encode + Decode + Clone,
+    K: Terminated + Encode + Decode + Clone + 'static,
     V: State,
     S: Symbol,
 {
@@ -30,7 +30,7 @@ where
 
 impl<K, V, S> Balance<S, Decimal> for Pool<K, V, S>
 where
-    K: Terminated + Encode + Decode + Clone,
+    K: Terminated + Encode + Decode + Clone + 'static,
     V: State,
     S: Symbol,
 {
@@ -65,7 +65,7 @@ impl<T: State> DerefMut for Entry<T> {
 
 impl<K, V, S> Pool<K, V, S>
 where
-    K: Terminated + Encode + Decode + Clone,
+    K: Terminated + Encode + Decode + Clone + 'static,
     V: State,
     S: Symbol,
 {
@@ -79,7 +79,7 @@ where
 
 impl<K, V, S> Pool<K, V, S>
 where
-    K: Encode + Decode + Terminated + Clone,
+    K: Encode + Decode + Terminated + Clone + 'static,
     V: State + Balance<S, Decimal> + Give<(u8, Amount)> + Default,
     S: Symbol,
 {
@@ -207,7 +207,7 @@ pub type IterEntry<'a, K, V, S> = Result<(K, Child<'a, V, S>)>;
 impl<K, V, S> Pool<K, V, S>
 where
     S: Symbol,
-    K: Encode + Decode + Terminated + Clone + Next,
+    K: Encode + Decode + Terminated + Clone + Next + 'static,
     V: State + Balance<S, Decimal> + Give<(u8, Amount)> + Default,
 {
     pub fn range<B>(&self, bounds: B) -> Result<impl Iterator<Item = IterEntry<K, V, S>>>
@@ -231,7 +231,7 @@ impl<K, V, S, T> Give<Coin<T>> for Pool<K, V, S>
 where
     S: Symbol,
     T: Symbol,
-    K: Encode + Terminated + Decode + Clone,
+    K: Encode + Terminated + Decode + Clone + 'static,
     V: State,
 {
     fn give(&mut self, coin: Coin<T>) -> Result<()> {
@@ -249,7 +249,7 @@ where
 impl<K, V, S> Give<(u8, Amount)> for Pool<K, V, S>
 where
     S: Symbol,
-    K: Encode + Terminated + Decode + Clone,
+    K: Encode + Terminated + Decode + Clone + 'static,
     V: State,
 {
     fn give(&mut self, coin: (u8, Amount)) -> Result<()> {
@@ -267,7 +267,7 @@ where
 pub struct ChildMut<'a, K, V, S>
 where
     S: Symbol,
-    K: Encode + Clone,
+    K: Encode + Clone + 'static,
     V: State + Balance<S, Decimal>,
 {
     parent_num_tokens: &'a mut Decimal,
@@ -281,7 +281,7 @@ where
 impl<'a, K, V, S> Drop for ChildMut<'a, K, V, S>
 where
     S: Symbol,
-    K: Encode + Clone,
+    K: Encode + Clone + 'static,
     V: State + Balance<S, Decimal>,
 {
     fn drop(&mut self) {
@@ -348,7 +348,7 @@ where
 impl<'a, K, V, S> Deref for ChildMut<'a, K, V, S>
 where
     S: Symbol,
-    K: Encode + Clone,
+    K: Encode + Clone + 'static,
     V: State + Balance<S, Decimal>,
 {
     type Target = V;
@@ -362,7 +362,7 @@ where
 impl<'a, K, V, S> DerefMut for ChildMut<'a, K, V, S>
 where
     S: Symbol,
-    K: Encode + Clone,
+    K: Encode + Clone + 'static,
     V: State + Balance<S, Decimal>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {

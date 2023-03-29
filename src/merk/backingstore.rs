@@ -19,7 +19,12 @@ pub enum BackingStore {
     MapStore(Shared<MapStore>),
     ProofMap(Shared<ProofStore>),
     Null(NullStore),
+    Other(Shared<Box<dyn ReadWrite>>),
 }
+
+pub trait ReadWrite: Read + Write {}
+
+impl<T: Read + Write> ReadWrite for T {}
 
 impl Default for BackingStore {
     fn default() -> Self {
@@ -39,6 +44,7 @@ impl Read for BackingStore {
             BackingStore::MapStore(ref store) => store.get(key),
             BackingStore::ProofMap(ref map) => map.get(key),
             BackingStore::Null(ref null) => null.get(key),
+            BackingStore::Other(ref store) => store.borrow().get(key),
         }
     }
 
@@ -53,6 +59,7 @@ impl Read for BackingStore {
             BackingStore::MapStore(ref store) => store.get_next(key),
             BackingStore::ProofMap(ref map) => map.get_next(key),
             BackingStore::Null(ref null) => null.get_next(key),
+            BackingStore::Other(ref store) => store.borrow().get_next(key),
         }
     }
 }
@@ -73,6 +80,7 @@ impl Write for BackingStore {
                 panic!("put() is not implemented for ProofMap")
             }
             BackingStore::Null(ref mut store) => store.put(key, value),
+            BackingStore::Other(ref mut store) => store.borrow_mut().put(key, value),
         }
     }
     fn delete(&mut self, key: &[u8]) -> Result<()> {
@@ -91,6 +99,7 @@ impl Write for BackingStore {
                 panic!("delete() is not implemented for ProofMap")
             }
             BackingStore::Null(ref mut store) => store.delete(key),
+            BackingStore::Other(ref mut store) => store.borrow_mut().delete(key),
         }
     }
 }

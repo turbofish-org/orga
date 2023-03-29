@@ -18,7 +18,6 @@ pub fn derive(item: TokenStream) -> TokenStream {
     });
     let types = struct_fields(&item).map(|field| &field.ty);
     let types_where = struct_fields(&item).map(|field| &field.ty);
-    let indexes = (0..struct_fields(&item).count()).map(num_to_token);
 
     let name = &item.ident;
     let mut generics = item.generics.clone();
@@ -35,19 +34,17 @@ pub fn derive(item: TokenStream) -> TokenStream {
     let generic_params = gen_param_input(&generics, true);
 
     let output = quote! {
-        impl#generics ::orga::describe::Describe for #name#generic_params
+        impl #generics ::orga::describe::Describe for #name #generic_params
         where
             Self: ::orga::state::State + 'static,
             #(#types_where: ::orga::state::State + ::orga::describe::Describe + 'static,)*
             #where_clause
         {
             fn describe() -> ::orga::describe::Descriptor {
-                ::orga::describe::Builder::new::<Self>()
+                ::orga::describe::Builder::new::<Self>().meta::<u8>()
                 #(
-                    .named_child::<#types>(
+                    .named_child_from_state::<Self, #types>(
                         stringify!(#names),
-                        &[#indexes],
-                        |v| ::orga::describe::Builder::access(v, |v: Self| v.#names)
                     )
                 )*
                 .build()

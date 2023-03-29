@@ -9,7 +9,6 @@ use std::marker::PhantomData;
 #[derive(Debug)]
 // #[must_use = "If these coins are meant to be discarded, explicitly call the `burn` method"]
 pub struct Coin<S: Symbol> {
-    #[call]
     pub amount: Amount,
     symbol: PhantomData<S>,
 }

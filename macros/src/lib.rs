@@ -1,12 +1,13 @@
 #![feature(proc_macro_span)]
+#![feature(box_patterns)]
 
 use proc_macro::TokenStream;
 
-mod call;
-mod client;
 mod describe;
 mod encoding;
 mod entry;
+mod field_call;
+mod method_call;
 mod migrate_from;
 mod next;
 mod orga;
@@ -34,21 +35,6 @@ pub fn query(args: TokenStream, input: TokenStream) -> TokenStream {
     query::attr(args, input)
 }
 
-#[proc_macro_derive(Call, attributes(call))]
-pub fn derive_call(item: TokenStream) -> TokenStream {
-    call::derive(item)
-}
-
-#[proc_macro_attribute]
-pub fn call(args: TokenStream, input: TokenStream) -> TokenStream {
-    call::attr(args, input)
-}
-
-#[proc_macro_derive(Client)]
-pub fn derive_client(item: TokenStream) -> TokenStream {
-    client::derive(item)
-}
-
 #[proc_macro_derive(Next)]
 pub fn derive_next(item: TokenStream) -> TokenStream {
     next::derive(item)
@@ -72,4 +58,14 @@ pub fn orga(args: TokenStream, input: TokenStream) -> TokenStream {
 #[proc_macro_derive(VersionedEncoding, attributes(encoding))]
 pub fn derive_versioned_encoding(item: TokenStream) -> TokenStream {
     encoding::derive(item)
+}
+
+#[proc_macro_derive(FieldCall, attributes(call))]
+pub fn derive_field_call(item: TokenStream) -> TokenStream {
+    field_call::derive(item)
+}
+
+#[proc_macro_attribute]
+pub fn call_block(item: TokenStream, input: TokenStream) -> TokenStream {
+    method_call::call_block(item, input)
 }

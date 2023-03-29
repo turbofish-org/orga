@@ -1,5 +1,7 @@
+use darling::util::path_to_string;
+use heck::{CamelCase, SnakeCase};
 use proc_macro2::TokenStream;
-use quote::quote;
+use quote::{format_ident, quote};
 use regex::Regex;
 use std::collections::HashSet;
 use syn::Ident;
@@ -11,7 +13,7 @@ pub fn parse_parent() -> File {
     parse_file(source.as_str()).unwrap()
 }
 
-pub fn get_generic_requirements<I, J>(inputs: I, params: J) -> Vec<Ident>
+pub fn _get_generic_requirements<I, J>(inputs: I, params: J) -> Vec<Ident>
 where
     I: Iterator<Item = Type>,
     J: Iterator<Item = GenericParam>,
@@ -193,11 +195,20 @@ pub struct Types {
     pub flusher_ty: TokenStream,
     pub loader_ty: TokenStream,
     pub result_ty: TokenStream,
+    pub error_ty: TokenStream,
     pub terminated_trait: TokenStream,
     pub encode_trait: TokenStream,
     pub decode_trait: TokenStream,
     pub encoder_ty: TokenStream,
     pub decoder_ty: TokenStream,
+    pub field_call_trait: TokenStream,
+    pub method_call_trait: TokenStream,
+    pub method_call_marker_trait: TokenStream,
+    pub call_trait: TokenStream,
+    pub trace_fn: TokenStream,
+    pub keyop_ty: TokenStream,
+    pub ed_result_ty: TokenStream,
+    pub ed_error_ty: TokenStream,
 }
 
 impl Default for Types {
@@ -209,11 +220,20 @@ impl Default for Types {
             flusher_ty: quote! { ::orga::state::Flusher },
             loader_ty: quote! { ::orga::state::Loader },
             result_ty: quote! { ::orga::Result },
+            error_ty: quote! { ::orga::Error },
             terminated_trait: quote! { ::orga::encoding::Terminated },
             encode_trait: quote! { ::orga::encoding::Encode },
             decode_trait: quote! { ::orga::encoding::Decode },
             encoder_ty: quote! { ::orga::encoding::encoder::Encoder },
             decoder_ty: quote! { ::orga::encoding::decoder::Decoder },
+            field_call_trait: quote! { ::orga::call::FieldCall },
+            method_call_trait: quote! { ::orga::call::MethodCall },
+            method_call_marker_trait: quote! { ::orga::call::MethodCallMarker },
+            call_trait: quote! { ::orga::call::Call },
+            trace_fn: quote! { ::orga::client::experimental::trace },
+            keyop_ty: quote! { ::orga::describe::KeyOp },
+            ed_result_ty: quote! { ::orga::encoding::Result },
+            ed_error_ty: quote! { ::orga::encoding::Error },
         }
     }
 }
@@ -222,4 +242,27 @@ pub fn is_attr_with_ident(attr: &Attribute, ident: &str) -> bool {
     attr.path
         .get_ident()
         .map_or(false, |attr_ident| attr_ident.to_string() == ident)
+}
+
+pub fn to_camel_case(ident: &Ident) -> Ident {
+    Ident::new(&format!("{}", ident).as_str().to_camel_case(), ident.span())
+}
+
+pub fn to_snake_case(ident: &Ident) -> Ident {
+    Ident::new(&format!("{}", ident).as_str().to_snake_case(), ident.span())
+}
+
+pub fn impl_item_attrs(item: &ImplItem) -> Vec<Attribute> {
+    use ImplItem::*;
+    match item {
+        Method(method) => method.attrs.clone(),
+        Const(constant) => constant.attrs.clone(),
+        Type(ty) => ty.attrs.clone(),
+        Macro(macro_) => macro_.attrs.clone(),
+        _ => unimplemented!(),
+    }
+}
+
+pub fn path_to_ident(path: &Path) -> Ident {
+    format_ident!("{}", path_to_string(path))
 }

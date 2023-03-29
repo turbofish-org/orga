@@ -33,6 +33,22 @@ pub struct Store<S = DefaultBackingStore> {
     store: Shared<S>,
 }
 
+impl Store {
+    #[cfg(feature = "merk")]
+    pub fn with_map_store() -> Self {
+        use super::MapStore;
+        Self::new(crate::merk::BackingStore::MapStore(Shared::new(
+            MapStore::new(),
+        )))
+    }
+
+    #[cfg(not(feature = "merk"))]
+    pub fn with_map_store() -> Self {
+        use super::MapStore;
+        Self::new(Shared::new(MapStore::new()))
+    }
+}
+
 impl MigrateFrom for Store {
     fn migrate_from(other: Self) -> Result<Self> {
         Ok(other)

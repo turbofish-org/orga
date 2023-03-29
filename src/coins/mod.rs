@@ -53,12 +53,11 @@ pub use ops::*;
 
 use bech32::{self, encode_to_fmt, FromBase32, ToBase32, Variant};
 
-use crate::client::Client;
 use crate::collections::Next;
 use crate::describe::Describe;
 use crate::macros::State;
+use crate::migrate::MigrateFrom;
 use crate::query::Query;
-use crate::{call::Call, migrate::MigrateFrom};
 use ed::{Decode, Encode};
 use ripemd::{Digest as _, Ripemd160};
 use serde::{Deserialize, Serialize};
@@ -78,8 +77,6 @@ use sha2::Sha256;
     Hash,
     Debug,
     Copy,
-    Client,
-    Call,
     Default,
     Describe,
     MigrateFrom,

@@ -10,7 +10,7 @@ use crate::state::State;
 use crate::store::Store;
 use crate::Result;
 
-#[derive(Query, Encode, Decode)]
+#[derive(Query, Encode, Decode, Describe)]
 pub struct Deque<T> {
     meta: Meta,
     map: Map<u64, T>,
@@ -77,6 +77,7 @@ impl<T: Call + State> Call for Deque<T> {
         self.get_mut(index)?.call(subcall)
     }
 }
+impl<T> crate::call::MethodCallMarker for Deque<T> {}
 
 // TODO: use derive(State) once it supports generic parameters
 impl<T: State> State for Deque<T> {

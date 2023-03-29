@@ -40,9 +40,7 @@ use super::{Adapter, Lunchbox};
 pub struct TransferModule {
     lunchbox: Lunchbox,
     commitments: Map<Adapter<(PortId, ChannelId)>, Deque<Adapter<PacketState>>>,
-    #[call]
     pub(super) bank: Bank,
-    #[call]
     pub height: u64,
 }
 
@@ -572,7 +570,6 @@ impl FromStr for Dynom {
 
 #[orga]
 pub struct Bank {
-    #[call]
     pub balances: Map<Dynom, Map<Address, Amount>>,
 }
 
