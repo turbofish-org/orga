@@ -6,7 +6,6 @@ use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
 use crate::call::Call;
 use crate::client::{AsyncCall, Client as ClientTrait};
-use crate::coins::Address;
 use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::query::Query;
 use crate::state::State;
@@ -176,7 +175,12 @@ where
             .get(key_bytes.as_slice())?
             .map(|value_bytes| {
                 let substore = self.store.sub(key_bytes.as_slice());
-                let value = V::load(substore, &mut value_bytes.as_slice())?;
+                let mut value_bytes = value_bytes.as_slice();
+                let value = V::load(substore, &mut value_bytes)?;
+                debug_assert!(
+                    value_bytes.is_empty(),
+                    "Value had leftover bytes after decode"
+                );
                 Ok(value)
             })
             .transpose()
@@ -490,14 +494,17 @@ where
                         .transpose()?
                         .expect("Peek ensures this arm is unreachable");
 
-                    let mut key_bytes = &entry.0[..];
+                    let mut key_bytes = entry.0.as_slice();
                     let key = Decode::decode(&mut key_bytes)?;
-                    debug_assert!(key_bytes.is_empty());
+                    debug_assert!(key_bytes.is_empty(), "Key had leftover bytes after decode");
 
-                    let value = V::load(
-                        self.parent_store.sub(entry.0.as_slice()),
-                        &mut entry.1.as_slice(),
-                    )?;
+                    let mut value_bytes = entry.1.as_slice();
+                    let value =
+                        V::load(self.parent_store.sub(entry.0.as_slice()), &mut value_bytes)?;
+                    debug_assert!(
+                        value_bytes.is_empty(),
+                        "Value had leftover bytes after decode"
+                    );
 
                     Some((Ref::Owned(key), Ref::Owned(value)))
                 }
@@ -528,10 +535,13 @@ where
                     if key_cmp == Ordering::Greater {
                         let entry = self.store_iter.next().unwrap()?;
 
-                        let value = V::load(
-                            self.parent_store.sub(entry.0.as_slice()),
-                            &mut entry.1.as_slice(),
-                        )?;
+                        let mut value_bytes = entry.1.as_slice();
+                        let value =
+                            V::load(self.parent_store.sub(entry.0.as_slice()), &mut value_bytes)?;
+                        debug_assert!(
+                            value_bytes.is_empty(),
+                            "Value had leftover bytes after decode"
+                        );
 
                         return Ok(Some((Ref::Owned(key), Ref::Owned(value))));
                     }
