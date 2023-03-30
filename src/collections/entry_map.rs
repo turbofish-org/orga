@@ -201,18 +201,35 @@ where
     T2::Key: Encode + Terminated,
     T2::Value: State,
 {
-    fn migrate_from(other: EntryMap<T1>) -> Result<Self> {
+    fn migrate_from(mut other: EntryMap<T1>) -> Result<Self> {
         // TODO: clone bound shouldn't be required on T1::Value, but there's currently no
         // way to access the inner map's store, so we need the
         // clone bound to create the entry map's iterator
-        let mut entry_map = Self::default();
+
+        let mut map = Self::default();
+        let mut old_keys = vec![];
         for entry in other.map.iter()? {
-            let (k, v) = entry?;
-            let entry = T1::from_entry((k.clone(), v.clone()));
-            entry_map.insert(entry.migrate_into()?)?;
+            let (key, _value) = entry?;
+            old_keys.push(key.clone());
         }
 
-        Ok(entry_map)
+        for key in old_keys {
+            let old_key_bytes = key.encode()?;
+            let mut value_bytes = vec![];
+            let value = other.map.remove(key.clone())?.unwrap().into_inner();
+            value.flush(&mut value_bytes)?;
+            let value = T1::Value::load(
+                other.map.store.sub(old_key_bytes.as_slice()),
+                &mut value_bytes.as_slice(),
+            )?;
+            let entry = T1::from_entry((key, value));
+            let new_entry = entry.migrate_into()?;
+            map.insert(new_entry)?;
+        }
+        let mut out = vec![];
+        other.flush(&mut out)?;
+
+        Ok(map)
     }
 }
 
