@@ -6,6 +6,7 @@ use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
 use crate::call::Call;
 use crate::client::{AsyncCall, Client as ClientTrait};
+use crate::coins::Address;
 use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::query::Query;
 use crate::state::State;
@@ -230,18 +231,12 @@ where
         }
 
         for key in old_keys.iter() {
-            let old_key_bytes = key.encode()?;
-            let mut value_bytes = vec![];
             let value = other.remove(key.clone())?.unwrap().into_inner();
-            value.flush(&mut value_bytes)?;
-            let value = V1::load(
-                other.store.sub(old_key_bytes.as_slice()),
-                &mut value_bytes.as_slice(),
-            )?;
             let new_key = key.clone().migrate_into()?;
             let new_value = value.migrate_into()?;
             map.insert(new_key, new_value)?;
         }
+
         let mut out = vec![];
         other.flush(&mut out)?;
 
