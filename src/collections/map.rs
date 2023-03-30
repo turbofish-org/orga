@@ -1014,6 +1014,7 @@ where
 mod tests {
     use super::super::deque::Deque;
     use super::{Map, *};
+    use crate::set_compat_mode;
     use crate::store::{MapStore, Store};
 
     fn enc(n: u32) -> Vec<u8> {
@@ -2014,5 +2015,50 @@ mod tests {
 
         let actual = read_map.entry(12).unwrap().or_insert(28).unwrap();
         assert_eq!(26, *actual);
+    }
+
+    #[orga(version = 1)]
+    struct Foo {
+        #[orga(version(V1))]
+        bar: u32,
+
+        baz: u32,
+    }
+
+    impl MigrateFrom<FooV0> for FooV1 {
+        fn migrate_from(from: FooV0) -> Result<Self> {
+            Ok(Self {
+                bar: 0,
+                baz: from.baz,
+            })
+        }
+    }
+
+    #[test]
+    fn migrate() {
+        let mut store = mapstore();
+        store.put(vec![0, 0, 0, 12], vec![0, 0, 0, 0, 123]).unwrap();
+
+        let map0: Map<u32, Foo> = Map::with_store(store).unwrap();
+        let map1: Map<u32, Foo> = map0.migrate_into().unwrap();
+
+        assert_eq!(map1.get(12).unwrap().unwrap().bar, 0);
+        assert_eq!(map1.get(12).unwrap().unwrap().baz, 123);
+    }
+
+    #[test]
+    fn migrate_compat_mode() {
+        set_compat_mode(true);
+
+        let mut store = mapstore();
+        store.put(vec![0, 0, 0, 12], vec![0, 0, 0, 123]).unwrap();
+
+        let map0: Map<u32, Foo> = Map::with_store(store).unwrap();
+        let map1: Map<u32, Foo> = map0.migrate_into().unwrap();
+
+        set_compat_mode(false);
+
+        assert_eq!(map1.get(12).unwrap().unwrap().bar, 0);
+        assert_eq!(map1.get(12).unwrap().unwrap().baz, 123);
     }
 }
