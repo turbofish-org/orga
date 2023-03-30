@@ -88,7 +88,7 @@ impl<K> Eq for MapKey<K> {}
 /// changes to the backing store.
 #[derive(Query, Call)]
 pub struct Map<K, V> {
-    store: Store,
+    pub(super) store: Store,
     children: BTreeMap<MapKey<K>, Option<V>>,
 }
 
