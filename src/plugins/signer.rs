@@ -590,10 +590,14 @@ pub mod keplr {
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(feature = "abci")]
 pub fn load_privkey() -> Result<SecretKey> {
-    // Ensure orga home directory exists
-    let orga_home = home::home_dir()
-        .expect("No home directory set")
-        .join(".orga-wallet");
+    use std::path::PathBuf;
+
+    let home = match std::env::var("NOMIC_HOME_DIR") {
+        Ok(home) => Some(PathBuf::from(home)),
+        Err(_) => home::home_dir(),
+    };
+
+    let orga_home = home.expect("No home directory set").join(".orga-wallet");
 
     std::fs::create_dir_all(&orga_home)?;
     let keypair_path = orga_home.join("privkey");
