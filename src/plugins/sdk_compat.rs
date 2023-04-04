@@ -16,7 +16,7 @@ pub const NATIVE_CALL_FLAG: u8 = 0xff;
 
 // TODO: add version 1 so that plugin is transparent on `inner`
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Serialize)]
 pub struct SdkCompatPlugin<S, T: State> {
     pub(crate) symbol: PhantomData<S>,
     pub(crate) inner: T,
@@ -509,6 +509,7 @@ impl<T: Client<SdkCompatAdapter<T, U, S>>, U: Clone, S> DerefMut for SdkCompatCl
     }
 }
 
+use serde::Serialize;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsValue;
 

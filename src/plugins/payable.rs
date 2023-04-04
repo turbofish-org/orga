@@ -1,3 +1,5 @@
+use serde::Serialize;
+
 use super::sdk_compat::{sdk::Tx as SdkTx, ConvertSdkTx};
 use crate::call::Call;
 use crate::client::{AsyncCall, AsyncQuery, Client};
@@ -14,7 +16,7 @@ use std::ops::{Deref, DerefMut};
 
 const MAX_SUBCALL_LEN: u32 = 200_000;
 
-#[derive(State, Encode, Decode, Default)]
+#[derive(State, Encode, Decode, Default, Serialize)]
 pub struct PayablePlugin<T> {
     inner: T,
 }

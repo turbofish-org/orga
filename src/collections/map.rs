@@ -12,6 +12,7 @@ use crate::state::State;
 use crate::store::*;
 use crate::{Error, Result};
 use ed::*;
+use serde::Serialize;
 
 #[derive(Clone, Debug)]
 pub struct MapKey<K> {
@@ -87,7 +88,7 @@ impl<K> Eq for MapKey<K> {}
 /// changes to the backing store.
 #[derive(Query, Call)]
 pub struct Map<K, V> {
-    store: Store,
+    pub(super) store: Store,
     children: BTreeMap<MapKey<K>, Option<V>>,
 }
 
@@ -174,7 +175,12 @@ where
             .get(key_bytes.as_slice())?
             .map(|value_bytes| {
                 let substore = self.store.sub(key_bytes.as_slice());
-                let value = V::load(substore, &mut value_bytes.as_slice())?;
+                let mut value_bytes = value_bytes.as_slice();
+                let value = V::load(substore, &mut value_bytes)?;
+                debug_assert!(
+                    value_bytes.is_empty(),
+                    "Value had leftover bytes after decode"
+                );
                 Ok(value)
             })
             .transpose()
@@ -229,18 +235,12 @@ where
         }
 
         for key in old_keys.iter() {
-            let old_key_bytes = key.encode()?;
-            let mut value_bytes = vec![];
             let value = other.remove(key.clone())?.unwrap().into_inner();
-            value.flush(&mut value_bytes)?;
-            let value = V1::load(
-                other.store.sub(old_key_bytes.as_slice()),
-                &mut value_bytes.as_slice(),
-            )?;
             let new_key = key.clone().migrate_into()?;
             let new_value = value.migrate_into()?;
             map.insert(new_key, new_value)?;
         }
+
         let mut out = vec![];
         other.flush(&mut out)?;
 
@@ -430,6 +430,25 @@ where
     }
 }
 
+impl<K: Serialize, V: Serialize> Serialize for Map<K, V>
+where
+    K: Encode + Decode + Terminated + Clone,
+    V: State,
+{
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error> {
+        use serde::ser::{Error, SerializeSeq};
+        let mut seq = serializer.serialize_seq(None)?;
+        for entry in self.iter().map_err(Error::custom)? {
+            let (key, value) = entry.map_err(Error::custom)?;
+            seq.serialize_element(&(&*key, &*value))?;
+        }
+        seq.end()
+    }
+}
+
 pub struct Iter<'a, K, V>
 where
     K: Decode + Encode + Terminated,
@@ -475,14 +494,17 @@ where
                         .transpose()?
                         .expect("Peek ensures this arm is unreachable");
 
-                    let mut key_bytes = &entry.0[..];
+                    let mut key_bytes = entry.0.as_slice();
                     let key = Decode::decode(&mut key_bytes)?;
-                    debug_assert!(key_bytes.is_empty());
+                    debug_assert!(key_bytes.is_empty(), "Key had leftover bytes after decode");
 
-                    let value = V::load(
-                        self.parent_store.sub(entry.0.as_slice()),
-                        &mut entry.1.as_slice(),
-                    )?;
+                    let mut value_bytes = entry.1.as_slice();
+                    let value =
+                        V::load(self.parent_store.sub(entry.0.as_slice()), &mut value_bytes)?;
+                    debug_assert!(
+                        value_bytes.is_empty(),
+                        "Value had leftover bytes after decode"
+                    );
 
                     Some((Ref::Owned(key), Ref::Owned(value)))
                 }
@@ -513,10 +535,13 @@ where
                     if key_cmp == Ordering::Greater {
                         let entry = self.store_iter.next().unwrap()?;
 
-                        let value = V::load(
-                            self.parent_store.sub(entry.0.as_slice()),
-                            &mut entry.1.as_slice(),
-                        )?;
+                        let mut value_bytes = entry.1.as_slice();
+                        let value =
+                            V::load(self.parent_store.sub(entry.0.as_slice()), &mut value_bytes)?;
+                        debug_assert!(
+                            value_bytes.is_empty(),
+                            "Value had leftover bytes after decode"
+                        );
 
                         return Ok(Some((Ref::Owned(key), Ref::Owned(value))));
                     }
@@ -994,6 +1019,7 @@ where
 mod tests {
     use super::super::deque::Deque;
     use super::{Map, *};
+    use crate::set_compat_mode;
     use crate::store::{MapStore, Store};
 
     fn enc(n: u32) -> Vec<u8> {
@@ -1994,5 +2020,50 @@ mod tests {
 
         let actual = read_map.entry(12).unwrap().or_insert(28).unwrap();
         assert_eq!(26, *actual);
+    }
+
+    #[orga(version = 1)]
+    struct Foo {
+        #[orga(version(V1))]
+        bar: u32,
+
+        baz: u32,
+    }
+
+    impl MigrateFrom<FooV0> for FooV1 {
+        fn migrate_from(from: FooV0) -> Result<Self> {
+            Ok(Self {
+                bar: 0,
+                baz: from.baz,
+            })
+        }
+    }
+
+    #[test]
+    fn migrate() {
+        let mut store = mapstore();
+        store.put(vec![0, 0, 0, 12], vec![0, 0, 0, 0, 123]).unwrap();
+
+        let map0: Map<u32, Foo> = Map::with_store(store).unwrap();
+        let map1: Map<u32, Foo> = map0.migrate_into().unwrap();
+
+        assert_eq!(map1.get(12).unwrap().unwrap().bar, 0);
+        assert_eq!(map1.get(12).unwrap().unwrap().baz, 123);
+    }
+
+    #[test]
+    fn migrate_compat_mode() {
+        set_compat_mode(true);
+
+        let mut store = mapstore();
+        store.put(vec![0, 0, 0, 12], vec![0, 0, 0, 123]).unwrap();
+
+        let map0: Map<u32, Foo> = Map::with_store(store).unwrap();
+        let map1: Map<u32, Foo> = map0.migrate_into().unwrap();
+
+        set_compat_mode(false);
+
+        assert_eq!(map1.get(12).unwrap().unwrap().bar, 0);
+        assert_eq!(map1.get(12).unwrap().unwrap().baz, 123);
     }
 }

@@ -32,7 +32,7 @@ const UNBONDING_SECONDS: u64 = 10; // 10 seconds
 const UNBONDING_SECONDS: u64 = 60 * 60 * 24 * 14; // 2 weeks
 const EDIT_INTERVAL_SECONDS: u64 = 60 * 60 * 24; // 1 day
 
-#[derive(Call, Query, Default, Client, MigrateFrom)]
+#[derive(Call, Query, Default, Client, MigrateFrom, Serialize)]
 pub struct Staking<S: Symbol> {
     validators: Pool<Address, Validator<S>, S>,
     #[call]
