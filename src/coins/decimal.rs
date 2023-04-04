@@ -10,6 +10,7 @@ use std::str::FromStr;
 
 #[orga(simple)]
 #[derive(Copy, Debug)]
+#[serde(transparent)]
 pub struct Decimal {
     pub(crate) value: NumDecimal,
 }

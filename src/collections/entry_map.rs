@@ -1,3 +1,5 @@
+use serde::Serialize;
+
 use super::map::Iter as MapIter;
 use super::map::Map;
 use super::map::ReadOnly;
@@ -13,7 +15,11 @@ use crate::state::*;
 use crate::store::*;
 use crate::Result;
 
-#[derive(Query, Call, Encode, Decode)]
+#[derive(Query, Call, Encode, Decode, Serialize)]
+#[serde(bound(
+    serialize = "T::Key: Serialize + Terminated + Clone, T::Value: Serialize + State",
+    deserialize = "T::Key: Deserialize<'de> + Terminated + Clone, T::Value: Deserialize<'de> + State",
+))]
 
 pub struct EntryMap<T: Entry> {
     map: Map<T::Key, T::Value>,
@@ -195,18 +201,25 @@ where
     T2::Key: Encode + Terminated,
     T2::Value: State,
 {
-    fn migrate_from(other: EntryMap<T1>) -> Result<Self> {
-        // TODO: clone bound shouldn't be required on T1::Value, but there's currently no
-        // way to access the inner map's store, so we need the
-        // clone bound to create the entry map's iterator
-        let mut entry_map = Self::default();
+    fn migrate_from(mut other: EntryMap<T1>) -> Result<Self> {
+        let mut map = Self::default();
+        let mut old_keys = vec![];
         for entry in other.map.iter()? {
-            let (k, v) = entry?;
-            let entry = T1::from_entry((k.clone(), v.clone()));
-            entry_map.insert(entry.migrate_into()?)?;
+            let (key, _value) = entry?;
+            old_keys.push(key.clone());
         }
 
-        Ok(entry_map)
+        for key in old_keys {
+            let value = other.map.remove(key.clone())?.unwrap().into_inner();
+            let entry = T1::from_entry((key, value));
+            let new_entry = entry.migrate_into()?;
+            map.insert(new_entry)?;
+        }
+
+        let mut out = vec![];
+        other.flush(&mut out)?;
+
+        Ok(map)
     }
 }
 

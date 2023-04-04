@@ -1,3 +1,5 @@
+use serde::Serialize;
+
 use super::map::{ChildMut, Map, ReadOnly, Ref};
 use crate::call::Call;
 use crate::client::Client;
@@ -43,6 +45,21 @@ impl<T> Default for Deque<T> {
 impl<T> std::fmt::Debug for Deque<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Deque").field("meta", &self.meta).finish()
+    }
+}
+
+impl<T: Serialize + State> Serialize for Deque<T> {
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error> {
+        use serde::ser::{Error, SerializeSeq};
+        let mut seq = serializer.serialize_seq(None)?;
+        for entry in self.iter().map_err(Error::custom)? {
+            let value = entry.map_err(Error::custom)?;
+            seq.serialize_element(&*value)?;
+        }
+        seq.end()
     }
 }
 

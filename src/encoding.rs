@@ -10,6 +10,7 @@ pub mod decoder;
 pub mod encoder;
 
 use derive_more::{Deref, DerefMut, Into};
+use serde::Serialize;
 use std::convert::{TryFrom, TryInto};
 
 #[derive(
@@ -27,12 +28,14 @@ use std::convert::{TryFrom, TryInto};
     Hash,
     Eq,
     Client,
+    Serialize,
 )]
 pub struct LengthVec<P, T>
 where
     P: Encode + Decode + TryInto<usize> + Terminated + Clone,
     T: Encode + Decode + Terminated,
 {
+    #[serde(skip)]
     len: P,
 
     #[deref]
