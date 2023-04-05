@@ -63,7 +63,6 @@ pub struct ConnectionStore {
     count: u64,
     ends: Map<Adapter<ConnectionId>, ProtobufAdapter<ConnectionEnd>>,
     by_client: Map<Adapter<ClientId>, Deque<Adapter<ConnectionId>>>,
-    #[call]
     pub height: u64,
 }
 

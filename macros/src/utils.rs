@@ -209,6 +209,12 @@ pub struct Types {
     pub keyop_ty: TokenStream,
     pub ed_result_ty: TokenStream,
     pub ed_error_ty: TokenStream,
+    pub call_item_ty: TokenStream,
+    pub child_trait: TokenStream,
+    pub child_field_ty: TokenStream,
+    pub build_call_trait: TokenStream,
+    pub call_builder_ty: TokenStream,
+    pub call_marker_ty: TokenStream,
 }
 
 impl Default for Types {
@@ -234,6 +240,12 @@ impl Default for Types {
             keyop_ty: quote! { ::orga::describe::KeyOp },
             ed_result_ty: quote! { ::orga::encoding::Result },
             ed_error_ty: quote! { ::orga::encoding::Error },
+            call_item_ty: quote! { ::orga::call::Item },
+            child_trait: quote! { ::orga::describe::child::Child },
+            child_field_ty: quote! { ::orga::describe::child::Field },
+            build_call_trait: quote! { ::orga::call::BuildCall },
+            call_builder_ty: quote! { ::orga::call::CallBuilder },
+            call_marker_ty: quote! { ::orga::call::Marker },
         }
     }
 }

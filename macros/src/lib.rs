@@ -3,6 +3,8 @@
 
 use proc_macro::TokenStream;
 
+mod build_call;
+mod child;
 mod describe;
 mod encoding;
 mod entry;
@@ -68,4 +70,24 @@ pub fn derive_field_call(item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn call_block(item: TokenStream, input: TokenStream) -> TokenStream {
     method_call::call_block(item, input)
+}
+
+#[proc_macro_derive(Child)]
+pub fn derive_child(item: TokenStream) -> TokenStream {
+    child::derive(item)
+}
+
+#[proc_macro]
+pub fn resolve_path(input: TokenStream) -> TokenStream {
+    child::resolve_path(input)
+}
+
+#[proc_macro]
+pub fn build_call(input: TokenStream) -> TokenStream {
+    build_call::build_call(input)
+}
+
+#[proc_macro]
+pub fn const_ident(input: TokenStream) -> TokenStream {
+    child::const_ident(input)
 }

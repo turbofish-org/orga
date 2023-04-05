@@ -76,6 +76,7 @@ pub use compat::{compat_mode, set_compat_mode};
 
 // re-exports
 pub use async_trait::async_trait;
+pub use educe::Educe;
 pub use error::*;
 pub use futures_lite::future::Boxed as BoxFuture;
 pub use orga_macros as macros;

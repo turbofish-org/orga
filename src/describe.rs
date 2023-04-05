@@ -13,6 +13,7 @@ use std::{
 use wasm_bindgen::prelude::*;
 
 mod builder;
+pub mod child;
 
 pub use crate::macros::Describe;
 pub use builder::Builder;

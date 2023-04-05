@@ -1,4 +1,7 @@
-use crate::utils::{to_camel_case, to_snake_case};
+use crate::{
+    child::const_field_id,
+    utils::{to_camel_case, to_snake_case},
+};
 
 use super::utils::{is_attr_with_ident, Types};
 use darling::{usage::IdentSet, util::path_to_string, ToTokens};
@@ -62,15 +65,27 @@ fn method_call_enum(tokens: &mut TokenStream2, item: &ItemImpl) {
     let parent_ident = self_ty_ident(item);
     let sc_parent_ident = to_snake_case(&parent_ident);
     let ident = enum_ident(&item);
-    let variants = call_methods(&item).into_iter().map(|method| {
-        let ident = to_camel_case(&method.sig.ident);
+    let mut variants = call_methods(&item)
+        .into_iter()
+        .map(|method| {
+            let ident = to_camel_case(&method.sig.ident);
 
-        let args = method_args(method);
+            let args = method_args(method);
 
-        quote! { #ident(#( #args ),*) }
-    });
-    let generics = method_arg_generics(&item);
-    let generics = quote! { <#(#generics),*> };
+            quote! { #ident(#( #args ),*) }
+        })
+        .collect_vec();
+
+    let (imp, ty, wher) = item.generics.split_for_impl();
+    let tp = item
+        .generics
+        .type_params()
+        .map(|param| {
+            let ident = &param.ident;
+            quote! { #ident }
+        })
+        .collect_vec();
+    variants.push(quote! { Noop(::std::marker::PhantomData<(#( #tp ),*)>) });
 
     let enum_debug = {
         let child_debugs = call_methods(&item).into_iter().map(|field| {
@@ -85,9 +100,10 @@ fn method_call_enum(tokens: &mut TokenStream2, item: &ItemImpl) {
 
             quote! {
                 #cc_ident(#( #arg_names ),*) => {
-                    if !f.alternate() {
-                        write!(f, "{}.", stringify!(#sc_parent_ident))?;
+                    if f.alternate() {
+                        write!(f, "{}", stringify!(#sc_parent_ident))?;
                     }
+                    write!(f, ".")?;
 
                     f.debug_tuple(stringify!(#sc_ident))
                         #( .field(&#arg_names) )*
@@ -97,11 +113,12 @@ fn method_call_enum(tokens: &mut TokenStream2, item: &ItemImpl) {
         });
 
         quote! {
-            impl #generics ::std::fmt::Debug for #ident #generics {
+            impl #imp ::std::fmt::Debug for #ident #ty #wher {
                 fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
                     use #ident::*;
                     match self {
                         #( #child_debugs ),*
+                        Noop(_) => {Ok(())}
                     }
                 }
             }
@@ -110,7 +127,8 @@ fn method_call_enum(tokens: &mut TokenStream2, item: &ItemImpl) {
 
     tokens.extend(quote! {
         #[derive(#encode_trait, #decode_trait)]
-        pub enum #ident #generics {
+
+        pub enum #ident #ty {
             #( #variants ),*
         }
 
@@ -125,34 +143,39 @@ fn method_call_impl(tokens: &mut TokenStream2, item: &ItemImpl) {
         method_call_trait,
         method_call_marker_trait,
         result_ty,
+        call_marker_ty,
         ..
     } = Types::default();
     let ident = self_ty_ident(&item);
     let enum_ident = enum_ident(&item);
     let (imp, ty, wher) = item.generics.split_for_impl();
-    let arms = call_methods(&item).into_iter().map(|method| {
-        let ident = to_camel_case(&method.sig.ident);
-        let args = method_args(method);
-        let method_ident = &method.sig.ident;
-        let arg_names = args
-            .iter()
-            .enumerate()
-            .map(|(i, _)| {
-                let name = format_ident!("var{}", i);
-                quote! { #name }
-            })
-            .collect_vec();
+    let mut arms = call_methods(&item)
+        .into_iter()
+        .map(|method| {
+            let ident = to_camel_case(&method.sig.ident);
+            let args = method_args(method);
+            let method_ident = &method.sig.ident;
+            let arg_names = args
+                .iter()
+                .enumerate()
+                .map(|(i, _)| {
+                    let name = format_ident!("var{}", i);
+                    quote! { #name }
+                })
+                .collect_vec();
 
-        quote! {
-            #ident(#( #arg_names ),*) => {
-                self.#method_ident(#( #arg_names ),*)?;
+            quote! {
+                #ident(#( #arg_names ),*) => {
+                    self.#method_ident(#( #arg_names ),*)?;
+                }
             }
-        }
+        })
+        .collect_vec();
+    arms.push(quote! {
+        Noop(_) => {}
     });
-    let enum_generics = method_arg_generics(&item);
-    let enum_generics = quote! { <#(#enum_generics),*> };
-    let enum_bound =
-        quote! { #enum_ident #enum_generics: #encode_trait + #decode_trait + ::std::fmt::Debug };
+
+    let enum_bound = quote! { #enum_ident #ty: #encode_trait + #decode_trait + ::std::fmt::Debug };
     let wher = match wher {
         Some(w) => quote! { #w #enum_bound },
         None => quote! { where #enum_bound },
@@ -160,7 +183,7 @@ fn method_call_impl(tokens: &mut TokenStream2, item: &ItemImpl) {
 
     tokens.extend(quote! {
         impl #imp #method_call_trait for #ident #ty #wher {
-            type MethodCall = #enum_ident #enum_generics;
+            type MethodCall = #enum_ident #ty;
 
             fn method_call(&mut self, call: Self::MethodCall) -> #result_ty<()> {
                 use #enum_ident::*;
@@ -171,8 +194,8 @@ fn method_call_impl(tokens: &mut TokenStream2, item: &ItemImpl) {
                 Ok(())
             }
         }
-
-        impl #ty !#method_call_marker_trait for #ident #ty {}
+        #[allow(suspicious_auto_trait_impls)]
+        impl #ty !#method_call_marker_trait for #call_marker_ty<#ident #ty> {}
     })
 }
 
@@ -186,7 +209,7 @@ fn strip_call_attr(item: &mut ItemImpl) {
     }
 }
 
-fn method_arg_generics(item: &ItemImpl) -> Vec<Ident> {
+fn _method_arg_generics(item: &ItemImpl) -> Vec<Ident> {
     let mut arg_types = IdentSet::default();
     for method in call_methods(&item) {
         for arg in method_args(method) {
@@ -263,6 +286,50 @@ fn add_tracing(item_impl: &mut ItemImpl) {
     }
 }
 
+fn call_builder(tokens: &mut TokenStream2, item: &ItemImpl) {
+    let Types {
+        call_trait,
+        build_call_trait,
+        field_call_trait,
+        method_call_trait,
+        ..
+    } = Types::default();
+
+    let ident = self_ty_ident(&item);
+    let enum_ident = enum_ident(&item);
+
+    let (imp, ty, wher) = item.generics.split_for_impl();
+    let bound = quote! {
+        #ident #ty: #field_call_trait + #method_call_trait<MethodCall = #enum_ident #ty>,
+    };
+    let wher = match wher {
+        Some(w) => quote! { #w #bound },
+        None => quote! { where #bound },
+    };
+    let call_methods = call_methods(&item);
+    for call_method in call_methods.into_iter() {
+        let method_ident = &call_method.sig.ident;
+        let cc_ident = to_camel_case(&method_ident);
+        let const_method_id = const_field_id(method_ident);
+        let args = method_args(call_method);
+        let args_type = quote! { (#( #args,)*) };
+        let arg_names = args
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format_ident!("arg{}", i))
+            .collect_vec();
+        tokens.extend(quote! {
+            impl #imp #build_call_trait <#const_method_id> for #ident #ty #wher {
+                type Args = #args_type;
+                type Child = ();
+                fn build_call<F: Fn(::orga::call::CallBuilder<Self::Child>) -> <Self::Child as #call_trait>::Call>(f: F, (#(#arg_names,)* ) : #args_type) -> Self::Call {
+                    <Self as #call_trait>::Call::Method(<Self as #method_call_trait>::MethodCall::#cc_ident(#(#arg_names,)*))
+                }
+            }
+        })
+    }
+}
+
 pub fn call_block(args: TokenStream, input: TokenStream) -> TokenStream {
     let _attr_args = parse_macro_input!(args as AttributeArgs);
     let mut item = syn::parse::<ItemImpl>(input.clone()).unwrap();
@@ -275,6 +342,7 @@ pub fn call_block(args: TokenStream, input: TokenStream) -> TokenStream {
     let mut tokens = quote! {}.into();
     method_call_enum(&mut tokens, &item);
     method_call_impl(&mut tokens, &item);
+    call_builder(&mut tokens, &item);
     strip_call_attr(&mut item);
     tokens.extend(item.into_token_stream());
 

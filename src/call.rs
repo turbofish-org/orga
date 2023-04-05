@@ -3,6 +3,7 @@ use crate::{Error, Result};
 use std::cell::RefCell;
 use std::error::Error as StdError;
 use std::io::Read;
+use std::marker::PhantomData;
 use std::rc::Rc;
 use std::result::Result as StdResult;
 
@@ -222,20 +223,21 @@ impl<T: Call> MaybeCall for MaybeCallWrapper<T> {
     }
 }
 
-pub enum Item<T, U> {
+pub enum Item<T: std::fmt::Debug, U: std::fmt::Debug> {
     Field(T),
     Method(U),
 }
+
 impl<T: std::fmt::Debug, U: std::fmt::Debug> std::fmt::Debug for Item<T, U> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Item::Field(field) => write!(f, "{:?}", field),
-            Item::Method(method) => write!(f, "{:?}", method),
+            Item::Field(field) => field.fmt(f),
+            Item::Method(method) => method.fmt(f),
         }
     }
 }
 
-impl<T: Encode, U: Encode> Encode for Item<T, U> {
+impl<T: Encode + std::fmt::Debug, U: Encode + std::fmt::Debug> Encode for Item<T, U> {
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
         match self {
             Item::Field(field) => {
@@ -263,7 +265,7 @@ impl<T: Encode, U: Encode> Encode for Item<T, U> {
     }
 }
 
-impl<T: Decode, U: Decode> Decode for Item<T, U> {
+impl<T: Decode + std::fmt::Debug, U: Decode + std::fmt::Debug> Decode for Item<T, U> {
     fn decode<R: std::io::Read>(input: R) -> ed::Result<Self> {
         let mut input = input;
         let mut buf = [0u8; 1];
@@ -309,13 +311,59 @@ where
     }
 }
 
+pub struct Marker<T>(PhantomData<T>);
+
 pub auto trait MethodCallMarker {}
 
 impl<T> MethodCall for T
 where
-    T: FieldCall + MethodCallMarker,
+    T: FieldCall,
+    Marker<T>: MethodCallMarker,
 {
     fn method_call(&mut self, _call: Self::MethodCall) -> Result<()> {
         Err(Error::Call("Method not found".to_string()))
+    }
+}
+
+pub trait BuildCall<const ID: &'static str>: Call + Sized {
+    type Child: Call;
+    type Args = ();
+    fn build_call<F: Fn(CallBuilder<Self::Child>) -> <Self::Child as Call>::Call>(
+        f: F,
+        args: Self::Args,
+    ) -> Self::Call;
+}
+
+pub struct CallBuilder<T> {
+    _phantom: std::marker::PhantomData<T>,
+}
+
+impl<T> CallBuilder<T> {
+    pub fn new() -> Self {
+        Self {
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<T> CallBuilder<T> {
+    pub fn build_call<
+        const ID: &'static str,
+        F: Fn(CallBuilder<<T as BuildCall<ID>>::Child>) -> <<T as BuildCall<ID>>::Child as Call>::Call,
+    >(
+        &self,
+        f: F,
+        args: <T as BuildCall<ID>>::Args,
+    ) -> T::Call
+    where
+        T: BuildCall<ID>,
+    {
+        T::build_call(f, args)
+    }
+}
+
+impl<T> CallBuilder<T> {
+    pub fn make<U: std::ops::Deref<Target = T>>(_value: U) -> Self {
+        Self::new()
     }
 }

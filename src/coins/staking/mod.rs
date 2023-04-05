@@ -34,7 +34,6 @@ pub struct Staking<S: Symbol> {
     last_signed_block: Map<[u8; 20], u64>,
     validators_by_power: EntryMap<ValidatorPowerEntry>,
     last_validator_powers: Map<Address, u64>,
-    #[call]
     pub max_validators: u64,
     last_indexed_power: Map<Address, u64>,
     address_for_tm_hash: Map<[u8; 20], Address>,

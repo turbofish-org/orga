@@ -11,7 +11,10 @@ use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::quote;
 use syn::*;
 
-use crate::utils::{to_camel_case, to_snake_case, Types};
+use crate::{
+    child::const_field_id,
+    utils::{to_camel_case, to_snake_case, Types},
+};
 
 #[derive(Debug, Clone, FromDeriveInput)]
 #[darling(supports(struct_named), forward_attrs)]
@@ -141,13 +144,53 @@ impl FieldCallInputReceiver {
             }
         }
     }
+
+    fn call_builder(&self) -> TokenStream2 {
+        let Types {
+            build_call_trait,
+            call_trait,
+            field_call_trait,
+            method_call_trait,
+            ..
+        } = Types::default();
+        let self_ident = &self.ident;
+        let call_fields = self.call_fields();
+        let (imp, ty, wher) = self.generics.split_for_impl();
+        let call_bounds = self.call_bounds();
+        let wher = match wher {
+            Some(w) => quote! { #w #(#call_bounds),* },
+            None => quote! { where #(#call_bounds),* },
+        };
+        let wher = quote! {
+            #wher, Self: #field_call_trait + #method_call_trait,
+        };
+
+        let builders = call_fields.into_iter().map(|field| {
+            let field_ident = field.ident.as_ref().unwrap();
+            let field_const_id = const_field_id(field_ident);
+            let field_ty = &field.ty;
+            let variant_name = to_camel_case(field_ident);
+            quote! {
+                impl #imp #build_call_trait <#field_const_id> for #self_ident #ty #wher {
+                    type Child = #field_ty;
+                    fn build_call<F: Fn(::orga::call::CallBuilder<Self::Child>) -> <Self::Child as #call_trait>::Call>(f: F, args: Self::Args) -> Self::Call {
+                        let child_call = f(::orga::call::CallBuilder::new());
+                        <Self as #call_trait>::Call::Field(<Self as #field_call_trait>::FieldCall::#variant_name(child_call) )
+                    }
+                }
+            }
+        });
+
+        quote! {
+            #(#builders)*
+        }
+    }
 }
 
 #[derive(Debug, Clone, FromField)]
 #[darling(forward_attrs)]
 struct FieldCallFieldReceiver {
     ident: Option<Ident>,
-    // vis: Visibility,
     ty: Type,
     attrs: Vec<syn::Attribute>,
 }
@@ -165,11 +208,14 @@ impl ToTokens for FieldCallInputReceiver {
     fn to_tokens(&self, tokens: &mut TokenStream2) {
         let fc_enum = self.field_call_enum();
         let fc_impl = self.field_call_impl(&fc_enum);
+        let builders = self.call_builder();
 
         tokens.extend(quote! {
             #fc_enum
 
             #fc_impl
+
+            #builders
         });
     }
 }
@@ -322,14 +368,15 @@ impl ToTokens for FieldCallEnum {
             let sc_parent_ident = to_snake_case(&self.parent.ident);
             let child_debugs = self.data.iter().map(|field| {
                 let cc_ident = to_camel_case(field.ident.as_ref().unwrap());
+                let sc_ident = field.ident.as_ref().unwrap().to_string();
                 quote! {
                     #cc_ident(subcall) => {
-                        if !f.alternate() {
+                        if f.alternate() {
                             write!(f, "{}.", stringify!(#sc_parent_ident))?;
                         } else {
                             f.write_fmt(format_args!("."))?;
                         }
-                        f.write_fmt(format_args!("{:?}", &subcall))
+                        f.write_str(format!("{}{:?}", #sc_ident, &subcall).as_str())
                     }
                 }
             });
