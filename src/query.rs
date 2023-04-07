@@ -4,7 +4,7 @@ use std::error::Error as StdError;
 use std::io::Read;
 use std::result::Result as StdResult;
 
-pub use orga_macros::{query, Query};
+pub use orga_macros::{query, FieldQuery, Query};
 
 pub const PREFIX_OFFSET: u8 = 0x80;
 pub trait Query {

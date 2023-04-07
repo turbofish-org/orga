@@ -9,6 +9,7 @@ mod describe;
 mod encoding;
 mod entry;
 mod field_call;
+mod field_query;
 mod method_call;
 mod migrate_from;
 mod next;
@@ -90,4 +91,9 @@ pub fn build_call(input: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn const_ident(input: TokenStream) -> TokenStream {
     child::const_ident(input)
+}
+
+#[proc_macro_derive(FieldQuery, attributes(query))]
+pub fn derive_field_query(item: TokenStream) -> TokenStream {
+    field_query::derive(item)
 }

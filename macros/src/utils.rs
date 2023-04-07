@@ -215,6 +215,11 @@ pub struct Types {
     pub build_call_trait: TokenStream,
     pub call_builder_ty: TokenStream,
     pub call_marker_ty: TokenStream,
+    pub query_trait: TokenStream,
+    pub query_marker_ty: TokenStream,
+    pub field_query_trait: TokenStream,
+    pub method_query_trait: TokenStream,
+    pub query_item_ty: TokenStream,
 }
 
 impl Default for Types {
@@ -246,6 +251,11 @@ impl Default for Types {
             build_call_trait: quote! { ::orga::call::BuildCall },
             call_builder_ty: quote! { ::orga::call::CallBuilder },
             call_marker_ty: quote! { ::orga::call::Marker },
+            query_trait: quote! { ::orga::query::Query },
+            query_marker_ty: quote! { ::orga::query::Marker },
+            field_query_trait: quote! { ::orga::query::FieldQuery },
+            method_query_trait: quote! { ::orga::query::MethodQuery },
+            query_item_ty: quote! { ::orga::query::Item },
         }
     }
 }

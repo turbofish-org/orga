@@ -18,15 +18,15 @@ use crate::{
 
 #[derive(Debug, Clone, FromDeriveInput)]
 #[darling(supports(struct_named), forward_attrs)]
-struct FieldCallInputReceiver {
+struct FieldQueryInputReceiver {
     ident: Ident,
     generics: Generics,
     vis: Visibility,
-    data: ast::Data<(), FieldCallFieldReceiver>,
+    data: ast::Data<(), FieldQueryFieldReceiver>,
 }
 
-impl FieldCallInputReceiver {
-    fn call_fields(&self) -> Vec<FieldCallFieldReceiver> {
+impl FieldQueryInputReceiver {
+    fn query_fields(&self) -> Vec<FieldQueryFieldReceiver> {
         self.data
             .as_ref()
             .take_struct()
@@ -34,16 +34,16 @@ impl FieldCallInputReceiver {
             .fields
             .clone()
             .into_iter()
-            .filter(|field| field.is_call())
+            .filter(|field| field.is_query())
             .cloned()
             .collect()
     }
 
-    fn call_generics(&self) -> Generics {
-        let Types { call_trait, .. } = Types::default();
+    fn query_generics(&self) -> Generics {
+        let Types { query_trait, .. } = Types::default();
         let mut ret_generics = self.generics.clone();
-        let cf = self.call_fields();
-        let params = cf.collect_type_params_cloned(
+        let qf = self.query_fields();
+        let params = qf.collect_type_params_cloned(
             &Purpose::Declare.into(),
             &self.generics.declared_type_params(),
         );
@@ -57,23 +57,23 @@ impl FieldCallInputReceiver {
             .collect();
 
         let wher = ret_generics.make_where_clause();
-        for field in cf.iter() {
+        for field in qf.iter() {
             let ty = &field.ty;
-            wher.predicates.push(parse_quote!(#ty: #call_trait))
+            wher.predicates.push(parse_quote!(#ty: #query_trait))
         }
         ret_generics
     }
 
     fn unused_generics(&self) -> Generics {
-        let call_generics = self.call_generics();
-        let call_generics = call_generics.type_params().collect::<HashSet<_>>();
+        let query_generics = self.query_generics();
+        let query_generics = query_generics.type_params().collect::<HashSet<_>>();
 
         let mut ret_generics = self.generics.clone();
         ret_generics.params = ret_generics
             .params
             .into_iter()
             .filter(|gp| match gp {
-                GenericParam::Type(ref ty) => !call_generics.contains(ty),
+                GenericParam::Type(ref ty) => !query_generics.contains(ty),
                 _ => true,
             })
             .collect();
@@ -81,24 +81,27 @@ impl FieldCallInputReceiver {
         ret_generics
     }
 
-    fn field_call_enum(&self) -> FieldCallEnum {
-        FieldCallEnum {
+    fn field_query_enum(&self) -> FieldQueryEnum {
+        FieldQueryEnum {
             parent: self.clone(),
             vis: self.vis.clone(),
-            ident: Ident::new(&format!("{}FieldCall", self.ident), Span::call_site()),
-            data: self.call_fields(),
+            ident: Ident::new(&format!("{}FieldQuery", self.ident), Span::call_site()),
+            data: self.query_fields(),
         }
     }
 
-    fn call_bounds(&self) -> Vec<TokenStream2> {
-        let Types { state_trait, .. } = Types::default();
+    fn query_bounds(&self) -> Vec<TokenStream2> {
+        let Types {
+            state_trait,
+            query_trait,
+            ..
+        } = Types::default();
         let mut bounds = self
-            .call_fields()
+            .query_fields()
             .into_iter()
             .map(|field| {
                 let ty = &field.ty;
-                let call_trait = quote! { ::orga::call::Call };
-                quote! { #ty: #call_trait }
+                quote! { #ty: #query_trait }
             })
             .collect_vec();
 
@@ -110,33 +113,34 @@ impl FieldCallInputReceiver {
         bounds
     }
 
-    fn field_call_impl(&self, fc_enum: &FieldCallEnum) -> TokenStream2 {
+    fn field_query_impl(&self, fq_enum: &FieldQueryEnum) -> TokenStream2 {
         let Types {
             result_ty,
-            field_call_trait,
+            field_query_trait,
+            query_trait,
             ..
         } = Types::default();
         let ident = &self.ident;
-        let fc_enum_ident = &fc_enum.ident;
+        let fq_enum_ident = &fq_enum.ident;
         let (imp, ty, wher) = self.generics.split_for_impl();
-        let arms = fc_enum.data.iter().map(|v| {
+        let arms = fq_enum.data.iter().map(|v| {
             let cc_ident = to_camel_case(v.ident.as_ref().unwrap());
             let sc_ident = v.ident.as_ref().unwrap();
-            quote! { #cc_ident(subcall) => ::orga::call::Call::call(&mut self.#sc_ident, subcall) }
+            quote! { #cc_ident(subquery) => #query_trait::query(&self.#sc_ident, subquery) }
         });
 
-        let call_bounds = self.call_bounds();
+        let query_bounds = self.query_bounds();
         let wher = match wher {
-            Some(w) => quote! { #w #(#call_bounds),* },
-            None => quote! { where #(#call_bounds),* },
+            Some(w) => quote! { #w #(#query_bounds),* },
+            None => quote! { where #(#query_bounds),* },
         };
 
         quote! {
-            impl #imp #field_call_trait for #ident #ty #wher {
-                type FieldCall = #fc_enum_ident #ty;
-                fn field_call(&mut self, call: Self::FieldCall) -> #result_ty<()> {
-                    use #fc_enum_ident::*;
-                    match call {
+            impl #imp #field_query_trait for #ident #ty #wher {
+                type FieldQuery = #fq_enum_ident #ty;
+                fn field_query(&self, query: Self::FieldQuery) -> #result_ty<()> {
+                    use #fq_enum_ident::*;
+                    match query {
                         #(#arms,)*
                         Noop(_) => Ok(()),
                     }
@@ -144,95 +148,49 @@ impl FieldCallInputReceiver {
             }
         }
     }
-
-    fn call_builder(&self) -> TokenStream2 {
-        let Types {
-            build_call_trait,
-            call_trait,
-            field_call_trait,
-            method_call_trait,
-            ..
-        } = Types::default();
-        let self_ident = &self.ident;
-        let call_fields = self.call_fields();
-        let (imp, ty, wher) = self.generics.split_for_impl();
-        let call_bounds = self.call_bounds();
-        let wher = match wher {
-            Some(w) => quote! { #w #(#call_bounds),* },
-            None => quote! { where #(#call_bounds),* },
-        };
-        let wher = quote! {
-            #wher, Self: #field_call_trait + #method_call_trait,
-        };
-
-        let builders = call_fields.into_iter().map(|field| {
-            let field_ident = field.ident.as_ref().unwrap();
-            let field_const_id = const_field_id(field_ident);
-            let field_ty = &field.ty;
-            let variant_name = to_camel_case(field_ident);
-            quote! {
-                impl #imp #build_call_trait <#field_const_id> for #self_ident #ty #wher {
-                    type Child = #field_ty;
-                    fn build_call<F: Fn(::orga::call::CallBuilder<Self::Child>) -> <Self::Child as #call_trait>::Call>(f: F, args: Self::Args) -> Self::Call {
-                        let child_call = f(::orga::call::CallBuilder::new());
-                        <Self as #call_trait>::Call::Field(<Self as #field_call_trait>::FieldCall::#variant_name(child_call) )
-                    }
-                }
-            }
-        });
-
-        quote! {
-            #(#builders)*
-        }
-    }
 }
 
 #[derive(Debug, Clone, FromField)]
 #[darling(forward_attrs)]
-struct FieldCallFieldReceiver {
+struct FieldQueryFieldReceiver {
     ident: Option<Ident>,
     ty: Type,
-    attrs: Vec<syn::Attribute>,
+    vis: Visibility,
 }
-uses_type_params!(FieldCallFieldReceiver, ty);
+uses_type_params!(FieldQueryFieldReceiver, ty);
 
-impl FieldCallFieldReceiver {
-    fn is_call(&self) -> bool {
-        self.attrs
-            .iter()
-            .any(|attr| attr.path.segments.iter().any(|seg| seg.ident == "call"))
+impl FieldQueryFieldReceiver {
+    fn is_query(&self) -> bool {
+        matches!(self.vis, Visibility::Public(_))
     }
 }
 
-impl ToTokens for FieldCallInputReceiver {
+impl ToTokens for FieldQueryInputReceiver {
     fn to_tokens(&self, tokens: &mut TokenStream2) {
-        let fc_enum = self.field_call_enum();
-        let fc_impl = self.field_call_impl(&fc_enum);
-        let builders = self.call_builder();
+        let fq_enum = self.field_query_enum();
+        let fq_impl = self.field_query_impl(&fq_enum);
 
         tokens.extend(quote! {
-            #fc_enum
+            #fq_enum
 
-            #fc_impl
-
-            #builders
+            #fq_impl
         });
     }
 }
 
-struct FieldCallEnum {
-    parent: FieldCallInputReceiver,
+struct FieldQueryEnum {
+    parent: FieldQueryInputReceiver,
     ident: Ident,
     vis: Visibility,
-    data: Vec<FieldCallFieldReceiver>,
+    data: Vec<FieldQueryFieldReceiver>,
 }
 
-impl ToTokens for FieldCallEnum {
+impl ToTokens for FieldQueryEnum {
     fn to_tokens(&self, tokens: &mut TokenStream2) {
         let Types {
             encode_trait,
             decode_trait,
-            call_trait,
+            query_trait,
             state_trait,
             ed_result_ty,
             ed_error_ty,
@@ -246,12 +204,11 @@ impl ToTokens for FieldCallEnum {
             let ident = to_camel_case(field.ident.as_ref().unwrap());
             let ty = &field.ty;
             quote! {
-                #ident(<#ty as #call_trait>::Call)
+                #ident(<#ty as #query_trait>::Query)
             }
         });
 
         let (imp, ty, wher) = self.parent.generics.split_for_impl();
-        let _ident_str = ident.to_string();
 
         let unused_generics = self.parent.unused_generics();
         let unused_generics = unused_generics
@@ -265,11 +222,11 @@ impl ToTokens for FieldCallEnum {
             _ => quote! { (#(#unused_generics),*) },
         };
 
-        let call_bounds = self.parent.call_bounds();
+        let query_bounds = self.parent.query_bounds();
 
         let wher = match wher {
-            Some(w) => quote! { #w #(#call_bounds),* },
-            None => quote! { where #(#call_bounds),* },
+            Some(w) => quote! { #w #(#query_bounds),* },
+            None => quote! { where #(#query_bounds),* },
         };
 
         let parent_ty = quote! { #parent_ident #ty };
@@ -279,7 +236,7 @@ impl ToTokens for FieldCallEnum {
                 let cc_ident = to_camel_case(field.ident.as_ref().unwrap());
                 let field_ident = field.ident.as_ref().unwrap();
                 quote! {
-                    #cc_ident(subcall) => {
+                    #cc_ident(subquery) => {
                         if let Some(keyop) = <#parent_ty as #state_trait>::field_keyop(stringify!(#field_ident)) {
                             match keyop {
                                 #keyop_ty::Absolute(_) => {
@@ -288,7 +245,7 @@ impl ToTokens for FieldCallEnum {
                                 },
                                 #keyop_ty::Append(bytes) => {
                                     bytes.encode_into(out)?;
-                                    subcall.encode_into(out)
+                                    subquery.encode_into(out)
                                 }
                             }
                         } else {
@@ -302,7 +259,7 @@ impl ToTokens for FieldCallEnum {
                 let cc_ident = to_camel_case(field.ident.as_ref().unwrap());
                 let field_ident = field.ident.as_ref().unwrap();
                 quote! {
-                    #cc_ident(subcall) => {
+                    #cc_ident(subquery) => {
                         if let Some(keyop) = <#parent_ty as #state_trait>::field_keyop(stringify!(#field_ident)) {
                             match keyop {
                                 #keyop_ty::Absolute(_) => {
@@ -310,7 +267,7 @@ impl ToTokens for FieldCallEnum {
                                     Err(#ed_error_ty::UnencodableVariant)
                                 },
                                 #keyop_ty::Append(bytes) => {
-                                    Ok(bytes.encoding_length()? + subcall.encoding_length()?)
+                                    Ok(bytes.encoding_length()? + subquery.encoding_length()?)
                                 }
                             }
                         } else {
@@ -345,8 +302,8 @@ impl ToTokens for FieldCallEnum {
                 quote! {
                     if let Some(#keyop_ty::Append(prefix)) = <#parent_ty as #state_trait>::field_keyop(stringify!(#sc_ident)) {
                        if bytes.starts_with(&prefix) {
-                           let subcall = #decode_trait::decode(&mut &bytes[prefix.len()..])?;
-                           return Ok(#ident::#cc_ident(subcall));
+                           let subquery = #decode_trait::decode(&mut &bytes[prefix.len()..])?;
+                           return Ok(#ident::#cc_ident(subquery));
                        }
                     }
                 }
@@ -372,13 +329,13 @@ impl ToTokens for FieldCallEnum {
                 let cc_ident = to_camel_case(field.ident.as_ref().unwrap());
                 let sc_ident = field.ident.as_ref().unwrap().to_string();
                 quote! {
-                    #cc_ident(subcall) => {
+                    #cc_ident(subquery) => {
                         if f.alternate() {
                             write!(f, "{}.", stringify!(#sc_parent_ident))?;
                         } else {
                             f.write_fmt(format_args!("."))?;
                         }
-                        f.write_str(format!("{}{:?}", #sc_ident, &subcall).as_str())
+                        f.write_str(format!("{}{:?}", #sc_ident, &subquery).as_str())
                     }
                 }
             });
@@ -416,7 +373,7 @@ impl ToTokens for FieldCallEnum {
 pub fn derive(item: TokenStream) -> TokenStream {
     let item = parse_macro_input!(item as DeriveInput);
 
-    FieldCallInputReceiver::from_derive_input(&item)
+    FieldQueryInputReceiver::from_derive_input(&item)
         .unwrap()
         .into_token_stream()
         .into()
