@@ -161,6 +161,26 @@ impl<S: Read> Read for Store<S> {
             .map(|(k, v)| (k[self.prefix.len()..].into(), v));
         Ok(maybe_kv)
     }
+
+    #[inline]
+    fn get_prev(&self, key: Option<&[u8]>) -> Result<Option<KV>> {
+        let maybe_kv = if let Some(key) = key {
+            let prefixed = concat(self.prefix.as_slice(), key);
+            self.store
+                .get_prev(Some(prefixed.as_slice()))?
+                // TODO: terminating with filter is wrong, this will read all
+                // keys in store after reaching end
+                .filter(|(k, _)| k.starts_with(self.prefix.as_slice()))
+                .map(|(k, v)| (k[self.prefix.len()..].into(), v))
+        } else {
+            let end_key = increment_bytes(self.prefix.clone());
+            self.store
+                .get_prev(Some(end_key.as_slice()))?
+                .filter(|(k, _)| k.starts_with(self.prefix.as_slice()))
+                .map(|(k, v)| (k[self.prefix.len()..].into(), v))
+        };
+        Ok(maybe_kv)
+    }
 }
 
 impl<S: Write> Write for Store<S> {
@@ -193,6 +213,25 @@ fn concat(a: &[u8], b: &[u8]) -> Vec<u8> {
     value.extend_from_slice(a);
     value.extend_from_slice(b);
     value
+}
+
+#[inline]
+fn increment_bytes(mut bytes: Vec<u8>) -> Vec<u8> {
+    for byte in bytes.iter_mut().rev() {
+        if *byte == 255 {
+            *byte = 0;
+        } else {
+            *byte += 1;
+            return bytes;
+        }
+    }
+
+    bytes.push(0);
+    if bytes.len() > 1 {
+        bytes[0] += 1;
+    }
+
+    bytes
 }
 
 #[cfg(test)]

@@ -584,6 +584,7 @@ struct StoreNextIter<'a, S: Default + Read> {
     end_key: Bound<Vec<u8>>,
 }
 
+// TODO: dedupe this with the same code in Store
 fn increment_bytes(mut bytes: Vec<u8>) -> Vec<u8> {
     for byte in bytes.iter_mut().rev() {
         if *byte == 255 {

@@ -98,30 +98,59 @@ impl<S: Read> Read for BufStore<S> {
         }
     }
 
+    // TODO: optimize by retaining previously used iterator(s) so we don't
+    // have to recreate them each iteration (if it makes a difference)
+
     #[inline]
     fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
-        // TODO: optimize by retaining previously used iterator(s) so we don't
-        // have to recreate them each iteration (if it makes a difference)
-        let mut map_iter = self.map.range(exclusive_range_from(key));
-        let mut store_iter = (&self.store).into_iter(exclusive_range_from(key));
-        iter_merge_next(&mut map_iter, &mut store_iter)
+        let mut map_iter = self
+            .map
+            .range(exclusive_range_starting_from(key))
+            .map(|(k, v)| (k.clone(), v.clone()));
+        let mut store_iter = (&self.store).into_iter(exclusive_range_starting_from(key));
+        iter_merge_next(&mut map_iter, &mut store_iter, true)
+    }
+
+    #[inline]
+    fn get_prev(&self, key: Option<&[u8]>) -> Result<Option<KV>> {
+        let range = || {
+            key.map_or((Bound::Unbounded, Bound::Unbounded), |key| {
+                exclusive_range_ending_at(key)
+            })
+        };
+        let mut map_iter = self
+            .map
+            .range(range())
+            .rev()
+            .map(|(k, v)| (k.clone(), v.clone()));
+        let mut store_iter = (&self.store).into_iter(range()).rev();
+        iter_merge_next(&mut map_iter, &mut store_iter, false)
     }
 }
 
 /// Return range bounds which start from the given key (exclusive), with an
 /// unbounded end.
-fn exclusive_range_from(start: &[u8]) -> (Bound<Vec<u8>>, Bound<Vec<u8>>) {
+fn exclusive_range_starting_from(start: &[u8]) -> (Bound<Vec<u8>>, Bound<Vec<u8>>) {
     (Bound::Excluded(start.to_vec()), Bound::Unbounded)
+}
+
+fn exclusive_range_ending_at(start: &[u8]) -> (Bound<Vec<u8>>, Bound<Vec<u8>>) {
+    (Bound::Unbounded, Bound::Excluded(start.to_vec()))
 }
 
 /// Takes an iterator over entries in the in-memory map and an iterator over
 /// entries in the backing store, and yields the next entry. Entries in the map
 /// shadow entries in the backing store with the same key, including skipping
 /// entries marked as deleted (a `None` value in the map).
-fn iter_merge_next<S: Read>(
-    map_iter: &mut btree_map::Range<Vec<u8>, Option<Vec<u8>>>,
-    store_iter: &mut Iter<S>,
-) -> Result<Option<KV>> {
+fn iter_merge_next<M, S>(
+    map_iter: &mut M,
+    store_iter: &mut S,
+    increasing: bool,
+) -> Result<Option<KV>>
+where
+    M: Iterator<Item = (Vec<u8>, Option<Vec<u8>>)>,
+    S: Iterator<Item = Result<KV>>,
+{
     let mut map_iter = map_iter.peekable();
     let mut store_iter = store_iter.peekable();
 
@@ -148,15 +177,17 @@ fn iter_merge_next<S: Read>(
 
             // merge values from both iterators
             (true, true) => {
-                let map_key = map_iter.peek().unwrap().0;
+                let map_key = &map_iter.peek().unwrap().0;
                 let backing_key = match store_iter.peek().unwrap() {
                     Err(_) => return Err(Error::Store("Backing key does not exist".into())),
                     Ok((ref key, _)) => key,
                 };
                 let key_cmp = map_key.cmp(backing_key);
 
-                // map key > backing key, emit backing entry
-                if key_cmp == Ordering::Greater {
+                // map key is past backing key, emit backing entry
+                if (increasing && key_cmp == Ordering::Greater)
+                    || (!increasing && key_cmp == Ordering::Less)
+                {
                     let entry = store_iter.next().unwrap()?;
                     return Ok(Some(entry));
                 }
@@ -166,7 +197,7 @@ fn iter_merge_next<S: Read>(
                     store_iter.next();
                 }
 
-                // map key <= backing key, emit map entry (or skip if delete)
+                // map key is before backing key, emit map entry (or skip if delete)
                 match map_iter.next().unwrap() {
                     (key, Some(value)) => Some((key.clone(), value.clone())),
                     (_, None) => continue,
@@ -233,6 +264,27 @@ mod tests {
         assert_eq!(iter.next().unwrap().unwrap(), (vec![1], vec![1]));
         assert_eq!(iter.next().unwrap().unwrap(), (vec![3], vec![1]));
         assert_eq!(iter.next().unwrap().unwrap(), (vec![4], vec![0]));
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn rev_iter() {
+        let mut store = MapStore::new();
+        store.put(vec![0], vec![0]).unwrap();
+        store.put(vec![1], vec![0]).unwrap();
+        store.put(vec![2], vec![0]).unwrap();
+        store.put(vec![4], vec![0]).unwrap();
+
+        let mut buf = BufStore::wrap(store);
+        buf.put(vec![1], vec![1]).unwrap();
+        buf.delete(&[2]).unwrap();
+        buf.put(vec![3], vec![1]).unwrap();
+
+        let mut iter = buf.into_iter(..).rev();
+        assert_eq!(iter.next().unwrap().unwrap(), (vec![4], vec![0]));
+        assert_eq!(iter.next().unwrap().unwrap(), (vec![3], vec![1]));
+        assert_eq!(iter.next().unwrap().unwrap(), (vec![1], vec![1]));
+        assert_eq!(iter.next().unwrap().unwrap(), (vec![0], vec![0]));
         assert!(iter.next().is_none());
     }
 
