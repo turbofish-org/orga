@@ -11,6 +11,7 @@ mod entry;
 mod field_call;
 mod field_query;
 mod method_call;
+mod method_query;
 mod migrate_from;
 mod next;
 mod orga;
@@ -96,4 +97,9 @@ pub fn const_ident(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(FieldQuery, attributes(query))]
 pub fn derive_field_query(item: TokenStream) -> TokenStream {
     field_query::derive(item)
+}
+
+#[proc_macro_attribute]
+pub fn query_block(item: TokenStream, input: TokenStream) -> TokenStream {
+    method_query::query_block(item, input)
 }

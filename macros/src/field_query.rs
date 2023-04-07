@@ -11,10 +11,7 @@ use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::quote;
 use syn::*;
 
-use crate::{
-    child::const_field_id,
-    utils::{to_camel_case, to_snake_case, Types},
-};
+use crate::utils::{to_camel_case, to_snake_case, Types};
 
 #[derive(Debug, Clone, FromDeriveInput)]
 #[darling(supports(struct_named), forward_attrs)]
