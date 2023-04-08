@@ -14,7 +14,7 @@ use std::borrow::Borrow;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use tendermint_proto::abci::*;
+use tendermint_proto::v0_34::abci::*;
 
 pub struct Node<A> {
     _app: PhantomData<A>,
@@ -372,7 +372,7 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
 
     fn deliver_tx(&self, store: WrappedMerk, req: RequestDeliverTx) -> Result<ResponseDeliverTx> {
         let run_res = self.run(store, move |state| -> Result<_> {
-            let inner_call = Decode::decode(req.tx.as_slice())?;
+            let inner_call = Decode::decode(req.tx.to_vec().as_slice())?;
             state.call(ABCICall::DeliverTx(inner_call))?;
 
             Ok(state.events.take().unwrap_or_default())
@@ -395,7 +395,7 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
 
     fn check_tx(&self, store: WrappedMerk, req: RequestCheckTx) -> Result<ResponseCheckTx> {
         let run_res = self.run(store, move |state| -> Result<_> {
-            let inner_call = Decode::decode(req.tx.as_slice())?;
+            let inner_call = Decode::decode(req.tx.to_vec().as_slice())?;
             state.call(ABCICall::DeliverTx(inner_call))?;
 
             Ok(state.events.take().unwrap_or_default())
@@ -438,7 +438,7 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
 
         // Check which keys are accessed by the query and build a proof
         let query_bytes = req.data;
-        let query_decode_res = Decode::decode(query_bytes.as_slice());
+        let query_decode_res = Decode::decode(query_bytes.to_vec().as_slice());
         let query = query_decode_res?;
 
         state.query(query)?;
@@ -455,7 +455,7 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
         let res = ResponseQuery {
             code: 0,
             height: store_height as i64,
-            value,
+            value: value.into(),
             ..Default::default()
         };
         Ok(res)

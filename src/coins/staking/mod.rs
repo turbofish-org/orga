@@ -18,7 +18,8 @@ use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::convert::TryInto;
-use tendermint_proto::abci::EvidenceType;
+use tendermint_proto::abci::{Misbehavior, MisbehaviorType};
+use tendermint_proto::v0_34::abci::EvidenceType;
 
 mod delegator;
 pub use delegator::*;
@@ -293,7 +294,7 @@ impl<S: Symbol> BeginBlock for Staking<S> {
         for evidence in &ctx.byzantine_validators {
             match &evidence.validator {
                 Some(validator) => {
-                    let hash: [u8; 20] = validator.address.clone().try_into().map_err(|_| {
+                    let hash: [u8; 20] = validator.address.to_vec().try_into().map_err(|_| {
                         Error::Coins("Invalid pubkey length from Tendermint".into())
                     })?;
                     match self.address_for_tm_hash.get(hash)? {

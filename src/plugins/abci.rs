@@ -13,13 +13,13 @@ use std::cell::{Ref, RefCell};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::rc::Rc;
-use tendermint_proto::abci::{Event, RequestQuery, ResponseQuery};
-use tendermint_proto::abci::{
-    Evidence, LastCommitInfo, RequestBeginBlock, RequestEndBlock, RequestInitChain, ValidatorUpdate,
-};
-use tendermint_proto::crypto::{public_key::Sum, PublicKey};
 use tendermint_proto::google::protobuf::Timestamp;
-use tendermint_proto::types::Header;
+use tendermint_proto::v0_34::abci::{Event, Evidence, LastCommitInfo, RequestQuery, ResponseQuery};
+use tendermint_proto::v0_34::abci::{
+    RequestBeginBlock, RequestEndBlock, RequestInitChain, ValidatorUpdate,
+};
+use tendermint_proto::v0_34::crypto::{public_key::Sum, PublicKey};
+use tendermint_proto::v0_34::types::Header;
 
 pub struct Time {
     pub seconds: i64,
@@ -126,7 +126,7 @@ impl From<RequestInitChain> for InitChainCtx {
             time: req.time,
             chain_id: req.chain_id,
             validators,
-            app_state_bytes: req.app_state_bytes,
+            app_state_bytes: req.app_state_bytes.to_vec(),
             initial_height: req.initial_height,
         }
     }
@@ -148,7 +148,7 @@ impl From<RequestBeginBlock> for BeginBlockCtx {
         BeginBlockCtx {
             header,
             height,
-            hash: req.hash,
+            hash: req.hash.to_vec(),
             last_commit_info: req.last_commit_info,
             byzantine_validators: req.byzantine_validators,
         }
@@ -204,7 +204,7 @@ impl Validators {
             .unwrap();
         self.updates.insert(
             pub_key,
-            Adapter(tendermint_proto::abci::ValidatorUpdate {
+            Adapter(tendermint_proto::v0_34::abci::ValidatorUpdate {
                 pub_key: Some(key),
                 power: power as i64,
             }),
