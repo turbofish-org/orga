@@ -54,7 +54,7 @@ pub struct Client {
     consensus_states: Map<Number, ConsensusState>,
 }
 
-pub type ClientId = ByteTerminatedString<IbcClientId, b'/'>;
+pub type ClientId = ByteTerminatedString<b'/', IbcClientId>;
 
 // TODO
 pub type EofTerminatedId = ();

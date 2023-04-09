@@ -169,9 +169,9 @@ where
 
 #[derive(Clone, Debug, Deref, Serialize)]
 #[serde(transparent)]
-pub struct ByteTerminatedString<T: FromStr + ToString, const B: u8>(pub T);
+pub struct ByteTerminatedString<const B: u8, T: FromStr + ToString = String>(pub T);
 
-impl<T: FromStr + ToString, const B: u8> Encode for ByteTerminatedString<T, B> {
+impl<T: FromStr + ToString, const B: u8> Encode for ByteTerminatedString<B, T> {
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
         dest.write_all(self.0.to_string().as_bytes())?;
         dest.write_all(&[B])?;
@@ -183,7 +183,7 @@ impl<T: FromStr + ToString, const B: u8> Encode for ByteTerminatedString<T, B> {
     }
 }
 
-impl<T: FromStr + ToString, const B: u8> Decode for ByteTerminatedString<T, B> {
+impl<T: FromStr + ToString, const B: u8> Decode for ByteTerminatedString<B, T> {
     fn decode<R: std::io::Read>(input: R) -> ed::Result<Self> {
         let mut bytes = vec![];
         for byte in input.bytes() {
@@ -203,7 +203,7 @@ impl<T: FromStr + ToString, const B: u8> Decode for ByteTerminatedString<T, B> {
     }
 }
 
-impl<T: FromStr + ToString, const B: u8> State for ByteTerminatedString<T, B>
+impl<T: FromStr + ToString, const B: u8> State for ByteTerminatedString<B, T>
 where
     Self: Encode + Decode,
 {
@@ -221,4 +221,4 @@ where
     }
 }
 
-impl<T: FromStr + ToString, const B: u8> Terminated for ByteTerminatedString<T, B> {}
+impl<T: FromStr + ToString, const B: u8> Terminated for ByteTerminatedString<B, T> {}
