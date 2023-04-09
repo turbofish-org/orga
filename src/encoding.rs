@@ -227,6 +227,52 @@ where
 
 impl<T: FromStr + ToString, const B: u8> Terminated for ByteTerminatedString<B, T> {}
 
+#[derive(Clone, Debug, Deref, Serialize)]
+#[serde(transparent)]
+pub struct EofTerminatedString<T: FromStr + ToString = String>(pub T);
+
+impl<T: FromStr + ToString> Encode for EofTerminatedString<T> {
+    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+        dest.write_all(self.0.to_string().as_bytes())?;
+        Ok(())
+    }
+
+    fn encoding_length(&self) -> ed::Result<usize> {
+        Ok(self.0.to_string().len() + 1)
+    }
+}
+
+impl<T: FromStr + ToString> Decode for EofTerminatedString<T> {
+    fn decode<R: std::io::Read>(mut input: R) -> ed::Result<Self> {
+        let mut string = String::new();
+        input.read_to_string(&mut string)?;
+
+        let inner = string.parse().map_err(|_| ed::Error::UnexpectedByte(4))?;
+
+        Ok(Self(inner))
+    }
+}
+
+impl<T: FromStr + ToString> Terminated for EofTerminatedString<T> {}
+
+impl<T: FromStr + ToString> State for EofTerminatedString<T>
+where
+    Self: Encode + Decode,
+{
+    fn attach(&mut self, _store: crate::store::Store) -> crate::Result<()> {
+        Ok(())
+    }
+
+    fn flush<W: std::io::Write>(self, out: &mut W) -> crate::Result<()> {
+        self.encode_into(out)?;
+        Ok(())
+    }
+
+    fn load(_store: crate::store::Store, bytes: &mut &[u8]) -> crate::Result<Self> {
+        Ok(Self::decode(bytes)?)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -256,6 +302,29 @@ mod tests {
 
         bytes.extend_from_slice(b"567,8,");
         let decoded = CommaTerminatedU64::load(Store::default(), &mut &bytes[..]).unwrap();
+        assert_eq!(*decoded, *value);
+    }
+
+    #[test]
+    fn eof_terminated_string_encode_decode() {
+        let value: EofTerminatedString<u64> = EofTerminatedString(1234);
+
+        let bytes = value.encode().unwrap();
+        assert_eq!(bytes, b"1234");
+
+        let decoded = EofTerminatedString::<u64>::decode(&bytes[..]).unwrap();
+        assert_eq!(*decoded, *value);
+    }
+
+    #[test]
+    fn eof_terminated_string_state() {
+        let value: EofTerminatedString<u64> = EofTerminatedString(1234);
+
+        let mut bytes = vec![];
+        value.clone().flush(&mut bytes).unwrap();
+        assert_eq!(bytes, b"1234");
+
+        let decoded = EofTerminatedString::<u64>::load(Store::default(), &mut &bytes[..]).unwrap();
         assert_eq!(*decoded, *value);
     }
 }
