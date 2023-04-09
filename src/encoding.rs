@@ -11,7 +11,11 @@ pub mod encoder;
 
 use derive_more::{Deref, DerefMut, Into};
 use serde::Serialize;
-use std::convert::{TryFrom, TryInto};
+use std::{
+    convert::{TryFrom, TryInto},
+    fmt::Display,
+    str::FromStr,
+};
 
 #[derive(
     Deref,
@@ -152,11 +156,69 @@ where
     fn attach(&mut self, _store: crate::store::Store) -> crate::Result<()> {
         Ok(())
     }
+
     fn flush<W: std::io::Write>(self, out: &mut W) -> crate::Result<()> {
         self.encode_into(out)?;
         Ok(())
     }
+
     fn load(_store: crate::store::Store, bytes: &mut &[u8]) -> crate::Result<Self> {
         Ok(Self::decode(bytes)?)
     }
 }
+
+#[derive(Clone, Debug, Deref, Serialize)]
+#[serde(transparent)]
+pub struct ByteTerminatedString<T: FromStr + ToString, const B: u8>(pub T);
+
+impl<T: FromStr + ToString, const B: u8> Encode for ByteTerminatedString<T, B> {
+    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+        dest.write_all(self.0.to_string().as_bytes())?;
+        dest.write_all(&[B])?;
+        Ok(())
+    }
+
+    fn encoding_length(&self) -> ed::Result<usize> {
+        Ok(self.0.to_string().len() + 1)
+    }
+}
+
+impl<T: FromStr + ToString, const B: u8> Decode for ByteTerminatedString<T, B> {
+    fn decode<R: std::io::Read>(input: R) -> ed::Result<Self> {
+        let mut bytes = vec![];
+        for byte in input.bytes() {
+            let byte = byte?;
+            if byte == B {
+                break;
+            }
+            bytes.push(byte);
+        }
+
+        let inner: T = String::from_utf8(bytes)
+            .map_err(|_| ed::Error::UnexpectedByte(4))?
+            .parse()
+            .map_err(|_| ed::Error::UnexpectedByte(4))?;
+
+        Ok(Self(inner))
+    }
+}
+
+impl<T: FromStr + ToString, const B: u8> State for ByteTerminatedString<T, B>
+where
+    Self: Encode + Decode,
+{
+    fn attach(&mut self, _store: crate::store::Store) -> crate::Result<()> {
+        Ok(())
+    }
+
+    fn flush<W: std::io::Write>(self, out: &mut W) -> crate::Result<()> {
+        self.encode_into(out)?;
+        Ok(())
+    }
+
+    fn load(_store: crate::store::Store, bytes: &mut &[u8]) -> crate::Result<Self> {
+        Ok(Self::decode(bytes)?)
+    }
+}
+
+impl<T: FromStr + ToString, const B: u8> Terminated for ByteTerminatedString<T, B> {}
