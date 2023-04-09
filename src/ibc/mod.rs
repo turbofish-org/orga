@@ -65,38 +65,3 @@ pub type ClientState = ();
 pub type ConsensusState = ();
 pub type Connection = ();
 pub type ChannelEnd = ();
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::encoding::{Decode, Encode};
-    use crate::state::State;
-    use crate::store::Store;
-
-    #[test]
-    fn client_id_encode_decode() {
-        let id: IbcClientId = "07-tendermint-0".parse().unwrap();
-        let id: ClientId = ByteTerminatedString(id);
-
-        let mut bytes = id.encode().unwrap();
-        assert_eq!(bytes, b"07-tendermint-0/");
-
-        bytes.extend_from_slice(b"foo/bar/123");
-        let decoded = ClientId::decode(&bytes[..]).unwrap();
-        assert_eq!(*decoded, *id);
-    }
-
-    #[test]
-    fn client_id_state() {
-        let id: IbcClientId = "07-tendermint-0".parse().unwrap();
-        let id: ClientId = ByteTerminatedString(id);
-
-        let mut bytes = vec![];
-        id.clone().flush(&mut bytes).unwrap();
-        assert_eq!(bytes, b"07-tendermint-0/");
-
-        bytes.extend_from_slice(b"foo/bar/123");
-        let decoded = ClientId::load(Store::default(), &mut &bytes[..]).unwrap();
-        assert_eq!(*decoded, *id);
-    }
-}

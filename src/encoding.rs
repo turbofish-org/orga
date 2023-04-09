@@ -173,6 +173,10 @@ pub struct ByteTerminatedString<const B: u8, T: FromStr + ToString = String>(pub
 
 impl<T: FromStr + ToString, const B: u8> Encode for ByteTerminatedString<B, T> {
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+        for byte in self.0.to_string().as_bytes() {
+            debug_assert!(byte != &B);
+        }
+
         dest.write_all(self.0.to_string().as_bytes())?;
         dest.write_all(&[B])?;
         Ok(())
@@ -194,7 +198,7 @@ impl<T: FromStr + ToString, const B: u8> Decode for ByteTerminatedString<B, T> {
             bytes.push(byte);
         }
 
-        let inner: T = String::from_utf8(bytes)
+        let inner = String::from_utf8(bytes)
             .map_err(|_| ed::Error::UnexpectedByte(4))?
             .parse()
             .map_err(|_| ed::Error::UnexpectedByte(4))?;
@@ -222,3 +226,36 @@ where
 }
 
 impl<T: FromStr + ToString, const B: u8> Terminated for ByteTerminatedString<B, T> {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::store::Store;
+
+    type CommaTerminatedU64 = ByteTerminatedString<b',', u64>;
+
+    #[test]
+    fn byte_terminated_string_encode_decode() {
+        let value: CommaTerminatedU64 = ByteTerminatedString(1234);
+
+        let mut bytes = value.encode().unwrap();
+        assert_eq!(bytes, b"1234,");
+
+        bytes.extend_from_slice(b"567,8,");
+        let decoded = CommaTerminatedU64::decode(&bytes[..]).unwrap();
+        assert_eq!(*decoded, *value);
+    }
+
+    #[test]
+    fn byte_terminated_string_state() {
+        let value: CommaTerminatedU64 = ByteTerminatedString(1234);
+
+        let mut bytes = vec![];
+        value.clone().flush(&mut bytes).unwrap();
+        assert_eq!(bytes, b"1234,");
+
+        bytes.extend_from_slice(b"567,8,");
+        let decoded = CommaTerminatedU64::load(Store::default(), &mut &bytes[..]).unwrap();
+        assert_eq!(*decoded, *value);
+    }
+}
