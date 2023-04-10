@@ -23,6 +23,10 @@ use crate::orga;
 
 #[orga]
 pub struct Ibc {
+    channel_counter: u64,
+    connection_counter: u64,
+    client_counter: u64,
+
     #[state(absolute_prefix(b"clients/"))]
     clients: Map<ClientId, Client>,
 
@@ -33,13 +37,13 @@ pub struct Ibc {
     channel_ends: Map<PortChannel, ChannelEnd>,
 
     #[state(absolute_prefix(b"nextSequenceSend/"))]
-    next_sequence_send: Map<PortChannel, u64>,
+    next_sequence_send: Map<PortChannel, Number>,
 
     #[state(absolute_prefix(b"nextSequenceRecv/"))]
-    next_sequence_recv: Map<PortChannel, u64>,
+    next_sequence_recv: Map<PortChannel, Number>,
 
     #[state(absolute_prefix(b"nextSequenceAck/"))]
-    next_sequence_ack: Map<PortChannel, u64>,
+    next_sequence_ack: Map<PortChannel, Number>,
 
     #[state(absolute_prefix(b"commitments/"))]
     commitments: Map<PortChannelSequence, Vec<u8>>,
@@ -57,14 +61,14 @@ pub struct Client {
     client_state: Map<(), ClientState>,
 
     #[state(prefix(b"consensusStates/"))]
-    consensus_states: Map<Height, ConsensusState>,
+    consensus_states: Map<Number, ConsensusState>,
 }
 
 pub type SlashTerminatedString<T> = ByteTerminatedString<b'/', T>;
 
 pub type ClientId = SlashTerminatedString<IbcClientId>;
 pub type ConnectionId = EofTerminatedString<IbcConnectionId>;
-pub type Height = EofTerminatedString<u64>;
+pub type Number = EofTerminatedString<u64>;
 
 #[derive(Encode, Decode, Serialize, Clone, Debug)]
 pub struct PortChannel(
@@ -223,6 +227,10 @@ mod tests {
         app.attach(store.clone()).unwrap();
         let ibc = &mut app.ibc;
 
+        ibc.channel_counter = 123;
+        ibc.connection_counter = 456;
+        ibc.client_counter = 789;
+
         let mut client = Client::default();
         let client_state = TmClientState::new(
             ChainId::new("foo".to_string(), 0),
@@ -266,13 +274,19 @@ mod tests {
         ibc.channel_ends.insert(channel_end_path, chan).unwrap();
 
         let seq_sends_path = SeqSendPath(PortId::transfer(), ChannelId::new(123)).into();
-        ibc.next_sequence_send.insert(seq_sends_path, 1).unwrap();
+        ibc.next_sequence_send
+            .insert(seq_sends_path, 1.into())
+            .unwrap();
 
         let seq_recvs_path = SeqRecvPath(PortId::transfer(), ChannelId::new(123)).into();
-        ibc.next_sequence_recv.insert(seq_recvs_path, 2).unwrap();
+        ibc.next_sequence_recv
+            .insert(seq_recvs_path, 2.into())
+            .unwrap();
 
         let seq_acks_path = SeqAckPath(PortId::transfer(), ChannelId::new(123)).into();
-        ibc.next_sequence_ack.insert(seq_acks_path, 3).unwrap();
+        ibc.next_sequence_ack
+            .insert(seq_acks_path, 3.into())
+            .unwrap();
 
         let commitments_path = CommitmentPath {
             port_id: PortId::transfer(),
@@ -302,7 +316,10 @@ mod tests {
 
         let mut bytes = vec![];
         app.flush(&mut bytes).unwrap();
-        assert_eq!(bytes, vec![0, 0]);
+        assert_eq!(
+            bytes,
+            vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 123, 0, 0, 0, 0, 0, 0, 1, 200, 0, 0, 0, 0, 0, 0, 3, 21]
+        );
 
         let mut entries = store.range(..);
         let mut assert_next = |key: &[u8], value: &[u8]| {
@@ -365,17 +382,14 @@ mod tests {
                 26, 0,
             ],
         );
-        assert_next(
-            b"nextSequenceAck/ports/transfer/channels/channel-123",
-            &[0, 0, 0, 0, 0, 0, 0, 3],
-        );
+        assert_next(b"nextSequenceAck/ports/transfer/channels/channel-123", b"3");
         assert_next(
             b"nextSequenceRecv/ports/transfer/channels/channel-123",
-            &[0, 0, 0, 0, 0, 0, 0, 2],
+            b"2",
         );
         assert_next(
             b"nextSequenceSend/ports/transfer/channels/channel-123",
-            &[0, 0, 0, 0, 0, 0, 0, 1],
+            b"1",
         );
         assert_next(
             b"receipts/ports/transfer/channels/channel-123/sequences/1",
