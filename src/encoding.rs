@@ -227,6 +227,12 @@ where
 
 impl<T: FromStr + ToString, const B: u8> Terminated for ByteTerminatedString<B, T> {}
 
+impl<T: FromStr + ToString, const B: u8> From<T> for ByteTerminatedString<B, T> {
+    fn from(value: T) -> Self {
+        Self(value)
+    }
+}
+
 #[derive(Clone, Debug, Deref, Serialize)]
 #[serde(transparent)]
 pub struct EofTerminatedString<T: FromStr + ToString = String>(pub T);
@@ -270,6 +276,12 @@ where
 
     fn load(_store: crate::store::Store, bytes: &mut &[u8]) -> crate::Result<Self> {
         Ok(Self::decode(bytes)?)
+    }
+}
+
+impl<T: FromStr + ToString> From<T> for EofTerminatedString<T> {
+    fn from(value: T) -> Self {
+        Self(value)
     }
 }
 
