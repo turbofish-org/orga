@@ -285,6 +285,53 @@ impl<T: FromStr + ToString> From<T> for EofTerminatedString<T> {
     }
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct FixedString<const S: &'static str>;
+
+impl<const S: &'static str> Encode for FixedString<S> {
+    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+        dest.write_all(S.as_bytes())?;
+        Ok(())
+    }
+
+    fn encoding_length(&self) -> ed::Result<usize> {
+        Ok(S.len())
+    }
+}
+
+impl<const S: &'static str> Decode for FixedString<S> {
+    fn decode<R: std::io::Read>(mut input: R) -> ed::Result<Self> {
+        let mut bytes = vec![0; S.len()];
+        input.read_exact(&mut bytes)?;
+
+        if bytes != S.as_bytes() {
+            return Err(ed::Error::UnexpectedByte(3));
+        }
+
+        Ok(Self)
+    }
+}
+
+impl<const S: &'static str> Terminated for FixedString<S> {}
+
+impl<const S: &'static str> State for FixedString<S>
+where
+    Self: Encode + Decode,
+{
+    fn attach(&mut self, _store: crate::store::Store) -> crate::Result<()> {
+        Ok(())
+    }
+
+    fn flush<W: std::io::Write>(self, out: &mut W) -> crate::Result<()> {
+        self.encode_into(out)?;
+        Ok(())
+    }
+
+    fn load(_store: crate::store::Store, bytes: &mut &[u8]) -> crate::Result<Self> {
+        Ok(Self::decode(bytes)?)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
