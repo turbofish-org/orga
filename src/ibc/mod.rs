@@ -6,10 +6,14 @@ use ibc::core::ics24_host::identifier::{
 use ibc::core::ics24_host::path::{
     AckPath, ChannelEndPath, CommitmentPath, ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
 };
+use ibc_proto::google::protobuf::Any;
+use ibc_proto::protobuf::Protobuf;
 use serde::Serialize;
 
 use crate::collections::Map;
-use crate::encoding::{ByteTerminatedString, Decode, Encode, EofTerminatedString, FixedString};
+use crate::encoding::{
+    Adapter, ByteTerminatedString, Decode, Encode, EofTerminatedString, FixedString,
+};
 use crate::orga;
 
 #[orga]
@@ -116,7 +120,44 @@ port_channel_sequence_from_impl!(CommitmentPath);
 port_channel_sequence_from_impl!(AckPath);
 port_channel_sequence_from_impl!(ReceiptPath);
 
-pub type ClientState = ();
+#[orga(skip(Default), simple)]
+pub struct ClientState {
+    inner: TmClientState,
+}
+
+impl Encode for Adapter<ClientState> {
+    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+        let mut buf = vec![];
+        Protobuf::<Any>::encode(&self.0.inner, &mut buf)
+            .map_err(|_| ed::Error::UnexpectedByte(10))?;
+        dest.write_all(&buf)?;
+        Ok(())
+    }
+
+    fn encoding_length(&self) -> ed::Result<usize> {
+        let mut buf = vec![];
+        Protobuf::<Any>::encode(&self.0.inner, &mut buf)
+            .map_err(|_| ed::Error::UnexpectedByte(10))?;
+        Ok(buf.len())
+    }
+}
+
+impl Decode for Adapter<ClientState> {
+    fn decode<R: std::io::Read>(mut input: R) -> ed::Result<Self> {
+        let mut buf = vec![];
+        input.read_to_end(&mut buf)?;
+        let inner =
+            Protobuf::<Any>::decode(buf.as_slice()).map_err(|_| ed::Error::UnexpectedByte(10))?;
+        Ok(Self(ClientState { inner }))
+    }
+}
+
+impl From<TmClientState> for ClientState {
+    fn from(inner: TmClientState) -> Self {
+        Self { inner }
+    }
+}
+
 pub type ConsensusState = ();
 pub type Connection = ();
 pub type ChannelEnd = ();
