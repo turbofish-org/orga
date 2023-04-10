@@ -164,7 +164,18 @@ pub type ChannelEnd = ();
 
 #[cfg(test)]
 mod tests {
-    use ibc::core::ics02_client::client_type::ClientType;
+    use std::time::Duration;
+
+    use ibc::{
+        clients::ics07_tendermint::client_state::AllowUpdate,
+        core::{
+            ics02_client::{
+                client_type::ClientType, height::Height, trust_threshold::TrustThreshold,
+            },
+            ics23_commitment::specs::ProofSpecs,
+            ics24_host::identifier::ChainId,
+        },
+    };
 
     use super::*;
     use crate::{
@@ -187,7 +198,24 @@ mod tests {
         let ibc = &mut app.ibc;
 
         let mut client = Client::default();
-        client.client_state.insert((), ()).unwrap();
+        let client_state = TmClientState::new(
+            ChainId::new("foo".to_string(), 0),
+            TrustThreshold::default(),
+            Duration::from_secs(60 * 60 * 24 * 7),
+            Duration::from_secs(60 * 60 * 24 * 14),
+            Duration::from_secs(60),
+            Height::new(0, 1234).unwrap(),
+            ProofSpecs::default(),
+            vec![],
+            AllowUpdate {
+                after_expiry: false,
+                after_misbehaviour: false,
+            },
+            None,
+        )
+        .unwrap()
+        .into();
+        client.client_state.insert((), client_state).unwrap();
         client.consensus_states.insert(10.into(), ()).unwrap();
         client.consensus_states.insert(20.into(), ()).unwrap();
         let client_id = IbcClientId::new(ClientType::new("07-tendermint".to_string()), 123)
@@ -241,25 +269,56 @@ mod tests {
         assert_eq!(bytes, vec![0, 0]);
 
         let mut entries = store.range(..);
-        let mut assert_next_key = |key: &[u8]| {
+        let mut assert_next = |key: &[u8], value: &[u8]| {
+            let (k, v) = entries.next().unwrap().unwrap();
             assert_eq!(
-                String::from_utf8(entries.next().unwrap().unwrap().0).unwrap(),
+                String::from_utf8(k).unwrap(),
                 String::from_utf8(key.to_vec()).unwrap()
             );
+            assert_eq!(v, value);
         };
 
-        assert_next_key(b"acks/ports/transfer/channels/channel-123/sequences/1");
-        assert_next_key(b"channelEnds/ports/transfer/channels/channel-123");
-        assert_next_key(b"clients/07-tendermint-123/");
-        assert_next_key(b"clients/07-tendermint-123/clientState");
-        assert_next_key(b"clients/07-tendermint-123/consensusStates/10");
-        assert_next_key(b"clients/07-tendermint-123/consensusStates/20");
-        assert_next_key(b"commitments/ports/transfer/channels/channel-123/sequences/1");
-        assert_next_key(b"connections/connection-123");
-        assert_next_key(b"nextSequenceAck/ports/transfer/channels/channel-123");
-        assert_next_key(b"nextSequenceRecv/ports/transfer/channels/channel-123");
-        assert_next_key(b"nextSequenceSend/ports/transfer/channels/channel-123");
-        assert_next_key(b"receipts/ports/transfer/channels/channel-123/sequences/1");
+        assert_next(
+            b"acks/ports/transfer/channels/channel-123/sequences/1",
+            &[1, 2, 3],
+        );
+        assert_next(b"channelEnds/ports/transfer/channels/channel-123", &[]);
+        assert_next(b"clients/07-tendermint-123/", &[0]);
+        assert_next(
+            b"clients/07-tendermint-123/clientState",
+            &[
+                0, 10, 43, 47, 105, 98, 99, 46, 108, 105, 103, 104, 116, 99, 108, 105, 101, 110,
+                116, 115, 46, 116, 101, 110, 100, 101, 114, 109, 105, 110, 116, 46, 118, 49, 46,
+                67, 108, 105, 101, 110, 116, 83, 116, 97, 116, 101, 18, 90, 10, 5, 102, 111, 111,
+                45, 48, 18, 4, 8, 1, 16, 3, 26, 4, 8, 128, 245, 36, 34, 4, 8, 128, 234, 73, 42, 2,
+                8, 60, 50, 0, 58, 3, 16, 210, 9, 66, 25, 10, 9, 8, 1, 24, 1, 32, 1, 42, 1, 0, 18,
+                12, 10, 2, 0, 1, 16, 33, 24, 4, 32, 12, 48, 1, 66, 25, 10, 9, 8, 1, 24, 1, 32, 1,
+                42, 1, 0, 18, 12, 10, 2, 0, 1, 16, 32, 24, 1, 32, 1, 48, 1,
+            ],
+        );
+        assert_next(b"clients/07-tendermint-123/consensusStates/10", &[]);
+        assert_next(b"clients/07-tendermint-123/consensusStates/20", &[]);
+        assert_next(
+            b"commitments/ports/transfer/channels/channel-123/sequences/1",
+            &[1, 2, 3],
+        );
+        assert_next(b"connections/connection-123", &[]);
+        assert_next(
+            b"nextSequenceAck/ports/transfer/channels/channel-123",
+            &[0, 0, 0, 0, 0, 0, 0, 3],
+        );
+        assert_next(
+            b"nextSequenceRecv/ports/transfer/channels/channel-123",
+            &[0, 0, 0, 0, 0, 0, 0, 2],
+        );
+        assert_next(
+            b"nextSequenceSend/ports/transfer/channels/channel-123",
+            &[0, 0, 0, 0, 0, 0, 0, 1],
+        );
+        assert_next(
+            b"receipts/ports/transfer/channels/channel-123/sequences/1",
+            &[1, 2, 3],
+        );
         assert!(entries.next().is_none());
     }
 }
