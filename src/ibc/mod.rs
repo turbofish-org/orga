@@ -1,4 +1,8 @@
-use ibc::clients::ics07_tendermint::client_state::ClientState as TmClientState;
+use ibc::clients::ics07_tendermint::{
+    client_state::ClientState as TmClientState, consensus_state::ConsensusState as TmConsensusState,
+};
+use ibc::core::ics03_connection::connection::ConnectionEnd as IbcConnectionEnd;
+use ibc::core::ics04_channel::channel::ChannelEnd as IbcChannelEnd;
 use ibc::core::ics04_channel::packet::Sequence;
 use ibc::core::ics24_host::identifier::{
     ChannelId, ClientId as IbcClientId, ConnectionId as IbcConnectionId, PortId,
@@ -7,13 +11,14 @@ use ibc::core::ics24_host::path::{
     AckPath, ChannelEndPath, CommitmentPath, ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
 };
 use ibc_proto::google::protobuf::Any;
+use ibc_proto::ibc::core::{
+    channel::v1::Channel as RawChannelEnd, connection::v1::ConnectionEnd as RawConnectionEnd,
+};
 use ibc_proto::protobuf::Protobuf;
 use serde::Serialize;
 
 use crate::collections::Map;
-use crate::encoding::{
-    Adapter, ByteTerminatedString, Decode, Encode, EofTerminatedString, FixedString,
-};
+use crate::encoding::{ByteTerminatedString, Decode, Encode, EofTerminatedString, FixedString};
 use crate::orga;
 
 #[orga]
@@ -22,7 +27,7 @@ pub struct Ibc {
     clients: Map<ClientId, Client>,
 
     #[state(absolute_prefix(b"connections/"))]
-    connections: Map<ConnectionId, Connection>,
+    connections: Map<ConnectionId, ConnectionEnd>,
 
     #[state(absolute_prefix(b"channelEnds/"))]
     channel_ends: Map<PortChannel, ChannelEnd>,
@@ -120,47 +125,67 @@ port_channel_sequence_from_impl!(CommitmentPath);
 port_channel_sequence_from_impl!(AckPath);
 port_channel_sequence_from_impl!(ReceiptPath);
 
-#[orga(skip(Default), simple)]
-pub struct ClientState {
-    inner: TmClientState,
+macro_rules! protobuf_newtype {
+    ($newtype:tt, $inner:ty, $raw:ty) => {
+        #[derive(Serialize, Clone, Debug)]
+        pub struct $newtype {
+            inner: $inner,
+        }
+
+        impl Encode for $newtype {
+            fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+                let mut buf = vec![];
+                Protobuf::<$raw>::encode(&self.inner, &mut buf)
+                    .map_err(|_| ed::Error::UnexpectedByte(10))?;
+                dest.write_all(&buf)?;
+                Ok(())
+            }
+
+            fn encoding_length(&self) -> ed::Result<usize> {
+                let mut buf = vec![];
+                Protobuf::<$raw>::encode(&self.inner, &mut buf)
+                    .map_err(|_| ed::Error::UnexpectedByte(10))?;
+                Ok(buf.len())
+            }
+        }
+
+        impl Decode for $newtype {
+            fn decode<R: std::io::Read>(mut input: R) -> ed::Result<Self> {
+                let mut buf = vec![];
+                input.read_to_end(&mut buf)?;
+                let inner = Protobuf::<$raw>::decode(buf.as_slice())
+                    .map_err(|_| ed::Error::UnexpectedByte(10))?;
+                Ok(Self { inner })
+            }
+        }
+
+        impl crate::state::State for $newtype {
+            fn attach(&mut self, _store: crate::store::Store) -> crate::Result<()> {
+                Ok(())
+            }
+
+            fn flush<W: std::io::Write>(self, out: &mut W) -> crate::Result<()> {
+                self.encode_into(out)?;
+                Ok(())
+            }
+
+            fn load(_store: crate::store::Store, bytes: &mut &[u8]) -> crate::Result<Self> {
+                Ok(Self::decode(bytes)?)
+            }
+        }
+
+        impl From<$inner> for $newtype {
+            fn from(inner: $inner) -> Self {
+                Self { inner }
+            }
+        }
+    };
 }
 
-impl Encode for Adapter<ClientState> {
-    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
-        let mut buf = vec![];
-        Protobuf::<Any>::encode(&self.0.inner, &mut buf)
-            .map_err(|_| ed::Error::UnexpectedByte(10))?;
-        dest.write_all(&buf)?;
-        Ok(())
-    }
-
-    fn encoding_length(&self) -> ed::Result<usize> {
-        let mut buf = vec![];
-        Protobuf::<Any>::encode(&self.0.inner, &mut buf)
-            .map_err(|_| ed::Error::UnexpectedByte(10))?;
-        Ok(buf.len())
-    }
-}
-
-impl Decode for Adapter<ClientState> {
-    fn decode<R: std::io::Read>(mut input: R) -> ed::Result<Self> {
-        let mut buf = vec![];
-        input.read_to_end(&mut buf)?;
-        let inner =
-            Protobuf::<Any>::decode(buf.as_slice()).map_err(|_| ed::Error::UnexpectedByte(10))?;
-        Ok(Self(ClientState { inner }))
-    }
-}
-
-impl From<TmClientState> for ClientState {
-    fn from(inner: TmClientState) -> Self {
-        Self { inner }
-    }
-}
-
-pub type ConsensusState = ();
-pub type Connection = ();
-pub type ChannelEnd = ();
+protobuf_newtype!(ClientState, TmClientState, Any);
+protobuf_newtype!(ConsensusState, TmConsensusState, Any);
+protobuf_newtype!(ConnectionEnd, IbcConnectionEnd, RawConnectionEnd);
+protobuf_newtype!(ChannelEnd, IbcChannelEnd, RawChannelEnd);
 
 #[cfg(test)]
 mod tests {
@@ -172,10 +197,11 @@ mod tests {
             ics02_client::{
                 client_type::ClientType, height::Height, trust_threshold::TrustThreshold,
             },
-            ics23_commitment::specs::ProofSpecs,
+            ics23_commitment::{commitment::CommitmentRoot, specs::ProofSpecs},
             ics24_host::identifier::ChainId,
         },
     };
+    use tendermint_0_29::{Hash, Time};
 
     use super::*;
     use crate::{
@@ -216,18 +242,28 @@ mod tests {
         .unwrap()
         .into();
         client.client_state.insert((), client_state).unwrap();
-        client.consensus_states.insert(10.into(), ()).unwrap();
-        client.consensus_states.insert(20.into(), ()).unwrap();
+        let consensus_state = TmConsensusState::new(
+            CommitmentRoot::from_bytes(&[0; 32]),
+            Time::from_unix_timestamp(0, 0).unwrap(),
+            Hash::Sha256([5; 32]),
+        )
+        .into();
+        client
+            .consensus_states
+            .insert(100.into(), consensus_state)
+            .unwrap();
         let client_id = IbcClientId::new(ClientType::new("07-tendermint".to_string()), 123)
             .unwrap()
             .into();
         ibc.clients.insert(client_id, client).unwrap();
 
         let conn_id = IbcConnectionId::new(123).into();
-        ibc.connections.insert(conn_id, ()).unwrap();
+        let conn = IbcConnectionEnd::default().into();
+        ibc.connections.insert(conn_id, conn).unwrap();
 
         let channel_end_path = ChannelEndPath(PortId::transfer(), ChannelId::new(123)).into();
-        ibc.channel_ends.insert(channel_end_path, ()).unwrap();
+        let chan = IbcChannelEnd::default().into();
+        ibc.channel_ends.insert(channel_end_path, chan).unwrap();
 
         let seq_sends_path = SeqSendPath(PortId::transfer(), ChannelId::new(123)).into();
         ibc.next_sequence_send.insert(seq_sends_path, 1).unwrap();
@@ -275,34 +311,60 @@ mod tests {
                 String::from_utf8(k).unwrap(),
                 String::from_utf8(key.to_vec()).unwrap()
             );
-            assert_eq!(v, value);
+            assert_eq!(
+                v,
+                value,
+                "key: {}",
+                String::from_utf8(key.to_vec()).unwrap()
+            );
         };
 
         assert_next(
             b"acks/ports/transfer/channels/channel-123/sequences/1",
             &[1, 2, 3],
         );
-        assert_next(b"channelEnds/ports/transfer/channels/channel-123", &[]);
+        assert_next(
+            b"channelEnds/ports/transfer/channels/channel-123",
+            &[
+                16, 1, 26, 13, 10, 11, 100, 101, 102, 97, 117, 108, 116, 80, 111, 114, 116,
+            ],
+        );
         assert_next(b"clients/07-tendermint-123/", &[0]);
         assert_next(
             b"clients/07-tendermint-123/clientState",
             &[
-                0, 10, 43, 47, 105, 98, 99, 46, 108, 105, 103, 104, 116, 99, 108, 105, 101, 110,
-                116, 115, 46, 116, 101, 110, 100, 101, 114, 109, 105, 110, 116, 46, 118, 49, 46,
-                67, 108, 105, 101, 110, 116, 83, 116, 97, 116, 101, 18, 90, 10, 5, 102, 111, 111,
-                45, 48, 18, 4, 8, 1, 16, 3, 26, 4, 8, 128, 245, 36, 34, 4, 8, 128, 234, 73, 42, 2,
-                8, 60, 50, 0, 58, 3, 16, 210, 9, 66, 25, 10, 9, 8, 1, 24, 1, 32, 1, 42, 1, 0, 18,
-                12, 10, 2, 0, 1, 16, 33, 24, 4, 32, 12, 48, 1, 66, 25, 10, 9, 8, 1, 24, 1, 32, 1,
-                42, 1, 0, 18, 12, 10, 2, 0, 1, 16, 32, 24, 1, 32, 1, 48, 1,
+                10, 43, 47, 105, 98, 99, 46, 108, 105, 103, 104, 116, 99, 108, 105, 101, 110, 116,
+                115, 46, 116, 101, 110, 100, 101, 114, 109, 105, 110, 116, 46, 118, 49, 46, 67,
+                108, 105, 101, 110, 116, 83, 116, 97, 116, 101, 18, 90, 10, 5, 102, 111, 111, 45,
+                48, 18, 4, 8, 1, 16, 3, 26, 4, 8, 128, 245, 36, 34, 4, 8, 128, 234, 73, 42, 2, 8,
+                60, 50, 0, 58, 3, 16, 210, 9, 66, 25, 10, 9, 8, 1, 24, 1, 32, 1, 42, 1, 0, 18, 12,
+                10, 2, 0, 1, 16, 33, 24, 4, 32, 12, 48, 1, 66, 25, 10, 9, 8, 1, 24, 1, 32, 1, 42,
+                1, 0, 18, 12, 10, 2, 0, 1, 16, 32, 24, 1, 32, 1, 48, 1,
             ],
         );
-        assert_next(b"clients/07-tendermint-123/consensusStates/10", &[]);
-        assert_next(b"clients/07-tendermint-123/consensusStates/20", &[]);
+        assert_next(
+            b"clients/07-tendermint-123/consensusStates/100",
+            &[
+                10, 46, 47, 105, 98, 99, 46, 108, 105, 103, 104, 116, 99, 108, 105, 101, 110, 116,
+                115, 46, 116, 101, 110, 100, 101, 114, 109, 105, 110, 116, 46, 118, 49, 46, 67,
+                111, 110, 115, 101, 110, 115, 117, 115, 83, 116, 97, 116, 101, 18, 72, 10, 0, 18,
+                34, 10, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 26, 32, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
+                5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
+            ],
+        );
         assert_next(
             b"commitments/ports/transfer/channels/channel-123/sequences/1",
             &[1, 2, 3],
         );
-        assert_next(b"connections/connection-123", &[]);
+        assert_next(
+            b"connections/connection-123",
+            &[
+                10, 15, 48, 55, 45, 116, 101, 110, 100, 101, 114, 109, 105, 110, 116, 45, 48, 34,
+                19, 10, 15, 48, 55, 45, 116, 101, 110, 100, 101, 114, 109, 105, 110, 116, 45, 48,
+                26, 0,
+            ],
+        );
         assert_next(
             b"nextSequenceAck/ports/transfer/channels/channel-123",
             &[0, 0, 0, 0, 0, 0, 0, 3],
