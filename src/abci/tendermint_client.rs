@@ -165,7 +165,7 @@ where
     type Call = T::Call;
 
     async fn call(&self, call: Self::Call) -> Result<()> {
-        let tx = call.encode()?.into();
+        let tx = call.encode()?;
         let tx_res = self.client.broadcast_tx_commit(tx).await?;
 
         if tx_res.check_tx.code.is_err() {

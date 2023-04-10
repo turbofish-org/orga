@@ -132,6 +132,8 @@ fn leaf_op() -> LeafOp {
 
 #[cfg(test)]
 mod tests {
+    use ics23::HostFunctionsManager;
+
     use crate::merk::MerkStore;
     use crate::store::Write;
 
@@ -155,7 +157,7 @@ mod tests {
         drop(store);
         merk::Merk::destroy(merk::Merk::open(path).unwrap()).unwrap();
 
-        assert!(ics23::verify_membership(
+        assert!(ics23::verify_membership::<HostFunctionsManager>(
             &proof,
             &MerkStore::ics23_spec(),
             &root_hash,
@@ -186,7 +188,7 @@ mod tests {
         drop(store);
         merk::Merk::destroy(merk::Merk::open(path).unwrap()).unwrap();
 
-        assert!(ics23::verify_non_membership(
+        assert!(ics23::verify_non_membership::<HostFunctionsManager>(
             &proof,
             &MerkStore::ics23_spec(),
             &root_hash,

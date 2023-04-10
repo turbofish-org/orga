@@ -1,3 +1,4 @@
+use ibc::clients::ics07_tendermint::client_state::ClientState as TmClientState;
 use ibc::core::ics04_channel::packet::Sequence;
 use ibc::core::ics24_host::identifier::{
     ChannelId, ClientId as IbcClientId, ConnectionId as IbcConnectionId, PortId,
