@@ -41,6 +41,18 @@ pub trait Read {
         }
     }
 
+    fn get_prev(&self, key: Option<&[u8]>) -> Result<Option<KV>>;
+
+    fn get_prev_inclusive(&self, key: Option<&[u8]>) -> Result<Option<KV>> {
+        match key {
+            Some(key) => match self.get(key)? {
+                Some(value) => Ok(Some((key.to_vec(), value))),
+                None => self.get_prev(Some(key)),
+            },
+            None => self.get_prev(None),
+        }
+    }
+
     /// Returns an iterator over the key/value entries in the given range.
     #[inline]
     fn into_iter<B: RangeBounds<Vec<u8>>>(self, bounds: B) -> Iter<Self>
@@ -75,6 +87,21 @@ impl<R: Read, T: Deref<Target = R>> Read for T {
     #[inline]
     fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
         self.deref().get_next(key)
+    }
+
+    #[inline]
+    fn get_next_inclusive(&self, key: &[u8]) -> Result<Option<KV>> {
+        self.deref().get_next_inclusive(key)
+    }
+
+    #[inline]
+    fn get_prev(&self, key: Option<&[u8]>) -> Result<Option<KV>> {
+        self.deref().get_prev(key)
+    }
+
+    #[inline]
+    fn get_prev_inclusive(&self, key: Option<&[u8]>) -> Result<Option<KV>> {
+        self.deref().get_prev_inclusive(key)
     }
 }
 

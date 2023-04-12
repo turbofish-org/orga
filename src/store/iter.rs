@@ -79,6 +79,49 @@ impl<S: Read> Iterator for Iter<S> {
     }
 }
 
+impl<S: Read> DoubleEndedIterator for Iter<S> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.done {
+            return None;
+        }
+
+        let maybe_entry = match self.bounds.1 {
+            // get last entry
+            Bound::Unbounded => self.parent.get_prev(None).transpose(),
+
+            // if entry exists at given key, emit that. if not, get prev entry
+            Bound::Included(ref key) => self.parent.get_prev_inclusive(Some(key)).transpose(),
+
+            // get prev entry
+            Bound::Excluded(ref key) => self.parent.get_prev(Some(key)).transpose(),
+        };
+
+        match maybe_entry {
+            // bubble up errors
+            Some(Err(err)) => Some(Err(err)),
+
+            // got entry
+            Some(Ok((key, value))) => {
+                // entry is past start of range, mark iterator as done
+                if !self.bounds.contains(&key) {
+                    self.done = true;
+                    return None;
+                }
+
+                // advance internal state to prev key
+                self.bounds.1 = Bound::Excluded(key.clone());
+                Some(Ok((key, value)))
+            }
+
+            // reached end of iteration, mark iterator as done
+            None => {
+                self.done = true;
+                None
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -170,6 +213,10 @@ mod tests {
 
             fn get_next(&self, _key: &[u8]) -> Result<Option<KV>> {
                 Err(Error::Store("get_next".into()))
+            }
+
+            fn get_prev(&self, _key: Option<&[u8]>) -> Result<Option<KV>> {
+                Err(Error::Store("get_prev".into()))
             }
         }
 
