@@ -173,9 +173,14 @@ impl<S: Read> Read for Store<S> {
                 .filter(|(k, _)| k.starts_with(self.prefix.as_slice()))
                 .map(|(k, v)| (k[self.prefix.len()..].into(), v))
         } else {
-            let end_key = increment_bytes(self.prefix.clone());
+            let incremented = increment_bytes(self.prefix.clone());
+            let end_key = if !self.prefix.is_empty() {
+                Some(incremented.as_slice())
+            } else {
+                None
+            };
             self.store
-                .get_prev(Some(end_key.as_slice()))?
+                .get_prev(end_key)?
                 .filter(|(k, _)| k.starts_with(self.prefix.as_slice()))
                 .map(|(k, v)| (k[self.prefix.len()..].into(), v))
         };
