@@ -47,17 +47,40 @@ impl store::Read for ProofBuilder {
     fn get_next(&self, key: &[u8]) -> Result<Option<store::KV>> {
         let mut maybe_next_key = None;
         let maybe_entry = self.store.get_next(key)?.map(|(next_key, value)| {
-            // TODO: support inserting `(Bound, Bound)` into query
             maybe_next_key = Some(next_key.clone());
-
             (next_key.to_vec(), value.to_vec())
         });
+
+        // TODO: support inserting `(Bound, Bound)` into query
         let range = match maybe_next_key {
             Some(next_key) => key.to_vec()..=next_key.to_vec(),
             None => key.to_vec()..=key.to_vec(),
         };
 
         self.query.borrow_mut().insert_range_inclusive(range);
+        Ok(maybe_entry)
+    }
+
+    fn get_prev(&self, key: Option<&[u8]>) -> Result<Option<store::KV>> {
+        let mut maybe_prev_key = None;
+        let maybe_entry = self.store.get_prev(key)?.map(|(prev_key, value)| {
+            maybe_prev_key = Some(prev_key.clone());
+            (prev_key.to_vec(), value.to_vec())
+        });
+
+        // TODO: support inserting `(Bound, Bound)` into query
+        let mut query = self.query.borrow_mut();
+        match key {
+            Some(key) => match maybe_prev_key {
+                Some(prev_key) => query.insert_range(prev_key.to_vec()..key.to_vec()),
+                None => query.insert_key(key.to_vec()),
+            },
+            None => match maybe_prev_key {
+                Some(prev_key) => query.insert_key(prev_key.to_vec()),
+                None => query.insert_key(vec![]),
+            },
+        };
+
         Ok(maybe_entry)
     }
 }

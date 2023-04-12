@@ -250,6 +250,18 @@ where
     }
 }
 
+impl<'a, T> DoubleEndedIterator for Iter<'a, T>
+where
+    T: State,
+{
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.map_iter.next_back().map(|entry| match entry {
+            Ok(entry) => Ok(entry.1),
+            Err(err) => Err(err),
+        })
+    }
+}
+
 #[allow(unused_imports)]
 mod test {
     use super::{Deque, Map, Meta};

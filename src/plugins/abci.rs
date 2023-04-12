@@ -27,8 +27,8 @@ pub struct Time {
 }
 
 impl Time {
-    #[cfg(test)]
-    pub(crate) fn from_seconds<T: Into<i64>>(seconds: T) -> Self {
+    // #[cfg(test)]
+    pub fn from_seconds<T: Into<i64>>(seconds: T) -> Self {
         let seconds = seconds.into();
         Self { seconds, nanos: 0 }
     }

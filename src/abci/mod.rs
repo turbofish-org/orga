@@ -512,6 +512,10 @@ mod server {
         fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
             self.store.get_next(key)
         }
+
+        fn get_prev(&self, key: Option<&[u8]>) -> Result<Option<KV>> {
+            self.store.get_prev(key)
+        }
     }
 
     impl Write for MemStore {
