@@ -193,7 +193,7 @@ impl Read for ProofStore {
     fn get_prev(&self, key: Option<&[u8]>) -> Result<Option<KV>> {
         let mut iter = self.0.range((
             Bound::Unbounded,
-            key.map_or(Bound::Unbounded, |key| Bound::Excluded(key)),
+            key.map_or(Bound::Unbounded, Bound::Excluded),
         ));
         let item = iter.next_back().transpose()?;
         Ok(item.map(|(k, v)| (k.to_vec(), v.to_vec())))

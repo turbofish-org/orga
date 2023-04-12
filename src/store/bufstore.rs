@@ -166,7 +166,7 @@ where
             (true, false) => {
                 match map_iter.next().unwrap() {
                     // map value is not a delete, emit value
-                    (key, Some(value)) => Some((key.clone(), value.clone())),
+                    (key, Some(value)) => Some((key, value)),
                     // map value is a delete, go to next entry
                     (_, None) => continue,
                 }
@@ -199,7 +199,7 @@ where
 
                 // map key is before or at backing key, emit map entry (or skip if delete)
                 match map_iter.next().unwrap() {
-                    (key, Some(value)) => Some((key.clone(), value.clone())),
+                    (key, Some(value)) => Some((key, value)),
                     (_, None) => continue,
                 }
             }

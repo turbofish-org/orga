@@ -18,7 +18,7 @@ impl Read for NullStore {
     }
 
     #[inline]
-    fn get_prev(&self, key: Option<&[u8]>) -> Result<Option<KV>> {
+    fn get_prev(&self, _key: Option<&[u8]>) -> Result<Option<KV>> {
         Ok(None)
     }
 }

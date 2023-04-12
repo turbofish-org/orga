@@ -361,7 +361,7 @@ where
         let store_iter = StoreNextIter::new(&self.store, encoded_range)?;
 
         Ok(Iter {
-            parent: &self,
+            parent: self,
             map_iter,
             store_iter,
         })
@@ -592,38 +592,15 @@ where
                 .parent
                 .children
                 .range((
-                    maybe_front_entry.map_or(Bound::Included(back_entry.0.clone()), |(k, _)| {
-                        Bound::Included(k)
-                    }),
-                    Bound::Included(back_entry.0.clone()),
+                    maybe_front_entry
+                        .map_or(Bound::Included(back_entry.0), |(k, _)| Bound::Included(k)),
+                    Bound::Included(back_entry.0),
                 ))
                 .peekable();
 
             back_entry
         })
     }
-}
-
-fn maybe_debug<T>(t: T) -> String {
-    MaybeDebugWrapper(t).maybe_debug()
-}
-
-struct MaybeDebugWrapper<T>(T);
-
-impl<T> MaybeDebug for MaybeDebugWrapper<T> {
-    default fn maybe_debug(&self) -> String {
-        "(no debug)".to_string()
-    }
-}
-
-impl<T: std::fmt::Debug> MaybeDebug for MaybeDebugWrapper<T> {
-    fn maybe_debug(&self) -> String {
-        format!("{:?}", self.0)
-    }
-}
-
-trait MaybeDebug {
-    fn maybe_debug(&self) -> String;
 }
 
 impl<'a, K, V> Iterator for Iter<'a, K, V>
@@ -683,7 +660,7 @@ fn decrement_bytes(mut bytes: Vec<u8>) -> Option<Vec<u8>> {
         }
     }
 
-    if bytes.len() > 0 {
+    if bytes.is_empty() {
         bytes.pop();
         Some(bytes)
     } else {
@@ -1260,7 +1237,7 @@ mod tests {
 
     #[test]
     fn iter_merge_next_map_only() {
-        let (store, mut map) = setup();
+        let (_, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();

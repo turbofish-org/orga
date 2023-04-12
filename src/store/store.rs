@@ -168,8 +168,6 @@ impl<S: Read> Read for Store<S> {
             let prefixed = concat(self.prefix.as_slice(), key);
             self.store
                 .get_prev(Some(prefixed.as_slice()))?
-                // TODO: terminating with filter is wrong, this will read all
-                // keys in store after reaching end
                 .filter(|(k, _)| k.starts_with(self.prefix.as_slice()))
                 .map(|(k, v)| (k[self.prefix.len()..].into(), v))
         } else {
@@ -281,7 +279,7 @@ mod test {
         let mut backing = MapStore::new();
         backing.put(vec![0, 0], vec![0]).unwrap();
 
-        let mut store = Store::new(&mut backing);
+        let store = Store::new(&mut backing);
         assert_eq!(
             store.get_prev(None).unwrap().unwrap(),
             (vec![0, 0], vec![0])
