@@ -285,6 +285,12 @@ impl<T: FromStr + ToString> From<T> for EofTerminatedString<T> {
     }
 }
 
+impl<T: FromStr + ToString> EofTerminatedString<T> {
+    pub fn into_inner(self) -> T {
+        self.0
+    }
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct FixedString<const S: &'static str>;
 
