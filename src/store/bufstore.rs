@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::{btree_map, BTreeMap};
+use std::collections::BTreeMap;
 
 use super::*;
 
@@ -197,7 +197,7 @@ where
                     store_iter.next();
                 }
 
-                // map key is before backing key, emit map entry (or skip if delete)
+                // map key is before or at backing key, emit map entry (or skip if delete)
                 match map_iter.next().unwrap() {
                     (key, Some(value)) => Some((key.clone(), value.clone())),
                     (_, None) => continue,
@@ -258,33 +258,37 @@ mod tests {
         buf.put(vec![1], vec![1]).unwrap();
         buf.delete(&[2]).unwrap();
         buf.put(vec![3], vec![1]).unwrap();
+        buf.put(vec![5], vec![1]).unwrap();
 
         let mut iter = buf.into_iter(..);
         assert_eq!(iter.next().unwrap().unwrap(), (vec![0], vec![0]));
         assert_eq!(iter.next().unwrap().unwrap(), (vec![1], vec![1]));
         assert_eq!(iter.next().unwrap().unwrap(), (vec![3], vec![1]));
         assert_eq!(iter.next().unwrap().unwrap(), (vec![4], vec![0]));
+        assert_eq!(iter.next().unwrap().unwrap(), (vec![5], vec![1]));
         assert!(iter.next().is_none());
     }
 
     #[test]
     fn rev_iter() {
         let mut store = MapStore::new();
-        store.put(vec![0], vec![0]).unwrap();
         store.put(vec![1], vec![0]).unwrap();
         store.put(vec![2], vec![0]).unwrap();
+        store.put(vec![3], vec![0]).unwrap();
         store.put(vec![4], vec![0]).unwrap();
 
         let mut buf = BufStore::wrap(store);
-        buf.put(vec![1], vec![1]).unwrap();
-        buf.delete(&[2]).unwrap();
-        buf.put(vec![3], vec![1]).unwrap();
+        buf.put(vec![0], vec![1]).unwrap();
+        buf.put(vec![2], vec![1]).unwrap();
+        buf.delete(&[3]).unwrap();
+        buf.put(vec![5], vec![1]).unwrap();
 
         let mut iter = buf.into_iter(..).rev();
+        assert_eq!(iter.next().unwrap().unwrap(), (vec![5], vec![1]));
         assert_eq!(iter.next().unwrap().unwrap(), (vec![4], vec![0]));
-        assert_eq!(iter.next().unwrap().unwrap(), (vec![3], vec![1]));
-        assert_eq!(iter.next().unwrap().unwrap(), (vec![1], vec![1]));
-        assert_eq!(iter.next().unwrap().unwrap(), (vec![0], vec![0]));
+        assert_eq!(iter.next().unwrap().unwrap(), (vec![2], vec![1]));
+        assert_eq!(iter.next().unwrap().unwrap(), (vec![1], vec![0]));
+        assert_eq!(iter.next().unwrap().unwrap(), (vec![0], vec![1]));
         assert!(iter.next().is_none());
     }
 
