@@ -275,4 +275,16 @@ mod test {
         assert!(backing.get(&[1, 3, 1]).unwrap().is_none());
         assert_eq!(backing.get(&[1, 3, 2]).unwrap().unwrap(), vec![5, 0]);
     }
+
+    #[test]
+    fn get_prev_empty_key() {
+        let mut backing = MapStore::new();
+        backing.put(vec![0, 0], vec![0]).unwrap();
+
+        let mut store = Store::new(&mut backing);
+        assert_eq!(
+            store.get_prev(None).unwrap().unwrap(),
+            (vec![0, 0], vec![0])
+        );
+    }
 }
