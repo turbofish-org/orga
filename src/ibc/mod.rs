@@ -1,6 +1,7 @@
 use ibc::clients::ics07_tendermint::{
     client_state::ClientState as TmClientState, consensus_state::ConsensusState as TmConsensusState,
 };
+use ibc::core::ics02_client::height::Height;
 use ibc::core::ics03_connection::connection::ConnectionEnd as IbcConnectionEnd;
 use ibc::core::ics04_channel::channel::ChannelEnd as IbcChannelEnd;
 use ibc::core::ics04_channel::packet::Sequence;
@@ -8,7 +9,8 @@ use ibc::core::ics24_host::identifier::{
     ChannelId, ClientId as IbcClientId, ConnectionId as IbcConnectionId, PortId,
 };
 use ibc::core::ics24_host::path::{
-    AckPath, ChannelEndPath, CommitmentPath, ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
+    AckPath, ChannelEndPath, ClientConnectionPath, CommitmentPath, ConnectionPath, ReceiptPath,
+    SeqAckPath, SeqRecvPath, SeqSendPath,
 };
 use ibc_proto::google::protobuf::Any;
 use ibc_proto::ibc::core::{
@@ -20,6 +22,8 @@ use serde::Serialize;
 use crate::collections::Map;
 use crate::encoding::{ByteTerminatedString, Decode, Encode, EofTerminatedString, FixedString};
 use crate::orga;
+
+mod impls;
 
 #[orga]
 pub struct Ibc {
@@ -49,7 +53,7 @@ pub struct Ibc {
     commitments: Map<PortChannelSequence, Vec<u8>>,
 
     #[state(absolute_prefix(b"receipts/"))]
-    receipts: Map<PortChannelSequence, Vec<u8>>,
+    receipts: Map<PortChannelSequence, ()>,
 
     #[state(absolute_prefix(b"acks/"))]
     acks: Map<PortChannelSequence, Vec<u8>>,
@@ -61,7 +65,10 @@ pub struct Client {
     client_state: Map<(), ClientState>,
 
     #[state(prefix(b"consensusStates/"))]
-    consensus_states: Map<Number, ConsensusState>,
+    consensus_states: Map<EpochHeight, ConsensusState>,
+
+    #[state(prefix(b"connections/"))]
+    connections: Map<ConnectionId, ()>,
 }
 
 pub type SlashTerminatedString<T> = ByteTerminatedString<b'/', T>;
@@ -69,6 +76,42 @@ pub type SlashTerminatedString<T> = ByteTerminatedString<b'/', T>;
 pub type ClientId = SlashTerminatedString<IbcClientId>;
 pub type ConnectionId = EofTerminatedString<IbcConnectionId>;
 pub type Number = EofTerminatedString<u64>;
+pub type EpochHeight = EofTerminatedString;
+
+impl From<ConnectionPath> for ConnectionId {
+    fn from(path: ConnectionPath) -> Self {
+        Self(path.0)
+    }
+}
+
+impl From<ClientConnectionPath> for ClientId {
+    fn from(path: ClientConnectionPath) -> Self {
+        Self(path.0)
+    }
+}
+
+impl From<Sequence> for Number {
+    fn from(sequence: Sequence) -> Self {
+        Self(sequence.into())
+    }
+}
+
+impl From<Height> for EpochHeight {
+    fn from(height: Height) -> Self {
+        Self(format!("{}-{}", height.revision_number(), height.revision_height()).into())
+    }
+}
+
+impl TryFrom<EpochHeight> for Height {
+    type Error = ();
+
+    fn try_from(epoch_height: EpochHeight) -> Result<Self, Self::Error> {
+        let mut parts = epoch_height.0.split('-');
+        let revision_number = parts.next().ok_or(())?.parse().map_err(|_| ())?;
+        let revision_height = parts.next().ok_or(())?.parse().map_err(|_| ())?;
+        Height::new(revision_number, revision_height).map_err(|_| ())
+    }
+}
 
 #[derive(Encode, Decode, Serialize, Clone, Debug)]
 pub struct PortChannel(
@@ -183,6 +226,12 @@ macro_rules! protobuf_newtype {
                 Self { inner }
             }
         }
+
+        impl From<$newtype> for $inner {
+            fn from(outer: $newtype) -> Self {
+                outer.inner
+            }
+        }
     };
 }
 
@@ -258,7 +307,7 @@ mod tests {
         .into();
         client
             .consensus_states
-            .insert(100.into(), consensus_state)
+            .insert("0-100".to_string().into(), consensus_state)
             .unwrap();
         let client_id = IbcClientId::new(ClientType::new("07-tendermint".to_string()), 123)
             .unwrap()
@@ -312,7 +361,7 @@ mod tests {
             sequence: 1.into(),
         }
         .into();
-        ibc.receipts.insert(receipts_path, vec![1, 2, 3]).unwrap();
+        ibc.receipts.insert(receipts_path, ()).unwrap();
 
         let mut bytes = vec![];
         app.flush(&mut bytes).unwrap();
@@ -360,7 +409,7 @@ mod tests {
             ],
         );
         assert_next(
-            b"clients/07-tendermint-123/consensusStates/100",
+            b"clients/07-tendermint-123/consensusStates/0-100",
             &[
                 10, 46, 47, 105, 98, 99, 46, 108, 105, 103, 104, 116, 99, 108, 105, 101, 110, 116,
                 115, 46, 116, 101, 110, 100, 101, 114, 109, 105, 110, 116, 46, 118, 49, 46, 67,
@@ -393,7 +442,7 @@ mod tests {
         );
         assert_next(
             b"receipts/ports/transfer/channels/channel-123/sequences/1",
-            &[1, 2, 3],
+            &[],
         );
         assert!(entries.next().is_none());
     }
