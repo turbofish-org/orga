@@ -404,11 +404,26 @@ mod tests {
         let client_id = IbcClientId::new(ClientType::new("07-tendermint".to_string()), 123)
             .unwrap()
             .into();
-        ibc.clients.insert(client_id, client).unwrap();
+        client.client_type = ClientType::new("07-tendermint".to_string()).into();
+        client
+            .updates
+            .insert(
+                "0-100".to_string().into(),
+                (
+                    IbcTimestamp::default().into(),
+                    Height::new(0, 123).unwrap().into(),
+                ),
+            )
+            .unwrap();
+        let conn_id = IbcConnectionId::new(123);
+        client
+            .connections
+            .insert(conn_id.clone().into(), ())
+            .unwrap();
 
-        let conn_id = IbcConnectionId::new(123).into();
+        ibc.clients.insert(client_id, client).unwrap();
         let conn = IbcConnectionEnd::default().into();
-        ibc.connections.insert(conn_id, conn).unwrap();
+        ibc.connections.insert(conn_id.into(), conn).unwrap();
 
         let channel_end_path = ChannelEndPath(PortId::transfer(), ChannelId::new(123)).into();
         let chan = IbcChannelEnd::default().into();
@@ -487,7 +502,7 @@ mod tests {
                 16, 1, 26, 13, 10, 11, 100, 101, 102, 97, 117, 108, 116, 80, 111, 114, 116,
             ],
         );
-        assert_next(b"clients/07-tendermint-123/", &[0]);
+        assert_next(b"clients/07-tendermint-123/", b"\x0007-tendermint");
         assert_next(
             b"clients/07-tendermint-123/clientState",
             &[
@@ -500,6 +515,7 @@ mod tests {
                 1, 0, 18, 12, 10, 2, 0, 1, 16, 32, 24, 1, 32, 1, 48, 1,
             ],
         );
+        assert_next(b"clients/07-tendermint-123/connections/connection-123", &[]);
         assert_next(
             b"clients/07-tendermint-123/consensusStates/0-100",
             &[
@@ -509,6 +525,13 @@ mod tests {
                 34, 10, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 0, 0, 0, 0, 0, 26, 32, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
                 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
+            ],
+        );
+        assert_next(
+            b"clients/07-tendermint-123/updates/0-100",
+            &[
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 123,
             ],
         );
         assert_next(
