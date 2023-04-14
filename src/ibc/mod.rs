@@ -22,7 +22,7 @@ use ibc_proto::ibc::core::{
 use ibc_proto::protobuf::Protobuf;
 use serde::Serialize;
 
-use crate::collections::Map;
+use crate::collections::{Deque, Map};
 use crate::encoding::{
     Adapter, ByteTerminatedString, Decode, Encode, EofTerminatedString, FixedString,
 };
@@ -32,6 +32,9 @@ mod impls;
 
 #[orga]
 pub struct Ibc {
+    height: u64,
+    host_consensus_states: Deque<ConsensusState>,
+
     channel_counter: u64,
     connection_counter: u64,
     client_counter: u64,
@@ -474,7 +477,11 @@ mod tests {
         app.flush(&mut bytes).unwrap();
         assert_eq!(
             bytes,
-            vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 123, 0, 0, 0, 0, 0, 0, 1, 200, 0, 0, 0, 0, 0, 0, 3, 21]
+            vec![
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 127, 255, 255, 255, 255, 255, 255, 255, 127, 255,
+                255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 123, 0, 0, 0, 0, 0, 0, 1, 200,
+                0, 0, 0, 0, 0, 0, 3, 21
+            ]
         );
 
         let mut entries = store.range(..);

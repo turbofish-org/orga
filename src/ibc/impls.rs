@@ -1,6 +1,7 @@
 use std::time::Duration;
 use std::{iter::DoubleEndedIterator, ops::Bound};
 
+use ibc::core::ics23_commitment::commitment::CommitmentRoot;
 use ibc::{
     clients::ics07_tendermint::{
         client_state::ClientState as TmClientState,
@@ -32,7 +33,48 @@ use ibc::{
     Height,
 };
 
+use crate::abci::BeginBlock;
+use crate::plugins::{BeginBlockCtx, Time};
+use crate::Error;
+
 use super::*;
+
+const MAX_HOST_CONSENSUS_STATES: u64 = 100_000;
+
+#[cfg(feature = "abci")]
+impl BeginBlock for Ibc {
+    fn begin_block(&mut self, ctx: &BeginBlockCtx) -> crate::Result<()> {
+        self.height = ctx.height;
+
+        let timestamp = if let Some(ref timestamp) = ctx.header.time {
+            tendermint::Time::from_unix_timestamp(timestamp.seconds, timestamp.nanos as u32)
+                .map_err(|_| crate::Error::Ibc("Invalid timestamp".to_string()))?
+        } else {
+            return Err(Error::Tendermint("Missing timestamp".to_string()));
+        };
+
+        self.host_consensus_states.push_back(
+            TmConsensusState::new(
+                CommitmentRoot::from_bytes(ctx.header.app_hash.as_slice()),
+                timestamp,
+                tendermint::Hash::Sha256(
+                    ctx.header
+                        .next_validators_hash
+                        .clone()
+                        .try_into()
+                        .map_err(|_| Error::Tendermint("Invalid hash".to_string()))?,
+                ),
+            )
+            .into(),
+        )?;
+
+        while self.host_consensus_states.len() > MAX_HOST_CONSENSUS_STATES {
+            self.host_consensus_states.pop_front()?;
+        }
+
+        Ok(())
+    }
+}
 
 impl Router for Ibc {
     fn get_route(&self, module_id: &ModuleId) -> Option<&dyn Module> {
@@ -172,18 +214,28 @@ impl ValidationContext for Ibc {
     }
 
     fn host_height(&self) -> Result<Height, ContextError> {
-        todo!()
+        Ok(Height::new(0, self.height)?)
     }
 
     fn host_timestamp(&self) -> Result<Timestamp, ContextError> {
-        todo!()
+        let host_height = self.host_height()?;
+        let host_cons_state = self.host_consensus_state(&host_height)?;
+        Ok(host_cons_state.timestamp())
     }
 
     fn host_consensus_state(
         &self,
         height: &Height,
     ) -> Result<Box<dyn ConsensusState>, ContextError> {
-        todo!()
+        let index = self.host_consensus_states.len() - 1 - (self.height - height.revision_height());
+        Ok(Box::<TmConsensusState>::new(
+            self.host_consensus_states
+                .get(index)
+                .map_err(|_| ClientError::ImplementationSpecific)?
+                .unwrap()
+                .clone()
+                .into(),
+        ))
     }
 
     fn client_counter(&self) -> Result<u64, ContextError> {
