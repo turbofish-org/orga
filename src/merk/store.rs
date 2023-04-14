@@ -1,6 +1,7 @@
 use crate::abci::ABCIStore;
 use crate::error::{Error, Result};
 use crate::store::*;
+use cosmrs::proto::tendermint::v0_34::abci::{self, *};
 use merk::{
     chunks::ChunkProducer, restore::Restorer, rocksdb, tree::Tree, BatchEntry, Hash, Merk, Op,
 };
@@ -10,7 +11,6 @@ use std::{
     mem::transmute,
     path::{Path, PathBuf},
 };
-use tendermint_proto::v0_34::abci::{self, *};
 type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
 pub const SNAPSHOT_INTERVAL: u64 = 1000;

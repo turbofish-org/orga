@@ -36,6 +36,7 @@ impl MerkStore {
             }),
             max_depth: 0,
             min_depth: 0,
+            prehash_key_before_comparison: false,
         }
     }
 }

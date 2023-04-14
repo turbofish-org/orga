@@ -254,7 +254,7 @@ mod tests {
             ics24_host::identifier::ChainId,
         },
     };
-    use tendermint_0_29::{Hash, Time};
+    use tendermint::{Hash, Time};
 
     use super::*;
     use crate::{
@@ -294,7 +294,6 @@ mod tests {
                 after_expiry: false,
                 after_misbehaviour: false,
             },
-            None,
         )
         .unwrap()
         .into();

@@ -13,7 +13,6 @@ use derive_more::{Deref, DerefMut, Into};
 use serde::Serialize;
 use std::{
     convert::{TryFrom, TryInto},
-    fmt::Display,
     str::FromStr,
 };
 
