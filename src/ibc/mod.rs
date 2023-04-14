@@ -1,6 +1,8 @@
+use ed::Terminated;
 use ibc::clients::ics07_tendermint::{
     client_state::ClientState as TmClientState, consensus_state::ConsensusState as TmConsensusState,
 };
+use ibc::core::ics02_client::client_type::ClientType;
 use ibc::core::ics02_client::height::Height;
 use ibc::core::ics03_connection::connection::ConnectionEnd as IbcConnectionEnd;
 use ibc::core::ics04_channel::channel::ChannelEnd as IbcChannelEnd;
@@ -12,6 +14,7 @@ use ibc::core::ics24_host::path::{
     AckPath, ChannelEndPath, ClientConnectionPath, CommitmentPath, ConnectionPath, ReceiptPath,
     SeqAckPath, SeqRecvPath, SeqSendPath,
 };
+use ibc::timestamp::Timestamp as IbcTimestamp;
 use ibc_proto::google::protobuf::Any;
 use ibc_proto::ibc::core::{
     channel::v1::Channel as RawChannelEnd, connection::v1::ConnectionEnd as RawConnectionEnd,
@@ -20,7 +23,9 @@ use ibc_proto::protobuf::Protobuf;
 use serde::Serialize;
 
 use crate::collections::Map;
-use crate::encoding::{ByteTerminatedString, Decode, Encode, EofTerminatedString, FixedString};
+use crate::encoding::{
+    Adapter, ByteTerminatedString, Decode, Encode, EofTerminatedString, FixedString,
+};
 use crate::orga;
 
 mod impls;
@@ -61,6 +66,9 @@ pub struct Ibc {
 
 #[orga]
 pub struct Client {
+    #[state(prefix(b"updates/"))]
+    updates: Map<EpochHeight, (Timestamp, BinaryHeight)>,
+
     #[state(prefix(b"clientState"))]
     client_state: Map<(), ClientState>,
 
@@ -69,6 +77,8 @@ pub struct Client {
 
     #[state(prefix(b"connections/"))]
     connections: Map<ConnectionId, ()>,
+
+    client_type: EofTerminatedString,
 }
 
 pub type SlashTerminatedString<T> = ByteTerminatedString<b'/', T>;
@@ -77,6 +87,73 @@ pub type ClientId = SlashTerminatedString<IbcClientId>;
 pub type ConnectionId = EofTerminatedString<IbcConnectionId>;
 pub type Number = EofTerminatedString<u64>;
 pub type EpochHeight = EofTerminatedString;
+
+#[orga(simple)]
+#[derive(Debug)]
+pub struct Timestamp {
+    inner: IbcTimestamp,
+}
+
+impl Encode for Adapter<Timestamp> {
+    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+        borsh::BorshSerialize::serialize(&self.0.inner, dest)
+            .map_err(|_| ed::Error::UnexpectedByte(40))
+    }
+
+    fn encoding_length(&self) -> ed::Result<usize> {
+        let mut buf = vec![];
+        borsh::BorshSerialize::serialize(&self.0.inner, &mut buf)
+            .map_err(|_| ed::Error::UnexpectedByte(40))?;
+        Ok(buf.len())
+    }
+}
+
+impl Decode for Adapter<Timestamp> {
+    fn decode<R: std::io::Read>(mut input: R) -> ed::Result<Self> {
+        Ok(Self(Timestamp {
+            inner: borsh::BorshDeserialize::deserialize_reader(&mut input)
+                .map_err(|_| ed::Error::UnexpectedByte(40))?,
+        }))
+    }
+}
+
+impl From<Timestamp> for IbcTimestamp {
+    fn from(timestamp: Timestamp) -> Self {
+        timestamp.inner
+    }
+}
+
+impl From<IbcTimestamp> for Timestamp {
+    fn from(timestamp: IbcTimestamp) -> Self {
+        Self { inner: timestamp }
+    }
+}
+
+#[orga]
+#[derive(Clone, Debug)]
+pub struct BinaryHeight {
+    epoch: u64,
+    height: u64,
+}
+
+impl From<Height> for BinaryHeight {
+    fn from(height: Height) -> Self {
+        Self {
+            epoch: height.revision_number(),
+            height: height.revision_height(),
+        }
+    }
+}
+
+impl TryFrom<BinaryHeight> for Height {
+    type Error = ();
+
+    fn try_from(height: BinaryHeight) -> Result<Self, Self::Error> {
+        Height::new(height.epoch, height.height).map_err(|_| ())
+    }
+}
+
+impl Terminated for Adapter<Timestamp> {}
 
 impl From<ConnectionPath> for ConnectionId {
     fn from(path: ConnectionPath) -> Self {
@@ -98,7 +175,11 @@ impl From<Sequence> for Number {
 
 impl From<Height> for EpochHeight {
     fn from(height: Height) -> Self {
-        Self(format!("{}-{}", height.revision_number(), height.revision_height()).into())
+        Self(format!(
+            "{}-{}",
+            height.revision_number(),
+            height.revision_height()
+        ))
     }
 }
 
@@ -110,6 +191,18 @@ impl TryFrom<EpochHeight> for Height {
         let revision_number = parts.next().ok_or(())?.parse().map_err(|_| ())?;
         let revision_height = parts.next().ok_or(())?.parse().map_err(|_| ())?;
         Height::new(revision_number, revision_height).map_err(|_| ())
+    }
+}
+
+impl From<ClientType> for EofTerminatedString {
+    fn from(client_type: ClientType) -> Self {
+        Self(client_type.as_str().to_string())
+    }
+}
+
+impl From<EofTerminatedString> for ClientType {
+    fn from(client_type: EofTerminatedString) -> Self {
+        ClientType::new(client_type.0)
     }
 }
 

@@ -166,7 +166,7 @@ where
     }
 }
 
-#[derive(Clone, Debug, Deref, Serialize)]
+#[derive(Clone, Debug, Deref, Serialize, Default)]
 #[serde(transparent)]
 pub struct ByteTerminatedString<const B: u8, T: FromStr + ToString = String>(pub T);
 
@@ -232,7 +232,7 @@ impl<T: FromStr + ToString, const B: u8> From<T> for ByteTerminatedString<B, T> 
     }
 }
 
-#[derive(Clone, Debug, Deref, Serialize)]
+#[derive(Clone, Debug, Deref, Serialize, Default)]
 #[serde(transparent)]
 pub struct EofTerminatedString<T: FromStr + ToString = String>(pub T);
 

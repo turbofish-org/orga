@@ -308,7 +308,20 @@ impl ValidationContext for Ibc {
         client_id: &IbcClientId,
         height: &Height,
     ) -> Result<Timestamp, ContextError> {
-        todo!()
+        Ok(self
+            .clients
+            .get(client_id.clone().into())
+            .map_err(|_| ClientError::ImplementationSpecific)?
+            .ok_or(ClientError::ClientStateNotFound {
+                client_id: client_id.clone(),
+            })?
+            .updates
+            .get(height.clone().into())
+            .map_err(|_| ClientError::ImplementationSpecific)?
+            .ok_or(ClientError::ImplementationSpecific)?
+            .0
+            .clone()
+            .into())
     }
 
     fn client_update_height(
@@ -316,7 +329,20 @@ impl ValidationContext for Ibc {
         client_id: &IbcClientId,
         height: &Height,
     ) -> Result<Height, ContextError> {
-        todo!()
+        self.clients
+            .get(client_id.clone().into())
+            .map_err(|_| ClientError::ImplementationSpecific)?
+            .ok_or(ClientError::ClientStateNotFound {
+                client_id: client_id.clone(),
+            })?
+            .updates
+            .get((*height).into())
+            .map_err(|_| ClientError::ImplementationSpecific)?
+            .ok_or(ClientError::ImplementationSpecific)?
+            .1
+            .clone()
+            .try_into()
+            .map_err(|_| ClientError::ImplementationSpecific.into())
     }
 
     fn channel_counter(&self) -> Result<u64, ContextError> {
@@ -324,7 +350,7 @@ impl ValidationContext for Ibc {
     }
 
     fn max_expected_time_per_block(&self) -> Duration {
-        todo!()
+        Duration::from_secs(8)
     }
 }
 
@@ -334,7 +360,13 @@ impl ExecutionContext for Ibc {
         client_type_path: ClientTypePath,
         client_type: ClientType,
     ) -> Result<(), ContextError> {
-        todo!()
+        self.clients
+            .entry(client_type_path.0.into())
+            .map_err(|_| ClientError::ImplementationSpecific)?
+            .or_insert_default()
+            .map_err(|_| ClientError::ImplementationSpecific)?
+            .client_type = client_type.into();
+        Ok(())
     }
 
     fn store_client_state(
@@ -391,7 +423,18 @@ impl ExecutionContext for Ibc {
         height: Height,
         timestamp: Timestamp,
     ) -> Result<(), ContextError> {
-        todo!()
+        self.clients
+            .entry(client_id.into())
+            .map_err(|_| ClientError::ImplementationSpecific)?
+            .or_insert_default()
+            .map_err(|_| ClientError::ImplementationSpecific)?
+            .updates
+            .entry(height.into())
+            .map_err(|_| ClientError::ImplementationSpecific)?
+            .or_insert_default()
+            .map_err(|_| ClientError::ImplementationSpecific)?
+            .0 = timestamp.into();
+        Ok(())
     }
 
     fn store_update_height(
@@ -400,7 +443,18 @@ impl ExecutionContext for Ibc {
         height: Height,
         host_height: Height,
     ) -> Result<(), ContextError> {
-        todo!()
+        self.clients
+            .entry(client_id.into())
+            .map_err(|_| ClientError::ImplementationSpecific)?
+            .or_insert_default()
+            .map_err(|_| ClientError::ImplementationSpecific)?
+            .updates
+            .entry(height.into())
+            .map_err(|_| ClientError::ImplementationSpecific)?
+            .or_insert_default()
+            .map_err(|_| ClientError::ImplementationSpecific)?
+            .1 = host_height.into();
+        Ok(())
     }
 
     fn store_connection(

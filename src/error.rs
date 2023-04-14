@@ -29,6 +29,8 @@ pub enum Error {
     Ed(#[from] ed::Error),
     #[error("Ibc Error: {0}")]
     Ibc(String),
+    #[error(transparent)]
+    IbcContext(#[from] ibc::core::ContextError),
     #[error("Invalid ID")]
     InvalidID,
     #[error(transparent)]
