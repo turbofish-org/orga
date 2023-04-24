@@ -59,6 +59,8 @@ pub struct ABCIPlugin<T> {
     current_vp: Rc<RefCell<Option<EntryMap<ValidatorEntry>>>>,
     #[serde(skip)]
     cons_key_by_op_addr: Rc<RefCell<Option<OperatorMap>>>,
+    #[serde(skip)]
+    pub(crate) logs: Option<Vec<String>>,
 }
 
 impl<T1, T2> MigrateFrom<ABCIPlugin<T1>> for ABCIPlugin<T2>
@@ -74,6 +76,7 @@ where
             events: other.events,
             current_vp: other.current_vp,
             cons_key_by_op_addr: other.cons_key_by_op_addr,
+            logs: other.logs,
         })
     }
 }
@@ -88,6 +91,7 @@ impl<T: Default> Default for ABCIPlugin<T> {
             events: None,
             current_vp: Rc::new(RefCell::new(Some(Default::default()))),
             cons_key_by_op_addr: Rc::new(RefCell::new(Some(Default::default()))),
+            logs: None,
         }
     }
 }
@@ -285,6 +289,17 @@ impl Events {
     }
 }
 
+#[derive(Default)]
+pub struct Logs {
+    pub(crate) messages: Vec<String>,
+}
+
+impl Logs {
+    pub fn add(&mut self, message: impl AsRef<str>) {
+        self.messages.push(message.as_ref().to_string());
+    }
+}
+
 #[derive(Debug, Encode, Decode)]
 pub enum ABCICall<C> {
     InitChain(Adapter<RequestInitChain>),
@@ -349,24 +364,34 @@ impl<T: App> Call for ABCIPlugin<T> {
             }
             DeliverTx(inner_call) => {
                 Context::add(Events::default());
+                Context::add(Logs::default());
                 self.events.replace(vec![]);
+                self.logs.replace(vec![]);
                 let res = self.inner.call(inner_call);
                 if res.is_ok() {
                     self.events
                         .replace(Context::resolve::<Events>().unwrap().events.clone());
                 }
+                self.logs
+                    .replace(Context::resolve::<Logs>().unwrap().messages.clone());
                 Context::remove::<Events>();
+                Context::remove::<Logs>();
                 res?;
             }
             CheckTx(inner_call) => {
                 Context::add(Events::default());
+                Context::add(Logs::default());
                 self.events.replace(vec![]);
+                self.logs.replace(vec![]);
                 let res = self.inner.call(inner_call);
                 if res.is_ok() {
                     self.events
                         .replace(Context::resolve::<Events>().unwrap().events.clone());
                 }
+                self.logs
+                    .replace(Context::resolve::<Logs>().unwrap().messages.clone());
                 Context::remove::<Events>();
+                Context::remove::<Logs>();
                 res?;
             }
         };
@@ -470,6 +495,7 @@ impl<T: State> State for ABCIPlugin<T> {
             cons_key_by_op_addr: Rc::new(RefCell::new(Some(loader.load_child()?))),
             events: None,
             time: None,
+            logs: None,
         })
     }
 }
