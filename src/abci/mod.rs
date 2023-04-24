@@ -22,15 +22,15 @@ pub mod tendermint_client;
 #[cfg(feature = "abci")]
 pub use tendermint_client::TendermintClient;
 
-pub use cosmrs::proto::tendermint::v0_34::abci as messages;
 use messages::*;
+pub use tendermint_proto::abci as messages;
 
 #[cfg(feature = "abci")]
 mod server {
     use super::*;
     use crate::merk::MerkStore;
-    use cosmrs::proto::tendermint::v0_34::abci::request::Value as Req;
-    use cosmrs::proto::tendermint::v0_34::abci::response::Value as Res;
+    use tendermint_proto::abci::request::Value as Req;
+    use tendermint_proto::abci::response::Value as Res;
 
     /// Top-level struct for running an ABCI application. Maintains an ABCI server,
     /// mempool, and handles committing data to the store.

@@ -15,10 +15,10 @@ use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::{Error, Result};
-use cosmrs::proto::tendermint::v0_34::abci::EvidenceType;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::convert::TryInto;
+use tendermint_proto::abci::EvidenceType;
 
 mod delegator;
 pub use delegator::*;

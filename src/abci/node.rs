@@ -9,12 +9,12 @@ use crate::state::State;
 use crate::store::{Read, Shared, Store, Write};
 use crate::tendermint::Tendermint;
 use crate::Result;
-use cosmrs::proto::tendermint::v0_34::abci::*;
 use home::home_dir;
 use std::borrow::Borrow;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use tendermint_proto::abci::*;
 
 pub struct Node<A> {
     _app: PhantomData<A>,

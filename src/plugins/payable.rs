@@ -492,8 +492,8 @@ mod abci {
     {
         fn abci_query(
             &self,
-            request: &cosmrs::proto::tendermint::v0_34::abci::RequestQuery,
-        ) -> Result<cosmrs::proto::tendermint::v0_34::abci::ResponseQuery> {
+            request: &tendermint_proto::abci::RequestQuery,
+        ) -> Result<tendermint_proto::abci::ResponseQuery> {
             self.inner.abci_query(request)
         }
     }

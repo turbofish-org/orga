@@ -8,20 +8,19 @@ use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::{compat_mode, Error, Result};
-use cosmrs::proto::tendermint::google::protobuf::Timestamp;
-use cosmrs::proto::tendermint::v0_34::abci::{
-    Event, Evidence, LastCommitInfo, RequestQuery, ResponseQuery,
-};
-use cosmrs::proto::tendermint::v0_34::abci::{
-    RequestBeginBlock, RequestEndBlock, RequestInitChain, ValidatorUpdate,
-};
-use cosmrs::proto::tendermint::v0_34::crypto::{public_key::Sum, PublicKey};
-use cosmrs::proto::tendermint::v0_34::types::Header;
 use serde::Serialize;
 use std::cell::{Ref, RefCell};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::rc::Rc;
+use tendermint_proto::abci::Event;
+use tendermint_proto::abci::{Evidence, LastCommitInfo, RequestQuery, ResponseQuery};
+use tendermint_proto::abci::{
+    RequestBeginBlock, RequestEndBlock, RequestInitChain, ValidatorUpdate,
+};
+use tendermint_proto::crypto::{public_key::Sum, PublicKey};
+use tendermint_proto::google::protobuf::Timestamp;
+use tendermint_proto::types::Header;
 
 pub struct Time {
     pub seconds: i64,
@@ -206,7 +205,7 @@ impl Validators {
             .unwrap();
         self.updates.insert(
             pub_key,
-            Adapter(cosmrs::proto::tendermint::v0_34::abci::ValidatorUpdate {
+            Adapter(tendermint_proto::abci::ValidatorUpdate {
                 pub_key: Some(key),
                 power: power as i64,
             }),
