@@ -10,8 +10,7 @@ use ibc::{
     core::{
         context::Router,
         ics02_client::{
-            client_state::ClientState, client_type::ClientType, consensus_state::ConsensusState,
-            error::ClientError,
+            client_state::ClientState, consensus_state::ConsensusState, error::ClientError,
         },
         ics03_connection::error::ConnectionError,
         ics04_channel::{
@@ -34,7 +33,7 @@ use ibc::{
 
 use crate::abci::BeginBlock;
 use crate::context::GetContext;
-use crate::plugins::{BeginBlockCtx, Events, Time};
+use crate::plugins::{BeginBlockCtx, Events, Logs, Time};
 use crate::Error;
 
 use super::*;
@@ -407,20 +406,6 @@ impl ValidationContext for Ibc {
 }
 
 impl ExecutionContext for Ibc {
-    // fn store_client_type(
-    //     &mut self,
-    //     client_type_path: ClientTypePath,
-    //     client_type: ClientType,
-    // ) -> Result<(), ContextError> {
-    //     self.clients
-    //         .entry(client_type_path.0.into())
-    //         .map_err(|_| ClientError::ImplementationSpecific)?
-    //         .or_insert_default()
-    //         .map_err(|_| ClientError::ImplementationSpecific)?
-    //         .client_type = client_type.into();
-    //     Ok(())
-    // }
-
     fn store_client_state(
         &mut self,
         client_state_path: ClientStatePath,
@@ -656,7 +641,11 @@ impl ExecutionContext for Ibc {
     }
 
     fn log_message(&mut self, message: String) {
-        todo!()
+        let ctx = match self.context::<Logs>() {
+            Some(ctx) => ctx,
+            None => return,
+        };
+        ctx.add(message);
     }
 }
 
