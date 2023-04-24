@@ -22,8 +22,7 @@ use ibc::{
         },
         ics23_commitment::commitment::CommitmentPrefix,
         ics24_host::path::{
-            ClientConnectionPath, ClientConsensusStatePath, ClientStatePath, ClientTypePath,
-            ConnectionPath,
+            ClientConnectionPath, ClientConsensusStatePath, ClientStatePath, ConnectionPath,
         },
         ics26_routing::context::{Module, ModuleId},
         ContextError, ExecutionContext, ValidationContext,
@@ -407,19 +406,19 @@ impl ValidationContext for Ibc {
 }
 
 impl ExecutionContext for Ibc {
-    fn store_client_type(
-        &mut self,
-        client_type_path: ClientTypePath,
-        client_type: ClientType,
-    ) -> Result<(), ContextError> {
-        self.clients
-            .entry(client_type_path.0.into())
-            .map_err(|_| ClientError::ImplementationSpecific)?
-            .or_insert_default()
-            .map_err(|_| ClientError::ImplementationSpecific)?
-            .client_type = client_type.into();
-        Ok(())
-    }
+    // fn store_client_type(
+    //     &mut self,
+    //     client_type_path: ClientTypePath,
+    //     client_type: ClientType,
+    // ) -> Result<(), ContextError> {
+    //     self.clients
+    //         .entry(client_type_path.0.into())
+    //         .map_err(|_| ClientError::ImplementationSpecific)?
+    //         .or_insert_default()
+    //         .map_err(|_| ClientError::ImplementationSpecific)?
+    //         .client_type = client_type.into();
+    //     Ok(())
+    // }
 
     fn store_client_state(
         &mut self,
