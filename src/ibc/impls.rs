@@ -33,7 +33,8 @@ use ibc::{
 };
 
 use crate::abci::BeginBlock;
-use crate::plugins::{BeginBlockCtx, Time};
+use crate::context::GetContext;
+use crate::plugins::{BeginBlockCtx, Events, Time};
 use crate::Error;
 
 use super::*;
@@ -638,7 +639,20 @@ impl ExecutionContext for Ibc {
     }
 
     fn emit_ibc_event(&mut self, event: IbcEvent) {
-        todo!()
+        let ctx = match self.context::<Events>() {
+            Some(ctx) => ctx,
+            None => return,
+        };
+        let event: tendermint::abci::Event = match event.try_into() {
+            Ok(event) => event,
+            Err(_) => return,
+        };
+        let event = match event.try_into() {
+            Ok(event) => event,
+            Err(_) => return,
+        };
+
+        ctx.add(event);
     }
 
     fn log_message(&mut self, message: String) {
