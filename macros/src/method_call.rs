@@ -141,9 +141,7 @@ fn method_call_impl(tokens: &mut TokenStream2, item: &ItemImpl) {
         encode_trait,
         decode_trait,
         method_call_trait,
-        method_call_marker_trait,
         result_ty,
-        call_marker_ty,
         ..
     } = Types::default();
     let ident = self_ty_ident(&item);
@@ -194,8 +192,6 @@ fn method_call_impl(tokens: &mut TokenStream2, item: &ItemImpl) {
                 Ok(())
             }
         }
-        #[allow(suspicious_auto_trait_impls)]
-        impl #ty !#method_call_marker_trait for #call_marker_ty<#ident #ty> {}
     })
 }
 
@@ -333,7 +329,7 @@ fn call_builder(tokens: &mut TokenStream2, item: &ItemImpl) {
 pub fn call_block(args: TokenStream, input: TokenStream) -> TokenStream {
     let _attr_args = parse_macro_input!(args as AttributeArgs);
     let mut item = syn::parse::<ItemImpl>(input.clone()).unwrap();
-    add_tracing(&mut item);
+    // add_tracing(&mut item);
     let call_methods = call_methods(&item);
     if call_methods.is_empty() {
         return input;

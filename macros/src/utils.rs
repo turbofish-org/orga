@@ -7,7 +7,7 @@ use std::collections::HashSet;
 use syn::Ident;
 use syn::*;
 
-pub fn parse_parent() -> File {
+pub fn _parse_parent() -> File {
     let path = proc_macro::Span::call_site().source_file().path();
     let source = std::fs::read_to_string(path).unwrap_or_default();
     parse_file(source.as_str()).unwrap()
@@ -70,7 +70,7 @@ where
     req_set.into_iter().collect()
 }
 
-pub fn relevant_impls(names: Vec<&Ident>, source: &File) -> Vec<ItemImpl> {
+pub fn _relevant_impls(names: Vec<&Ident>, source: &File) -> Vec<ItemImpl> {
     source
         .items
         .iter()
@@ -101,7 +101,7 @@ pub fn relevant_impls(names: Vec<&Ident>, source: &File) -> Vec<ItemImpl> {
         .collect()
 }
 
-pub fn relevant_methods(
+pub fn _relevant_methods(
     name: &Ident,
     attr: &str,
     source: &File,
@@ -128,7 +128,7 @@ pub fn relevant_methods(
             .collect()
     };
 
-    relevant_impls(vec![name, &strip_version(name)], source)
+    _relevant_impls(vec![name, &_strip_version(name)], source)
         .into_iter()
         .flat_map(get_methods)
         .collect()
@@ -159,7 +159,7 @@ pub fn gen_param_input(generics: &Generics, bracketed: bool) -> TokenStream {
     }
 }
 
-pub fn strip_version(ident: &Ident) -> Ident {
+pub fn _strip_version(ident: &Ident) -> Ident {
     let name = ident.to_string();
     let re = Regex::new(r"V([0-9]+)").unwrap();
     let stripped_name = re.replace_all(&name, "").to_string();
@@ -203,7 +203,6 @@ pub struct Types {
     pub decoder_ty: TokenStream,
     pub field_call_trait: TokenStream,
     pub method_call_trait: TokenStream,
-    pub method_call_marker_trait: TokenStream,
     pub call_trait: TokenStream,
     pub trace_fn: TokenStream,
     pub keyop_ty: TokenStream,
@@ -214,10 +213,7 @@ pub struct Types {
     pub child_field_ty: TokenStream,
     pub build_call_trait: TokenStream,
     pub call_builder_ty: TokenStream,
-    pub call_marker_ty: TokenStream,
     pub query_trait: TokenStream,
-    pub method_query_marker_ty: TokenStream,
-    pub method_query_marker_trait: TokenStream,
     pub field_query_trait: TokenStream,
     pub method_query_trait: TokenStream,
     pub query_item_ty: TokenStream,
@@ -240,7 +236,6 @@ impl Default for Types {
             decoder_ty: quote! { ::orga::encoding::decoder::Decoder },
             field_call_trait: quote! { ::orga::call::FieldCall },
             method_call_trait: quote! { ::orga::call::MethodCall },
-            method_call_marker_trait: quote! { ::orga::call::MethodCallMarker },
             call_trait: quote! { ::orga::call::Call },
             trace_fn: quote! { ::orga::client::experimental::trace },
             keyop_ty: quote! { ::orga::describe::KeyOp },
@@ -251,10 +246,7 @@ impl Default for Types {
             child_field_ty: quote! { ::orga::describe::child::Field },
             build_call_trait: quote! { ::orga::call::BuildCall },
             call_builder_ty: quote! { ::orga::call::CallBuilder },
-            call_marker_ty: quote! { ::orga::call::Marker },
             query_trait: quote! { ::orga::query::Query },
-            method_query_marker_ty: quote! { ::orga::query::Marker },
-            method_query_marker_trait: quote! { ::orga::query::MethodQueryMarker },
             field_query_trait: quote! { ::orga::query::FieldQuery },
             method_query_trait: quote! { ::orga::query::MethodQuery },
             query_item_ty: quote! { ::orga::query::Item },

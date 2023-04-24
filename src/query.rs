@@ -4,7 +4,7 @@ use std::error::Error as StdError;
 use std::io::Read;
 use std::result::Result as StdResult;
 
-pub use orga_macros::{query, query_block, FieldQuery, Query};
+pub use orga_macros::{query_block, FieldQuery};
 
 pub const PREFIX_OFFSET: u8 = 0x80;
 pub trait Query {
@@ -254,16 +254,9 @@ pub trait MethodQuery {
     fn method_query(&self, query: Self::MethodQuery) -> Result<()>;
 }
 
-pub struct Marker<T>(std::marker::PhantomData<T>);
-
-pub auto trait MethodQueryMarker {}
-
-impl<T> MethodQuery for T
-where
-    T: FieldQuery,
-    Marker<T>: MethodQueryMarker,
-{
-    fn method_query(&self, _query: Self::MethodQuery) -> Result<()> {
+impl<T> MethodQuery for T {
+    default type MethodQuery = ();
+    default fn method_query(&self, _query: Self::MethodQuery) -> Result<()> {
         Err(Error::Query("Method not found".to_string()))
     }
 }

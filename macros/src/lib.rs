@@ -15,7 +15,6 @@ mod method_query;
 mod migrate_from;
 mod next;
 mod orga;
-mod query;
 mod state;
 mod utils;
 
@@ -27,16 +26,6 @@ pub fn derive_state(item: TokenStream) -> TokenStream {
 #[proc_macro_derive(Entry, attributes(key))]
 pub fn derive_entry(item: TokenStream) -> TokenStream {
     entry::derive(item)
-}
-
-#[proc_macro_derive(Query)]
-pub fn derive_query(item: TokenStream) -> TokenStream {
-    query::derive(item)
-}
-
-#[proc_macro_attribute]
-pub fn query(args: TokenStream, input: TokenStream) -> TokenStream {
-    query::attr(args, input)
 }
 
 #[proc_macro_derive(Next)]

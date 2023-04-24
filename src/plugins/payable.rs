@@ -3,9 +3,10 @@ use crate::call::Call;
 use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Amount, Coin, Symbol};
 use crate::context::{Context, GetContext};
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::migrate::{MigrateFrom, MigrateInto};
-use crate::query::Query;
+use crate::query::{FieldQuery, Query};
 use crate::state::State;
 use crate::{Error, Result};
 use std::collections::HashMap;
@@ -14,9 +15,9 @@ use std::ops::{Deref, DerefMut};
 
 const MAX_SUBCALL_LEN: u32 = 200_000;
 
-#[derive(State, Encode, Decode, Default)]
+#[derive(State, Default, FieldQuery, Describe)]
 pub struct PayablePlugin<T> {
-    inner: T,
+    pub inner: T,
 }
 
 impl<T1, T2> MigrateFrom<PayablePlugin<T1>> for PayablePlugin<T2>
@@ -27,14 +28,6 @@ where
         Ok(Self {
             inner: other.inner.migrate_into()?,
         })
-    }
-}
-
-impl<T: State> Deref for PayablePlugin<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
     }
 }
 
@@ -93,21 +86,25 @@ pub struct PaidCall<T> {
     pub paid: T,
 }
 
-impl<T: Encode> Encode for PaidCall<T> {
+impl<T: Encode + std::fmt::Debug> Encode for PaidCall<T> {
     fn encoding_length(&self) -> ed::Result<usize> {
-        Ok(self.payer.encoding_length()? + self.paid.encoding_length()?)
+        Ok(self.payer.encoding_length()? + self.paid.encoding_length()? + 8)
     }
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+        dbg!(&self.payer, &self.paid);
         let payer_call_bytes = self.payer.encode()?;
+        dbg!(payer_call_bytes.len());
         let payer_call_len: u32 = payer_call_bytes
             .len()
             .try_into()
             .map_err(|_| ed::Error::UnexpectedByte(0))?;
+        dbg!(payer_call_len, payer_call_len.encode()?);
         let paid_call_bytes = self.paid.encode()?;
         let paid_call_len: u32 = paid_call_bytes
             .len()
             .try_into()
             .map_err(|_| ed::Error::UnexpectedByte(0))?;
+        dbg!(paid_call_len, paid_call_len.encode()?);
 
         dest.write_all(&payer_call_len.encode()?)?;
         dest.write_all(&payer_call_bytes)?;
@@ -118,7 +115,7 @@ impl<T: Encode> Encode for PaidCall<T> {
     }
 }
 
-impl<T: Decode> Decode for PaidCall<T> {
+impl<T: Decode + std::fmt::Debug> Decode for PaidCall<T> {
     fn decode<R: std::io::Read>(mut reader: R) -> ed::Result<Self> {
         let payer_call_len = u32::decode(&mut reader)?;
         if payer_call_len > MAX_SUBCALL_LEN {
@@ -132,10 +129,9 @@ impl<T: Decode> Decode for PaidCall<T> {
         }
         let mut paid_call_bytes = vec![0u8; paid_call_len as usize];
         reader.read_exact(&mut paid_call_bytes)?;
-
         Ok(Self {
-            payer: T::decode(&mut payer_call_bytes.as_slice())?,
-            paid: T::decode(&mut paid_call_bytes.as_slice())?,
+            payer: dbg!(T::decode(&mut payer_call_bytes.as_slice())?),
+            paid: dbg!(T::decode(&mut paid_call_bytes.as_slice())?),
         })
     }
 }
@@ -173,14 +169,6 @@ where
                 Ok(())
             }
         }
-    }
-}
-
-impl<T: Query + State> Query for PayablePlugin<T> {
-    type Query = T::Query;
-
-    fn query(&self, query: Self::Query) -> Result<()> {
-        self.inner.query(query)
     }
 }
 

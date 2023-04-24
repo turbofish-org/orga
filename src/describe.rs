@@ -60,6 +60,7 @@ impl Descriptor {
 }
 
 pub type LoadFn = fn(Store, &mut &[u8]) -> Result<()>;
+pub type ApplyQueryBytesFn = fn(Vec<u8>) -> Vec<u8>;
 
 #[derive(Clone, Debug)]
 pub enum Children {
@@ -87,6 +88,7 @@ pub struct NamedChild {
 pub struct DynamicChild {
     key_desc: Box<Descriptor>,
     value_desc: Box<Descriptor>,
+    apply_query_bytes: ApplyQueryBytesFn,
 }
 
 impl DynamicChild {
@@ -96,6 +98,10 @@ impl DynamicChild {
 
     pub fn value_desc(&self) -> &Descriptor {
         &self.value_desc
+    }
+
+    pub fn apply_query_bytes(&self, bytes: Vec<u8>) -> Vec<u8> {
+        (self.apply_query_bytes)(bytes)
     }
 }
 

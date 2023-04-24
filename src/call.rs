@@ -3,11 +3,10 @@ use crate::{Error, Result};
 use std::cell::RefCell;
 use std::error::Error as StdError;
 use std::io::Read;
-use std::marker::PhantomData;
 use std::rc::Rc;
 use std::result::Result as StdResult;
 
-pub use orga_macros::{call_block, FieldCall};
+pub use orga_macros::{build_call, call_block, FieldCall};
 pub const PREFIX_OFFSET: u8 = 0x40;
 
 pub trait Call {
@@ -311,16 +310,9 @@ where
     }
 }
 
-pub struct Marker<T>(PhantomData<T>);
-
-pub auto trait MethodCallMarker {}
-
-impl<T> MethodCall for T
-where
-    T: FieldCall,
-    Marker<T>: MethodCallMarker,
-{
-    fn method_call(&mut self, _call: Self::MethodCall) -> Result<()> {
+impl<T> MethodCall for T {
+    default type MethodCall = ();
+    default fn method_call(&mut self, _call: Self::MethodCall) -> Result<()> {
         Err(Error::Call("Method not found".to_string()))
     }
 }

@@ -27,7 +27,7 @@ pub struct Signal {
 
 #[orga(skip(Default))]
 pub struct Upgrade {
-    pub signals: Map<PubKey, Signal>,
+    signals: Map<PubKey, Signal>,
     pub threshold: Decimal,
     pub activation_delay_seconds: i64,
     pub rate_limit_seconds: i64,

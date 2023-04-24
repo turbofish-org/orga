@@ -4,6 +4,7 @@ use std::{fmt::Display, str::FromStr};
 pub use amount::*;
 
 pub mod symbol;
+use orga_macros::FieldQuery;
 pub use symbol::*;
 
 pub mod coin;
@@ -57,7 +58,6 @@ use crate::collections::Next;
 use crate::describe::Describe;
 use crate::macros::State;
 use crate::migrate::MigrateFrom;
-use crate::query::Query;
 use ed::{Decode, Encode};
 use ripemd::{Digest as _, Ripemd160};
 use serde::{Deserialize, Serialize};
@@ -68,7 +68,7 @@ use sha2::Sha256;
     Decode,
     State,
     Next,
-    Query,
+    FieldQuery,
     Clone,
     PartialEq,
     Eq,

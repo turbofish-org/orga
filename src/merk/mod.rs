@@ -1,4 +1,4 @@
-mod backingstore;
+pub mod backingstore;
 mod client;
 #[cfg(feature = "merk-full")]
 mod ics23;

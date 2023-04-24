@@ -8,7 +8,8 @@ use crate::call::{Call, FieldCall};
 use crate::client::Client as ClientTrait;
 use crate::describe::Describe;
 use crate::migrate::{MigrateFrom, MigrateInto};
-use crate::query::Query;
+use crate::orga;
+use crate::query::{FieldQuery, Query};
 use crate::state::State;
 use crate::store::*;
 use crate::{Error, Result};
@@ -86,7 +87,7 @@ impl<K> Eq for MapKey<K> {}
 /// When values in the map are mutated, inserted, or deleted, they are retained
 /// in an in-memory map until the call to `State::flush` which writes the
 /// changes to the backing store.
-#[derive(Query, FieldCall)]
+#[derive(FieldQuery, FieldCall)]
 pub struct Map<K, V> {
     store: Store,
     children: BTreeMap<MapKey<K>, Option<V>>,
@@ -143,6 +144,7 @@ impl<K, V> Default for Map<K, V> {
     }
 }
 
+#[orga]
 impl<K, V> Map<K, V>
 where
     K: Encode + Terminated + 'static,
@@ -279,7 +281,12 @@ where
 {
     fn describe() -> crate::describe::Descriptor {
         use crate::describe::Builder;
-        Builder::new::<Self>().dynamic_child::<K, V>().build()
+        Builder::new::<Self>()
+            .dynamic_child::<K, V>(|mut query_bytes| {
+                query_bytes.extend_from_slice(&[129]);
+                query_bytes
+            })
+            .build()
     }
 }
 
@@ -676,6 +683,14 @@ impl<'a, V: Query> Query for Ref<'a, V> {
 
     fn query(&self, query: Self::Query) -> Result<()> {
         self.deref().query(query)
+    }
+}
+
+impl<'a, V> Query for Ref<'a, V> {
+    default type Query = ();
+
+    default fn query(&self, _query: Self::Query) -> Result<()> {
+        Err(Error::Query("Bounds not met".into()))
     }
 }
 

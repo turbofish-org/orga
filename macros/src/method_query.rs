@@ -57,6 +57,7 @@ fn method_query_enum(tokens: &mut TokenStream2, item: &ItemImpl) {
     let Types {
         encode_trait,
         decode_trait,
+        query_trait,
         ..
     } = Types::default();
     let parent_ident = self_ty_ident(item);
@@ -67,8 +68,18 @@ fn method_query_enum(tokens: &mut TokenStream2, item: &ItemImpl) {
         .map(|method| {
             let ident = to_camel_case(&method.sig.ident);
 
-            let args = method_args(method);
-
+            let mut args = method_args(method)
+                .iter()
+                .map(|ty| {
+                    quote! { #ty }
+                })
+                .collect_vec();
+            // let return_ty = if let ReturnType::Type(_, return_ty) = &method.sig.output {
+            //     quote! { #return_ty }
+            // } else {
+            //     quote! { () }
+            // };
+            args.push(quote! { Vec<u8> });
             quote! { #ident(#( #args ),*) }
         })
         .collect_vec();
@@ -84,7 +95,7 @@ fn method_query_enum(tokens: &mut TokenStream2, item: &ItemImpl) {
         .collect_vec();
     variants.push(quote! { Noop(::std::marker::PhantomData<(#( #tp ),*)>) });
 
-    let enum_debug = {
+    let _enum_debug = {
         let child_debugs = query_methods(&item).into_iter().map(|field| {
             let cc_ident = to_camel_case(&field.sig.ident);
             let sc_ident = &field.sig.ident;
@@ -123,12 +134,12 @@ fn method_query_enum(tokens: &mut TokenStream2, item: &ItemImpl) {
     };
 
     tokens.extend(quote! {
-        #[derive(#encode_trait, #decode_trait)]
+        #[derive(#encode_trait, #decode_trait, Debug)]
         pub enum #ident #ty {
             #( #variants ),*
         }
 
-        #enum_debug
+        // #enum_debug
     })
 }
 
@@ -137,9 +148,8 @@ fn method_query_impl(tokens: &mut TokenStream2, item: &ItemImpl) {
         encode_trait,
         decode_trait,
         method_query_trait,
-        method_query_marker_trait,
+        query_trait,
         result_ty,
-        method_query_marker_ty: query_marker_ty,
         ..
     } = Types::default();
     let ident = self_ty_ident(&item);
@@ -159,10 +169,14 @@ fn method_query_impl(tokens: &mut TokenStream2, item: &ItemImpl) {
                     quote! { #name }
                 })
                 .collect_vec();
-
+            let mut param_names = arg_names.clone();
+            param_names.push(quote! { subquery });
             quote! {
-                #ident(#( #arg_names ),*) => {
-                    self.#method_ident(#( #arg_names ),*)?;
+                #ident(#( #param_names ),*) => {
+                    let result = self.#method_ident(#( #arg_names ),*)?;
+                    if !subquery.is_empty() {
+                        #query_trait::query(&result, #decode_trait::decode(subquery.as_slice())?)?;
+                    }
                 }
             }
         })
@@ -190,8 +204,6 @@ fn method_query_impl(tokens: &mut TokenStream2, item: &ItemImpl) {
                 Ok(())
             }
         }
-        #[allow(suspicious_auto_trait_impls)]
-        impl #ty !#method_query_marker_trait for #query_marker_ty<#ident #ty> {}
     })
 }
 
@@ -267,7 +279,7 @@ fn add_tracing(item_impl: &mut ItemImpl) {
                 let block = &method.block;
 
                 method.block = parse_quote! {
-                    #block
+                    { ::orga::client::experimental::with_trace(move ||{ #block }) }
                 };
 
                 let pfx = format!("{} (0x{:02x})", query_index - 1, query_index - 1);

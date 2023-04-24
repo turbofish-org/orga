@@ -2,18 +2,34 @@ use super::map::{ChildMut, Map, ReadOnly, Ref};
 use crate::call::Call;
 use crate::client::Client;
 use crate::collections::map::Iter as MapIter;
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::orga;
-use crate::query::Query;
+use crate::query::FieldQuery;
 use crate::state::State;
 use crate::store::Store;
 use crate::Result;
 
-#[derive(Query, Encode, Decode, Describe)]
+#[derive(FieldQuery, Encode, Decode)]
 pub struct Deque<T> {
     meta: Meta,
     map: Map<u64, T>,
+}
+
+impl<T> Describe for Deque<T>
+where
+    T: State + Describe,
+{
+    fn describe() -> crate::describe::Descriptor {
+        use crate::describe::Builder;
+        Builder::new::<Self>()
+            .dynamic_child::<u64, T>(|mut query_bytes| {
+                query_bytes.extend_from_slice(&[129]);
+                query_bytes
+            })
+            .build()
+    }
 }
 
 impl<T> Deque<T> {
@@ -77,7 +93,6 @@ impl<T: Call + State> Call for Deque<T> {
         self.get_mut(index)?.call(subcall)
     }
 }
-impl<T> crate::call::MethodCallMarker for Deque<T> {}
 
 // TODO: use derive(State) once it supports generic parameters
 impl<T: State> State for Deque<T> {
@@ -112,15 +127,21 @@ impl<T: State> State for Deque<T> {
 //     }
 // }
 
+#[orga]
 impl<T: State> Deque<T> {
     #[query]
-    pub fn len(&self) -> u64 {
-        self.meta.tail - self.meta.head
+    pub fn len(&self) -> Result<u64> {
+        Ok(self.meta.tail - self.meta.head)
     }
 
     #[query]
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
+    pub fn get_raw(&self, key: u64) -> Result<Option<Ref<T>>> {
+        self.map.get(key)
+    }
+
+    #[query]
+    pub fn is_empty(&self) -> Result<bool> {
+        Ok(self.len()? == 0)
     }
 
     #[query]
@@ -167,7 +188,7 @@ impl<T: State> Deque<T> {
     }
 
     pub fn pop_front(&mut self) -> Result<Option<ReadOnly<T>>> {
-        if self.is_empty() {
+        if self.is_empty()? {
             return Ok(None);
         }
 
@@ -176,7 +197,7 @@ impl<T: State> Deque<T> {
     }
 
     pub fn pop_back(&mut self) -> Result<Option<ReadOnly<T>>> {
-        if self.is_empty() {
+        if self.is_empty()? {
             return Ok(None);
         }
 
@@ -189,7 +210,7 @@ impl<T: State> Deque<T> {
     }
 
     pub fn back_mut(&mut self) -> Result<Option<ChildMut<u64, T>>> {
-        self.get_mut(self.len() - 1)
+        self.get_mut(self.len()? - 1)
     }
 }
 
@@ -246,7 +267,7 @@ mod test {
         let mut deque: Deque<u32> = Deque::new();
 
         deque.push_front(42).unwrap();
-        assert_eq!(deque.len(), 1);
+        assert_eq!(deque.len().unwrap(), 1);
     }
 
     #[test]
@@ -254,7 +275,7 @@ mod test {
         let mut deque: Deque<u32> = Deque::new();
 
         deque.push_back(42).unwrap();
-        assert_eq!(deque.len(), 1);
+        assert_eq!(deque.len().unwrap(), 1);
     }
 
     #[test]
@@ -269,7 +290,7 @@ mod test {
 
         deque.push_front(42).unwrap();
         assert_eq!(*deque.pop_front().unwrap().unwrap(), 42);
-        assert!(deque.is_empty());
+        assert!(deque.is_empty().unwrap());
     }
 
     #[test]
@@ -285,7 +306,7 @@ mod test {
 
         deque.push_back(42).unwrap();
         assert_eq!(*deque.pop_back().unwrap().unwrap(), 42);
-        assert!(deque.is_empty());
+        assert!(deque.is_empty().unwrap());
     }
 
     #[test]

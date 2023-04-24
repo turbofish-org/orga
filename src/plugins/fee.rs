@@ -6,6 +6,7 @@ use crate::call::Call;
 use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Coin, Symbol};
 use crate::context::{Context, GetContext};
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::query::Query;
@@ -21,7 +22,7 @@ pub const MIN_FEE: u64 = 10_000;
 pub struct FeePlugin<S, T> {
     #[state(skip)]
     _symbol: PhantomData<S>,
-    inner: T,
+    pub inner: T,
 }
 
 impl<S1, S2, T1, T2> MigrateFrom<FeePlugin<S1, T1>> for FeePlugin<S2, T2>
@@ -36,19 +37,15 @@ where
     }
 }
 
-// impl<S, T> Describe for FeePlugin<S, T>
-// where
-//     S: Symbol,
-//     T: State + Describe + 'static,
-// {
-//     fn describe() -> crate::describe::Descriptor {
-//         crate::describe::Builder::new::<Self>()
-//             .named_child::<T>("inner", &[], |v| {
-//                 crate::describe::Builder::access(v, |v: Self| v.inner)
-//             })
-//             .build()
-//     }
-// }
+impl<S, T> Describe for FeePlugin<S, T>
+where
+    S: Symbol,
+    T: State + Describe + 'static,
+{
+    fn describe() -> crate::describe::Descriptor {
+        T::describe()
+    }
+}
 
 impl<S, T: Query> Query for FeePlugin<S, T> {
     type Query = T::Query;

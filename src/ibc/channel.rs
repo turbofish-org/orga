@@ -302,7 +302,7 @@ impl ChannelReader for Ibc {
             .get_or_default(Adapter::new(cid.clone()))?;
 
         let mut res = vec![];
-        for i in 0..conn_chans.len() {
+        for i in 0..conn_chans.len()? {
             let chan = conn_chans
                 .get(i)?
                 .ok_or_else(|| crate::Error::Ibc("Failed to read channel".into()))?;
@@ -517,6 +517,7 @@ impl ChannelKeeper for Ibc {
     }
 }
 
+#[orga]
 impl ChannelStore {
     #[query]
     pub fn packet_commitments(
@@ -526,7 +527,7 @@ impl ChannelStore {
         let mut packet_states = vec![];
 
         let packets = self.commitments.get_or_default(ids.clone())?;
-        for i in 0..packets.len() {
+        for i in 0..packets.len()? {
             let packet_state = packets
                 .get(i)?
                 .ok_or_else(|| crate::Error::Ibc("Could not get packet commitment".into()))?;
@@ -556,7 +557,7 @@ impl ChannelStore {
 
         let channels_ = self.connection_channels.get_or_default(conn_id)?;
 
-        for i in 0..channels_.len() {
+        for i in 0..channels_.len()? {
             let channel_ids = channels_
                 .get(i)?
                 .ok_or_else(|| crate::Error::Ibc("Could not get channel".into()))?;
@@ -583,7 +584,7 @@ impl ChannelStore {
         &self,
         ids: Adapter<(PortId, ChannelId)>,
         sequences: LengthVec<u16, u64>,
-    ) -> Vec<u64> {
+    ) -> crate::Result<Vec<u64>> {
         let mut unreceived = vec![];
         for seq in sequences.iter() {
             if self
@@ -596,7 +597,7 @@ impl ChannelStore {
             }
         }
 
-        unreceived
+        Ok(unreceived)
     }
 
     #[query]
@@ -604,7 +605,7 @@ impl ChannelStore {
         &self,
         ids: Adapter<(PortId, ChannelId)>,
         sequences: LengthVec<u16, u64>,
-    ) -> Vec<u64> {
+    ) -> crate::Result<Vec<u64>> {
         let mut unreceived = vec![];
         for seq in sequences.iter() {
             if self
@@ -617,7 +618,7 @@ impl ChannelStore {
             }
         }
 
-        unreceived
+        Ok(unreceived)
     }
 
     #[query]
@@ -655,7 +656,7 @@ impl ChannelStore {
     pub fn query_channels(&self) -> crate::Result<Vec<IdentifiedChannel>> {
         let mut channels = vec![];
 
-        for i in 0..self.all_channels.len() {
+        for i in 0..self.all_channels.len()? {
             let channel_ids = self
                 .all_channels
                 .get(i)?

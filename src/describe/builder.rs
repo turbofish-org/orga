@@ -1,7 +1,10 @@
 use crate::state::State;
 use std::any::{type_name, TypeId};
 
-use super::{Children, Describe, Descriptor, DynamicChild, Inspect, KeyOp, LoadFn, NamedChild};
+use super::{
+    ApplyQueryBytesFn, Children, Describe, Descriptor, DynamicChild, Inspect, KeyOp, LoadFn,
+    NamedChild,
+};
 
 pub struct Builder {
     type_id: TypeId,
@@ -66,10 +69,14 @@ impl Builder {
         }
     }
 
-    pub fn dynamic_child<K: Describe, V: Describe>(mut self) -> Self {
+    pub fn dynamic_child<K: Describe, V: Describe>(
+        mut self,
+        apply_query_bytes: ApplyQueryBytesFn,
+    ) -> Self {
         let child = DynamicChild {
             key_desc: Box::new(K::describe()),
             value_desc: Box::new(V::describe()),
+            apply_query_bytes,
         };
 
         match self.children {

@@ -511,6 +511,7 @@ impl Module for TransferModule {
     }
 }
 
+#[orga]
 impl TransferModule {
     #[query]
     pub fn packet_commitments(
@@ -521,7 +522,7 @@ impl TransferModule {
 
         let commitments = self.commitments.get_or_default(ids.clone())?;
 
-        for i in 0..commitments.len() {
+        for i in 0..commitments.len()? {
             let packet_state = commitments
                 .get(i)?
                 .ok_or_else(|| crate::Error::Ibc("Could not get packet commitment".into()))?;

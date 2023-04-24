@@ -1,9 +1,10 @@
 use crate::call::Call as CallTrait;
 use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Address, Symbol};
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::migrate::{MigrateFrom, MigrateInto};
-use crate::query::Query;
+use crate::query::{FieldQuery, Query};
 use crate::state::State;
 use crate::{Error, Result};
 use std::marker::PhantomData;
@@ -12,10 +13,10 @@ use std::ops::{Deref, DerefMut};
 pub const MAX_CALL_SIZE: usize = 65_535;
 pub const NATIVE_CALL_FLAG: u8 = 0xff;
 
-#[derive(State, Default, Clone)]
-pub struct SdkCompatPlugin<S, T: State> {
+#[derive(State, Default, Clone, FieldQuery, Describe)]
+pub struct SdkCompatPlugin<S, T> {
     pub(crate) symbol: PhantomData<S>,
-    pub(crate) inner: T,
+    pub inner: T,
 }
 
 impl<S1, S2, T1: State, T2: State> MigrateFrom<SdkCompatPlugin<S1, T1>> for SdkCompatPlugin<S2, T2>
@@ -27,20 +28,6 @@ where
             symbol: other.symbol.migrate_into()?,
             inner: other.inner.migrate_into()?,
         })
-    }
-}
-
-impl<S, T: State> Deref for SdkCompatPlugin<S, T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl<S, T: State> DerefMut for SdkCompatPlugin<S, T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
     }
 }
 
@@ -363,7 +350,7 @@ pub trait ConvertSdkTx {
 impl<S: Symbol, T> CallTrait for SdkCompatPlugin<S, T>
 where
     T: CallTrait + State + ConvertSdkTx<Output = T::Call>,
-    T::Call: Encode + 'static,
+    T::Call: Encode,
 {
     type Call = Call<T::Call>;
 
@@ -374,14 +361,6 @@ where
         };
 
         self.inner.call(call)
-    }
-}
-
-impl<S, T: Query + State> Query for SdkCompatPlugin<S, T> {
-    type Query = T::Query;
-
-    fn query(&self, query: Self::Query) -> Result<()> {
-        self.inner.query(query)
     }
 }
 

@@ -104,7 +104,7 @@ impl OrgaSubStruct {
         if self.is_last {
             // maybe_add("Call", quote! { ::orga::call::Call });
             maybe_add("Call", quote! { ::orga::call::FieldCall });
-            maybe_add("Query", quote! { ::orga::query::Query });
+            maybe_add("Query", quote! { ::orga::query::FieldQuery });
             // maybe_add("Client", quote! { ::orga::client::Client });
             maybe_add("Describe", quote! { ::orga::describe::Describe });
         }
@@ -344,6 +344,7 @@ fn expand_item_impl(attr_args: AttributeArgs, item: ItemImpl) -> TokenStream {
     if channels.is_empty() {
         return quote! {
             #[::orga::call::call_block]
+            #[::orga::query::query_block]
             #item
         }
         .into();

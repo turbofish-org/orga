@@ -144,30 +144,35 @@ impl ConnectionKeeper for Ibc {
     }
 }
 
-// Calls and queries
+#[orga]
 impl ConnectionStore {
     #[query]
     pub fn get_by_conn_id(
         &self,
         id: Adapter<ConnectionId>,
-    ) -> Result<ProtobufAdapter<ConnectionEnd>> {
+    ) -> crate::Result<ProtobufAdapter<ConnectionEnd>> {
         Ok(self
             .ends
             .get(id.clone())?
             .map(|v| v.clone())
-            .ok_or_else(|| Error::connection_not_found(id.clone().into_inner()))?
+            // .ok_or_else(||
+            // Error::connection_not_found(id.clone().into_inner()))?
+            .ok_or_else(|| crate::Error::Ibc("Connection not found".into()))?
             .into())
     }
 
     #[query]
-    pub fn client_connections(&self, client_id: Adapter<ClientId>) -> Result<Vec<ConnectionId>> {
+    pub fn client_connections(
+        &self,
+        client_id: Adapter<ClientId>,
+    ) -> crate::Result<Vec<ConnectionId>> {
         let mut conn_ids = vec![];
         let conns = self
             .by_client
             .get(client_id)?
             .ok_or_else(|| crate::Error::Ibc("Client not found".into()))?;
 
-        for i in 0..conns.len() {
+        for i in 0..conns.len()? {
             let conn_id: ConnectionId = conns
                 .get(i)?
                 .ok_or_else(|| crate::Error::Ibc("Connection not found".into()))?
@@ -180,7 +185,7 @@ impl ConnectionStore {
     }
 
     #[query]
-    pub fn all_connections(&self) -> Result<Vec<RawIdentifiedConnection>> {
+    pub fn all_connections(&self) -> crate::Result<Vec<RawIdentifiedConnection>> {
         let mut connections = vec![];
         for i in 0..self.count {
             let connection_id = ConnectionId::new(i);

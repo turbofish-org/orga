@@ -1,6 +1,6 @@
 use crate::describe::Describe;
 use crate::migrate::MigrateFrom;
-use crate::query::Query;
+use crate::query::FieldQuery;
 use crate::state::State;
 use crate::store::Store;
 pub use ed::*;
@@ -19,7 +19,7 @@ use std::convert::{TryFrom, TryInto};
     Default,
     Clone,
     Debug,
-    Query,
+    FieldQuery,
     MigrateFrom,
     PartialEq,
     Hash,

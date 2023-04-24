@@ -3,6 +3,7 @@ use super::{MerkStore, ProofBuilder};
 use crate::store::{BufStore, MapStore, NullStore, Read, Shared, Write, KV};
 use crate::{Error, Result};
 use merk::proofs::query::Map as ProofMap;
+use std::any::Any;
 use std::ops::Bound;
 
 #[cfg(feature = "merk-full")]
@@ -22,9 +23,15 @@ pub enum BackingStore {
     Other(Shared<Box<dyn ReadWrite>>),
 }
 
-pub trait ReadWrite: Read + Write {}
+pub trait ReadWrite: Read + Write {
+    fn into_any(self: Box<Self>) -> Box<dyn Any>;
+}
 
-impl<T: Read + Write> ReadWrite for T {}
+impl<T: Read + Write + 'static> ReadWrite for T {
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+}
 
 impl Default for BackingStore {
     fn default() -> Self {
@@ -130,6 +137,15 @@ impl BackingStore {
     pub fn into_map_store(self) -> Result<Shared<MapStore>> {
         match self {
             BackingStore::MapStore(store) => Ok(store),
+            _ => Err(Error::Downcast(
+                "Failed to downcast backing store to map store".into(),
+            )),
+        }
+    }
+
+    pub fn into_other(self) -> Result<Shared<Box<dyn ReadWrite>>> {
+        match self {
+            BackingStore::Other(store) => Ok(store),
             _ => Err(Error::Downcast(
                 "Failed to downcast backing store to map store".into(),
             )),

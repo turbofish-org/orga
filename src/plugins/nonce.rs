@@ -1,23 +1,23 @@
+use std::any::type_name;
+
 use super::{sdk_compat::sdk::Tx as SdkTx, ConvertSdkTx, Signer};
 use crate::call::Call;
-use crate::client::Client;
-use crate::client::{AsyncCall, AsyncQuery};
 use crate::coins::Address;
 use crate::collections::Map;
 use crate::context::GetContext;
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::migrate::{MigrateFrom, MigrateInto};
-use crate::query::Query;
+use crate::query::FieldQuery;
 use crate::state::State;
 use crate::{Error, Result};
-use std::ops::{Deref, DerefMut};
 
 const NONCE_INCREASE_LIMIT: u64 = 1000;
 
-#[derive(State, Encode, Decode, Default)]
-pub struct NoncePlugin<T: State> {
-    map: Map<Address, u64>,
-    inner: T,
+#[derive(State, Default, FieldQuery, Describe)]
+pub struct NoncePlugin<T> {
+    pub map: Map<Address, u64>,
+    pub inner: T,
 }
 
 impl<T1: State, T2: State> MigrateFrom<NoncePlugin<T1>> for NoncePlugin<T2>
@@ -35,14 +35,6 @@ where
 impl<T: State> NoncePlugin<T> {
     pub fn nonce(&self, address: Address) -> Result<u64> {
         Ok(*self.map.get_or_default(address)?)
-    }
-}
-
-impl<T: State> Deref for NoncePlugin<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
     }
 }
 
@@ -71,26 +63,6 @@ where
             inner_call,
             nonce: Some(nonce),
         })
-    }
-}
-
-#[derive(Encode, Decode, Debug)]
-pub enum NonceQuery<T> {
-    Nonce(Address),
-    Inner(T),
-}
-
-impl<T: State + Query> Query for NoncePlugin<T> {
-    type Query = NonceQuery<T::Query>;
-
-    fn query(&self, query: Self::Query) -> Result<()> {
-        match query {
-            NonceQuery::Nonce(address) => {
-                self.nonce(address)?;
-                Ok(())
-            }
-            NonceQuery::Inner(query) => self.inner.query(query),
-        }
     }
 }
 
@@ -146,170 +118,6 @@ where
             (None, Some(_)) => Err(Error::Nonce(
                 "Unsigned calls must not include a nonce".into(),
             )),
-        }
-    }
-}
-
-pub struct NonceAdapter<T, U: Clone> {
-    parent: U,
-    marker: std::marker::PhantomData<fn() -> T>,
-}
-
-unsafe impl<T, U: Send + Clone> Send for NonceAdapter<T, U> {}
-
-impl<T, U: Clone> Clone for NonceAdapter<T, U> {
-    fn clone(&self) -> Self {
-        NonceAdapter {
-            parent: self.parent.clone(),
-            marker: std::marker::PhantomData,
-        }
-    }
-}
-
-#[async_trait::async_trait(?Send)]
-impl<T: Call + Query + State, U> AsyncCall for NonceAdapter<T, U>
-where
-    T::Call: Send,
-    U: Send
-        + AsyncCall<Call = NonceCall<T::Call>>
-        + Clone
-        + for<'a> AsyncQuery<Query = NonceQuery<T::Query>, Response<'a> = std::rc::Rc<NoncePlugin<T>>>,
-{
-    type Call = T::Call;
-
-    async fn call(&self, call: Self::Call) -> Result<()> {
-        // Load nonce from file
-        let nonce = load_nonce()?;
-
-        let call_bytes = call.encode()?;
-        let fut = self.parent.call(NonceCall {
-            inner_call: call,
-            nonce: Some(nonce),
-        });
-
-        // Increment the local nonce
-        write_nonce(nonce + 1)?;
-
-        let res = fut.await;
-
-        // TODO: ABCI shouldn't be messing up the error variant
-        // if let Err(Error::Nonce(_)) = res {
-        #[cfg(not(target_arch = "wasm32"))]
-        #[cfg(feature = "abci")]
-        if let Err(err) = &res {
-            if err.to_string().contains("Nonce Error:") {
-                let privkey = super::signer::load_privkey().unwrap();
-                let pubkey =
-                    secp256k1::PublicKey::from_secret_key(&secp256k1::Secp256k1::new(), &privkey);
-                let my_addr = Address::from_pubkey(pubkey.serialize());
-                let nonce = self
-                    .parent
-                    .query(NonceQuery::Nonce(my_addr), |n| n.nonce(my_addr))
-                    .await?;
-
-                let call = Self::Call::decode(call_bytes.as_slice())?;
-                let fut = self.parent.call(NonceCall {
-                    inner_call: call,
-                    nonce: Some(nonce + 1),
-                });
-
-                // Increment the local nonce
-                write_nonce(nonce + 2)?;
-
-                return fut.await;
-            }
-        }
-
-        res
-    }
-}
-
-#[async_trait::async_trait(?Send)]
-impl<
-        T: Query + State,
-        U: for<'a> AsyncQuery<
-                Query = NonceQuery<T::Query>,
-                Response<'a> = std::rc::Rc<NoncePlugin<T>>,
-            > + Clone,
-    > AsyncQuery for NonceAdapter<T, U>
-{
-    type Query = T::Query;
-    type Response<'a> = std::rc::Rc<T>;
-
-    async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
-    where
-        F: FnMut(Self::Response<'_>) -> Result<R>,
-    {
-        self.parent
-            .query(NonceQuery::Inner(query), |plugin| {
-                check(std::rc::Rc::new(
-                    std::rc::Rc::try_unwrap(plugin)
-                        .map_err(|_| ())
-                        .unwrap()
-                        .inner,
-                ))
-            })
-            .await
-    }
-}
-
-pub struct NonceClient<T: Client<NonceAdapter<T, U>> + State, U: Clone> {
-    inner: T::Client,
-    parent: U,
-}
-
-impl<T: Client<NonceAdapter<T, U>> + State, U: Clone> Clone for NonceClient<T, U>
-where
-    T::Client: Clone,
-{
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-            parent: self.parent.clone(),
-        }
-    }
-}
-
-impl<T: Client<NonceAdapter<T, U>> + State, U: Clone> Deref for NonceClient<T, U> {
-    type Target = T::Client;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl<T: Client<NonceAdapter<T, U>> + State, U: Clone> DerefMut for NonceClient<T, U> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-
-impl<
-        T: Client<NonceAdapter<T, U>> + State + Query,
-        U: Clone
-            + for<'a> AsyncQuery<
-                Query = NonceQuery<T::Query>,
-                Response<'a> = std::rc::Rc<NoncePlugin<T>>,
-            >,
-    > NonceClient<T, U>
-{
-    pub async fn nonce(&self, address: Address) -> Result<u64> {
-        self.parent
-            .query(NonceQuery::Nonce(address), |plugin| plugin.nonce(address))
-            .await
-    }
-}
-
-impl<T: Client<NonceAdapter<T, U>> + State, U: Clone> Client<U> for NoncePlugin<T> {
-    type Client = NonceClient<T, U>;
-
-    fn create_client(parent: U) -> Self::Client {
-        NonceClient {
-            inner: T::create_client(NonceAdapter {
-                parent: parent.clone(),
-                marker: std::marker::PhantomData,
-            }),
-            parent,
         }
     }
 }

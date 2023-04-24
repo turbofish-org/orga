@@ -1,7 +1,9 @@
+use super::GetNonce;
 use super::{sdk_compat::sdk::Tx as SdkTx, ConvertSdkTx};
 use crate::call::Call as CallTrait;
 use crate::client::{AsyncCall, AsyncQuery, Client as ClientTrait};
 use crate::context::Context;
+use crate::describe::{Describe, Descriptor};
 use crate::encoding::{Decode, Encode};
 use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::query::Query;
@@ -13,7 +15,22 @@ use std::ops::Deref;
 #[derive(Encode, Decode, Default, State)]
 #[state(transparent)]
 pub struct ChainCommitmentPlugin<T, const ID: &'static str> {
-    inner: T,
+    pub inner: T,
+}
+
+impl<T: Describe, const ID: &'static str> Describe for ChainCommitmentPlugin<T, ID> {
+    fn describe() -> Descriptor {
+        T::describe()
+    }
+}
+
+impl<T, const ID: &'static str> GetNonce for ChainCommitmentPlugin<T, ID>
+where
+    T: GetNonce,
+{
+    fn nonce(&self, address: crate::coins::Address) -> Result<u64> {
+        self.inner.nonce(address)
+    }
 }
 
 impl<T1, T2, const ID1: &'static str, const ID2: &'static str>
@@ -38,14 +55,6 @@ impl Deref for ChainId {
     }
 }
 
-impl<T, const ID: &'static str> Deref for ChainCommitmentPlugin<T, ID> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
 impl<T: CallTrait, const ID: &'static str> CallTrait for ChainCommitmentPlugin<T, ID> {
     type Call = Vec<u8>;
 
@@ -63,8 +72,10 @@ impl<T: CallTrait, const ID: &'static str> CallTrait for ChainCommitmentPlugin<T
                 String::from_utf8(chain_id.to_vec()).unwrap_or_default()
             )));
         }
-
+        dbg!(&call);
+        dbg!(&call[chain_id.len()..]);
         let inner_call = Decode::decode(&call[chain_id.len()..])?;
+        dbg!(&inner_call);
         self.inner.call(inner_call)
     }
 }

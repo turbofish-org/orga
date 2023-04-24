@@ -9,12 +9,12 @@ use std::ops::RangeBounds;
 
 use super::{Entry, Next};
 use crate::call::FieldCall;
-use crate::query::Query;
+use crate::query::FieldQuery;
 use crate::state::*;
 use crate::store::*;
 use crate::Result;
 
-#[derive(Query, FieldCall, Encode, Decode, Describe)]
+#[derive(FieldQuery, FieldCall, Encode, Decode, Describe)]
 pub struct EntryMap<T: Entry> {
     map: Map<T::Key, T::Value>,
 }
@@ -110,13 +110,14 @@ where
     }
 }
 
+// #[orga]
 impl<T> EntryMap<T>
 where
     T: Entry,
     T::Key: Encode + Terminated + Clone + 'static,
     T::Value: State + Eq,
 {
-    #[query]
+    // #[query]
     pub fn contains(&self, entry: T) -> Result<bool> {
         let (key, value) = entry.into_entry();
 
@@ -137,7 +138,7 @@ where
 
     // TODO: this query can be moved to an impl with more permissive bounds
     // after some query macro changes
-    #[query]
+    // #[query]
     pub fn contains_entry_key(&self, entry: T) -> Result<bool> {
         let (key, _) = entry.into_entry();
         self.map.contains_key(key)

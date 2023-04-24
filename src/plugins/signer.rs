@@ -5,6 +5,7 @@ use super::{
 use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Address, Symbol};
 use crate::context::{Context, GetContext};
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::migrate::MigrateFrom;
 use crate::orga;
@@ -19,7 +20,15 @@ use std::ops::Deref;
 #[derive(Default, Encode, Decode, State)]
 #[state(transparent)]
 pub struct SignerPlugin<T> {
-    pub(crate) inner: T,
+    pub inner: T,
+}
+impl<T> Describe for SignerPlugin<T>
+where
+    T: Describe,
+{
+    fn describe() -> crate::describe::Descriptor {
+        T::describe()
+    }
 }
 
 impl<T1, T2> MigrateFrom<SignerPlugin<T1>> for SignerPlugin<T2>
@@ -30,14 +39,6 @@ where
         Ok(Self {
             inner: other.inner.migrate_into()?,
         })
-    }
-}
-
-impl<T: State> Deref for SignerPlugin<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
     }
 }
 
@@ -132,10 +133,9 @@ fn adr36_bytes(call_bytes: &[u8], address: Address) -> Result<Vec<u8>> {
     serde_json::to_vec(&msg).map_err(|e| Error::App(format!("{}", e)))
 }
 
-impl<T: State, U> SignerPlugin<T>
+impl<T: State> SignerPlugin<T>
 where
-    T: Deref<Target = U>,
-    U: GetNonce,
+    T: GetNonce,
 {
     fn sdk_sign_bytes(&mut self, tx: &SdkTx, address: Address) -> Result<Vec<u8>> {
         let nonce = self.inner.nonce(address)? + 1;
@@ -209,10 +209,9 @@ where
     }
 }
 
-impl<T: Call + State, U> Call for SignerPlugin<T>
+impl<T: Call + State> Call for SignerPlugin<T>
 where
-    T: Deref<Target = U>,
-    U: GetNonce,
+    T: GetNonce,
 {
     type Call = SignerCall;
 
@@ -223,7 +222,9 @@ where
         };
         Context::add(signer_ctx);
 
+        dbg!("decoding signer plugin inner call..");
         let inner_call = Decode::decode(call.call_bytes.as_slice())?;
+        dbg!(&inner_call);
         self.inner.call(inner_call)
     }
 }
@@ -677,7 +678,6 @@ mod abci {
 struct Counter {
     pub count: u64,
     pub last_signer: Address,
-    nonce: NonceNoop,
 }
 
 #[orga]
@@ -692,18 +692,8 @@ impl Counter {
     }
 }
 
-impl Deref for Counter {
-    type Target = NonceNoop;
-
-    fn deref(&self) -> &Self::Target {
-        &self.nonce
-    }
-}
-
-#[derive(State, Clone, Debug, Encode, Decode, Default, Describe)]
-pub struct NonceNoop(());
-impl GetNonce for NonceNoop {
-    fn nonce(&self, _: Address) -> Result<u64> {
+impl GetNonce for Counter {
+    fn nonce(&self, _address: Address) -> Result<u64> {
         Ok(0)
     }
 }
@@ -738,7 +728,6 @@ mod tests {
                 inner: Counter {
                     count: 0,
                     last_signer: Address::NULL,
-                    nonce: NonceNoop(()),
                 },
             },
         };
@@ -751,9 +740,9 @@ mod tests {
         let call = Decode::decode(call_bytes.as_slice()).unwrap();
         SdkCompatPlugin::<_, _>::call(&mut state, call).unwrap();
 
-        assert_eq!(state.count, 1);
+        assert_eq!(state.inner.inner.count, 1);
         assert_eq!(
-            state.last_signer,
+            state.inner.inner.last_signer,
             [
                 147, 54, 126, 195, 164, 236, 108, 70, 107, 218, 16, 43, 121, 200, 38, 174, 234,
                 199, 157, 75

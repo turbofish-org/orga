@@ -453,7 +453,7 @@ impl ClientStore {
     }
 }
 
-// Call and query methods
+#[orga]
 impl ClientStore {
     #[query]
     pub fn query_client_states(&self) -> crate::Result<Vec<IdentifiedClientState>> {

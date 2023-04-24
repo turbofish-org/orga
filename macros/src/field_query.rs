@@ -352,6 +352,8 @@ impl ToTokens for FieldQueryEnum {
         };
 
         tokens.extend(quote! {
+            #[derive(::educe::Educe)]
+            #[educe(Debug)]
             #vis enum #ident #imp #wher {
                 Noop(::std::marker::PhantomData<#unused_generics>),
                 #(#variants),*
@@ -361,7 +363,7 @@ impl ToTokens for FieldQueryEnum {
 
             #enum_decode
 
-            #enum_debug
+            // #enum_debug
 
         });
     }

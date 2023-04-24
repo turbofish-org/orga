@@ -6,6 +6,7 @@ use crate::abci::{AbciQuery, BeginBlock};
 use crate::coins::{Address, Amount};
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
+use crate::migrate::MigrateFrom;
 #[cfg(feature = "abci")]
 use crate::plugins::BeginBlockCtx;
 #[cfg(feature = "abci")]

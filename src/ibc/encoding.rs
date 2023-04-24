@@ -2,7 +2,7 @@ use crate::collections::Next;
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, Terminated};
 use crate::migrate::MigrateFrom;
-use crate::query::Query;
+use crate::query::FieldQuery;
 use crate::state::State;
 use crate::store::Store;
 use ibc::core::ics02_client::client_type::ClientType;
@@ -17,7 +17,7 @@ use prost::Message;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
 
-#[derive(Clone, Query, Debug, Serialize, Deserialize, Default)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct Adapter<T> {
     pub(crate) inner: T,
 }
@@ -145,7 +145,7 @@ where
     }
 }
 
-#[derive(Query, Default)]
+#[derive(Default, FieldQuery)]
 pub struct ProtobufAdapter<T> {
     inner: T,
 }
