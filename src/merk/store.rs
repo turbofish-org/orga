@@ -201,6 +201,42 @@ impl Read for MerkStore {
         let value = tree.value();
         Ok(Some((key.to_vec(), value.to_vec())))
     }
+
+    fn get_prev(&self, end: Option<&[u8]>) -> Result<Option<KV>> {
+        // TODO: use an iterator in merk which steps through in-memory nodes
+        // (loading if necessary)
+        let mut iter = self.merk().raw_iter();
+        if let Some(key) = end {
+            iter.seek(key);
+
+            if !iter.valid() {
+                iter.status()?;
+                return Ok(None);
+            }
+
+            if iter.key().unwrap() == key {
+                iter.prev();
+
+                if !iter.valid() {
+                    iter.status()?;
+                    return Ok(None);
+                }
+            }
+        } else {
+            iter.seek_to_last();
+
+            if !iter.valid() {
+                iter.status()?;
+                return Ok(None);
+            }
+        }
+
+        let key = iter.key().unwrap();
+        let tree_bytes = iter.value().unwrap();
+        let tree = Tree::decode(vec![], tree_bytes);
+        let value = tree.value();
+        Ok(Some((key.to_vec(), value.to_vec())))
+    }
 }
 
 pub struct Iter<'a> {
