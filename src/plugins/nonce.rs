@@ -394,7 +394,7 @@ fn write_nonce(nonce: u64) -> Result<()> {
 
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(not(feature = "abci"))]
-fn write_nonce(nonce: u64) -> Result<()> {
+fn write_nonce(_nonce: u64) -> Result<()> {
     unimplemented!()
 }
 

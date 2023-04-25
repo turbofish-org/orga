@@ -125,12 +125,14 @@ migrate_tuple_impl!(A, B, C, D, E, F, G, H, I, J, K, L; 0, 1, 2, 3, 4, 5, 6, 7, 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(any(feature = "merk", feature = "merk-verify"))]
+    use crate::store::Shared;
     use crate::{
         collections::{Deque, Entry, EntryMap, Map},
         encoding::{Decode, Encode},
         orga,
         state::State,
-        store::{DefaultBackingStore, MapStore, Read, Shared, Store, Write},
+        store::{DefaultBackingStore, MapStore, Read, Store, Write},
         Result,
     };
 

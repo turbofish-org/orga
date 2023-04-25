@@ -312,7 +312,7 @@ where
 
     #[cfg(not(target_arch = "wasm32"))]
     #[cfg(not(feature = "abci"))]
-    async fn call(&self, call: Self::Call) -> Result<()> {
+    async fn call(&self, _call: Self::Call) -> Result<()> {
         unimplemented!()
     }
 

@@ -22,9 +22,12 @@ fn simp_balance(multishare: &MultiShare) -> Amount {
     Balance::<Simp, Amount>::balance(multishare).unwrap()
 }
 
+#[cfg(feature = "abci")]
 fn alt_balance(multishare: &MultiShare) -> Amount {
     Balance::<Alt, Amount>::balance(multishare).unwrap()
 }
+
+#[cfg(feature = "abci")]
 fn setup_state() -> Result<Staking<Simp>> {
     let staking: Staking<Simp> = Staking {
         downtime_jail_seconds: 5,
