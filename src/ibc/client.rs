@@ -1,3 +1,4 @@
+#[cfg(feature = "abci")]
 use std::convert::TryInto;
 use std::ops::Bound;
 
@@ -17,6 +18,7 @@ use ibc::core::ics02_client::client_state::AnyClientState;
 use ibc::core::ics02_client::client_type::ClientType;
 use ibc::core::ics02_client::context::{ClientKeeper, ClientReader};
 use ibc::core::ics02_client::error::Error;
+#[cfg(feature = "abci")]
 use ibc::core::ics23_commitment::commitment::CommitmentRoot;
 use ibc::core::ics24_host::identifier::ClientId;
 use ibc::core::ics24_host::path::ClientStatePath;

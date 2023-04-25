@@ -189,7 +189,10 @@ where
         // Load nonce from file
         let nonce = load_nonce()?;
 
+        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(feature = "abci")]
         let call_bytes = call.encode()?;
+
         let fut = self.parent.call(NonceCall {
             inner_call: call,
             nonce: Some(nonce),

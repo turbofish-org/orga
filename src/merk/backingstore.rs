@@ -1,10 +1,12 @@
 #[cfg(feature = "merk-full")]
 use super::{MerkStore, ProofBuilder};
-use crate::store::{BufStore, MapStore, NullStore, Read, Shared, Write, KV};
+use crate::store::{MapStore, NullStore, Read, Shared, Write, KV};
 use crate::{Error, Result};
 use merk::proofs::query::Map as ProofMap;
 use std::ops::Bound;
 
+#[cfg(feature = "merk-full")]
+use crate::store::BufStore;
 #[cfg(feature = "merk-full")]
 type WrappedMerkStore = Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>;
 

@@ -1,4 +1,5 @@
 use std::convert::TryFrom;
+#[cfg(feature = "abci")]
 use std::str::from_utf8;
 
 #[cfg(feature = "abci")]
@@ -17,21 +18,29 @@ use client::ClientStore;
 use encoding::*;
 pub use ibc as ibc_rs;
 use ibc::applications::transfer::msgs::transfer::MsgTransfer;
+#[cfg(feature = "abci")]
 use ibc::applications::transfer::relay::send_transfer::send_transfer;
+#[cfg(feature = "abci")]
 use ibc::core::ics02_client::height::Height;
 use ibc::core::ics04_channel::timeout::TimeoutHeight;
 use ibc::core::ics24_host::identifier::{ChannelId, PortId};
+#[cfg(feature = "abci")]
 use ibc::core::ics26_routing::handler::dispatch;
+#[cfg(feature = "abci")]
 use ibc::events::IbcEvent;
+#[cfg(feature = "abci")]
 use ibc::handler::{HandlerOutput, HandlerOutputBuilder};
 use ibc::signer::Signer as IbcSigner;
 use ibc::timestamp::Timestamp;
 pub use ibc_proto as proto;
 use ibc_proto::cosmos::base::v1beta1::Coin;
 use ibc_proto::ibc::core::channel::v1::PacketState;
+#[cfg(feature = "abci")]
 use ics23::LeafOp;
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "abci")]
 use tendermint_proto::abci::{EventAttribute, RequestQuery, ResponseQuery};
+#[cfg(feature = "abci")]
 use tendermint_proto::Protobuf;
 
 mod channel;
@@ -48,7 +57,9 @@ mod transfer;
 pub use grpc::start_grpc;
 
 use crate::store::Store;
+#[cfg(feature = "abci")]
 use tendermint_proto::abci::Event;
+#[cfg(feature = "abci")]
 use tendermint_proto::crypto::{ProofOp, ProofOps};
 
 use self::channel::ChannelStore;
@@ -155,9 +166,9 @@ impl TryFrom<TransferArgs> for TransferOpts {
 
 impl Ibc {
     #[call]
-    pub fn deliver_tx(&mut self, msg: IbcTx) -> Result<()> {
+    pub fn deliver_tx(&mut self, _msg: IbcTx) -> Result<()> {
         #[cfg(feature = "abci")]
-        return self.exec_deliver_tx(msg);
+        return self.exec_deliver_tx(_msg);
 
         #[cfg(not(feature = "abci"))]
         panic!()
@@ -298,6 +309,7 @@ impl BeginBlock for Ibc {
     }
 }
 
+#[cfg(feature = "abci")]
 use crate::store::Read;
 #[cfg(feature = "abci")]
 impl AbciQuery for Ibc {
