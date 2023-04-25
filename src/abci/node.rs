@@ -33,9 +33,12 @@ pub struct Node<A> {
 
 impl Node<()> {
     pub fn home(name: &str) -> PathBuf {
-        home_dir()
-            .expect("Could not resolve user home directory")
-            .join(format!(".{}", name).as_str())
+        match std::env::var("NOMIC_HOME_DIR") {
+            Ok(home) => Some(PathBuf::from(home)),
+            Err(_) => home_dir(),
+        }
+        .expect("Could not resolve user home directory")
+        .join(format!(".{}", name).as_str())
     }
 
     pub fn height<P: AsRef<Path>>(home: P) -> Result<u64> {

@@ -1,15 +1,10 @@
-use std::clone::Clone;
-use std::env;
-use std::net::ToSocketAddrs;
-use std::sync::mpsc::{self, Receiver, Sender, SyncSender};
-
+#[cfg(feature = "abci")]
 use log::info;
 
 use crate::call::Call;
 use crate::query::Query;
 use crate::state::State;
-use crate::store::{BufStore, BufStoreMap, MapStore, Read, Shared, Write, KV};
-use crate::{Error, Result};
+use crate::Result;
 #[cfg(feature = "abci")]
 mod node;
 #[cfg(feature = "abci")]
@@ -29,6 +24,12 @@ pub use tendermint_proto::abci as messages;
 mod server {
     use super::*;
     use crate::merk::MerkStore;
+    use crate::store::{BufStore, BufStoreMap, MapStore, Read, Shared, Write, KV};
+    use crate::Error;
+    use std::clone::Clone;
+    use std::env;
+    use std::net::ToSocketAddrs;
+    use std::sync::mpsc::{self, Receiver, Sender, SyncSender};
     use tendermint_proto::abci::request::Value as Req;
     use tendermint_proto::abci::response::Value as Res;
 
