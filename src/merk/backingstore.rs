@@ -1,6 +1,7 @@
 #[cfg(feature = "merk-full")]
 use super::{MerkStore, ProofBuilder};
-use crate::store::{BufStore, MapStore, NullStore, Read, Shared, Write, KV};
+use crate::prelude::bufstore::PartialMapStore;
+use crate::store::{BufStore, EmptyStore, MapStore, Read, Shared, Write, KV};
 use crate::{Error, Result};
 use merk::proofs::query::Map as ProofMap;
 use std::any::Any;
@@ -18,8 +19,9 @@ pub enum BackingStore {
     #[cfg(feature = "merk-full")]
     Merk(Shared<MerkStore>),
     MapStore(Shared<MapStore>),
+    PartialMapStore(Shared<PartialMapStore>),
     ProofMap(Shared<ProofStore>),
-    Null(NullStore),
+    Null(EmptyStore),
     Other(Shared<Box<dyn ReadWrite>>),
 }
 
@@ -35,7 +37,7 @@ impl<T: Read + Write + 'static> ReadWrite for T {
 
 impl Default for BackingStore {
     fn default() -> Self {
-        BackingStore::Null(NullStore)
+        BackingStore::Null(EmptyStore)
     }
 }
 
@@ -49,6 +51,7 @@ impl Read for BackingStore {
             #[cfg(feature = "merk-full")]
             BackingStore::Merk(ref store) => store.get(key),
             BackingStore::MapStore(ref store) => store.get(key),
+            BackingStore::PartialMapStore(ref store) => store.get(key),
             BackingStore::ProofMap(ref map) => map.get(key),
             BackingStore::Null(ref null) => null.get(key),
             BackingStore::Other(ref store) => store.borrow().get(key),
@@ -64,6 +67,7 @@ impl Read for BackingStore {
             #[cfg(feature = "merk-full")]
             BackingStore::Merk(ref store) => store.get_next(key),
             BackingStore::MapStore(ref store) => store.get_next(key),
+            BackingStore::PartialMapStore(ref store) => store.get_next(key),
             BackingStore::ProofMap(ref map) => map.get_next(key),
             BackingStore::Null(ref null) => null.get_next(key),
             BackingStore::Other(ref store) => store.borrow().get_next(key),
@@ -83,6 +87,7 @@ impl Write for BackingStore {
                 panic!("put() is not implemented for ProofBuilder")
             }
             BackingStore::MapStore(ref mut store) => store.put(key, value),
+            BackingStore::PartialMapStore(ref mut store) => store.put(key, value),
             BackingStore::ProofMap(_) => {
                 panic!("put() is not implemented for ProofMap")
             }
@@ -102,6 +107,7 @@ impl Write for BackingStore {
                 panic!("delete() is not implemented for ProofBuilder")
             }
             BackingStore::MapStore(ref mut store) => store.delete(key),
+            BackingStore::PartialMapStore(ref mut store) => store.delete(key),
             BackingStore::ProofMap(_) => {
                 panic!("delete() is not implemented for ProofMap")
             }

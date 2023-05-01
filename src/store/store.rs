@@ -42,6 +42,14 @@ impl Store {
         )))
     }
 
+    #[cfg(feature = "merk")]
+    pub fn with_partial_map_store() -> Self {
+        use crate::prelude::bufstore::PartialMapStore;
+        Self::new(crate::merk::BackingStore::PartialMapStore(Shared::new(
+            PartialMapStore::new(),
+        )))
+    }
+
     #[cfg(not(feature = "merk"))]
     pub fn with_map_store() -> Self {
         use super::MapStore;

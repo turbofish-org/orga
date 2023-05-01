@@ -10,7 +10,7 @@ pub mod store;
 
 pub use bufstore::{BufStore, Map as BufStoreMap, MapStore};
 pub use iter::Iter;
-pub use nullstore::NullStore;
+pub use nullstore::EmptyStore;
 pub use share::Shared;
 pub use store::{DefaultBackingStore, Store};
 

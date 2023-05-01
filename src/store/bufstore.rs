@@ -1,13 +1,16 @@
 use std::cmp::Ordering;
 use std::collections::{btree_map, BTreeMap};
 
+use super::nullstore::NullStore;
 use super::*;
 
 /// An in-memory map containing values modified by writes to a `BufStore`.
 pub type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
 /// A simple `Store` implementation which persists data in an in-memory map.
-pub type MapStore = BufStore<NullStore>;
+pub type MapStore = BufStore<EmptyStore>;
+
+pub type PartialMapStore = BufStore<NullStore>;
 
 /// Wraps a `Store` and records mutations in an in-memory map, so that
 /// modifications do not affect the underlying `Store` until `flush` is called.
