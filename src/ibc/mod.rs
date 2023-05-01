@@ -14,6 +14,7 @@ use ibc::core::ics24_host::path::{
     AckPath, ChannelEndPath, ClientConnectionPath, CommitmentPath, ConnectionPath, ReceiptPath,
     SeqAckPath, SeqRecvPath, SeqSendPath,
 };
+use ibc::signer::Signer;
 use ibc::timestamp::Timestamp as IbcTimestamp;
 use ibc_proto::google::protobuf::Any;
 use ibc_proto::ibc::core::{
@@ -22,6 +23,7 @@ use ibc_proto::ibc::core::{
 use ibc_proto::protobuf::Protobuf;
 use serde::Serialize;
 
+use crate::coins::Address;
 use crate::collections::{Deque, Map};
 use crate::encoding::{
     Adapter, ByteTerminatedString, Decode, Encode, EofTerminatedString, FixedString,
@@ -29,6 +31,8 @@ use crate::encoding::{
 use crate::orga;
 
 mod impls;
+mod transfer;
+use transfer::Transfer;
 
 #[orga]
 pub struct Ibc {
@@ -38,6 +42,7 @@ pub struct Ibc {
     channel_counter: u64,
     connection_counter: u64,
     client_counter: u64,
+    transfer: Transfer,
 
     #[state(absolute_prefix(b"clients/"))]
     clients: Map<ClientId, Client>,
@@ -336,6 +341,17 @@ protobuf_newtype!(ConsensusState, TmConsensusState, Any);
 protobuf_newtype!(ConnectionEnd, IbcConnectionEnd, RawConnectionEnd);
 protobuf_newtype!(ChannelEnd, IbcChannelEnd, RawChannelEnd);
 
+impl TryFrom<Signer> for Address {
+    type Error = crate::Error;
+
+    fn try_from(signer: Signer) -> crate::Result<Self> {
+        signer
+            .as_ref()
+            .parse()
+            .map_err(|_| crate::Error::Ibc("Invalid signer".to_string()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
@@ -480,7 +496,7 @@ mod tests {
             vec![
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 127, 255, 255, 255, 255, 255, 255, 255, 127, 255,
                 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 123, 0, 0, 0, 0, 0, 0, 1, 200,
-                0, 0, 0, 0, 0, 0, 3, 21
+                0, 0, 0, 0, 0, 0, 3, 21, 0
             ]
         );
 

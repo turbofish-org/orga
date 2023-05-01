@@ -33,7 +33,7 @@ use ibc::{
 
 use crate::abci::BeginBlock;
 use crate::context::GetContext;
-use crate::plugins::{BeginBlockCtx, Events, Logs, Time};
+use crate::plugins::{BeginBlockCtx, Events, Logs};
 use crate::Error;
 
 use super::*;
@@ -255,7 +255,7 @@ impl ValidationContext for Ibc {
 
     fn validate_self_client(
         &self,
-        client_state_of_host_on_counterparty: Any,
+        _client_state_of_host_on_counterparty: Any,
     ) -> Result<(), ContextError> {
         Ok(())
     }
