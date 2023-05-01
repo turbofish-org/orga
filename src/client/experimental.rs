@@ -104,7 +104,9 @@ impl<T, S> Client<T, S> {
         S: StoreClient,
     {
         let mut store = Some(Store::new(BackingStore::Other(Shared::new(Box::new(
-            QueryStore { store: None },
+            QueryStore {
+                store: Some(Store::with_partial_map_store()),
+            },
         )))));
         let mut height: Option<u64> = None;
         let _ = take_trace();
@@ -602,6 +604,7 @@ mod tests {
     fn basic_client() -> Result<()> {
         let mut store = Store::with_map_store();
         let mut app = Foo::default();
+        app.attach(store.clone())?;
         let mut inner_map = Map::<u32, u64>::default();
         let mut deque_inner_map = Map::<u32, Bar>::default();
         inner_map.insert(16, 32)?;
@@ -624,7 +627,6 @@ mod tests {
             },
         )?;
         app.bar.b = 8;
-        app.attach(store.clone())?;
 
         let mut bytes = vec![];
         app.flush(&mut bytes)?;
