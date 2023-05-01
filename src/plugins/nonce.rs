@@ -288,6 +288,7 @@ mod tests {
         }
     }
 
+    #[serial_test::serial]
     #[test]
     fn nonced_calls() {
         let mut state: NoncePlugin<Counter> = Default::default();
