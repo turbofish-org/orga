@@ -91,31 +91,32 @@ impl Parse for ResolveInput {
     }
 }
 pub fn resolve_path(input: TokenStream) -> TokenStream {
-    let Types {
-        child_trait,
-        child_field_ty,
-        ..
-    } = Types::default();
-    let inp = input.clone();
-    let item = parse_macro_input!(inp as ResolveInput);
-    let root_type = item.root_type;
+    unimplemented!()
+    // let Types {
+    //     child_trait,
+    //     child_field_ty,
+    //     ..
+    // } = Types::default();
+    // let inp = input.clone();
+    // let item = parse_macro_input!(inp as ResolveInput);
+    // let root_type = item.root_type;
 
-    let def_site = Span::def_site();
-    let resolved_type = item
-        .segments
-        .iter()
-        .skip(1)
-        .fold(quote_spanned! { def_site=> #root_type }, |acc, segment| {
-            let const_field_id = const_field_id(segment);
-            quote_spanned! { def_site=> <#child_field_ty<#acc, #const_field_id> as #child_trait>::Child}
-        });
+    // let def_site = Span::def_site();
+    // let resolved_type = item
+    //     .segments
+    //     .iter()
+    //     .skip(1)
+    //     .fold(quote_spanned! { def_site=> #root_type }, |acc, segment| {
+    //         let const_field_id = const_field_id(segment);
+    //         quote_spanned! { def_site=> <#child_field_ty<#acc, #const_field_id> as #child_trait>::Child}
+    //     });
 
-    let call_site = Span::call_site();
-    let output = quote_spanned! { call_site=>
-        #resolved_type
-    };
+    // let call_site = Span::call_site();
+    // let output = quote_spanned! { call_site=>
+    //     #resolved_type
+    // };
 
-    output.into()
+    // output.into()
 }
 
 pub fn derive(item: TokenStream) -> TokenStream {
