@@ -8,7 +8,6 @@ use ibc::{
         consensus_state::ConsensusState as TmConsensusState,
     },
     core::{
-        context::Router,
         ics02_client::{
             client_state::ClientState, consensus_state::ConsensusState, error::ClientError,
         },
@@ -16,14 +15,12 @@ use ibc::{
         ics04_channel::{
             commitment::{AcknowledgementCommitment, PacketCommitment},
             error::{ChannelError, PacketError},
-            msgs::{ChannelMsg, PacketMsg},
             packet::Receipt,
         },
         ics23_commitment::commitment::CommitmentPrefix,
         ics24_host::path::{
             ClientConnectionPath, ClientConsensusStatePath, ClientStatePath, ConnectionPath,
         },
-        ics26_routing::context::{Module, ModuleId},
         ContextError, ExecutionContext, ValidationContext,
     },
     events::IbcEvent,
@@ -72,32 +69,6 @@ impl BeginBlock for Ibc {
         }
 
         Ok(())
-    }
-}
-
-impl Router for Ibc {
-    fn get_route(&self, module_id: &ModuleId) -> Option<&dyn Module> {
-        todo!()
-    }
-
-    fn get_route_mut(&mut self, module_id: &ModuleId) -> Option<&mut dyn Module> {
-        todo!()
-    }
-
-    fn has_route(&self, module_id: &ModuleId) -> bool {
-        todo!()
-    }
-
-    fn lookup_module_by_port(&self, port_id: &PortId) -> Option<ModuleId> {
-        todo!()
-    }
-
-    fn lookup_module_channel(&self, msg: &ChannelMsg) -> Result<ModuleId, ChannelError> {
-        todo!()
-    }
-
-    fn lookup_module_packet(&self, msg: &PacketMsg) -> Result<ModuleId, ChannelError> {
-        todo!()
     }
 }
 

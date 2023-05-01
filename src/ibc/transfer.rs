@@ -13,9 +13,21 @@ use ibc::{
             TokenTransferValidationContext,
         },
         error::TokenTransferError,
-        PrefixedDenom,
+        PrefixedCoin, PrefixedDenom, VERSION,
     },
-    core::ics24_host::identifier::PortId,
+    core::{
+        ics04_channel::{
+            channel::{Counterparty, Order},
+            error::{ChannelError, PacketError},
+            handler::ModuleExtras,
+            msgs::acknowledgement::Acknowledgement,
+            packet::Packet,
+            Version as ChannelVersion,
+        },
+        ics24_host::identifier::{ChannelId, ConnectionId, PortId},
+        ics26_routing::context::Module,
+    },
+    signer::Signer,
 };
 const ACCOUNT_PREFIX: &str = "nomic"; // TODO: configurable prefix
 
@@ -27,20 +39,15 @@ pub struct Transfer {
 impl TokenTransferValidationContext for Ibc {
     type AccountId = Address;
 
-    fn get_port(
-        &self,
-    ) -> Result<
-        ibc::core::ics24_host::identifier::PortId,
-        ibc::applications::transfer::error::TokenTransferError,
-    > {
+    fn get_port(&self) -> Result<ibc::core::ics24_host::identifier::PortId, TokenTransferError> {
         Ok(PortId::transfer())
     }
 
     fn get_escrow_account(
         &self,
         port_id: &ibc::core::ics24_host::identifier::PortId,
-        channel_id: &ibc::core::ics24_host::identifier::ChannelId,
-    ) -> Result<Self::AccountId, ibc::applications::transfer::error::TokenTransferError> {
+        channel_id: &ChannelId,
+    ) -> Result<Self::AccountId, TokenTransferError> {
         let account_id = AccountId::new(
             ACCOUNT_PREFIX,
             &cosmos_adr028_escrow_address(port_id, channel_id),
@@ -52,13 +59,11 @@ impl TokenTransferValidationContext for Ibc {
             .map_err(|_| TokenTransferError::ParseAccountFailure)
     }
 
-    fn can_send_coins(&self) -> Result<(), ibc::applications::transfer::error::TokenTransferError> {
+    fn can_send_coins(&self) -> Result<(), TokenTransferError> {
         Ok(())
     }
 
-    fn can_receive_coins(
-        &self,
-    ) -> Result<(), ibc::applications::transfer::error::TokenTransferError> {
+    fn can_receive_coins(&self) -> Result<(), TokenTransferError> {
         Ok(())
     }
 
@@ -66,24 +71,24 @@ impl TokenTransferValidationContext for Ibc {
         &self,
         _from_account: &Self::AccountId,
         _to_account: &Self::AccountId,
-        _coin: &ibc::applications::transfer::PrefixedCoin,
-    ) -> Result<(), ibc::applications::transfer::error::TokenTransferError> {
+        _coin: &PrefixedCoin,
+    ) -> Result<(), TokenTransferError> {
         Ok(())
     }
 
     fn mint_coins_validate(
         &self,
         _account: &Self::AccountId,
-        _coin: &ibc::applications::transfer::PrefixedCoin,
-    ) -> Result<(), ibc::applications::transfer::error::TokenTransferError> {
+        _coin: &PrefixedCoin,
+    ) -> Result<(), TokenTransferError> {
         Ok(())
     }
 
     fn burn_coins_validate(
         &self,
         _account: &Self::AccountId,
-        _coin: &ibc::applications::transfer::PrefixedCoin,
-    ) -> Result<(), ibc::applications::transfer::error::TokenTransferError> {
+        _coin: &PrefixedCoin,
+    ) -> Result<(), TokenTransferError> {
         Ok(())
     }
 }
@@ -147,8 +152,8 @@ impl TokenTransferExecutionContext for Ibc {
     fn burn_coins_execute(
         &mut self,
         account: &Self::AccountId,
-        coin: &ibc::applications::transfer::PrefixedCoin,
-    ) -> Result<(), ibc::applications::transfer::error::TokenTransferError> {
+        coin: &PrefixedCoin,
+    ) -> Result<(), TokenTransferError> {
         let denom: Denom = coin.denom.clone().try_into()?;
         let amount: Amount = coin.amount.try_into()?;
 
@@ -164,8 +169,8 @@ impl TokenTransferExecutionContext for Ibc {
         &mut self,
         from: &Self::AccountId,
         to: &Self::AccountId,
-        coin: &ibc::applications::transfer::PrefixedCoin,
-    ) -> Result<(), ibc::applications::transfer::error::TokenTransferError> {
+        coin: &PrefixedCoin,
+    ) -> Result<(), TokenTransferError> {
         let denom: Denom = coin.denom.clone().try_into()?;
         let amount: Amount = coin.amount.try_into()?;
 
@@ -183,8 +188,8 @@ impl TokenTransferExecutionContext for Ibc {
     fn mint_coins_execute(
         &mut self,
         account: &Self::AccountId,
-        coin: &ibc::applications::transfer::PrefixedCoin,
-    ) -> Result<(), ibc::applications::transfer::error::TokenTransferError> {
+        coin: &PrefixedCoin,
+    ) -> Result<(), TokenTransferError> {
         let denom: Denom = coin.denom.clone().try_into()?;
         let amount: Amount = coin.amount.try_into()?;
 
@@ -194,5 +199,159 @@ impl TokenTransferExecutionContext for Ibc {
         *receiver_balance = (*receiver_balance + amount).result()?;
 
         Ok(())
+    }
+}
+
+use ibc::applications::transfer::context::*;
+impl Module for Ibc {
+    fn on_chan_open_init_validate(
+        &self,
+        order: Order,
+        connection_hops: &[ConnectionId],
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        counterparty: &Counterparty,
+        version: &ChannelVersion,
+    ) -> Result<ChannelVersion, ChannelError> {
+        on_chan_open_init_validate(
+            self,
+            order,
+            connection_hops,
+            port_id,
+            channel_id,
+            counterparty,
+            version,
+        )
+        .map_err(|e: TokenTransferError| ChannelError::AppModule {
+            description: e.to_string(),
+        })?;
+        Ok(ChannelVersion::new(VERSION.to_string()))
+    }
+
+    fn on_chan_open_init_execute(
+        &mut self,
+        order: Order,
+        connection_hops: &[ConnectionId],
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        counterparty: &Counterparty,
+        version: &ChannelVersion,
+    ) -> Result<(ModuleExtras, ChannelVersion), ChannelError> {
+        on_chan_open_init_execute(
+            self,
+            order,
+            connection_hops,
+            port_id,
+            channel_id,
+            counterparty,
+            version,
+        )
+        .map_err(|e: TokenTransferError| ChannelError::AppModule {
+            description: e.to_string(),
+        })
+    }
+
+    fn on_chan_open_try_validate(
+        &self,
+        order: Order,
+        connection_hops: &[ConnectionId],
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        counterparty: &Counterparty,
+        counterparty_version: &ChannelVersion,
+    ) -> Result<ChannelVersion, ChannelError> {
+        on_chan_open_try_validate(
+            self,
+            order,
+            connection_hops,
+            port_id,
+            channel_id,
+            counterparty,
+            counterparty_version,
+        )
+        .map_err(|e: TokenTransferError| ChannelError::AppModule {
+            description: e.to_string(),
+        })?;
+        Ok(ChannelVersion::new(VERSION.to_string()))
+    }
+
+    fn on_chan_open_try_execute(
+        &mut self,
+        order: Order,
+        connection_hops: &[ConnectionId],
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        counterparty: &Counterparty,
+        counterparty_version: &ChannelVersion,
+    ) -> Result<(ModuleExtras, ChannelVersion), ChannelError> {
+        on_chan_open_try_execute(
+            self,
+            order,
+            connection_hops,
+            port_id,
+            channel_id,
+            counterparty,
+            counterparty_version,
+        )
+        .map_err(|e: TokenTransferError| ChannelError::AppModule {
+            description: e.to_string(),
+        })
+    }
+
+    fn on_recv_packet_execute(
+        &mut self,
+        packet: &Packet,
+        _relayer: &Signer,
+    ) -> (ModuleExtras, Acknowledgement) {
+        on_recv_packet_execute(self, packet)
+    }
+
+    fn on_acknowledgement_packet_validate(
+        &self,
+        packet: &Packet,
+        acknowledgement: &Acknowledgement,
+        relayer: &Signer,
+    ) -> Result<(), PacketError> {
+        on_acknowledgement_packet_validate(self, packet, acknowledgement, relayer).map_err(
+            |e: TokenTransferError| PacketError::AppModule {
+                description: e.to_string(),
+            },
+        )
+    }
+
+    fn on_acknowledgement_packet_execute(
+        &mut self,
+        _packet: &Packet,
+        _acknowledgement: &Acknowledgement,
+        _relayer: &Signer,
+    ) -> (ModuleExtras, Result<(), PacketError>) {
+        (ModuleExtras::empty(), Ok(()))
+    }
+
+    fn on_timeout_packet_validate(
+        &self,
+        packet: &Packet,
+        relayer: &Signer,
+    ) -> Result<(), PacketError> {
+        on_timeout_packet_validate(self, packet, relayer).map_err(|e: TokenTransferError| {
+            PacketError::AppModule {
+                description: e.to_string(),
+            }
+        })
+    }
+
+    fn on_timeout_packet_execute(
+        &mut self,
+        packet: &Packet,
+        relayer: &Signer,
+    ) -> (ModuleExtras, Result<(), PacketError>) {
+        let res = on_timeout_packet_execute(self, packet, relayer);
+        (
+            res.0,
+            res.1
+                .map_err(|e: TokenTransferError| PacketError::AppModule {
+                    description: e.to_string(),
+                }),
+        )
     }
 }

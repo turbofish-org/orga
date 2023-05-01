@@ -33,6 +33,7 @@ use crate::orga;
 mod impls;
 mod transfer;
 use transfer::Transfer;
+mod router;
 
 #[orga]
 pub struct Ibc {
@@ -70,6 +71,12 @@ pub struct Ibc {
 
     #[state(absolute_prefix(b"acks/"))]
     acks: Map<PortChannelSequence, Vec<u8>>,
+}
+
+impl std::fmt::Debug for Ibc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Ibc").finish()
+    }
 }
 
 #[orga]
