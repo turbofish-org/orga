@@ -30,6 +30,7 @@ use crate::collections::{Deque, Map};
 use crate::encoding::{
     Adapter, ByteTerminatedString, Decode, Encode, EofTerminatedString, FixedString,
 };
+use crate::store::Store;
 use crate::{orga, Error};
 
 mod impls;
@@ -38,6 +39,7 @@ use transfer::Transfer;
 
 use self::messages::{IbcMessage, IbcTx};
 mod messages;
+mod query;
 mod router;
 
 #[orga]
@@ -76,6 +78,9 @@ pub struct Ibc {
 
     #[state(absolute_prefix(b"acks/"))]
     acks: Map<PortChannelSequence, Vec<u8>>,
+
+    #[state(absolute_prefix(b""))]
+    store: Store,
 }
 
 impl Ibc {
