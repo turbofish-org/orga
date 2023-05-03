@@ -1,7 +1,9 @@
 use ed::Terminated;
+use ibc::applications::transfer::relay::send_transfer::send_transfer;
 use ibc::clients::ics07_tendermint::{
     client_state::ClientState as TmClientState, consensus_state::ConsensusState as TmConsensusState,
 };
+use ibc::core::dispatch;
 use ibc::core::ics02_client::client_type::ClientType;
 use ibc::core::ics02_client::height::Height;
 use ibc::core::ics03_connection::connection::ConnectionEnd as IbcConnectionEnd;
@@ -28,11 +30,14 @@ use crate::collections::{Deque, Map};
 use crate::encoding::{
     Adapter, ByteTerminatedString, Decode, Encode, EofTerminatedString, FixedString,
 };
-use crate::orga;
+use crate::{orga, Error};
 
 mod impls;
 mod transfer;
 use transfer::Transfer;
+
+use self::messages::{IbcMessage, IbcTx};
+mod messages;
 mod router;
 
 #[orga]
@@ -71,6 +76,21 @@ pub struct Ibc {
 
     #[state(absolute_prefix(b"acks/"))]
     acks: Map<PortChannelSequence, Vec<u8>>,
+}
+
+impl Ibc {
+    #[call]
+    pub fn deliver(&mut self, messages: IbcTx) -> crate::Result<()> {
+        for message in messages.0 {
+            use IbcMessage::*;
+            match message {
+                Ics26(msg) => dispatch(self, msg).map_err(|e| Error::Ibc(e.to_string()))?,
+                Ics20(msg) => send_transfer(self, msg).map_err(|e| Error::Ibc(e.to_string()))?,
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl std::fmt::Debug for Ibc {
