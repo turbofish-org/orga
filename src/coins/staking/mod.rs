@@ -18,7 +18,7 @@ use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::convert::TryInto;
-use tendermint_proto::abci::EvidenceType;
+use tendermint_proto::v0_34::abci::EvidenceType;
 
 mod delegator;
 pub use delegator::*;

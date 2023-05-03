@@ -217,7 +217,7 @@ impl From<ClientType> for EofTerminatedString {
 
 impl From<EofTerminatedString> for ClientType {
     fn from(client_type: EofTerminatedString) -> Self {
-        ClientType::new(client_type.0)
+        ClientType::new(client_type.0).unwrap()
     }
 }
 
@@ -427,10 +427,11 @@ mod tests {
             .consensus_states
             .insert("0-100".to_string().into(), consensus_state)
             .unwrap();
-        let client_id = IbcClientId::new(ClientType::new("07-tendermint".to_string()), 123)
-            .unwrap()
-            .into();
-        client.client_type = ClientType::new("07-tendermint".to_string()).into();
+        let client_id =
+            IbcClientId::new(ClientType::new("07-tendermint".to_string()).unwrap(), 123)
+                .unwrap()
+                .into();
+        client.client_type = ClientType::new("07-tendermint".to_string()).unwrap().into();
         client
             .updates
             .insert(

@@ -73,6 +73,35 @@ impl BeginBlock for Ibc {
 }
 
 impl ValidationContext for Ibc {
+    fn validate_message_signer(&self, signer: &Signer) -> Result<(), ContextError> {
+        use crate::context::Context;
+        use crate::plugins::Signer as SignerCtx;
+        let ctx = Context::resolve::<SignerCtx>()
+            .ok_or_else(|| Error::Signer("Invalid signer".to_string()))
+            .map_err(|e| ClientError::InvalidSigner {
+                reason: e.to_string(),
+            })?;
+
+        let expected_signer = ctx.signer.ok_or_else(|| ClientError::InvalidSigner {
+            reason: "Missing signer".to_string(),
+        })?;
+        let actual_signer: Address =
+            signer
+                .clone()
+                .try_into()
+                .map_err(|e: crate::Error| ClientError::InvalidSigner {
+                    reason: e.to_string(),
+                })?;
+
+        if expected_signer != actual_signer {
+            return Err(ClientError::InvalidSigner {
+                reason: "Invalid signer".to_string(),
+            }
+            .into());
+        }
+        Ok(())
+    }
+
     fn client_state(&self, client_id: &IbcClientId) -> Result<Box<dyn ClientState>, ContextError> {
         Ok(Box::<TmClientState>::new(
             self.clients
@@ -629,7 +658,7 @@ mod tests {
     use super::*;
 
     fn tm_client_id(n: u64) -> ClientId {
-        IbcClientId::new(ClientType::new("07-tendermint".to_string()), n)
+        IbcClientId::new(ClientType::new("07-tendermint".to_string()).unwrap(), n)
             .unwrap()
             .into()
     }

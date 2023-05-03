@@ -14,7 +14,7 @@ use std::borrow::Borrow;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use tendermint_proto::abci::*;
+use tendermint_proto::v0_34::abci::*;
 
 pub struct Node<A> {
     _app: PhantomData<A>,

@@ -13,14 +13,14 @@ use std::cell::{Ref, RefCell};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::rc::Rc;
-use tendermint_proto::abci::Event;
-use tendermint_proto::abci::{Evidence, LastCommitInfo, RequestQuery, ResponseQuery};
-use tendermint_proto::abci::{
+use tendermint_proto::google::protobuf::Timestamp;
+use tendermint_proto::v0_34::abci::Event;
+use tendermint_proto::v0_34::abci::{Evidence, LastCommitInfo, RequestQuery, ResponseQuery};
+use tendermint_proto::v0_34::abci::{
     RequestBeginBlock, RequestEndBlock, RequestInitChain, ValidatorUpdate,
 };
-use tendermint_proto::crypto::{public_key::Sum, PublicKey};
-use tendermint_proto::google::protobuf::Timestamp;
-use tendermint_proto::types::Header;
+use tendermint_proto::v0_34::crypto::{public_key::Sum, PublicKey};
+use tendermint_proto::v0_34::types::Header;
 
 pub struct Time {
     pub seconds: i64,
@@ -209,7 +209,7 @@ impl Validators {
             .unwrap();
         self.updates.insert(
             pub_key,
-            Adapter(tendermint_proto::abci::ValidatorUpdate {
+            Adapter(tendermint_proto::v0_34::abci::ValidatorUpdate {
                 pub_key: Some(key),
                 power: power as i64,
             }),

@@ -10,7 +10,7 @@ use std::{
     mem::transmute,
     path::{Path, PathBuf},
 };
-use tendermint_proto::abci::{self, *};
+use tendermint_proto::v0_34::abci::{self, *};
 type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
 pub const SNAPSHOT_INTERVAL: u64 = 1000;
