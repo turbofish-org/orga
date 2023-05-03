@@ -36,6 +36,8 @@ use crate::{orga, Error};
 mod impls;
 mod transfer;
 use transfer::Transfer;
+mod service;
+pub use service::start_grpc;
 
 use self::messages::{IbcMessage, IbcTx};
 mod messages;
