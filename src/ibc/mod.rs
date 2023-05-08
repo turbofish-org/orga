@@ -1,5 +1,5 @@
 use ed::Terminated;
-use ibc::applications::transfer::relay::send_transfer::send_transfer;
+use ibc::applications::transfer::send_transfer;
 use ibc::clients::ics07_tendermint::{
     client_state::ClientState as TmClientState, consensus_state::ConsensusState as TmConsensusState,
 };
@@ -16,8 +16,7 @@ use ibc::core::ics24_host::path::{
     AckPath, ChannelEndPath, ClientConnectionPath, CommitmentPath, ConnectionPath, ReceiptPath,
     SeqAckPath, SeqRecvPath, SeqSendPath,
 };
-use ibc::signer::Signer;
-use ibc::timestamp::Timestamp as IbcTimestamp;
+use ibc::Signer;
 use ibc_proto::google::protobuf::Any;
 use ibc_proto::ibc::core::{
     channel::v1::Channel as RawChannelEnd, connection::v1::ConnectionEnd as RawConnectionEnd,
@@ -32,6 +31,7 @@ use crate::encoding::{
 };
 use crate::store::Store;
 use crate::{orga, Error};
+use ibc::core::timestamp::Timestamp as IbcTimestamp;
 
 mod impls;
 mod transfer;
@@ -43,6 +43,7 @@ use self::messages::{IbcMessage, IbcTx};
 mod messages;
 mod query;
 mod router;
+pub const IBC_QUERY_PATH: &str = "store/ibc/key";
 
 #[orga]
 pub struct Ibc {
@@ -391,11 +392,9 @@ mod tests {
     use std::time::Duration;
 
     use ibc::{
-        clients::ics07_tendermint::client_state::AllowUpdate,
+        clients::ics07_tendermint::{client_state::AllowUpdate, trust_threshold::TrustThreshold},
         core::{
-            ics02_client::{
-                client_type::ClientType, height::Height, trust_threshold::TrustThreshold,
-            },
+            ics02_client::{client_type::ClientType, height::Height},
             ics23_commitment::{commitment::CommitmentRoot, specs::ProofSpecs},
             ics24_host::identifier::ChainId,
         },
@@ -480,7 +479,15 @@ mod tests {
         ibc.connections.insert(conn_id.into(), conn).unwrap();
 
         let channel_end_path = ChannelEndPath(PortId::transfer(), ChannelId::new(123)).into();
-        let chan = IbcChannelEnd::default().into();
+        let chan = IbcChannelEnd::new(
+            ibc::core::ics04_channel::channel::State::Open,
+            Default::default(),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+        )
+        .unwrap()
+        .into();
         ibc.channel_ends.insert(channel_end_path, chan).unwrap();
 
         let seq_sends_path = SeqSendPath(PortId::transfer(), ChannelId::new(123)).into();
@@ -557,7 +564,7 @@ mod tests {
         assert_next(
             b"channelEnds/ports/transfer/channels/channel-123",
             &[
-                16, 1, 26, 13, 10, 11, 100, 101, 102, 97, 117, 108, 116, 80, 111, 114, 116,
+                8, 3, 16, 1, 26, 13, 10, 11, 100, 101, 102, 97, 117, 108, 116, 80, 111, 114, 116,
             ],
         );
         assert_next(b"clients/07-tendermint-123/", b"\x0007-tendermint");

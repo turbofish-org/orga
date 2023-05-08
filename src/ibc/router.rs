@@ -1,11 +1,8 @@
 use std::borrow::Borrow;
 
 use ibc::applications::transfer::MODULE_ID_STR;
-use ibc::core::{
-    context::Router,
-    ics24_host::identifier::PortId,
-    ics26_routing::context::{Module, ModuleId},
-};
+use ibc::core::ics24_host::identifier::PortId;
+use ibc::core::router::{Module, ModuleId, Router};
 
 use super::Ibc;
 
@@ -24,7 +21,7 @@ impl Router for Ibc {
 
     fn lookup_module_by_port(&self, port_id: &PortId) -> Option<ModuleId> {
         let transfer_port = PortId::transfer();
-        let transfer_module_id: ModuleId = MODULE_ID_STR.parse().unwrap();
+        let transfer_module_id: ModuleId = ModuleId::new(MODULE_ID_STR.to_string());
 
         if port_id == &transfer_port {
             Some(transfer_module_id)

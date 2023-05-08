@@ -1,6 +1,7 @@
 use std::time::Duration;
 use std::{iter::DoubleEndedIterator, ops::Bound};
 
+use ibc::core::events::IbcEvent;
 use ibc::core::ics23_commitment::commitment::CommitmentRoot;
 use ibc::{
     clients::ics07_tendermint::{
@@ -21,10 +22,9 @@ use ibc::{
         ics24_host::path::{
             ClientConnectionPath, ClientConsensusStatePath, ClientStatePath, ConnectionPath,
         },
+        timestamp::Timestamp,
         ContextError, ExecutionContext, ValidationContext,
     },
-    events::IbcEvent,
-    timestamp::Timestamp,
     Height,
 };
 

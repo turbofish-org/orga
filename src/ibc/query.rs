@@ -1,9 +1,9 @@
-use ibc::core::ics24_host::{Path, IBC_QUERY_PATH};
+use ibc::core::ics24_host::path::Path;
 use ics23::LeafOp;
 use tendermint_proto::v0_34::abci::{RequestQuery, ResponseQuery};
 use tendermint_proto::v0_34::crypto::{ProofOp, ProofOps};
 
-use super::Ibc;
+use super::{Ibc, IBC_QUERY_PATH};
 use crate::abci::AbciQuery;
 use crate::store::Read;
 use crate::{Error, Result};

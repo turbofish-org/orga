@@ -17,7 +17,6 @@ use ibc::{
                 AckPath, ChannelEndPath, ClientConnectionPath, ClientConsensusStatePath,
                 ClientStatePath, CommitmentPath, ConnectionPath, ReceiptPath,
             },
-            Path as IbcPath,
         },
     },
 };

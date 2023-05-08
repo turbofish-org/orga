@@ -2,9 +2,8 @@ use crate::encoding::{Decode, Encode};
 use crate::Result;
 use cosmrs::Tx;
 use ed::Terminated;
-use ibc::{
-    applications::transfer::msgs::transfer::MsgTransfer, core::ics26_routing::msgs::MsgEnvelope,
-};
+use ibc::applications::transfer::msgs::transfer::MsgTransfer;
+use ibc::core::MsgEnvelope;
 use ibc_proto::google::protobuf::Any;
 
 #[derive(Clone, Debug)]
