@@ -379,9 +379,9 @@ macro_rules! protobuf_newtype {
         }
 
         #[allow(trivial_bounds)]
-        impl From<$newtype> for Any
+        impl From<$newtype> for $raw
         where
-            $inner: Into<Any>,
+            $inner: Into<$raw>,
         {
             fn from(outer: $newtype) -> Self {
                 outer.inner.into()

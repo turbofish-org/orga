@@ -1,11 +1,15 @@
+use ibc::core::ics03_connection::connection::ConnectionEnd as IbcConnectionEnd;
 use ibc::core::ics24_host::path::Path;
 use ibc::Height;
 use ibc_proto::ibc::core::client::v1::{ConsensusStateWithHeight, IdentifiedClientState};
+use ibc_proto::ibc::core::connection::v1::{
+    ConnectionEnd as RawConnectionEnd, IdentifiedConnection,
+};
 use ics23::LeafOp;
 use tendermint_proto::v0_34::abci::{RequestQuery, ResponseQuery};
 use tendermint_proto::v0_34::crypto::{ProofOp, ProofOps};
 
-use super::{ClientId, Ibc, IBC_QUERY_PATH};
+use super::{ClientId, ConnectionEnd, ConnectionId, Ibc, IBC_QUERY_PATH};
 use crate::abci::AbciQuery;
 use crate::store::Read;
 use crate::{Error, Result};
@@ -127,5 +131,49 @@ impl Ibc {
         }
 
         Ok(states)
+    }
+
+    pub fn query_connection(&self, conn_id: ConnectionId) -> Result<ConnectionEnd> {
+        Ok(self
+            .connections
+            .get(conn_id.into())?
+            .ok_or_else(|| Error::Ibc("Connection not found".to_string()))?
+            .clone())
+    }
+
+    pub fn query_all_connections(&self) -> Result<Vec<IdentifiedConnection>> {
+        let mut connections = vec![];
+
+        for entry in self.connections.iter()? {
+            let (id, connection) = entry?;
+            let connection: IbcConnectionEnd = connection.clone().into();
+            let raw_connection: RawConnectionEnd = connection.into();
+            connections.push(IdentifiedConnection {
+                client_id: raw_connection.client_id,
+                counterparty: raw_connection.counterparty,
+                versions: raw_connection.versions,
+                delay_period: raw_connection.delay_period,
+                id: id.clone().as_str().to_string(),
+                state: raw_connection.state.into(),
+            });
+        }
+
+        Ok(connections)
+    }
+
+    pub fn query_client_connections(&self, client_id: ClientId) -> Result<Vec<ConnectionId>> {
+        let mut connection_ids = vec![];
+
+        let client = self
+            .clients
+            .get(client_id.into())?
+            .ok_or_else(|| Error::Ibc("Client not found".to_string()))?;
+
+        for entry in client.connections.iter()? {
+            let (id, _) = entry?;
+            connection_ids.push(id.clone());
+        }
+
+        Ok(connection_ids)
     }
 }

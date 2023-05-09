@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use std::str::FromStr;
 
 use ibc::core::ics24_host::identifier::{ClientId, PortId};
 use ibc::{
@@ -224,11 +225,13 @@ impl ClientQuery for IbcClientService {
     }
 }
 
-pub struct IbcConnectionService {}
+pub struct IbcConnectionService {
+    ibc: Client<Ibc>,
+}
 
 impl IbcConnectionService {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(ibc: Client<Ibc>) -> Self {
+        Self { ibc }
     }
 }
 
@@ -238,21 +241,50 @@ impl ConnectionQuery for IbcConnectionService {
         &self,
         request: Request<QueryConnectionRequest>,
     ) -> Result<Response<QueryConnectionResponse>, Status> {
-        todo!()
+        let conn_id = ConnectionId::from_str(&request.into_inner().connection_id)
+            .map_err(|_| Status::invalid_argument("Invalid connection ID".to_string()))?;
+
+        let conn = self
+            .ibc
+            .query(|ibc| ibc.query_connection(conn_id.clone().into()))
+            .await?;
+
+        Ok(Response::new(QueryConnectionResponse {
+            connection: Some(conn.into()),
+            ..Default::default()
+        }))
     }
 
     async fn connections(
         &self,
         _request: Request<QueryConnectionsRequest>,
     ) -> Result<Response<QueryConnectionsResponse>, Status> {
-        todo!()
+        let connections = self.ibc.query(|ibc| ibc.query_all_connections()).await?;
+
+        Ok(Response::new(QueryConnectionsResponse {
+            connections,
+            ..Default::default()
+        }))
     }
 
     async fn client_connections(
         &self,
         request: Request<QueryClientConnectionsRequest>,
     ) -> Result<Response<QueryClientConnectionsResponse>, Status> {
-        todo!()
+        let client_id: ClientId = request
+            .into_inner()
+            .client_id
+            .parse()
+            .map_err(|_| Status::invalid_argument("Invalid client ID".to_string()))?;
+        let connection_ids = self
+            .ibc
+            .query(|ibc| ibc.query_client_connections(client_id.clone().into()))
+            .await?;
+
+        Ok(Response::new(QueryClientConnectionsResponse {
+            connection_paths: connection_ids.into_iter().map(|v| v.to_string()).collect(),
+            ..Default::default()
+        }))
     }
 
     async fn connection_client_state(
@@ -727,8 +759,8 @@ pub async fn start_grpc(client: Client<Ibc>, opts: &GrpcOpts) {
     let auth_service = AuthQueryServer::new(AuthService {});
     let bank_service = BankQueryServer::new(BankService {});
     let staking_service = StakingQueryServer::new(StakingService {});
-    let ibc_client_service = ClientQueryServer::new(IbcClientService::new(client));
-    let ibc_connection_service = ConnectionQueryServer::new(IbcConnectionService {});
+    let ibc_client_service = ClientQueryServer::new(IbcClientService::new(client.clone()));
+    let ibc_connection_service = ConnectionQueryServer::new(IbcConnectionService::new(client));
     let ibc_channel_service = ChannelQueryServer::new(IbcChannelService {});
     let health_service = HealthServer::new(AppHealthService {});
     let tx_service = TxServer::new(AppTxService {});
@@ -747,7 +779,6 @@ pub async fn start_grpc(client: Client<Ibc>, opts: &GrpcOpts) {
         .unwrap();
 }
 
-#[derive(Copy)]
 pub struct Client<T> {
     inner: PhantomData<T>,
 }
