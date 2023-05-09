@@ -17,11 +17,6 @@ pub use node::*;
 
 pub mod prost;
 
-#[cfg(feature = "abci")]
-pub mod tendermint_client;
-#[cfg(feature = "abci")]
-pub use tendermint_client::TendermintClient;
-
 use messages::*;
 pub use tendermint_proto::abci as messages;
 

@@ -279,7 +279,7 @@ fn add_tracing(item_impl: &mut ItemImpl) {
                 let block = &method.block;
 
                 method.block = parse_quote! {
-                    { ::orga::client::experimental::with_trace(move ||{ #block }) }
+                    { ::orga::client::trace::maybe_pop_trace(move || { #block }) }
                 };
 
                 let pfx = format!("{} (0x{:02x})", query_index - 1, query_index - 1);

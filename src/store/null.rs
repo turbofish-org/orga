@@ -1,12 +1,13 @@
 use super::*;
+use crate::Error as OrgaError;
 
 /// An implementation of `Read` which is always empty. Useful for tests, or as
 /// the "backing store" for a `BufStore` in order to create a temporary store
 /// which does not persist data (`MapStore`).
 #[derive(Default, Clone)]
-pub struct EmptyStore;
+pub struct Empty;
 
-impl Read for EmptyStore {
+impl Read for Empty {
     #[inline]
     fn get(&self, _: &[u8]) -> Result<Option<Vec<u8>>> {
         Ok(None)
@@ -18,7 +19,7 @@ impl Read for EmptyStore {
     }
 }
 
-impl Write for EmptyStore {
+impl Write for Empty {
     fn put(&mut self, _key: Vec<u8>, _value: Vec<u8>) -> Result<()> {
         unimplemented!()
     }
@@ -29,26 +30,28 @@ impl Write for EmptyStore {
 }
 
 #[derive(Default, Clone)]
-pub struct NullStore;
+pub struct Unknown;
 
-impl Read for NullStore {
+impl Read for Unknown {
     #[inline]
-    fn get(&self, _: &[u8]) -> Result<Option<Vec<u8>>> {
-        Err(Error::Store("Store is null".to_string()))
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        Err(OrgaError::StoreErr(Error::ReadUnknown(key.to_vec())))
     }
 
     #[inline]
-    fn get_next(&self, _: &[u8]) -> Result<Option<KV>> {
-        Err(Error::Store("Store is null".to_string()))
+    fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
+        Err(OrgaError::StoreErr(Error::ReadUnknown(key.to_vec())))
     }
 }
 
-impl Write for NullStore {
+impl Write for Unknown {
     fn put(&mut self, _key: Vec<u8>, _value: Vec<u8>) -> Result<()> {
+        // TODO: WriteUnknown error
         unimplemented!()
     }
 
     fn delete(&mut self, _key: &[u8]) -> Result<()> {
+        // TODO: WriteUnknown error
         unimplemented!()
     }
 }
@@ -58,13 +61,13 @@ mod tests {
     use super::*;
     #[test]
     fn get() {
-        let store = EmptyStore;
+        let store = Empty;
         assert_eq!(store.get(&[1]).unwrap(), None)
     }
 
     #[test]
     fn get_next() {
-        let store = EmptyStore;
+        let store = Empty;
         assert_eq!(store.get_next(&[1]).unwrap(), None)
     }
 }

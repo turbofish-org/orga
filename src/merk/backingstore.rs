@@ -1,7 +1,7 @@
 #[cfg(feature = "merk-full")]
 use super::{MerkStore, ProofBuilder};
 use crate::prelude::bufstore::PartialMapStore;
-use crate::store::{BufStore, EmptyStore, MapStore, Read, Shared, Write, KV};
+use crate::store::{BufStore, Empty, MapStore, Read, Shared, Write, KV};
 use crate::{Error, Result};
 use merk::proofs::query::Map as ProofMap;
 use std::any::Any;
@@ -21,7 +21,7 @@ pub enum BackingStore {
     MapStore(Shared<MapStore>),
     PartialMapStore(Shared<PartialMapStore>),
     ProofMap(Shared<ProofStore>),
-    Null(EmptyStore),
+    Null(Empty),
     Other(Shared<Box<dyn ReadWrite>>),
 }
 
@@ -37,7 +37,7 @@ impl<T: Read + Write + 'static> ReadWrite for T {
 
 impl Default for BackingStore {
     fn default() -> Self {
-        BackingStore::Null(EmptyStore)
+        BackingStore::Null(Empty)
     }
 }
 

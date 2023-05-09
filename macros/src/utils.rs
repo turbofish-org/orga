@@ -237,7 +237,7 @@ impl Default for Types {
             field_call_trait: quote! { ::orga::call::FieldCall },
             method_call_trait: quote! { ::orga::call::MethodCall },
             call_trait: quote! { ::orga::call::Call },
-            trace_fn: quote! { ::orga::client::experimental::trace },
+            trace_fn: quote! { ::orga::client::trace::push_trace },
             keyop_ty: quote! { ::orga::describe::KeyOp },
             ed_result_ty: quote! { ::orga::encoding::Result },
             ed_error_ty: quote! { ::orga::encoding::Error },

@@ -1,7 +1,6 @@
 use super::GetNonce;
 use super::{sdk_compat::sdk::Tx as SdkTx, ConvertSdkTx};
 use crate::call::Call as CallTrait;
-use crate::client::{AsyncCall, AsyncQuery, Client as ClientTrait};
 use crate::context::Context;
 use crate::describe::{Describe, Descriptor};
 use crate::encoding::{Decode, Encode};
@@ -104,85 +103,6 @@ where
         inner_call.encode_into(&mut call_bytes)?;
 
         Ok(call_bytes)
-    }
-}
-
-pub struct Client<T, U: Clone, const ID: &'static str> {
-    parent: U,
-    marker: std::marker::PhantomData<fn() -> T>,
-}
-
-impl<T, U: Clone, const ID: &'static str> Clone for Client<T, U, ID> {
-    fn clone(&self) -> Self {
-        Client {
-            parent: self.parent.clone(),
-            marker: PhantomData,
-        }
-    }
-}
-
-unsafe impl<T, U: Clone + Send, const ID: &'static str> Send for Client<T, U, ID> {}
-
-#[async_trait::async_trait(?Send)]
-impl<T: CallTrait, U: AsyncCall<Call = Vec<u8>> + Clone, const ID: &'static str> AsyncCall
-    for Client<T, U, ID>
-where
-    T::Call: Send,
-    U: Send,
-{
-    type Call = T::Call;
-
-    async fn call(&self, call: Self::Call) -> Result<()> {
-        let id_bytes = ID.as_bytes();
-
-        let mut call_bytes = Vec::with_capacity(id_bytes.len() + call.encoding_length()?);
-        call_bytes.extend_from_slice(id_bytes);
-        call.encode_into(&mut call_bytes)?;
-
-        self.parent.call(call_bytes).await
-    }
-}
-
-#[async_trait::async_trait(?Send)]
-impl<
-        T: Query + 'static,
-        U: for<'a> AsyncQuery<
-                Query = T::Query,
-                Response<'a> = std::rc::Rc<ChainCommitmentPlugin<T, ID>>,
-            > + Clone,
-        const ID: &'static str,
-    > AsyncQuery for Client<T, U, ID>
-{
-    type Query = T::Query;
-    type Response<'a> = std::rc::Rc<T>;
-
-    async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
-    where
-        F: FnMut(Self::Response<'_>) -> Result<R>,
-    {
-        self.parent
-            .query(query, |plugin| {
-                check(std::rc::Rc::new(
-                    std::rc::Rc::try_unwrap(plugin)
-                        .map_err(|_| ())
-                        .unwrap()
-                        .inner,
-                ))
-            })
-            .await
-    }
-}
-
-impl<T: ClientTrait<Client<T, U, ID>>, U: Clone, const ID: &'static str> ClientTrait<U>
-    for ChainCommitmentPlugin<T, ID>
-{
-    type Client = T::Client;
-
-    fn create_client(parent: U) -> Self::Client {
-        T::create_client(Client {
-            parent,
-            marker: std::marker::PhantomData,
-        })
     }
 }
 

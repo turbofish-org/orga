@@ -1,5 +1,4 @@
 use crate::call::Call as CallTrait;
-use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Address, Symbol};
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
@@ -374,112 +373,6 @@ impl<T, U: Clone, S> Clone for SdkCompatAdapter<T, U, S> {
         Self {
             inner: std::marker::PhantomData,
             parent: self.parent.clone(),
-        }
-    }
-}
-
-#[async_trait::async_trait(?Send)]
-impl<T: CallTrait, U, S> AsyncCall for SdkCompatAdapter<T, U, S>
-where
-    U: AsyncCall<Call = Call<T::Call>>,
-    T::Call: Send,
-{
-    type Call = T::Call;
-
-    async fn call(&self, call: Self::Call) -> Result<()> {
-        self.parent.call(Call::Native(call)).await
-    }
-}
-
-#[async_trait::async_trait(?Send)]
-impl<
-        T: Query + State,
-        U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = std::rc::Rc<SdkCompatPlugin<S, T>>>
-            + Clone,
-        S,
-    > AsyncQuery for SdkCompatAdapter<T, U, S>
-{
-    type Query = T::Query;
-    type Response<'a> = std::rc::Rc<T>;
-
-    async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
-    where
-        F: FnMut(Self::Response<'_>) -> Result<R>,
-    {
-        self.parent
-            .query(query, |plugin| {
-                check(std::rc::Rc::new(
-                    std::rc::Rc::try_unwrap(plugin)
-                        .map_err(|_| ())
-                        .unwrap()
-                        .inner,
-                ))
-            })
-            .await
-    }
-}
-
-pub struct SdkCompatClient<T: Client<SdkCompatAdapter<T, U, S>>, U: Clone, S> {
-    inner: T::Client,
-    _parent: U,
-}
-
-impl<T: Client<SdkCompatAdapter<T, U, S>>, U: Clone, S> Deref for SdkCompatClient<T, U, S> {
-    type Target = T::Client;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl<T: Client<SdkCompatAdapter<T, U, S>>, U: Clone, S> DerefMut for SdkCompatClient<T, U, S> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::JsValue;
-
-impl<
-        T: Client<SdkCompatAdapter<T, U, S>> + CallTrait,
-        U: Clone + AsyncCall<Call = Call<T::Call>>,
-        S,
-    > SdkCompatClient<T, U, S>
-{
-    #[cfg(target_arch = "wasm32")]
-    pub async fn send_sdk_tx(
-        &mut self,
-        sign_doc: sdk::SignDoc,
-    ) -> std::result::Result<(), JsValue> {
-        let signer = crate::plugins::signer::keplr::Signer;
-        let sig = signer.sign_sdk(sign_doc.clone()).await?;
-
-        let tx = sdk::Tx::Amino(sdk::AminoTx {
-            msg: sign_doc.msgs,
-            signatures: vec![sig],
-            fee: sign_doc.fee,
-            memo: sign_doc.memo,
-        });
-        self._parent
-            .call(Call::Sdk(tx))
-            .await
-            .map_err(|e| e.to_string().into())
-    }
-}
-
-impl<S, T: Client<SdkCompatAdapter<T, U, S>> + State, U: Clone> Client<U>
-    for SdkCompatPlugin<S, T>
-{
-    type Client = SdkCompatClient<T, U, S>;
-
-    fn create_client(parent: U) -> Self::Client {
-        SdkCompatClient {
-            inner: T::create_client(SdkCompatAdapter {
-                inner: std::marker::PhantomData,
-                parent: parent.clone(),
-            }),
-            _parent: parent,
         }
     }
 }

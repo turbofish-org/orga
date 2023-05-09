@@ -1,20 +1,28 @@
-use crate::error::{Error, Result};
+use crate::error::Result;
 use std::ops::{Bound, Deref, DerefMut, RangeBounds};
+use thiserror::Error;
 
 pub mod bufstore;
 pub mod iter;
-pub mod nullstore;
+pub mod log;
+pub mod null;
 pub mod share;
 #[allow(clippy::module_inception)]
 pub mod store;
 
 pub use bufstore::{BufStore, Map as BufStoreMap, MapStore};
 pub use iter::Iter;
-pub use nullstore::EmptyStore;
+pub use null::Empty;
 pub use share::Shared;
 pub use store::{DefaultBackingStore, Store};
 
 // TODO: Key type (for cheaper concat, enum over ref or owned slice, etc)
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Tried to read unknown store data with key {0:?}")]
+    ReadUnknown(Vec<u8>),
+}
 
 /// A key/value entry - the first element is the key and the second element is
 /// the value.

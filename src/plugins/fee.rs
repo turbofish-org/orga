@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use super::sdk_compat::{sdk::Tx as SdkTx, ConvertSdkTx};
 use super::Paid;
 use crate::call::Call;
-use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Coin, Symbol};
 use crate::context::{Context, GetContext};
 use crate::describe::Describe;
@@ -83,73 +82,6 @@ impl<S, T: ConvertSdkTx> ConvertSdkTx for FeePlugin<S, T> {
 
     fn convert(&self, sdk_tx: &SdkTx) -> Result<T::Output> {
         self.inner.convert(sdk_tx)
-    }
-}
-
-pub struct FeeAdapter<T, U: Clone, S> {
-    parent: U,
-    marker: std::marker::PhantomData<fn(S, T)>,
-}
-
-unsafe impl<T, U: Send + Clone, S> Send for FeeAdapter<T, U, S> {}
-
-impl<T, U: Clone, S> Clone for FeeAdapter<T, U, S> {
-    fn clone(&self) -> Self {
-        FeeAdapter {
-            parent: self.parent.clone(),
-            marker: std::marker::PhantomData,
-        }
-    }
-}
-
-#[async_trait::async_trait(?Send)]
-impl<T: Call, U: AsyncCall<Call = T::Call> + Clone, S> AsyncCall for FeeAdapter<T, U, S>
-where
-    T::Call: Send,
-    U: Send,
-{
-    type Call = T::Call;
-
-    async fn call(&self, call: Self::Call) -> Result<()> {
-        self.parent.call(call).await
-    }
-}
-
-#[async_trait::async_trait(?Send)]
-impl<
-        T: Query + State,
-        U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = std::rc::Rc<FeePlugin<S, T>>> + Clone,
-        S,
-    > AsyncQuery for FeeAdapter<T, U, S>
-{
-    type Query = T::Query;
-    type Response<'a> = std::rc::Rc<T>;
-
-    async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
-    where
-        F: FnMut(Self::Response<'_>) -> Result<R>,
-    {
-        self.parent
-            .query(query, |plugin| {
-                check(std::rc::Rc::new(
-                    std::rc::Rc::try_unwrap(plugin)
-                        .map_err(|_| ())
-                        .unwrap()
-                        .inner,
-                ))
-            })
-            .await
-    }
-}
-
-impl<S, T: Client<FeeAdapter<T, U, S>>, U: Clone> Client<U> for FeePlugin<S, T> {
-    type Client = T::Client;
-
-    fn create_client(parent: U) -> Self::Client {
-        T::create_client(FeeAdapter {
-            parent,
-            marker: std::marker::PhantomData,
-        })
     }
 }
 

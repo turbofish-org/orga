@@ -5,7 +5,6 @@ use std::iter::Peekable;
 use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
 use crate::call::{Call, FieldCall};
-use crate::client::Client as ClientTrait;
 use crate::describe::Describe;
 use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::orga;
@@ -731,14 +730,6 @@ impl<'a, V: Ord> Ord for Ref<'a, V> {
     }
 }
 
-impl<'a, T: ClientTrait<U>, U: Clone> ClientTrait<U> for Ref<'a, T> {
-    type Client = T::Client;
-
-    fn create_client(parent: U) -> Self::Client {
-        T::create_client(parent)
-    }
-}
-
 /// A mutable reference to an existing value in a collection.
 ///
 /// If the value is mutated, it will be retained in memory until the parent
@@ -937,45 +928,6 @@ impl<'a, K: Encode, V> From<Entry<'a, K, V>> for Option<ChildMut<'a, K, V>> {
             Entry::Vacant { .. } => None,
             Entry::Occupied { child } => Some(child),
         }
-    }
-}
-
-pub struct Client<K, V, U: Clone> {
-    parent: U,
-    key: Option<K>,
-    _marker: std::marker::PhantomData<V>,
-}
-
-impl<K, V, U: Clone> ClientTrait<U> for Map<K, V> {
-    type Client = Client<K, V, U>;
-
-    fn create_client(parent: U) -> Self::Client {
-        Client {
-            parent,
-            key: None,
-            _marker: std::marker::PhantomData,
-        }
-    }
-}
-
-impl<K: Clone, V, U: Clone> Clone for Client<K, V, U> {
-    fn clone(&self) -> Self {
-        Client {
-            parent: self.parent.clone(),
-            key: self.key.clone(),
-            _marker: std::marker::PhantomData,
-        }
-    }
-}
-
-impl<K: Clone, V: Call, U: Clone> Client<K, V, U>
-where
-    V: ClientTrait<Self>,
-{
-    pub fn get_mut(&mut self, key: K) -> V::Client {
-        let mut adapter = self.clone();
-        adapter.key = Some(key);
-        V::create_client(adapter)
     }
 }
 

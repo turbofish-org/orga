@@ -1,5 +1,4 @@
 #![feature(bound_map)]
-#![feature(once_cell)]
 #![feature(associated_type_defaults)]
 #![feature(trivial_bounds)]
 #![allow(incomplete_features)]
@@ -12,6 +11,8 @@
 #![feature(local_key_cell_methods)]
 #![feature(auto_traits)]
 #![feature(negative_impls)]
+#![feature(lazy_cell)]
+#![feature(async_fn_in_trait)]
 
 extern crate self as orga;
 pub use orga_macros::orga;
@@ -62,9 +63,6 @@ pub mod coins;
 
 pub mod context;
 
-#[cfg(feature = "feat-ibc")]
-pub mod ibc;
-
 pub mod upgrade;
 
 mod error;
@@ -87,7 +85,6 @@ pub mod prelude {
 
     pub use crate::abci::*;
     pub use crate::call::*;
-    pub use crate::client::{AsyncCall, Client};
     pub use crate::coins::*;
     pub use crate::collections::*;
     pub use crate::context::*;

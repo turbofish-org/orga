@@ -1,6 +1,5 @@
 use super::map::{ChildMut, Map, ReadOnly, Ref};
 use crate::call::Call;
-use crate::client::Client;
 use crate::collections::map::Iter as MapIter;
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
@@ -212,13 +211,6 @@ impl<T: State> Deque<T> {
     pub fn back_mut(&mut self) -> Result<Option<ChildMut<u64, T>>> {
         self.get_mut(self.len()? - 1)
     }
-}
-
-// TODO: use derive(Client)
-impl<T, U: Clone + Send> Client<U> for Deque<T> {
-    type Client = ();
-
-    fn create_client(_: U) {}
 }
 
 impl<T1, T2> MigrateFrom<Deque<T1>> for Deque<T2>
