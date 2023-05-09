@@ -1,9 +1,11 @@
 use ibc::core::ics24_host::path::Path;
+use ibc::Height;
+use ibc_proto::ibc::core::client::v1::{ConsensusStateWithHeight, IdentifiedClientState};
 use ics23::LeafOp;
 use tendermint_proto::v0_34::abci::{RequestQuery, ResponseQuery};
 use tendermint_proto::v0_34::crypto::{ProofOp, ProofOps};
 
-use super::{Ibc, IBC_QUERY_PATH};
+use super::{ClientId, Ibc, IBC_QUERY_PATH};
 use crate::abci::AbciQuery;
 use crate::store::Read;
 use crate::{Error, Result};
@@ -84,5 +86,46 @@ impl AbciQuery for Ibc {
             height: self.height as i64,
             ..Default::default()
         })
+    }
+}
+
+impl Ibc {
+    pub fn query_client_states(&self) -> Result<Vec<IdentifiedClientState>> {
+        let mut states = vec![];
+        for entry in self.clients.iter()? {
+            let (id, client) = entry?;
+            for entry in client.client_state.iter()? {
+                let (_, client_state) = entry?;
+                states.push(IdentifiedClientState {
+                    client_id: id.clone().as_str().to_string(),
+                    client_state: Some(client_state.clone().into()),
+                });
+            }
+        }
+
+        Ok(states)
+    }
+
+    pub fn query_consensus_states(
+        &self,
+        client_id: ClientId,
+    ) -> Result<Vec<ConsensusStateWithHeight>> {
+        let mut states = vec![];
+
+        let client = self
+            .clients
+            .get(client_id.into())?
+            .ok_or_else(|| Error::Ibc("Client not found".to_string()))?;
+
+        for entry in client.consensus_states.iter()? {
+            let (height, consensus_state) = entry?;
+            let height: Height = height.clone().try_into()?;
+            states.push(ConsensusStateWithHeight {
+                height: Some(height.into()),
+                consensus_state: Some(consensus_state.clone().into()),
+            });
+        }
+
+        Ok(states)
     }
 }

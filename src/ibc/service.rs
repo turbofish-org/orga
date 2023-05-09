@@ -1,4 +1,6 @@
-use ibc::core::ics24_host::identifier::PortId;
+use std::marker::PhantomData;
+
+use ibc::core::ics24_host::identifier::{ClientId, PortId};
 use ibc::{
     clients::ics07_tendermint::{
         client_state::ClientState as TmClientState,
@@ -119,11 +121,21 @@ use ibc_proto::{
 };
 use tonic::{Request, Response, Status};
 
-pub struct IbcClientService {}
+use super::Ibc;
+
+impl From<crate::Error> for tonic::Status {
+    fn from(err: crate::Error) -> Self {
+        tonic::Status::aborted(err.to_string())
+    }
+}
+
+pub struct IbcClientService {
+    ibc: Client<Ibc>,
+}
 
 impl IbcClientService {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(ibc: Client<Ibc>) -> Self {
+        Self { ibc }
     }
 }
 
@@ -138,9 +150,14 @@ impl ClientQuery for IbcClientService {
 
     async fn client_states(
         &self,
-        request: Request<QueryClientStatesRequest>,
+        _request: Request<QueryClientStatesRequest>,
     ) -> Result<Response<QueryClientStatesResponse>, Status> {
-        todo!()
+        let res = QueryClientStatesResponse {
+            client_states: self.ibc.query(|ibc| ibc.query_client_states()).await?,
+            ..Default::default()
+        };
+
+        Ok(Response::new(res))
     }
 
     async fn consensus_state(
@@ -154,7 +171,21 @@ impl ClientQuery for IbcClientService {
         &self,
         request: Request<QueryConsensusStatesRequest>,
     ) -> Result<Response<QueryConsensusStatesResponse>, Status> {
-        todo!()
+        let client_id: ClientId = request
+            .into_inner()
+            .client_id
+            .parse()
+            .map_err(|_| Status::invalid_argument("Invalid client ID".to_string()))?;
+
+        let consensus_states = self
+            .ibc
+            .query(|ibc| ibc.query_consensus_states(client_id.clone().into()))
+            .await?;
+
+        Ok(Response::new(QueryConsensusStatesResponse {
+            consensus_states,
+            ..Default::default()
+        }))
     }
 
     async fn consensus_state_heights(
@@ -690,12 +721,13 @@ pub struct GrpcOpts {
     pub host: String,
     pub port: u16,
 }
-pub async fn start_grpc(opts: &GrpcOpts) {
+
+pub async fn start_grpc(client: Client<Ibc>, opts: &GrpcOpts) {
     use tonic::transport::Server;
     let auth_service = AuthQueryServer::new(AuthService {});
     let bank_service = BankQueryServer::new(BankService {});
     let staking_service = StakingQueryServer::new(StakingService {});
-    let ibc_client_service = ClientQueryServer::new(IbcClientService {});
+    let ibc_client_service = ClientQueryServer::new(IbcClientService::new(client));
     let ibc_connection_service = ConnectionQueryServer::new(IbcConnectionService {});
     let ibc_channel_service = ChannelQueryServer::new(IbcChannelService {});
     let health_service = HealthServer::new(AppHealthService {});
@@ -714,3 +746,22 @@ pub async fn start_grpc(opts: &GrpcOpts) {
         .await
         .unwrap();
 }
+
+#[derive(Copy)]
+pub struct Client<T> {
+    inner: PhantomData<T>,
+}
+impl<T> Clone for Client<T> {
+    fn clone(&self) -> Self {
+        Self { inner: PhantomData }
+    }
+}
+
+impl<T> Client<T> {
+    pub async fn query<F: Fn(T) -> crate::Result<U>, U>(&self, op: F) -> crate::Result<U> {
+        todo!()
+    }
+}
+
+unsafe impl<T> Send for Client<T> {}
+unsafe impl<T> Sync for Client<T> {}

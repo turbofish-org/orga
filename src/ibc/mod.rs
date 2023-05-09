@@ -227,13 +227,22 @@ impl From<Height> for EpochHeight {
 }
 
 impl TryFrom<EpochHeight> for Height {
-    type Error = ();
+    type Error = Error;
 
     fn try_from(epoch_height: EpochHeight) -> Result<Self, Self::Error> {
         let mut parts = epoch_height.0.split('-');
-        let revision_number = parts.next().ok_or(())?.parse().map_err(|_| ())?;
-        let revision_height = parts.next().ok_or(())?.parse().map_err(|_| ())?;
-        Height::new(revision_number, revision_height).map_err(|_| ())
+        let revision_number = parts
+            .next()
+            .ok_or(Error::Ibc("Invalid revision number".to_string()))?
+            .parse()
+            .map_err(|_| Error::Ibc("Invalid revision number".to_string()))?;
+        let revision_height = parts
+            .next()
+            .ok_or(Error::Ibc("Invalid revision height".to_string()))?
+            .parse()
+            .map_err(|_| Error::Ibc("Invalid revision height".to_string()))?;
+        Height::new(revision_number, revision_height)
+            .map_err(|_| Error::Ibc("Failed to parse height".to_string()))
     }
 }
 
@@ -366,6 +375,16 @@ macro_rules! protobuf_newtype {
         impl From<$newtype> for $inner {
             fn from(outer: $newtype) -> Self {
                 outer.inner
+            }
+        }
+
+        #[allow(trivial_bounds)]
+        impl From<$newtype> for Any
+        where
+            $inner: Into<Any>,
+        {
+            fn from(outer: $newtype) -> Self {
+                outer.inner.into()
             }
         }
     };
