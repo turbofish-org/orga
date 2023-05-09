@@ -18,8 +18,11 @@ use std::rc::Rc;
 
 pub trait State: Sized + 'static {
     fn attach(&mut self, store: Store) -> Result<()>;
+
     fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()>;
+
     fn load(store: Store, bytes: &mut &[u8]) -> Result<Self>;
+
     fn field_keyop(_field_name: &str) -> Option<KeyOp> {
         None
     }

@@ -13,6 +13,7 @@
 #![feature(negative_impls)]
 #![feature(lazy_cell)]
 #![feature(async_fn_in_trait)]
+#![feature(trait_upcasting)]
 
 extern crate self as orga;
 pub use orga_macros::orga;

@@ -2,15 +2,17 @@ use crate::call::Call;
 use crate::encoding::{Decode, Encode};
 use crate::orga;
 use crate::query::Query as QueryTrait;
+use crate::store::{Read, Store};
 use crate::Result;
 use educe::Educe;
 use std::cell::RefCell;
 
 #[orga(skip(Query))]
-#[state(transparent)]
 // TODO: #[call(transparent)]
 pub struct QueryPlugin<T> {
-    inner: RefCell<T>,
+    // #[state(transparent)]
+    pub inner: RefCell<T>,
+    store: Store,
 }
 
 #[derive(Clone, Encode, Decode, Educe)]
@@ -31,10 +33,7 @@ where
         match query {
             Query::Inner(inner) => self.inner.borrow().query(inner),
             Query::CallSimulation(call) => self.inner.borrow_mut().call(call),
-            Query::RawKey(_key) => {
-                // TODO
-                Ok(())
-            }
+            Query::RawKey(key) => self.store.get(&key).map(|_| ()),
         }
     }
 }

@@ -33,3 +33,13 @@ impl<T: Read> Read for ReadLog<T> {
         self.inner.get_next(key)
     }
 }
+
+impl<T: Write> Write for ReadLog<T> {
+    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
+        self.inner.put(key, value)
+    }
+
+    fn delete(&mut self, key: &[u8]) -> Result<()> {
+        self.inner.delete(key)
+    }
+}

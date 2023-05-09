@@ -51,8 +51,9 @@ where
             }
             StepResult::FetchQuery(query, n) => {
                 check_n(n)?;
-                let query = QueryPluginQuery::Query(query.encode()?).encode()?;
-                client.query(query.as_slice()).await?
+                let query = query.encode()?;
+                let res = client.query(query.as_slice()).await?;
+                res
             }
         };
 
@@ -62,15 +63,19 @@ where
 
 #[derive(Encode, Decode)]
 enum QueryPluginQuery {
-    Key(Vec<u8>),
     Query(Vec<u8>),
+    Foo,
+    Key(Vec<u8>),
 }
 
 pub fn step<T, U>(store: Store, query_fn: impl Fn(T) -> Result<U>) -> Result<StepResult<T, U>>
 where
     T: State + Query + Describe,
 {
-    let root_bytes = store.get(&[])?.unwrap_or_default();
+    let root_bytes = match store.get(&[])? {
+        Some(bytes) => bytes,
+        None => return Ok(StepResult::FetchKey(vec![], 0)),
+    };
     let app = T::load(store, &mut root_bytes.as_slice())?;
 
     let key = match query_fn(app) {
@@ -87,9 +92,7 @@ where
             Err(_) => return Ok(StepResult::FetchKey(key, push_count)),
         };
         let query_bytes = [receiver_pfx, trace.bytes()].concat();
-        dbg!(&query_bytes);
         let query = T::Query::decode(query_bytes.as_slice())?;
-        dbg!(&query);
         return Ok(StepResult::FetchQuery(query, push_count));
     }
 
@@ -101,12 +104,14 @@ pub fn join_store(dst: Store, src: Store) -> Result<Store> {
     let src = src.into_backing_store().into_inner();
 
     match (dst, src) {
-        (dst, BackingStore::Null(_)) => Ok(Store::new(dst)),
+        (store, BackingStore::Null(_)) | (BackingStore::Null(_), store) => Ok(Store::new(store)),
         (BackingStore::PartialMapStore(dst), BackingStore::PartialMapStore(src)) => {
             let mut dst = dst.into_inner();
             for (k, v) in src.into_inner().into_map() {
-                assert_eq!(&v, &dst.get(&k)?);
-                dst.put(k, v.unwrap())?;
+                match v {
+                    Some(v) => dst.put(k, v)?,
+                    None => dst.delete(&k)?,
+                }
             }
             Ok(Store::new(BackingStore::PartialMapStore(Shared::new(dst))))
         }
@@ -190,6 +195,7 @@ mod tests {
     use crate::client::mock::MockClient;
     use crate::collections::Deque;
     use crate::orga;
+    use crate::prelude::query::QueryPlugin;
 
     #[orga]
     struct Foo {
@@ -197,50 +203,79 @@ mod tests {
         pub baz: Deque<Deque<u32>>,
     }
 
-    fn setup() -> (Store, MockClient<Foo>) {
-        let mut store = Store::with_partial_map_store();
+    fn setup() -> MockClient<QueryPlugin<Foo>> {
+        let mut client = MockClient::default();
+        client.store = Store::with_map_store();
 
-        let mut foo = Foo::default();
-        foo.attach(store.clone()).unwrap();
+        let mut foo = QueryPlugin::<Foo>::default();
+        foo.attach(client.store.clone()).unwrap();
 
-        foo.bar = 123;
+        foo.inner.borrow_mut().bar = 123;
 
         let mut d = Deque::new();
         d.push_back(1).unwrap();
         d.push_back(2).unwrap();
         d.push_back(3).unwrap();
-        foo.baz.push_back(d).unwrap();
+        foo.inner.borrow_mut().baz.push_back(d).unwrap();
 
-        let mut d = Deque::new();
-        foo.baz.push_back(d).unwrap();
+        let d = Deque::new();
+        foo.inner.borrow_mut().baz.push_back(d).unwrap();
 
         let mut bytes = vec![];
         foo.flush(&mut bytes).unwrap();
-        store.put(vec![], bytes).unwrap();
+        client.store.put(vec![], bytes).unwrap();
 
-        (store, MockClient::default())
+        client
     }
 
     #[tokio::test]
     async fn execute_simple() {
-        let (store, client) = setup();
+        let client = setup();
 
-        let res = execute(store, &client, |app: Foo| Ok(app.bar))
-            .await
-            .unwrap();
+        let res = execute(Store::default(), &client, |app: QueryPlugin<Foo>| {
+            Ok(app.inner.borrow().bar)
+        })
+        .await
+        .unwrap();
         assert_eq!(res, 123);
-        assert!(client.queries.borrow().is_empty());
+        assert_eq!(client.queries.take(), vec![vec![2]]);
     }
 
     #[tokio::test]
-    async fn execute_deque_access() {
-        let (store, client) = setup();
+    async fn execute_deque_access_none() {
+        let client = setup();
 
-        let res = execute(store, &client, |app: Foo| Ok(app.baz.get(123)?.is_some()))
-            .await
-            .unwrap();
+        let res = execute(Store::default(), &client, |app: QueryPlugin<Foo>| {
+            Ok(app.inner.borrow().baz.get(123)?.is_none())
+        })
+        .await
+        .unwrap();
         assert!(res);
-        // assert!(client.calls.borrow().is_empty());
-        // assert!(client.queries.borrow().is_empty());
+        assert_eq!(
+            client.queries.take(),
+            vec![vec![2], vec![0, 1, 131, 0, 0, 0, 0, 0, 0, 0, 123]]
+        );
+    }
+
+    #[tokio::test]
+    async fn execute_deque_access_some() {
+        let client = setup();
+
+        let res = execute(Store::default(), &client, |app: QueryPlugin<Foo>| {
+            Ok(*app.inner.borrow().baz.get(0)?.unwrap().get(2)?.unwrap())
+        })
+        .await
+        .unwrap();
+        assert_eq!(res, 3);
+        assert_eq!(
+            client.queries.take(),
+            vec![
+                vec![2],
+                vec![0, 1, 131, 0, 0, 0, 0, 0, 0, 0, 0],
+                vec![
+                    0, 1, 129, 127, 255, 255, 255, 255, 255, 255, 255, 131, 0, 0, 0, 0, 0, 0, 0, 2
+                ]
+            ]
+        );
     }
 }

@@ -25,7 +25,7 @@ pub enum BackingStore {
     Other(Shared<Box<dyn ReadWrite>>),
 }
 
-pub trait ReadWrite: Read + Write {
+pub trait ReadWrite: Read + Write + Any + 'static {
     fn into_any(self: Box<Self>) -> Box<dyn Any>;
 }
 

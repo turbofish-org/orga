@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::ops::RangeBounds;
 
 use super::{Iter, Read, Shared, Write, KV};
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, Terminated};
 use crate::migrate::MigrateFrom;
 use crate::state::State;
@@ -63,14 +64,14 @@ impl MigrateFrom for Store {
     }
 }
 
-// impl<S> Describe for Store<S>
-// where
-//     Self: State + 'static,
-// {
-//     fn describe() -> crate::describe::Descriptor {
-//         crate::describe::Builder::new::<Self>().build()
-//     }
-// }
+impl<S> Describe for Store<S>
+where
+    Self: State + 'static,
+{
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>().build()
+    }
+}
 
 impl<S> Encode for Store<S> {
     fn encode_into<W: std::io::Write>(&self, _dest: &mut W) -> ed::Result<()> {

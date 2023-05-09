@@ -1,7 +1,14 @@
-use std::{cell::RefCell, marker::PhantomData};
+use std::{any::Any, cell::RefCell, marker::PhantomData};
 
 use crate::{
-    store::{Error as StoreError, Read, Store, Write, KV},
+    encoding::{Decode, Encode},
+    merk::BackingStore,
+    query::Query,
+    state::State,
+    store::{
+        bufstore::PartialMapStore, log::ReadLog, BufStore, Error as StoreError, Read, Shared,
+        Store, Write, KV,
+    },
     Error, Result,
 };
 
@@ -14,12 +21,38 @@ pub struct MockClient<T> {
     _marker: PhantomData<T>,
 }
 
-impl<T> Client for MockClient<T> {
+impl<T: State + Query> Client for MockClient<T> {
     async fn query(&self, query: &[u8]) -> Result<Store> {
         self.queries.borrow_mut().push(query.to_vec());
-        // TODO: copy keys accessed in query into a BufStore<UnknownStore>, return
-        // Ok(self.store)
-        Ok(Store::with_partial_map_store())
+
+        let store = Store::new(BackingStore::Other(Shared::new(Box::new(ReadLog::new(
+            self.store.clone(),
+        )))));
+        let root_bytes = store.get(&[])?.unwrap_or_default();
+        let app = T::load(store.clone(), &mut root_bytes.as_slice())?;
+        let query = T::Query::decode(query)?;
+        app.query(query)?;
+        drop(app);
+
+        let log = if let BackingStore::Other(b) = store.into_backing_store().into_inner() {
+            let b = b.into_inner() as Box<dyn Any>;
+            b.downcast::<ReadLog<Store>>().unwrap().reads().clone()
+        } else {
+            unreachable!()
+        };
+        let mut out_store = PartialMapStore::new();
+        for key in log {
+            match self.store.get(&key)? {
+                Some(value) => out_store.put(key, value)?,
+                None => out_store.delete(&key)?,
+            }
+        }
+        let map = out_store.into_map();
+        let out_store = BufStore::wrap_with_map(crate::store::null::Unknown, map);
+
+        Ok(Store::new(BackingStore::PartialMapStore(Shared::new(
+            out_store,
+        ))))
     }
 
     async fn call(&self, call: &[u8]) -> Result<()> {
