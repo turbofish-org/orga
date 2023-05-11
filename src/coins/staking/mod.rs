@@ -27,9 +27,9 @@ mod validator;
 pub use validator::*;
 
 #[cfg(test)]
-const UNBONDING_SECONDS: u64 = 10; // 10 seconds
+pub const UNBONDING_SECONDS: u64 = 10; // 10 seconds
 #[cfg(not(test))]
-const UNBONDING_SECONDS: u64 = 60 * 60 * 24 * 14; // 2 weeks
+pub const UNBONDING_SECONDS: u64 = 60 * 60 * 24 * 14; // 2 weeks
 const EDIT_INTERVAL_SECONDS: u64 = 60 * 60 * 24; // 1 day
 
 #[derive(Call, Query, Default, Client, MigrateFrom, Serialize)]

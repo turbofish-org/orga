@@ -27,7 +27,7 @@ use ibc::{
 use ibc_proto::cosmos::auth::v1beta1::{
     query_server::Query as AuthQuery, query_server::QueryServer as AuthQueryServer,
     AddressBytesToStringRequest, AddressBytesToStringResponse, AddressStringToBytesRequest,
-    AddressStringToBytesResponse, Bech32PrefixRequest, Bech32PrefixResponse,
+    AddressStringToBytesResponse, BaseAccount, Bech32PrefixRequest, Bech32PrefixResponse,
     QueryAccountAddressByIdRequest, QueryAccountAddressByIdResponse, QueryAccountRequest,
     QueryAccountResponse, QueryAccountsRequest, QueryAccountsResponse,
     QueryModuleAccountByNameRequest, QueryModuleAccountByNameResponse, QueryModuleAccountsRequest,
@@ -120,6 +120,8 @@ use ibc_proto::{
     },
     google::protobuf::Any,
 };
+use prost::Message;
+use tendermint_proto::p2p::DefaultNodeInfo;
 use tonic::{Request, Response, Status};
 
 use super::{Ibc, PortChannel};
@@ -607,7 +609,7 @@ impl StakingQuery for StakingService {
         Ok(Response::new(StakingQueryParamsResponse {
             params: Some(Params {
                 unbonding_time: Some(Duration {
-                    seconds: 2 * 7 * 24 * 60 * 60,
+                    seconds: crate::coins::staking::UNBONDING_SECONDS as i64,
                     nanos: 0,
                 }),
                 historical_entries: 1,
@@ -630,9 +632,18 @@ impl AuthQuery for AuthService {
 
     async fn account(
         &self,
-        _request: Request<QueryAccountRequest>,
+        request: Request<QueryAccountRequest>,
     ) -> Result<Response<QueryAccountResponse>, Status> {
-        todo!()
+        let account = BaseAccount {
+            address: request.into_inner().address,
+            ..Default::default()
+        };
+        Ok(Response::new(QueryAccountResponse {
+            account: Some(Any {
+                type_url: "/cosmos.auth.v1beta1.BaseAccount".to_string(),
+                value: account.encode_to_vec(),
+            }),
+        }))
     }
 
     async fn params(
@@ -691,9 +702,9 @@ pub struct BankService {}
 impl BankQuery for BankService {
     async fn balance(
         &self,
-        request: Request<QueryBalanceRequest>,
+        _request: Request<QueryBalanceRequest>,
     ) -> Result<Response<QueryBalanceResponse>, Status> {
-        todo!()
+        Ok(Response::new(QueryBalanceResponse { balance: None }))
     }
 
     async fn all_balances(
@@ -768,7 +779,10 @@ impl HealthService for AppHealthService {
         &self,
         _request: Request<GetNodeInfoRequest>,
     ) -> Result<Response<GetNodeInfoResponse>, Status> {
-        todo!()
+        Ok(Response::new(GetNodeInfoResponse {
+            default_node_info: Some(DefaultNodeInfo::default()),
+            application_version: None,
+        }))
     }
 
     async fn get_syncing(
