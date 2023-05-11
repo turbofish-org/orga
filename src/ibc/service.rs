@@ -122,7 +122,7 @@ use ibc_proto::{
 };
 use tonic::{Request, Response, Status};
 
-use super::Ibc;
+use super::{Ibc, PortChannel};
 
 impl From<crate::Error> for tonic::Status {
     fn from(err: crate::Error) -> Self {
@@ -244,13 +244,14 @@ impl ConnectionQuery for IbcConnectionService {
         let conn_id = ConnectionId::from_str(&request.into_inner().connection_id)
             .map_err(|_| Status::invalid_argument("Invalid connection ID".to_string()))?;
 
-        let conn = self
+        let connection = self
             .ibc
             .query(|ibc| ibc.query_connection(conn_id.clone().into()))
-            .await?;
+            .await?
+            .map(|v| v.into());
 
         Ok(Response::new(QueryConnectionResponse {
-            connection: Some(conn.into()),
+            connection,
             ..Default::default()
         }))
     }
@@ -302,11 +303,13 @@ impl ConnectionQuery for IbcConnectionService {
     }
 }
 
-pub struct IbcChannelService {}
+pub struct IbcChannelService {
+    ibc: Client<Ibc>,
+}
 
 impl IbcChannelService {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(ibc: Client<Ibc>) -> Self {
+        Self { ibc }
     }
 }
 
@@ -316,21 +319,51 @@ impl ChannelQuery for IbcChannelService {
         &self,
         request: Request<QueryChannelRequest>,
     ) -> Result<Response<QueryChannelResponse>, Status> {
-        todo!()
+        let request = request.into_inner();
+        let port_id = PortId::from_str(&request.port_id)
+            .map_err(|_| Status::invalid_argument("invalid port id"))?;
+        let channel_id = ChannelId::from_str(&request.channel_id)
+            .map_err(|_| Status::invalid_argument("invalid channel id"))?;
+
+        let path = ChannelEndPath(port_id, channel_id);
+
+        let channel = self
+            .ibc
+            .query(|ibc| ibc.query_channel(path.clone().into()))
+            .await?;
+
+        Ok(Response::new(QueryChannelResponse {
+            channel,
+            ..Default::default()
+        }))
     }
 
     async fn channels(
         &self,
         _request: Request<QueryChannelsRequest>,
     ) -> Result<Response<QueryChannelsResponse>, Status> {
-        todo!()
+        Ok(Response::new(QueryChannelsResponse {
+            channels: self.ibc.query(|ibc| ibc.query_all_channels()).await?,
+            ..Default::default()
+        }))
     }
 
     async fn connection_channels(
         &self,
         request: Request<QueryConnectionChannelsRequest>,
     ) -> Result<Response<QueryConnectionChannelsResponse>, Status> {
-        todo!()
+        let conn_id = ConnectionId::from_str(&request.get_ref().connection)
+            .map_err(|_| Status::invalid_argument("invalid connection id"))?;
+
+        let channels = self
+            .ibc
+            .query(|ibc| ibc.query_connection_channels(conn_id.clone().into()))
+            .await?;
+
+        Ok(Response::new(QueryConnectionChannelsResponse {
+            channels,
+            ..Default::default()
+        }))
     }
 
     async fn channel_client_state(
@@ -358,7 +391,23 @@ impl ChannelQuery for IbcChannelService {
         &self,
         request: Request<QueryPacketCommitmentsRequest>,
     ) -> Result<Response<QueryPacketCommitmentsResponse>, Status> {
-        todo!()
+        let request = request.into_inner();
+        let port_id = PortId::from_str(&request.port_id)
+            .map_err(|_| Status::invalid_argument("invalid port id"))?;
+        let channel_id = ChannelId::from_str(&request.channel_id)
+            .map_err(|_| Status::invalid_argument("invalid channel id"))?;
+
+        let path = PortChannel::new(port_id, channel_id);
+
+        let commitments = self
+            .ibc
+            .query(|ibc| ibc.query_packet_commitments(path.clone().into()))
+            .await?;
+
+        Ok(Response::new(QueryPacketCommitmentsResponse {
+            commitments,
+            ..Default::default()
+        }))
     }
 
     async fn packet_receipt(
@@ -379,21 +428,73 @@ impl ChannelQuery for IbcChannelService {
         &self,
         request: Request<QueryPacketAcknowledgementsRequest>,
     ) -> Result<Response<QueryPacketAcknowledgementsResponse>, Status> {
-        unimplemented!()
+        let request = request.into_inner();
+        let port_id = PortId::from_str(&request.port_id)
+            .map_err(|_| Status::invalid_argument("invalid port id"))?;
+        let channel_id = ChannelId::from_str(&request.channel_id)
+            .map_err(|_| Status::invalid_argument("invalid channel id"))?;
+
+        let path = PortChannel::new(port_id, channel_id);
+
+        let acknowledgements = self
+            .ibc
+            .query(|ibc| ibc.query_packet_acks(path.clone().into()))
+            .await?;
+
+        Ok(Response::new(QueryPacketAcknowledgementsResponse {
+            acknowledgements,
+            ..Default::default()
+        }))
     }
 
     async fn unreceived_packets(
         &self,
         request: Request<QueryUnreceivedPacketsRequest>,
     ) -> Result<Response<QueryUnreceivedPacketsResponse>, Status> {
-        todo!()
+        let request = request.into_inner();
+        let port_id = PortId::from_str(&request.port_id)
+            .map_err(|_| Status::invalid_argument("invalid port id"))?;
+        let channel_id = ChannelId::from_str(&request.channel_id)
+            .map_err(|_| Status::invalid_argument("invalid channel id"))?;
+        let sequences_to_check: Vec<u64> = request.packet_commitment_sequences;
+        let path = PortChannel::new(port_id, channel_id);
+
+        let sequences = self
+            .ibc
+            .query(|ibc| {
+                ibc.query_unreceived_packets(path.clone(), sequences_to_check.clone().try_into()?)
+            })
+            .await?;
+
+        Ok(Response::new(QueryUnreceivedPacketsResponse {
+            sequences,
+            ..Default::default()
+        }))
     }
 
     async fn unreceived_acks(
         &self,
         request: Request<QueryUnreceivedAcksRequest>,
     ) -> Result<Response<QueryUnreceivedAcksResponse>, Status> {
-        todo!()
+        let request = request.into_inner();
+        let port_id = PortId::from_str(&request.port_id)
+            .map_err(|_| Status::invalid_argument("invalid port id"))?;
+        let channel_id = ChannelId::from_str(&request.channel_id)
+            .map_err(|_| Status::invalid_argument("invalid channel id"))?;
+        let sequences_to_check: Vec<u64> = request.packet_ack_sequences;
+        let path = PortChannel::new(port_id, channel_id);
+
+        let sequences = self
+            .ibc
+            .query(|ibc| {
+                ibc.query_unreceived_acks(path.clone(), sequences_to_check.clone().try_into()?)
+            })
+            .await?;
+
+        Ok(Response::new(QueryUnreceivedAcksResponse {
+            sequences,
+            ..Default::default()
+        }))
     }
 
     async fn next_sequence_receive(
@@ -760,8 +861,9 @@ pub async fn start_grpc(client: Client<Ibc>, opts: &GrpcOpts) {
     let bank_service = BankQueryServer::new(BankService {});
     let staking_service = StakingQueryServer::new(StakingService {});
     let ibc_client_service = ClientQueryServer::new(IbcClientService::new(client.clone()));
-    let ibc_connection_service = ConnectionQueryServer::new(IbcConnectionService::new(client));
-    let ibc_channel_service = ChannelQueryServer::new(IbcChannelService {});
+    let ibc_connection_service =
+        ConnectionQueryServer::new(IbcConnectionService::new(client.clone()));
+    let ibc_channel_service = ChannelQueryServer::new(IbcChannelService::new(client.clone()));
     let health_service = HealthServer::new(AppHealthService {});
     let tx_service = TxServer::new(AppTxService {});
 

@@ -266,6 +266,41 @@ pub struct PortChannel(
     EofTerminatedString<ChannelId>,
 );
 
+impl PortChannel {
+    pub fn new(port_id: PortId, channel_id: ChannelId) -> Self {
+        Self(
+            FixedString,
+            ByteTerminatedString(port_id),
+            FixedString,
+            EofTerminatedString(channel_id),
+        )
+    }
+
+    pub fn port_id(&self) -> crate::Result<PortId> {
+        self.1
+            .clone()
+            .to_string()
+            .parse()
+            .map_err(|_| Error::Ibc("Invalid port ID".to_string()))
+    }
+
+    pub fn channel_id(&self) -> crate::Result<ChannelId> {
+        self.3
+            .clone()
+            .to_string()
+            .parse()
+            .map_err(|_| Error::Ibc("Invalid channel ID".to_string()))
+    }
+
+    pub fn with_sequence(self, sequence: Sequence) -> crate::Result<PortChannelSequence> {
+        Ok(PortChannelSequence::new(
+            self.port_id()?,
+            self.channel_id()?,
+            sequence,
+        ))
+    }
+}
+
 macro_rules! port_channel_from_impl {
     ($ty:ty) => {
         impl From<$ty> for PortChannel {
@@ -295,6 +330,43 @@ pub struct PortChannelSequence(
     #[serde(skip)] FixedString<"sequences/">,
     EofTerminatedString<Sequence>,
 );
+
+impl PortChannelSequence {
+    pub fn new(port_id: PortId, channel_id: ChannelId, sequence: Sequence) -> Self {
+        Self(
+            FixedString,
+            ByteTerminatedString(port_id),
+            FixedString,
+            ByteTerminatedString(channel_id),
+            FixedString,
+            EofTerminatedString(sequence),
+        )
+    }
+
+    pub fn port_id(&self) -> crate::Result<PortId> {
+        self.1
+            .clone()
+            .to_string()
+            .parse()
+            .map_err(|_| Error::Ibc("Invalid port ID".to_string()))
+    }
+
+    pub fn channel_id(&self) -> crate::Result<ChannelId> {
+        self.3
+            .clone()
+            .to_string()
+            .parse()
+            .map_err(|_| Error::Ibc("Invalid channel ID".to_string()))
+    }
+
+    pub fn sequence(&self) -> crate::Result<Sequence> {
+        self.5
+            .clone()
+            .to_string()
+            .parse()
+            .map_err(|_| Error::Ibc("Invalid sequence".to_string()))
+    }
+}
 
 macro_rules! port_channel_sequence_from_impl {
     ($ty:ty) => {

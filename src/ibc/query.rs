@@ -1,6 +1,7 @@
 use ibc::core::ics03_connection::connection::ConnectionEnd as IbcConnectionEnd;
 use ibc::core::ics24_host::path::Path;
 use ibc::Height;
+use ibc_proto::ibc::core::channel::v1::{Channel, IdentifiedChannel, PacketState};
 use ibc_proto::ibc::core::client::v1::{ConsensusStateWithHeight, IdentifiedClientState};
 use ibc_proto::ibc::core::connection::v1::{
     ConnectionEnd as RawConnectionEnd, IdentifiedConnection,
@@ -9,8 +10,9 @@ use ics23::LeafOp;
 use tendermint_proto::v0_34::abci::{RequestQuery, ResponseQuery};
 use tendermint_proto::v0_34::crypto::{ProofOp, ProofOps};
 
-use super::{ClientId, ConnectionEnd, ConnectionId, Ibc, IBC_QUERY_PATH};
+use super::{ClientId, ConnectionEnd, ConnectionId, Ibc, PortChannel, IBC_QUERY_PATH};
 use crate::abci::AbciQuery;
+use crate::encoding::LengthVec;
 use crate::store::Read;
 use crate::{Error, Result};
 
@@ -133,12 +135,11 @@ impl Ibc {
         Ok(states)
     }
 
-    pub fn query_connection(&self, conn_id: ConnectionId) -> Result<ConnectionEnd> {
+    pub fn query_connection(&self, conn_id: ConnectionId) -> Result<Option<ConnectionEnd>> {
         Ok(self
             .connections
             .get(conn_id.into())?
-            .ok_or_else(|| Error::Ibc("Connection not found".to_string()))?
-            .clone())
+            .map(|connection_end| connection_end.clone().into()))
     }
 
     pub fn query_all_connections(&self) -> Result<Vec<IdentifiedConnection>> {
@@ -175,5 +176,126 @@ impl Ibc {
         }
 
         Ok(connection_ids)
+    }
+
+    pub fn query_channel(&self, port_chan: PortChannel) -> Result<Option<Channel>> {
+        let channel = self
+            .channel_ends
+            .get(port_chan.into())?
+            .map(|channel_end| channel_end.clone().into());
+
+        Ok(channel.into())
+    }
+
+    pub fn query_all_channels(&self) -> Result<Vec<IdentifiedChannel>> {
+        let mut channels = vec![];
+        for entry in self.channel_ends.iter()? {
+            let (path, channel_end) = entry?;
+            let channel_end: Channel = channel_end.clone().into();
+            channels.push(IdentifiedChannel {
+                port_id: path.clone().1.to_string(),
+                channel_id: path.clone().3.to_string(),
+                version: channel_end.version,
+                connection_hops: channel_end.connection_hops,
+                counterparty: channel_end.counterparty,
+                ordering: channel_end.ordering.into(),
+                state: channel_end.state.into(),
+            });
+        }
+
+        Ok(channels)
+    }
+
+    pub fn query_connection_channels(
+        &self,
+        conn_id: ConnectionId,
+    ) -> Result<Vec<IdentifiedChannel>> {
+        let channels = self
+            .query_all_channels()?
+            .into_iter()
+            .filter(|channel| {
+                channel.connection_hops.first() == Some(&conn_id.clone().as_str().to_string())
+            })
+            .collect();
+
+        Ok(channels)
+    }
+
+    pub fn query_packet_commitments(&self, port_chan: PortChannel) -> Result<Vec<PacketState>> {
+        let mut commitments = vec![];
+
+        // TODO: instead of filtering, use self.commitments.range()
+        for entry in self.commitments.iter()? {
+            let (path, data) = entry?;
+            if path.port_id()? != port_chan.port_id()?
+                || path.channel_id()? != port_chan.channel_id()?
+            {
+                continue;
+            }
+            commitments.push(PacketState {
+                port_id: path.port_id()?.to_string(),
+                channel_id: path.channel_id()?.to_string(),
+                sequence: path.sequence()?.to_string().parse()?,
+                data: data.clone().into(),
+            });
+        }
+
+        Ok(commitments)
+    }
+
+    pub fn query_unreceived_packets(
+        &self,
+        port_chan: PortChannel,
+        sequences: LengthVec<u16, u64>,
+    ) -> Result<Vec<u64>> {
+        let mut unreceived = vec![];
+        let sequences: Vec<_> = sequences.into();
+        for sequence in sequences.into_iter() {
+            let path = port_chan.clone().with_sequence(sequence.into())?;
+            if !self.receipts.contains_key(path)? {
+                unreceived.push(sequence);
+            }
+        }
+
+        Ok(unreceived)
+    }
+
+    pub fn query_unreceived_acks(
+        &self,
+        port_chan: PortChannel,
+        sequences: LengthVec<u16, u64>,
+    ) -> Result<Vec<u64>> {
+        let mut unreceived = vec![];
+        let sequences: Vec<_> = sequences.into();
+        for sequence in sequences.into_iter() {
+            let path = port_chan.clone().with_sequence(sequence.into())?;
+            if !self.commitments.contains_key(path)? {
+                unreceived.push(sequence);
+            }
+        }
+
+        Ok(unreceived)
+    }
+
+    pub fn query_packet_acks(&self, port_chan: PortChannel) -> Result<Vec<PacketState>> {
+        let mut acks = vec![];
+
+        // TODO: iter over range instead of filtering
+        for entry in self.acks.iter()? {
+            let (path, data) = entry?;
+            if path.port_id()? != port_chan.port_id()?
+                || path.channel_id()? != port_chan.channel_id()?
+            {
+                continue;
+            }
+            acks.push(PacketState {
+                port_id: path.port_id()?.to_string(),
+                channel_id: path.channel_id()?.to_string(),
+                sequence: path.sequence()?.to_string().parse()?,
+                data: data.clone().into(),
+            });
+        }
+
+        Ok(acks)
     }
 }
