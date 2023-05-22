@@ -367,7 +367,7 @@ impl ValidationContext for Ibc {
                 client_id: client_id.clone(),
             })?
             .updates
-            .get(height.clone().into())
+            .get((*height).into())
             .map_err(|_| ClientError::ImplementationSpecific)?
             .ok_or(ClientError::ImplementationSpecific)?
             .0

@@ -100,7 +100,7 @@ enum Branch {
     KV,
 }
 
-fn inner_op<'a>(node: &RefWalker<MerkSource<'a>>, branch: Branch) -> InnerOp {
+fn inner_op(node: &RefWalker<MerkSource<'_>>, branch: Branch) -> InnerOp {
     let tree = node.tree();
     let kv_hash = || tree.kv_hash().to_vec();
     let left_hash = || tree.child_hash(true).to_vec();

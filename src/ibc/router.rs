@@ -8,11 +8,11 @@ use super::Ibc;
 
 impl Router for Ibc {
     fn get_route(&self, module_id: &ModuleId) -> Option<&dyn Module> {
-        (Borrow::<str>::borrow(module_id) == MODULE_ID_STR).then(|| self as _)
+        (Borrow::<str>::borrow(module_id) == MODULE_ID_STR).then_some(self as _)
     }
 
     fn get_route_mut(&mut self, module_id: &ModuleId) -> Option<&mut dyn Module> {
-        (Borrow::<str>::borrow(module_id) == MODULE_ID_STR).then(|| self as _)
+        (Borrow::<str>::borrow(module_id) == MODULE_ID_STR).then_some(self as _)
     }
 
     fn has_route(&self, module_id: &ModuleId) -> bool {

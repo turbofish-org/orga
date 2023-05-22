@@ -380,7 +380,7 @@ impl ChannelQuery for IbcChannelService {
 
         let commitments = self
             .ibc
-            .query(|ibc| ibc.query_packet_commitments(path.clone().into()))
+            .query(|ibc| ibc.query_packet_commitments(path.clone()))
             .await?;
 
         Ok(Response::new(QueryPacketCommitmentsResponse {
@@ -417,7 +417,7 @@ impl ChannelQuery for IbcChannelService {
 
         let acknowledgements = self
             .ibc
-            .query(|ibc| ibc.query_packet_acks(path.clone().into()))
+            .query(|ibc| ibc.query_packet_acks(path.clone()))
             .await?;
 
         Ok(Response::new(QueryPacketAcknowledgementsResponse {

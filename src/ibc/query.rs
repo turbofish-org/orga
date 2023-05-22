@@ -120,7 +120,7 @@ impl Ibc {
 
         let client = self
             .clients
-            .get(client_id.into())?
+            .get(client_id)?
             .ok_or_else(|| Error::Ibc("Client not found".to_string()))?;
 
         for entry in client.consensus_states.iter()? {
@@ -138,8 +138,8 @@ impl Ibc {
     pub fn query_connection(&self, conn_id: ConnectionId) -> Result<Option<ConnectionEnd>> {
         Ok(self
             .connections
-            .get(conn_id.into())?
-            .map(|connection_end| connection_end.clone().into()))
+            .get(conn_id)?
+            .map(|connection_end| connection_end.clone()))
     }
 
     pub fn query_all_connections(&self) -> Result<Vec<IdentifiedConnection>> {
@@ -155,7 +155,7 @@ impl Ibc {
                 versions: raw_connection.versions,
                 delay_period: raw_connection.delay_period,
                 id: id.clone().as_str().to_string(),
-                state: raw_connection.state.into(),
+                state: raw_connection.state,
             });
         }
 
@@ -167,7 +167,7 @@ impl Ibc {
 
         let client = self
             .clients
-            .get(client_id.into())?
+            .get(client_id)?
             .ok_or_else(|| Error::Ibc("Client not found".to_string()))?;
 
         for entry in client.connections.iter()? {
@@ -181,10 +181,10 @@ impl Ibc {
     pub fn query_channel(&self, port_chan: PortChannel) -> Result<Option<Channel>> {
         let channel = self
             .channel_ends
-            .get(port_chan.into())?
+            .get(port_chan)?
             .map(|channel_end| channel_end.clone().into());
 
-        Ok(channel.into())
+        Ok(channel)
     }
 
     pub fn query_all_channels(&self) -> Result<Vec<IdentifiedChannel>> {
@@ -198,8 +198,8 @@ impl Ibc {
                 version: channel_end.version,
                 connection_hops: channel_end.connection_hops,
                 counterparty: channel_end.counterparty,
-                ordering: channel_end.ordering.into(),
-                state: channel_end.state.into(),
+                ordering: channel_end.ordering,
+                state: channel_end.state,
             });
         }
 
@@ -236,7 +236,7 @@ impl Ibc {
                 port_id: path.port_id()?.to_string(),
                 channel_id: path.channel_id()?.to_string(),
                 sequence: path.sequence()?.to_string().parse()?,
-                data: data.clone().into(),
+                data: data.clone(),
             });
         }
 
@@ -292,7 +292,7 @@ impl Ibc {
                 port_id: path.port_id()?.to_string(),
                 channel_id: path.channel_id()?.to_string(),
                 sequence: path.sequence()?.to_string().parse()?,
-                data: data.clone().into(),
+                data: data.clone(),
             });
         }
 
