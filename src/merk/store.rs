@@ -10,7 +10,7 @@ use std::{
     mem::transmute,
     path::{Path, PathBuf},
 };
-use tendermint_proto::abci::{self, *};
+use tendermint_proto::v0_34::abci::{self, *};
 type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
 pub const SNAPSHOT_INTERVAL: u64 = 1000;
@@ -325,7 +325,7 @@ impl ABCIStore for MerkStore {
             .iter()
             .map(|(height, snapshot)| Snapshot {
                 chunks: snapshot.length,
-                hash: snapshot.hash.to_vec(),
+                hash: snapshot.hash.to_vec().into(),
                 height: *height,
                 ..Default::default()
             })
@@ -351,7 +351,7 @@ impl ABCIStore for MerkStore {
             .expect("Tried to apply a snapshot chunk while no state sync is in progress");
 
         if self.restorer.is_none() {
-            let expected_hash: [u8; 32] = match target_snapshot.hash.clone().try_into() {
+            let expected_hash: [u8; 32] = match target_snapshot.hash.to_vec().try_into() {
                 Ok(inner) => inner,
                 Err(_) => {
                     return Err(Error::Store("Failed to convert expected root hash".into()));
@@ -367,7 +367,7 @@ impl ABCIStore for MerkStore {
         }
 
         let restorer = self.restorer.as_mut().unwrap();
-        let chunks_remaining = restorer.process_chunk(req.chunk.as_slice())?;
+        let chunks_remaining = restorer.process_chunk(req.chunk.to_vec().as_slice())?;
         if chunks_remaining == 0 {
             let restored = self.restorer.take().unwrap().finalize()?;
             self.merk.take().unwrap().destroy()?;
@@ -395,7 +395,9 @@ impl ABCIStore for MerkStore {
         if let Some(snapshot) = req.snapshot {
             let is_canonical_height = snapshot.height % SNAPSHOT_INTERVAL == 0
                 || snapshot.height == FIRST_SNAPSHOT_HEIGHT;
-            if is_canonical_height && calc_app_hash(snapshot.hash.as_slice()) == req.app_hash {
+            if is_canonical_height
+                && calc_app_hash(snapshot.hash.to_vec().as_slice()) == req.app_hash
+            {
                 self.target_snapshot = Some(snapshot);
                 res.set_result(abci::response_offer_snapshot::Result::Accept);
             }

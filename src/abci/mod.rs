@@ -23,14 +23,14 @@ pub mod tendermint_client;
 pub use tendermint_client::TendermintClient;
 
 use messages::*;
-pub use tendermint_proto::abci as messages;
+pub use tendermint_proto::v0_34::abci as messages;
 
 #[cfg(feature = "abci")]
 mod server {
     use super::*;
     use crate::merk::MerkStore;
-    use tendermint_proto::abci::request::Value as Req;
-    use tendermint_proto::abci::response::Value as Res;
+    use tendermint_proto::v0_34::abci::request::Value as Req;
+    use tendermint_proto::v0_34::abci::response::Value as Res;
 
     /// Top-level struct for running an ABCI application. Maintains an ABCI server,
     /// mempool, and handles committing data to the store.
@@ -94,7 +94,7 @@ mod server {
                         version: "X".into(),
                         app_version: 0,
                         last_block_height: start_height as i64,
-                        last_block_app_hash: app_hash,
+                        last_block_app_hash: app_hash.into(),
                     };
 
                     self.store = Some(Shared::new(self_store));
@@ -116,9 +116,9 @@ mod server {
                             codespace: "".to_string(),
                             height: self.height as i64,
                             index: 0,
-                            key: vec![],
+                            key: vec![].into(),
                             proof_ops: None,
-                            value: vec![],
+                            value: vec![].into(),
                         });
 
                     self.store.replace(store);
@@ -276,7 +276,7 @@ mod server {
                     let mut res_commit = ResponseCommit::default();
                     let self_store = self_store_shared.into_inner();
 
-                    res_commit.data = self_store.root_hash()?;
+                    res_commit.data = self_store.root_hash()?.into();
                     self.store = Some(Shared::new(self_store));
                     Ok(Res::Commit(res_commit))
                 }
@@ -321,7 +321,7 @@ mod server {
                 }
                 Req::LoadSnapshotChunk(req) => {
                     let self_store = self.store.as_mut().unwrap();
-                    let chunk = self_store.borrow_mut().load_snapshot_chunk(req)?;
+                    let chunk = self_store.borrow_mut().load_snapshot_chunk(req)?.into();
                     let res = ResponseLoadSnapshotChunk { chunk };
 
                     Ok(Res::LoadSnapshotChunk(res))

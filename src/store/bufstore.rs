@@ -91,7 +91,7 @@ impl<S> BufStore<S> {
 impl<S: Read> Read for BufStore<S> {
     #[inline]
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        match self.map.get(key.as_ref()) {
+        match self.map.get(key) {
             Some(Some(value)) => Ok(Some(value.clone())),
             Some(None) => Ok(None),
             None => self.store.get(key),
@@ -216,7 +216,7 @@ impl<S: Read> Write for BufStore<S> {
 
     #[inline]
     fn delete(&mut self, key: &[u8]) -> Result<()> {
-        self.map.insert(key.as_ref().to_vec(), None);
+        self.map.insert(key.to_vec(), None);
         Ok(())
     }
 }

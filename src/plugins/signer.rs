@@ -116,7 +116,8 @@ struct Value {
 }
 
 fn adr36_bytes(call_bytes: &[u8], address: Address) -> Result<Vec<u8>> {
-    let data_b64 = base64::encode(call_bytes);
+    use base64::Engine;
+    let data_b64 = base64::prelude::BASE64_STANDARD.encode(call_bytes);
     let msg = Adr36Msg {
         chain_id: "".to_string(),
         account_number: "0".to_string(),
@@ -675,8 +676,8 @@ mod abci {
     {
         fn abci_query(
             &self,
-            request: &tendermint_proto::abci::RequestQuery,
-        ) -> Result<tendermint_proto::abci::ResponseQuery> {
+            request: &tendermint_proto::v0_34::abci::RequestQuery,
+        ) -> Result<tendermint_proto::v0_34::abci::ResponseQuery> {
             self.inner.abci_query(request)
         }
     }

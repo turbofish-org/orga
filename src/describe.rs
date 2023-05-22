@@ -103,17 +103,12 @@ impl Descriptor {
 pub type DecodeFn = fn(&[u8]) -> Result<Value>;
 pub type ParseFn = fn(&str) -> Result<Option<Value>>;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub enum Children {
+    #[default]
     None,
     Named(Vec<NamedChild>),
     Dynamic(DynamicChild),
-}
-
-impl Default for Children {
-    fn default() -> Self {
-        Children::None
-    }
 }
 
 impl Children {

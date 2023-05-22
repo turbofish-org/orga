@@ -13,13 +13,14 @@ use std::cell::{Ref, RefCell};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::rc::Rc;
-use tendermint_proto::abci::{Event, RequestQuery, ResponseQuery};
-use tendermint_proto::abci::{
-    Evidence, LastCommitInfo, RequestBeginBlock, RequestEndBlock, RequestInitChain, ValidatorUpdate,
-};
-use tendermint_proto::crypto::{public_key::Sum, PublicKey};
 use tendermint_proto::google::protobuf::Timestamp;
-use tendermint_proto::types::Header;
+use tendermint_proto::v0_34::abci::Event;
+use tendermint_proto::v0_34::abci::{Evidence, LastCommitInfo, RequestQuery, ResponseQuery};
+use tendermint_proto::v0_34::abci::{
+    RequestBeginBlock, RequestEndBlock, RequestInitChain, ValidatorUpdate,
+};
+use tendermint_proto::v0_34::crypto::{public_key::Sum, PublicKey};
+use tendermint_proto::v0_34::types::Header;
 
 pub struct Time {
     pub seconds: i64,
@@ -58,6 +59,8 @@ pub struct ABCIPlugin<T> {
     current_vp: Rc<RefCell<Option<EntryMap<ValidatorEntry>>>>,
     #[serde(skip)]
     cons_key_by_op_addr: Rc<RefCell<Option<OperatorMap>>>,
+    #[serde(skip)]
+    pub(crate) logs: Option<Vec<String>>,
 }
 
 impl<T1, T2> MigrateFrom<ABCIPlugin<T1>> for ABCIPlugin<T2>
@@ -73,6 +76,7 @@ where
             events: other.events,
             current_vp: other.current_vp,
             cons_key_by_op_addr: other.cons_key_by_op_addr,
+            logs: other.logs,
         })
     }
 }
@@ -87,6 +91,7 @@ impl<T: Default> Default for ABCIPlugin<T> {
             events: None,
             current_vp: Rc::new(RefCell::new(Some(Default::default()))),
             cons_key_by_op_addr: Rc::new(RefCell::new(Some(Default::default()))),
+            logs: None,
         }
     }
 }
@@ -126,7 +131,7 @@ impl From<RequestInitChain> for InitChainCtx {
             time: req.time,
             chain_id: req.chain_id,
             validators,
-            app_state_bytes: req.app_state_bytes,
+            app_state_bytes: req.app_state_bytes.to_vec(),
             initial_height: req.initial_height,
         }
     }
@@ -148,7 +153,7 @@ impl From<RequestBeginBlock> for BeginBlockCtx {
         BeginBlockCtx {
             header,
             height,
-            hash: req.hash,
+            hash: req.hash.to_vec(),
             last_commit_info: req.last_commit_info,
             byzantine_validators: req.byzantine_validators,
         }
@@ -204,7 +209,7 @@ impl Validators {
             .unwrap();
         self.updates.insert(
             pub_key,
-            Adapter(tendermint_proto::abci::ValidatorUpdate {
+            Adapter(tendermint_proto::v0_34::abci::ValidatorUpdate {
                 pub_key: Some(key),
                 power: power as i64,
             }),
@@ -284,6 +289,17 @@ impl Events {
     }
 }
 
+#[derive(Default)]
+pub struct Logs {
+    pub(crate) messages: Vec<String>,
+}
+
+impl Logs {
+    pub fn add(&mut self, message: impl AsRef<str>) {
+        self.messages.push(message.as_ref().to_string());
+    }
+}
+
 #[derive(Debug, Encode, Decode)]
 pub enum ABCICall<C> {
     InitChain(Adapter<RequestInitChain>),
@@ -348,24 +364,34 @@ impl<T: App> Call for ABCIPlugin<T> {
             }
             DeliverTx(inner_call) => {
                 Context::add(Events::default());
+                Context::add(Logs::default());
                 self.events.replace(vec![]);
+                self.logs.replace(vec![]);
                 let res = self.inner.call(inner_call);
                 if res.is_ok() {
                     self.events
                         .replace(Context::resolve::<Events>().unwrap().events.clone());
                 }
+                self.logs
+                    .replace(Context::resolve::<Logs>().unwrap().messages.clone());
                 Context::remove::<Events>();
+                Context::remove::<Logs>();
                 res?;
             }
             CheckTx(inner_call) => {
                 Context::add(Events::default());
+                Context::add(Logs::default());
                 self.events.replace(vec![]);
+                self.logs.replace(vec![]);
                 let res = self.inner.call(inner_call);
                 if res.is_ok() {
                     self.events
                         .replace(Context::resolve::<Events>().unwrap().events.clone());
                 }
+                self.logs
+                    .replace(Context::resolve::<Logs>().unwrap().messages.clone());
                 Context::remove::<Events>();
+                Context::remove::<Logs>();
                 res?;
             }
         };
@@ -469,6 +495,7 @@ impl<T: State> State for ABCIPlugin<T> {
             cons_key_by_op_addr: Rc::new(RefCell::new(Some(loader.load_child()?))),
             events: None,
             time: None,
+            logs: None,
         })
     }
 }

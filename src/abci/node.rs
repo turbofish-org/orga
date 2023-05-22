@@ -14,7 +14,7 @@ use std::borrow::Borrow;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use tendermint_proto::abci::*;
+use tendermint_proto::v0_34::abci::*;
 
 pub struct Node<A> {
     _app: PhantomData<A>,
@@ -372,18 +372,33 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
 
     fn deliver_tx(&self, store: WrappedMerk, req: RequestDeliverTx) -> Result<ResponseDeliverTx> {
         let run_res = self.run(store, move |state| -> Result<_> {
-            let inner_call = Decode::decode(req.tx.as_slice())?;
-            state.call(ABCICall::DeliverTx(inner_call))?;
+            let inner_call = Decode::decode(req.tx.to_vec().as_slice())?;
+            let res = state.call(ABCICall::DeliverTx(inner_call));
 
-            Ok(state.events.take().unwrap_or_default())
+            Ok((
+                res,
+                state.events.take().unwrap_or_default(),
+                state.logs.take().unwrap_or_default(),
+            ))
         })?;
 
         let mut deliver_tx_res = ResponseDeliverTx::default();
         match run_res {
-            Ok(events) => {
-                deliver_tx_res.events = events;
-                deliver_tx_res.log = "success".to_string();
-            }
+            Ok((res, events, logs)) => match res {
+                Ok(()) => {
+                    deliver_tx_res.code = 0;
+                    deliver_tx_res.log = logs.join("\n");
+                    deliver_tx_res.events = events;
+                }
+                Err(err) => {
+                    deliver_tx_res.code = 1;
+                    if logs.is_empty() {
+                        deliver_tx_res.log = err.to_string();
+                    } else {
+                        deliver_tx_res.log = logs.join("\n");
+                    }
+                }
+            },
             Err(err) => {
                 deliver_tx_res.code = 1;
                 deliver_tx_res.log = err.to_string();
@@ -395,18 +410,34 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
 
     fn check_tx(&self, store: WrappedMerk, req: RequestCheckTx) -> Result<ResponseCheckTx> {
         let run_res = self.run(store, move |state| -> Result<_> {
-            let inner_call = Decode::decode(req.tx.as_slice())?;
-            state.call(ABCICall::DeliverTx(inner_call))?;
+            let inner_call = Decode::decode(req.tx.to_vec().as_slice())?;
+            let res = state.call(ABCICall::CheckTx(inner_call));
 
-            Ok(state.events.take().unwrap_or_default())
+            Ok((
+                res,
+                state.events.take().unwrap_or_default(),
+                state.logs.take().unwrap_or_default(),
+            ))
         })?;
 
         let mut check_tx_res = ResponseCheckTx::default();
 
         match run_res {
-            Ok(events) => {
-                check_tx_res.events = events;
-            }
+            Ok((res, events, logs)) => match res {
+                Ok(()) => {
+                    check_tx_res.code = 0;
+                    check_tx_res.log = logs.join("\n");
+                    check_tx_res.events = events;
+                }
+                Err(err) => {
+                    check_tx_res.code = 1;
+                    if logs.is_empty() {
+                        check_tx_res.log = err.to_string();
+                    } else {
+                        check_tx_res.log = logs.join("\n");
+                    }
+                }
+            },
             Err(err) => {
                 check_tx_res.code = 1;
                 check_tx_res.log = err.to_string();
@@ -438,7 +469,7 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
 
         // Check which keys are accessed by the query and build a proof
         let query_bytes = req.data;
-        let query_decode_res = Decode::decode(query_bytes.as_slice());
+        let query_decode_res = Decode::decode(query_bytes.to_vec().as_slice());
         let query = query_decode_res?;
 
         state.query(query)?;
@@ -455,7 +486,7 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
         let res = ResponseQuery {
             code: 0,
             height: store_height as i64,
-            value,
+            value: value.into(),
             ..Default::default()
         };
         Ok(res)
