@@ -2,26 +2,9 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 
 use ibc::core::ics24_host::identifier::{ClientId, PortId};
-use ibc::{
-    clients::ics07_tendermint::{
-        client_state::ClientState as TmClientState,
-        consensus_state::ConsensusState as TmConsensusState,
-    },
-    core::{
-        ics03_connection::connection::{ConnectionEnd, IdentifiedConnectionEnd},
-        ics04_channel::{
-            channel::{ChannelEnd, IdentifiedChannelEnd},
-            commitment::{AcknowledgementCommitment, PacketCommitment},
-            packet::Sequence,
-        },
-        ics24_host::{
-            identifier::{ChannelId, ConnectionId},
-            path::{
-                AckPath, ChannelEndPath, ClientConnectionPath, ClientConsensusStatePath,
-                ClientStatePath, CommitmentPath, ConnectionPath, ReceiptPath,
-            },
-        },
-    },
+use ibc::core::ics24_host::{
+    identifier::{ChannelId, ConnectionId},
+    path::ChannelEndPath,
 };
 
 use ibc_proto::cosmos::auth::v1beta1::{
@@ -34,22 +17,18 @@ use ibc_proto::cosmos::auth::v1beta1::{
     QueryModuleAccountsResponse, QueryParamsRequest as AuthQueryParamsRequest,
     QueryParamsResponse as AuthQueryParamsResponse,
 };
-use ibc_proto::cosmos::{
-    bank::v1beta1::{
-        query_server::{Query as BankQuery, QueryServer as BankQueryServer},
-        QueryAllBalancesRequest, QueryAllBalancesResponse, QueryBalanceRequest,
-        QueryBalanceResponse, QueryDenomMetadataRequest, QueryDenomMetadataResponse,
-        QueryDenomOwnersRequest, QueryDenomOwnersResponse, QueryDenomsMetadataRequest,
-        QueryDenomsMetadataResponse, QueryParamsRequest, QueryParamsResponse,
-        QuerySpendableBalancesRequest, QuerySpendableBalancesResponse, QuerySupplyOfRequest,
-        QuerySupplyOfResponse, QueryTotalSupplyRequest, QueryTotalSupplyResponse,
-    },
-    base::v1beta1::Coin as RawCoin,
+use ibc_proto::cosmos::bank::v1beta1::{
+    query_server::{Query as BankQuery, QueryServer as BankQueryServer},
+    QueryAllBalancesRequest, QueryAllBalancesResponse, QueryBalanceRequest, QueryBalanceResponse,
+    QueryDenomMetadataRequest, QueryDenomMetadataResponse, QueryDenomOwnersRequest,
+    QueryDenomOwnersResponse, QueryDenomsMetadataRequest, QueryDenomsMetadataResponse,
+    QueryParamsRequest, QueryParamsResponse, QuerySpendableBalancesRequest,
+    QuerySpendableBalancesResponse, QuerySupplyOfRequest, QuerySupplyOfResponse,
+    QueryTotalSupplyRequest, QueryTotalSupplyResponse,
 };
 use ibc_proto::ibc::core::{
     channel::v1::{
         query_server::{Query as ChannelQuery, QueryServer as ChannelQueryServer},
-        Channel as RawChannelEnd, IdentifiedChannel as RawIdentifiedChannel, PacketState,
         QueryChannelClientStateRequest, QueryChannelClientStateResponse,
         QueryChannelConsensusStateRequest, QueryChannelConsensusStateResponse, QueryChannelRequest,
         QueryChannelResponse, QueryChannelsRequest, QueryChannelsResponse,
@@ -64,7 +43,6 @@ use ibc_proto::ibc::core::{
     },
     client::v1::{
         query_server::{Query as ClientQuery, QueryServer as ClientQueryServer},
-        ConsensusStateWithHeight, Height as RawHeight, IdentifiedClientState,
         QueryClientParamsRequest, QueryClientParamsResponse, QueryClientStateRequest,
         QueryClientStateResponse, QueryClientStatesRequest, QueryClientStatesResponse,
         QueryClientStatusRequest, QueryClientStatusResponse, QueryConsensusStateHeightsRequest,
@@ -75,7 +53,6 @@ use ibc_proto::ibc::core::{
     },
     connection::v1::{
         query_server::{Query as ConnectionQuery, QueryServer as ConnectionQueryServer},
-        ConnectionEnd as RawConnectionEnd, IdentifiedConnection as RawIdentifiedConnection,
         QueryClientConnectionsRequest, QueryClientConnectionsResponse,
         QueryConnectionClientStateRequest, QueryConnectionClientStateResponse,
         QueryConnectionConsensusStateRequest, QueryConnectionConsensusStateResponse,
@@ -109,7 +86,7 @@ use ibc_proto::{
             GetLatestBlockRequest, GetLatestBlockResponse, GetLatestValidatorSetRequest,
             GetLatestValidatorSetResponse, GetNodeInfoRequest, GetNodeInfoResponse,
             GetSyncingRequest, GetSyncingResponse, GetValidatorSetByHeightRequest,
-            GetValidatorSetByHeightResponse, Module as VersionInfoModule, VersionInfo,
+            GetValidatorSetByHeightResponse,
         },
         tx::v1beta1::{
             service_server::{Service as TxService, ServiceServer as TxServer},
@@ -905,7 +882,7 @@ impl<T> Clone for Client<T> {
 }
 
 impl<T> Client<T> {
-    pub async fn query<F: Fn(T) -> crate::Result<U>, U>(&self, op: F) -> crate::Result<U> {
+    pub async fn query<F: Fn(T) -> crate::Result<U>, U>(&self, _op: F) -> crate::Result<U> {
         todo!()
     }
 }

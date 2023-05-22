@@ -266,8 +266,10 @@ pub mod sdk {
                         .ok_or_else(|| Error::App("No signatures provided".to_string()))?
                         .pub_key
                         .value;
-
-                    base64::decode(pubkey_b64).map_err(|e| Error::App(e.to_string()))?
+                    use base64::Engine;
+                    base64::prelude::BASE64_STANDARD
+                        .decode(pubkey_b64)
+                        .map_err(|e| Error::App(e.to_string()))?
                 }
                 Tx::Protobuf(tx) => tx
                     .auth_info
@@ -302,7 +304,10 @@ pub mod sdk {
                         .ok_or_else(|| Error::App("No signatures provided".to_string()))?
                         .signature;
 
-                    base64::decode(sig_b64).map_err(|e| Error::App(e.to_string()))?
+                    use base64::Engine;
+                    base64::prelude::BASE64_STANDARD
+                        .decode(sig_b64)
+                        .map_err(|e| Error::App(e.to_string()))?
                 }
                 Tx::Protobuf(tx) => tx
                     .signatures
