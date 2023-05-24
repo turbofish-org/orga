@@ -26,6 +26,16 @@ pub trait Client<T: Query + Call> {
     async fn call(&self, call: &T::Call) -> Result<()>;
 }
 
+impl<T: Client<U>, U: Query + Call> Client<U> for &mut T {
+    async fn query(&self, query: &<U as Query>::Query) -> Result<Store> {
+        (**self).query(query).await
+    }
+
+    async fn call(&self, call: &<U as Call>::Call) -> Result<()> {
+        (**self).call(call).await
+    }
+}
+
 pub async fn execute<T, U>(
     store: Store,
     client: &impl Client<QueryPlugin<T>>,

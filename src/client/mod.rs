@@ -4,7 +4,7 @@ use crate::describe::{Children, Describe, Descriptor, KeyOp};
 use crate::encoding::{Decode, Encode};
 use crate::merk::{BackingStore, ProofStore};
 use crate::plugins::{PaidCall, PayableCall};
-use crate::prelude::{ConvertSdkTx, DefaultPlugins2, Shared};
+use crate::prelude::{sdk_compat, ConvertSdkTx, DefaultPlugins2, QueryPlugin, Shared, SignerCall};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
@@ -46,38 +46,39 @@ where
         }
     }
 
-    // pub fn call<F>(
-    //     &self,
-    //     payer: impl FnOnce(&T) -> T::Call,
-    //     payee: impl FnOnce(&T) -> T::Call,
-    // ) -> Result<()>
-    // where
-    //     F: FnOnce(&T) -> T::Call,
-    //     T: Call + Default,
-    //     W: Wallet,
-    //     DefaultPlugins<S, T, ID>: Call + State + Describe + Default,
-    // {
-    //     todo!()
-    //     // let app = &T::default(); // TODO
-    //     // let payer_call = payer(app);
-    //     // let payer_call_bytes = payer_call.encode()?;
-    //     // let payer = <T as Call>::Call::decode(payer_call_bytes.as_slice())?;
+    pub async fn call(
+        &self,
+        payer: impl FnOnce(&T) -> T::Call,
+        payee: impl FnOnce(&T) -> T::Call,
+    ) -> Result<()>
+    where
+        C: Client<DefaultPlugins<S, T, "foo">>,
+        T: Call + State + Query + Default,
+        W: Wallet,
+        DefaultPlugins<S, T, "foo">: Call + Query + State + Describe + Default,
+    {
+        let app = &T::default(); // TODO
+        let payer_call = payer(app);
+        let payer_call_bytes = payer_call.encode()?;
+        let payer = <T as Call>::Call::decode(payer_call_bytes.as_slice())?;
 
-    //     // let app = &T::default();
-    //     // let paid = payee(app);
-    //     // let call = PayableCall::Paid(PaidCall { payer, paid });
-    //     // let nonce = self.wallet.nonce()?;
-    //     // let call = crate::plugins::NonceCall {
-    //     //     nonce,
-    //     //     inner_call: call,
-    //     // };
-    //     // let call = [ID.as_bytes().to_vec(), call.encode()?].concat();
-    //     // let call = self.wallet.sign(&call)?;
-    //     // let call = crate::plugins::sdk_compat::Call::Native(call);
-    //     // self.client.store_client.call_bytes(&call.encode()?)?;
+        let paid = payee(app);
+        let call = PayableCall::Paid(PaidCall { payer, paid });
+        let nonce = self.wallet.nonce_hint()?;
+        // TODO: if nonce is none, query current value
+        let call = crate::plugins::NonceCall {
+            nonce,
+            inner_call: call,
+        };
+        let call = [b"foo".to_vec(), call.encode()?].concat();
+        let call = self.wallet.sign(&call)?;
+        let call = sdk_compat::Call::Native(call);
+        let call_bytes = call.encode()?;
+        let call = Decode::decode(call_bytes.as_slice())?;
+        self.client.call(&call).await?;
 
-    //     // Ok(())
-    // }
+        Ok(())
+    }
 
     pub async fn query<U, F: FnMut(T) -> Result<U>>(&self, mut op: F) -> Result<U>
     where
@@ -234,37 +235,47 @@ mod tests {
         app.flush(&mut bytes)?;
         store.put(vec![], bytes)?;
 
-        let client = MockClient::<App>::with_store(store);
-        let client = AppClient::<_, _, _, "foo", _>::new(client, Unsigned);
+        let mut mock_client = MockClient::<App>::with_store(store);
 
-        let bar_b = client.query(|app| Ok(app.bar.b)).await?;
-        assert_eq!(bar_b, 8);
+        {
+            let client = AppClient::<Foo, _, _, "foo", _>::new(&mut mock_client, Unsigned);
 
-        let value = client
-            .query(|app| app.e.get(12)?.unwrap().get_from_map(14, 2))
-            .await?;
-        assert_eq!(value, Some(32));
+            let bar_b = client.query(|app| Ok(app.bar.b)).await?;
+            assert_eq!(bar_b, 8);
 
-        let value = client
-            .query(|app| {
-                let x = app.e.get(12)?.unwrap();
-                let _ = app.e.get(13)?.unwrap();
-                x.get_from_map(14, 2)
-            })
-            .await?;
-        assert_eq!(value, Some(32));
+            let value = client
+                .query(|app| app.e.get(12)?.unwrap().get_from_map(14, 2))
+                .await?;
+            assert_eq!(value, Some(32));
 
-        let key = 13;
-        let value = client
-            .query(|app| Ok(app.deque.get(0)?.unwrap().get(key)?.unwrap().a))
-            .await?;
-        assert_eq!(value, 3);
+            let value = client
+                .query(|app| {
+                    let x = app.e.get(12)?.unwrap();
+                    let _ = app.e.get(13)?.unwrap();
+                    x.get_from_map(14, 2)
+                })
+                .await?;
+            assert_eq!(value, Some(32));
 
-        // client
-        //     .pay_from(|app| build_call!(app.bar.inc_b(4)))?
-        //     .call(|app| build_call!(app.my_method(1, 2, 3)))?;
-        // let bar_b = client.query(|app| Ok(app.bar.b)).await?;
-        // assert_eq!(bar_b, 12);
+            let key = 13;
+            let value = client
+                .query(|app| Ok(app.deque.get(0)?.unwrap().get(key)?.unwrap().a))
+                .await?;
+            assert_eq!(value, 3);
+
+            client
+                .call(
+                    |app| build_call!(app.bar.inc_b(4)),
+                    |app| build_call!(app.my_method(1, 2, 3)),
+                )
+                .await?;
+        }
+
+        {
+            let client = AppClient::<Foo, _, _, "foo", _>::new(&mut mock_client, Unsigned);
+            let bar_b = client.query(|app| Ok(app.bar.b)).await?;
+            assert_eq!(bar_b, 12);
+        }
 
         Ok(())
     }

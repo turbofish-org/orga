@@ -21,6 +21,7 @@ use super::exec::Client;
 #[derive(Clone, Default)]
 pub struct MockClient<T> {
     pub queries: RefCell<Vec<Vec<u8>>>,
+    pub calls: RefCell<Vec<Vec<u8>>>,
     pub store: Store,
     _marker: PhantomData<T>,
 }
@@ -29,6 +30,7 @@ impl<T> MockClient<T> {
     pub fn with_store(store: Store) -> Self {
         Self {
             queries: RefCell::new(vec![]),
+            calls: RefCell::new(vec![]),
             store,
             _marker: PhantomData,
         }
@@ -62,8 +64,6 @@ impl<T: State + Query + Call> Client<QueryPlugin<T>> for MockClient<QueryPlugin<
                 None => out_store.delete(&key)?,
             }
         }
-        // let map = out_store.into_map();
-        // let out_store = BufStore::wrap_with_map(crate::store::null::Unknown, map);
 
         Ok(Store::new(BackingStore::PartialMapStore(Shared::new(
             out_store,
@@ -71,7 +71,18 @@ impl<T: State + Query + Call> Client<QueryPlugin<T>> for MockClient<QueryPlugin<
     }
 
     async fn call(&self, call: &<QueryPlugin<T> as Call>::Call) -> Result<()> {
-        todo!()
+        self.calls.borrow_mut().push(call.encode()?);
+
+        let root_bytes = self.store.get(&[])?.unwrap_or_default();
+        let mut app = QueryPlugin::<T>::load(self.store.clone(), &mut root_bytes.as_slice())?;
+        let call = <QueryPlugin<T> as Call>::Call::decode(call.encode()?.as_slice())?;
+        app.call(call)?;
+
+        let mut out = vec![];
+        app.flush(&mut out)?;
+        self.store.clone().put(vec![], out)?;
+
+        Ok(())
     }
 }
 

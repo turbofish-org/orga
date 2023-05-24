@@ -7,7 +7,7 @@ use crate::Result;
 use educe::Educe;
 use std::cell::RefCell;
 
-#[orga(skip(Query))]
+#[orga(skip(Query, Call))]
 // TODO: #[call(transparent)]
 pub struct QueryPlugin<T> {
     store: Store,
@@ -37,6 +37,18 @@ where
         }
     }
 }
+
+impl<T> Call for QueryPlugin<T>
+where
+    T: QueryTrait + Call,
+{
+    type Call = T::Call;
+
+    fn call(&mut self, call: Self::Call) -> Result<()> {
+        self.inner.borrow_mut().call(call)
+    }
+}
+
 // TODO: abci method passthroughs
 
 #[cfg(test)]
