@@ -44,7 +44,7 @@ pub fn derive(item: TokenStream) -> TokenStream {
                 ::orga::describe::Builder::new::<Self>().meta::<u8>()
                 #(
                     .named_child_from_state::<Self, #types>(
-                        stringify!(#names),
+                        stringify!(#names), |v, mut op| op(::orga::describe::Builder::access(v, |v: &Self| &v.#names).unwrap())
                     )
                 )*
                 .build()

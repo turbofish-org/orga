@@ -1,7 +1,9 @@
+use std::ops::Deref;
+
 use super::map::{ChildMut, Map, ReadOnly, Ref};
 use crate::call::Call;
 use crate::collections::map::Iter as MapIter;
-use crate::describe::Describe;
+use crate::describe::{Describe, InspectRef};
 use crate::encoding::{Decode, Encode};
 use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::orga;
@@ -23,10 +25,24 @@ where
     fn describe() -> crate::describe::Descriptor {
         use crate::describe::Builder;
         Builder::new::<Self>()
-            .dynamic_child::<u64, T>(|mut query_bytes| {
-                query_bytes.extend_from_slice(&[129]);
-                query_bytes
-            })
+            .dynamic_child::<u64, T>(
+                |mut query_bytes| {
+                    query_bytes.extend_from_slice(&[129]);
+                    query_bytes
+                },
+                |deque, key, mut op| {
+                    let deque = deque.downcast_ref::<Self>();
+                    let key = key.downcast_ref::<u64>();
+                    let value = deque.get_raw(*key).unwrap();
+                    value
+                        .map(|v| {
+                            let v = &*v;
+                            let v: InspectRef = v as _;
+                            op(v)
+                        })
+                        .unwrap();
+                },
+            )
             .build()
     }
 }

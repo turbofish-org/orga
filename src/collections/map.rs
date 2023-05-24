@@ -5,7 +5,7 @@ use std::iter::Peekable;
 use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
 use crate::call::{Call, FieldCall};
-use crate::describe::Describe;
+use crate::describe::{Describe, InspectRef};
 use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::orga;
 use crate::query::{FieldQuery, Query};
@@ -281,10 +281,24 @@ where
     fn describe() -> crate::describe::Descriptor {
         use crate::describe::Builder;
         Builder::new::<Self>()
-            .dynamic_child::<K, V>(|mut query_bytes| {
-                query_bytes.extend_from_slice(&[129]);
-                query_bytes
-            })
+            .dynamic_child::<K, V>(
+                |mut query_bytes| {
+                    query_bytes.extend_from_slice(&[129]);
+                    query_bytes
+                },
+                |map: InspectRef, key: InspectRef, mut op| {
+                    let map = map.downcast_ref::<Self>();
+                    let key = key.downcast_ref::<K>();
+                    let value = map.get(key.clone()).unwrap();
+                    value
+                        .map(|v| {
+                            let v = &*v;
+                            let v: InspectRef = v as _;
+                            op(v)
+                        })
+                        .unwrap();
+                },
+            )
             .build()
     }
 }

@@ -7,13 +7,15 @@ use crate::{
 use ed::Terminated;
 use serde::{Deserialize, Serialize};
 use std::{
-    any::{Any, TypeId},
+    any::{type_name, Any, TypeId},
     fmt::{Debug, Display},
 };
 use wasm_bindgen::prelude::*;
 
 mod builder;
 pub mod child;
+pub mod value;
+use value::Value;
 
 pub use crate::macros::Describe;
 pub use builder::Builder;
@@ -31,6 +33,7 @@ pub struct Descriptor {
     children: Children,
     pub load: Option<LoadFn>,
     pub meta: Option<Box<Self>>,
+    pub parse: Option<ParseFn>,
 }
 
 impl Debug for Descriptor {
@@ -48,6 +51,22 @@ impl Descriptor {
         &self.children
     }
 
+    pub fn load(&self, store: Store, bytes: &mut &[u8]) -> Result<Box<dyn Inspect>> {
+        (self
+            .load
+            .ok_or_else(|| Error::App("State::load function is not available".to_string()))?)(
+            store, bytes,
+        )
+    }
+
+    pub fn from_str(&self, string: &str) -> Result<Option<Box<dyn Inspect>>> {
+        (self
+            .parse
+            .ok_or_else(|| Error::App("FromStr function is not available".to_string()))?)(
+            string
+        )
+    }
+
     // pub fn kv_descs(self) -> impl Iterator<Item = DynamicChild> {
     //     let (own, named) = match self.children {
     //         Children::None => (vec![], vec![]),
@@ -59,19 +78,43 @@ impl Descriptor {
     // }
 }
 
-pub type LoadFn = fn(Store, &mut &[u8]) -> Result<()>;
+pub type LoadFn = fn(Store, &mut &[u8]) -> Result<Box<dyn Inspect>>;
+pub type ParseFn = fn(&str) -> Result<Option<Box<dyn Inspect>>>;
 pub type ApplyQueryBytesFn = fn(Vec<u8>) -> Vec<u8>;
+pub type AccessFn = fn(InspectRef, WithFn);
+pub type WithFn<'a> = &'a mut dyn FnMut(&dyn Inspect);
+pub type DynamicAccessRefFn = fn(&dyn Inspect, &dyn Inspect, WithFn);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub enum Children {
+    #[default]
     None,
     Named(Vec<NamedChild>),
     Dynamic(DynamicChild),
 }
 
-impl Default for Children {
-    fn default() -> Self {
-        Children::None
+pub enum Child {
+    Named(NamedChild),
+    Dynamic(Box<dyn Inspect>, DynamicChild),
+}
+
+impl Child {
+    pub fn describe(&self) -> &Descriptor {
+        match self {
+            Child::Named(child) => &child.desc,
+            Child::Dynamic(_, child) => child.value_desc(),
+        }
+    }
+
+    pub fn access(&self, parent: InspectRef, mut op: WithFn) {
+        match self {
+            Child::Named(child) => {
+                let access = child.access.unwrap();
+
+                access(parent, op);
+            }
+            Child::Dynamic(key, child) => (child.access_ref)(parent, &**key, op),
+        }
     }
 }
 
@@ -81,14 +124,48 @@ pub struct NamedChild {
     pub name: String,
     pub desc: Descriptor,
     pub store_key: KeyOp,
+    access: Option<AccessFn>,
 }
 
-// #[wasm_bindgen(inspectable)]
+impl Children {
+    pub fn child_by_key<'a>(&self, subkey: &'a [u8]) -> Option<(&'a [u8], Child)> {
+        match self {
+            Children::None => None,
+            Children::Named(children) => {
+                for child in children {
+                    match child.store_key {
+                        KeyOp::Append(ref bytes) => {
+                            if subkey.starts_with(bytes) {
+                                return Some((&subkey[..bytes.len()], Child::Named(child.clone())));
+                            }
+                        }
+                        _ => (),
+                    }
+                }
+                None
+            }
+            Children::Dynamic(child) => {
+                let consumed = child.key_desc().encoding_bytes_subslice(subkey).ok()?;
+                let key = child
+                    .key_desc()
+                    .load(Store::default(), &mut consumed.clone())
+                    .ok()?;
+                Some((
+                    &subkey[..consumed.len()],
+                    Child::Dynamic(key, child.clone()),
+                ))
+            }
+        }
+    }
+}
+
+#[wasm_bindgen(inspectable)]
 #[derive(Clone, Debug)]
 pub struct DynamicChild {
     key_desc: Box<Descriptor>,
     value_desc: Box<Descriptor>,
     apply_query_bytes: ApplyQueryBytesFn,
+    access_ref: DynamicAccessRefFn,
 }
 
 impl DynamicChild {
@@ -131,7 +208,15 @@ impl KeyOp {
     }
 }
 
-pub trait Inspect {
+impl dyn Inspect {
+    pub fn downcast_ref<T: 'static>(&self) -> &T {
+        let any: &dyn Any = self as _;
+        any.downcast_ref().unwrap()
+    }
+}
+
+pub type InspectRef<'a> = &'a dyn Inspect;
+pub trait Inspect: Any {
     fn maybe_to_string(&self) -> Option<String> {
         MaybeDisplay::maybe_to_string(&DisplayWrapper(&self))
     }
@@ -153,20 +238,18 @@ pub trait Inspect {
     }
 
     // TODO: should this be a maybe impl?
-    fn encode(&self) -> Result<Vec<u8>> {
-        unimplemented!()
+    fn maybe_encode(&self) -> Option<Result<Vec<u8>>> {
+        MaybeEncode::maybe_encode(&EncodeWrapper(&self))
     }
 
     // TODO: should this be a maybe impl?
     fn describe(&self) -> Descriptor;
 
     // TODO: should this be a maybe impl?
-    fn attach(&mut self, store: Store) -> Result<()>;
+    fn attach2(&mut self, store: Store) -> Result<()>;
 
     // TODO: should this be a maybe impl?
     fn state_version(&self) -> u32;
-
-    fn to_any(&self) -> Result<Box<dyn Any>>;
 
     // TODO: maybe_to_object
     // TODO: query
@@ -178,19 +261,12 @@ impl<T: State + Describe + 'static> Inspect for T {
         Self::describe()
     }
 
-    fn attach(&mut self, store: Store) -> Result<()> {
+    fn attach2(&mut self, store: Store) -> Result<()> {
         State::attach(self, store)
     }
 
     fn state_version(&self) -> u32 {
         0 // TODO
-    }
-
-    fn to_any(&self) -> Result<Box<dyn Any>> {
-        todo!()
-        // let bytes = self.encode()?;
-        // let cloned = Self::decode(bytes.as_slice())?;
-        // Ok(Box::new(cloned))
     }
 }
 
@@ -231,6 +307,24 @@ impl<'a, T: Debug> MaybeDebug for DebugWrapper<'a, T> {
         } else {
             format!("{:?}", self.0)
         })
+    }
+}
+
+trait MaybeEncode {
+    fn maybe_encode(&self) -> Option<Result<Vec<u8>>>;
+}
+
+struct EncodeWrapper<'a, T>(&'a T);
+
+impl<'a, T> MaybeEncode for EncodeWrapper<'a, T> {
+    default fn maybe_encode(&self) -> Option<Result<Vec<u8>>> {
+        None
+    }
+}
+
+impl<'a, T: Encode> MaybeEncode for EncodeWrapper<'a, &T> {
+    fn maybe_encode(&self) -> Option<Result<Vec<u8>>> {
+        Some(self.0.encode().map_err(Error::Ed))
     }
 }
 
@@ -352,7 +446,7 @@ where
 {
     fn describe() -> Descriptor {
         Builder::new::<Self>()
-            .named_child::<T>("inner", &[])
+            // .named_child::<T>("inner", &[], T::describe())
             .build()
     }
 }
@@ -392,14 +486,14 @@ macro_rules! tuple_impl {
     ($($type:ident),*; $last_type:ident; $($indices:tt),*; $last_index:tt) => {
         impl<$($type,)* $last_type> Describe for ($($type,)* $last_type)
         where
-            $($type: State + Encode + Decode + Terminated + Describe + 'static,)*
-            $last_type: State + Encode + Decode + Describe + 'static,
+            $($type: State + Terminated + Describe + 'static,)*
+            $last_type: State + Describe + 'static,
         {
             fn describe() -> Descriptor {
                 // TODO: add child descriptors
                 Builder::new::<Self>()
-                    $(.named_child::<$type>(stringify!($indices), &[$indices as u8]))*
-                    .named_child::<$last_type>(stringify!($last_index), &[$last_index as u8])
+                    $(.named_child::<$type>(stringify!($indices), &[$indices as u8], |v, mut op| op(Builder::access(v, |v: &Self| &v.$indices).unwrap())))*
+                    .named_child::<$last_type>(stringify!($last_index), &[$last_index as u8], |v, mut op| op(Builder::access(v, |v: &Self| &v.$last_index).unwrap()))
                     .build()
             }
         }
@@ -418,136 +512,171 @@ tuple_impl!(A, B, C, D, E, F, G, H, I; J; 0, 1, 2, 3, 4, 5, 6, 7, 8; 9);
 tuple_impl!(A, B, C, D, E, F, G, H, I, J; K; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9; 10);
 tuple_impl!(A, B, C, D, E, F, G, H, I, J, K; L; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10; 11);
 
-// #[cfg(test)]
-// mod tests {
-//     use serde::{Deserialize, Serialize};
+#[cfg(test)]
+mod tests {
+    use orga_macros::orga;
+    use serde::{Deserialize, Serialize};
 
-//     use super::{Describe, Value};
-//     use crate::{
-//         collections::Map,
-//         encoding::{Decode, Encode},
-//         state::State,
-//         store::{DefaultBackingStore, MapStore, Shared, Store},
-//     };
+    use super::{Describe, Value};
+    use crate::{
+        collections::Map,
+        describe::Inspect,
+        encoding::{Decode, Encode},
+        state::State,
+        store::{DefaultBackingStore, MapStore, Shared, Store},
+        Result,
+    };
 
-//     #[derive(State, Encode, Decode, Describe, Debug, Serialize, Deserialize, PartialEq)]
-//     struct Foo {
-//         bar: u32,
-//         baz: u32,
-//     }
+    #[derive(State, Encode, Decode, Describe, Debug)]
+    struct Foo {
+        bar: u32,
+        baz: u32,
+        beep: Bar,
+    }
 
-//     #[derive(State, Encode, Decode, Describe, Default)]
-//     struct Bar {
-//         bar: u32,
-//         baz: Map<u32, u32>,
-//     }
+    #[orga]
+    #[derive(Debug)]
+    struct Bar {
+        bar: u32,
+        baz: Map<u32, u32>,
+    }
 
-//     #[derive(State, Encode, Decode, Describe, Default)]
-//     struct Baz<T: State>(Map<u32, T>);
+    #[test]
+    fn use_value() -> Result<()> {
+        let mut beep = Map::default();
+        beep.insert(124, 456).unwrap();
+        let foo = Foo {
+            bar: 420,
+            baz: 69,
+            beep: Bar {
+                bar: 123,
+                baz: beep,
+            },
+        };
+        let value = Value::new(foo);
+        let child = value
+            .child("beep")
+            .unwrap()
+            .child("baz")
+            .unwrap()
+            .child("124")
+            .unwrap();
+        child.with(|v| {
+            dbg!(v.maybe_to_json().unwrap());
+        });
+        // dbg!(value.maybe_json());
+        // let target: &Box<dyn Inspect> = vec![1, 2, 3];
+        // let x: &String = foo.downcast_ref().unwrap();
 
-//     fn create_bar_value() -> Value {
-//         let store = Store::new(DefaultBackingStore::MapStore(Shared::new(MapStore::new())));
+        Ok(())
+    }
 
-//         let mut bar = Bar::default();
-//         bar.attach(store.clone()).unwrap();
+    // #[derive(State, Encode, Decode, Describe, Default)]
+    // struct Baz<T: State>(Map<u32, T>);
 
-//         bar.baz.insert(123, 456).unwrap();
-//         bar.baz.insert(789, 1).unwrap();
-//         bar.baz.insert(1000, 2).unwrap();
-//         bar.baz.insert(1001, 3).unwrap();
-//         bar.flush().unwrap();
+    // fn create_bar_value() -> Value {
+    //     let store = Store::new(DefaultBackingStore::MapStore(Shared::new(MapStore::new())));
 
-//         let mut value = Value::new(bar);
-//         value.attach(store).unwrap();
+    //     let mut bar = Bar::default();
+    //     bar.attach(store.clone()).unwrap();
 
-//         value
-//     }
+    //     bar.baz.insert(123, 456).unwrap();
+    //     bar.baz.insert(789, 1).unwrap();
+    //     bar.baz.insert(1000, 2).unwrap();
+    //     bar.baz.insert(1001, 3).unwrap();
+    //     bar.flush().unwrap();
 
-//     #[test]
-//     fn decode() {
-//         let desc = Foo::describe();
-//         let value = desc.decode(&[0, 0, 1, 164, 0, 0, 0, 69]).unwrap();
-//         assert_eq!(
-//             value.maybe_debug(false).unwrap(),
-//             "Foo { bar: 420, baz: 69 }"
-//         );
-//     }
+    //     let mut value = Value::new(bar);
+    //     value.attach(store).unwrap();
 
-//     #[test]
-//     fn downcast() {
-//         let value = Value::new(Foo { bar: 420, baz: 69 });
-//         let foo: Foo = value.downcast().unwrap();
-//         assert_eq!(foo.bar, 420);
-//         assert_eq!(foo.baz, 69);
-//     }
+    //     value
+    // }
 
-//     #[test]
-//     fn child() {
-//         let value = Value::new(Foo { bar: 420, baz: 69 });
-//         let bar: u32 = value.child("bar").unwrap().unwrap().downcast().unwrap();
-//         let baz: u32 = value.child("baz").unwrap().unwrap().downcast().unwrap();
-//         assert_eq!(bar, 420);
-//         assert_eq!(baz, 69);
-//     }
+    // #[test]
+    // fn decode() {
+    //     let desc = Foo::describe();
+    //     let value = desc.decode(&[0, 0, 1, 164, 0, 0, 0, 69]).unwrap();
+    //     assert_eq!(
+    //         value.maybe_debug(false).unwrap(),
+    //         "Foo { bar: 420, baz: 69 }"
+    //     );
+    // }
 
-//     #[test]
-//     fn complex_child() {
-//         let value = create_bar_value();
+    // #[test]
+    // fn downcast() {
+    //     let value = Value::new(Foo { bar: 420, baz: 69 });
+    //     let foo: Foo = value.downcast().unwrap();
+    //     assert_eq!(foo.bar, 420);
+    //     assert_eq!(foo.baz, 69);
+    // }
 
-//         let baz = value.child("baz").unwrap().unwrap();
-//         assert_eq!(
-//             baz.child("123")
-//                 .unwrap()
-//                 .unwrap()
-//                 .downcast::<u32>()
-//                 .unwrap(),
-//             456
-//         );
-//     }
+    // #[test]
+    // fn child() {
+    //     let value = Value::new(Foo { bar: 420, baz: 69 });
+    //     let bar: u32 = value.child("bar").unwrap().unwrap().downcast().unwrap();
+    //     let baz: u32 = value.child("baz").unwrap().unwrap().downcast().unwrap();
+    //     assert_eq!(bar, 420);
+    //     assert_eq!(baz, 69);
+    // }
 
-//     #[test]
-//     fn json() {
-//         let value = Value::new(Foo { bar: 420, baz: 69 });
-//         assert_eq!(
-//             value.maybe_to_json().unwrap().unwrap().to_string(),
-//             "{\"bar\":420,\"baz\":69}".to_string(),
-//         );
-//         #[cfg(target_arch = "wasm32")]
-//         assert_eq!(
-//             serde_wasm_bindgen::from_value::<Foo>(value.maybe_to_wasm().unwrap().unwrap()).unwrap(),
-//             Foo { bar: 420, baz: 69 },
-//         );
+    // #[test]
+    // fn complex_child() {
+    //     let value = create_bar_value();
 
-//         let value = Value::new(Bar::default());
-//         assert!(value.maybe_to_json().unwrap().is_none());
-//         #[cfg(target_arch = "wasm32")]
-//         assert!(value.maybe_to_wasm().unwrap().is_none());
-//     }
+    //     let baz = value.child("baz").unwrap().unwrap();
+    //     assert_eq!(
+    //         baz.child("123")
+    //             .unwrap()
+    //             .unwrap()
+    //             .downcast::<u32>()
+    //             .unwrap(),
+    //         456
+    //     );
+    // }
 
-//     #[test]
-//     fn entries() {
-//         let bar = create_bar_value();
-//         assert!(bar.entries().is_none());
+    // #[test]
+    // fn json() {
+    //     let value = Value::new(Foo { bar: 420, baz: 69 });
+    //     assert_eq!(
+    //         value.maybe_to_json().unwrap().unwrap().to_string(),
+    //         "{\"bar\":420,\"baz\":69}".to_string(),
+    //     );
+    //     #[cfg(target_arch = "wasm32")]
+    //     assert_eq!(
+    //         serde_wasm_bindgen::from_value::<Foo>(value.maybe_to_wasm().unwrap().unwrap()).unwrap(),
+    //         Foo { bar: 420, baz: 69 },
+    //     );
 
-//         let map = bar.child("baz").unwrap().unwrap();
-//         let mut iter = map.entries().unwrap();
-//         let mut assert_entry = |expected_key, expected_value| {
-//             let (actual_key, actual_value) = iter.next().unwrap().unwrap();
-//             assert_eq!(actual_key.downcast::<u32>().unwrap(), expected_key);
-//             assert_eq!(actual_value.downcast::<u32>().unwrap(), expected_value);
-//         };
-//         assert_entry(123, 456);
-//         assert_entry(789, 1);
-//         assert_entry(1000, 2);
-//         assert_entry(1001, 3);
-//         assert!(iter.next().is_none());
-//     }
+    //     let value = Value::new(Bar::default());
+    //     assert!(value.maybe_to_json().unwrap().is_none());
+    //     #[cfg(target_arch = "wasm32")]
+    //     assert!(value.maybe_to_wasm().unwrap().is_none());
+    // }
 
-//     #[test]
-//     fn descriptor_json() {
-//         assert_eq!(
-//             serde_json::to_string(&<Bar as Describe>::describe()).unwrap(),
-//             "{\"type_name\":\"orga::describe::tests::Bar\",\"state_version\":0,\"children\":{\"Named\":[{\"name\":\"bar\",\"desc\":{\"type_name\":\"u32\",\"state_version\":0,\"children\":\"None\"},\"store_key\":{\"Append\":[0]}},{\"name\":\"baz\",\"desc\":{\"type_name\":\"orga::collections::map::Map<u32, u32>\",\"state_version\":0,\"children\":{\"Dynamic\":{\"key_desc\":{\"type_name\":\"u32\",\"state_version\":0,\"children\":\"None\"},\"value_desc\":{\"type_name\":\"u32\",\"state_version\":0,\"children\":\"None\"}}}},\"store_key\":{\"Append\":[1]}}]}}"
-//         );
-//     }
-// }
+    // #[test]
+    // fn entries() {
+    //     let bar = create_bar_value();
+    //     assert!(bar.entries().is_none());
+
+    //     let map = bar.child("baz").unwrap().unwrap();
+    //     let mut iter = map.entries().unwrap();
+    //     let mut assert_entry = |expected_key, expected_value| {
+    //         let (actual_key, actual_value) = iter.next().unwrap().unwrap();
+    //         assert_eq!(actual_key.downcast::<u32>().unwrap(), expected_key);
+    //         assert_eq!(actual_value.downcast::<u32>().unwrap(), expected_value);
+    //     };
+    //     assert_entry(123, 456);
+    //     assert_entry(789, 1);
+    //     assert_entry(1000, 2);
+    //     assert_entry(1001, 3);
+    //     assert!(iter.next().is_none());
+    // }
+
+    // #[test]
+    // fn descriptor_json() {
+    //     assert_eq!(
+    //         serde_json::to_string(&<Bar as Describe>::describe()).unwrap(),
+    //         "{\"type_name\":\"orga::describe::tests::Bar\",\"state_version\":0,\"children\":{\"Named\":[{\"name\":\"bar\",\"desc\":{\"type_name\":\"u32\",\"state_version\":0,\"children\":\"None\"},\"store_key\":{\"Append\":[0]}},{\"name\":\"baz\",\"desc\":{\"type_name\":\"orga::collections::map::Map<u32, u32>\",\"state_version\":0,\"children\":{\"Dynamic\":{\"key_desc\":{\"type_name\":\"u32\",\"state_version\":0,\"children\":\"None\"},\"value_desc\":{\"type_name\":\"u32\",\"state_version\":0,\"children\":\"None\"}}}},\"store_key\":{\"Append\":[1]}}]}}"
+    //     );
+    // }
+}

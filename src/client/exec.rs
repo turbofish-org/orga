@@ -2,7 +2,7 @@ use std::any::TypeId;
 
 use super::{trace::take_trace, Client};
 use crate::{
-    describe::{Children, Describe, Descriptor, KeyOp},
+    describe::{Child, Children, Describe, Descriptor, InspectRef, KeyOp, WithFn},
     encoding::{Decode, Encode},
     merk::{BackingStore, ProofStore},
     query::Query,
@@ -130,6 +130,33 @@ pub fn join_store(dst: Store, src: Store) -> Result<Store> {
 }
 
 impl Descriptor {
+    pub fn resolve_by_key(&self, subkey: &[u8]) -> Result<Vec<Child>> {
+        if subkey.is_empty() {
+            return Ok(vec![]);
+        }
+        let (consumed, child) = self
+            .children()
+            .child_by_key(subkey)
+            .ok_or_else(|| Error::Client(format!("No child found for key {:?}", subkey)))?;
+        let child_desc = child.describe();
+        let resolved_children = child_desc.resolve_by_key(&subkey[consumed.len()..])?;
+        let mut children = vec![child];
+        children.extend(resolved_children);
+
+        Ok(children)
+    }
+
+    pub fn access_by_key(&self, subkey: &[u8], instance: InspectRef, op: WithFn) {
+        if subkey.is_empty() {
+            return op(instance);
+        }
+        let (consumed, child) = self.children().child_by_key(subkey).unwrap();
+        let child_desc = child.describe().clone();
+        child.access(instance, &mut |v| {
+            child_desc.access_by_key(&subkey[consumed.len()..], v, op);
+        });
+    }
+
     pub fn resolve_by_type_id(
         &self,
         target_type_id: TypeId,

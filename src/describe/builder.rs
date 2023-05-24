@@ -1,10 +1,15 @@
+use crate::encoding::{Decode, Encode};
 use crate::state::State;
+use crate::{Error, Result};
 use std::any::{type_name, TypeId};
+use std::marker::PhantomData;
+use std::str::FromStr;
 
 use super::{
-    ApplyQueryBytesFn, Children, Describe, Descriptor, DynamicChild, Inspect, KeyOp, LoadFn,
-    NamedChild,
+    value::Value, AccessFn, ApplyQueryBytesFn, Children, Describe, Descriptor, DynamicChild,
+    Inspect, KeyOp, LoadFn, NamedChild,
 };
+use super::{DynamicAccessRefFn, InspectRef, ParseFn};
 
 pub struct Builder {
     type_id: TypeId,
@@ -13,6 +18,7 @@ pub struct Builder {
     load: LoadFn,
     children: Option<Children>,
     meta: Option<Box<Descriptor>>,
+    parse: ParseFn,
 }
 
 impl Builder {
@@ -21,21 +27,24 @@ impl Builder {
             type_id: TypeId::of::<T>(),
             type_name: type_name::<T>().to_string(),
             state_version: 0, // TODO
-            load: |store, bytes| {
-                T::load(store, bytes)?;
-                Ok(())
-            },
-            // meta: Some(Box::new(<u8 as Describe>::describe())),
+            load: |store, bytes| Ok(Box::new(T::load(store, bytes)?)),
             meta: None,
             children: None,
+            parse: |s| maybe_from_str::<T>(s),
         }
     }
 
-    pub fn named_child_keyop<T: Describe>(mut self, name: &'static str, keyop: KeyOp) -> Self {
+    pub fn named_child_keyop<T: Describe>(
+        mut self,
+        name: &'static str,
+        keyop: KeyOp,
+        access: AccessFn,
+    ) -> Self {
         let child = NamedChild {
             name: name.to_string(),
             store_key: keyop,
             desc: T::describe(),
+            access: Some(access),
         };
 
         match self.children {
@@ -47,16 +56,22 @@ impl Builder {
         self
     }
 
-    pub fn named_child<T: Describe>(self, name: &'static str, store_suffix: &[u8]) -> Self {
-        self.named_child_keyop::<T>(name, KeyOp::Append(store_suffix.to_vec()))
+    pub fn named_child<T: Describe>(
+        self,
+        name: &'static str,
+        store_suffix: &[u8],
+        access: AccessFn,
+    ) -> Self {
+        self.named_child_keyop::<T>(name, KeyOp::Append(store_suffix.to_vec()), access)
     }
 
     pub fn named_child_from_state<T: State + Describe, U: Describe>(
         self,
         name: &'static str,
+        access: AccessFn,
     ) -> Self {
         if let Some(keyop) = T::field_keyop(name) {
-            return self.named_child_keyop::<U>(name, keyop);
+            return self.named_child_keyop::<U>(name, keyop, access);
         } else {
             self
         }
@@ -72,11 +87,13 @@ impl Builder {
     pub fn dynamic_child<K: Describe, V: Describe>(
         mut self,
         apply_query_bytes: ApplyQueryBytesFn,
+        access_ref: DynamicAccessRefFn,
     ) -> Self {
         let child = DynamicChild {
             key_desc: Box::new(K::describe()),
             value_desc: Box::new(V::describe()),
             apply_query_bytes,
+            access_ref,
         };
 
         match self.children {
@@ -87,6 +104,18 @@ impl Builder {
         self
     }
 
+    pub fn access<T: Inspect + 'static, U: Inspect + 'static>(
+        value: InspectRef,
+        access: fn(&T) -> &U,
+    ) -> Result<InspectRef> {
+        use std::any::Any;
+        let any: &dyn Any = value as _;
+        let parent: &T = any.downcast_ref().unwrap();
+        let child = access(parent);
+
+        Ok(child)
+    }
+
     pub fn build(self) -> Descriptor {
         Descriptor {
             type_id: self.type_id,
@@ -95,7 +124,33 @@ impl Builder {
             load: Some(self.load),
             children: self.children.unwrap_or_default(),
             meta: self.meta,
+            parse: Some(self.parse),
         }
+    }
+}
+
+fn maybe_from_str<T>(s: &str) -> Result<Option<Box<dyn Inspect>>> {
+    FromStrWrapper::<T>::maybe_from_str(s)
+}
+
+trait MaybeFromStr {
+    fn maybe_from_str(s: &str) -> Result<Option<Box<dyn Inspect>>>;
+}
+
+struct FromStrWrapper<T>(PhantomData<T>);
+
+impl<T> MaybeFromStr for FromStrWrapper<T> {
+    default fn maybe_from_str(_s: &str) -> Result<Option<Box<dyn Inspect>>> {
+        Ok(None)
+    }
+}
+
+impl<T: FromStr + Inspect + 'static> MaybeFromStr for FromStrWrapper<T>
+where
+    Error: From<<T as FromStr>::Err>,
+{
+    fn maybe_from_str(s: &str) -> Result<Option<Box<dyn Inspect>>> {
+        Ok(Some(Box::new(T::from_str(s)?)))
     }
 }
 
