@@ -10,16 +10,16 @@ use std::cell::RefCell;
 #[orga(skip(Query))]
 // TODO: #[call(transparent)]
 pub struct QueryPlugin<T> {
-    // #[state(transparent)]
-    pub inner: RefCell<T>,
     store: Store,
+    #[state(transparent)]
+    pub inner: RefCell<T>,
 }
 
 #[derive(Clone, Encode, Decode, Educe)]
 #[educe(Debug)]
 pub enum Query<T: QueryTrait + Call> {
-    Inner(T::Query),
-    CallSimulation(T::Call),
+    Query(T::Query),
+    Call(T::Call),
     RawKey(Vec<u8>),
 }
 
@@ -31,8 +31,8 @@ where
 
     fn query(&self, query: Self::Query) -> Result<()> {
         match query {
-            Query::Inner(inner) => self.inner.borrow().query(inner),
-            Query::CallSimulation(call) => self.inner.borrow_mut().call(call),
+            Query::Query(query) => self.inner.borrow().query(query),
+            Query::Call(call) => self.inner.borrow_mut().call(call),
             Query::RawKey(key) => self.store.get(&key).map(|_| ()),
         }
     }

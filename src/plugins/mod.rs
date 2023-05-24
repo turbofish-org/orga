@@ -20,6 +20,7 @@ pub mod sdk_compat;
 pub use sdk_compat::{ConvertSdkTx, SdkCompatPlugin};
 
 pub mod query;
+pub use query::QueryPlugin;
 
 macro_rules! type_chain {
     ($name:tt<$($pfx_params:ident,)* _ $(,$sfx_params:ident)*>, $($tail:tt)*) => {
@@ -32,6 +33,17 @@ macro_rules! type_chain {
 }
 
 pub type DefaultPlugins<S, T, const ID: &'static str> = type_chain! {
+    QueryPlugin<_>,
+    SdkCompatPlugin<S, _>,
+    SignerPlugin<_>,
+    ChainCommitmentPlugin<_, ID>,
+    NoncePlugin<_>,
+    PayablePlugin<_>,
+    FeePlugin<S, _>,
+    T
+};
+
+pub type DefaultPlugins2<S, T, const ID: &'static str> = type_chain! {
     SdkCompatPlugin<S, _>,
     SignerPlugin<_>,
     ChainCommitmentPlugin<_, ID>,

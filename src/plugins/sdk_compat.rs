@@ -349,7 +349,6 @@ pub trait ConvertSdkTx {
 impl<S: Symbol, T> CallTrait for SdkCompatPlugin<S, T>
 where
     T: CallTrait + State + ConvertSdkTx<Output = T::Call>,
-    T::Call: Encode,
 {
     type Call = Call<T::Call>;
 

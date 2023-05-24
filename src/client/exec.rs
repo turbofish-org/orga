@@ -1,10 +1,12 @@
 use std::any::TypeId;
 
-use super::{trace::take_trace, Client};
+use super::trace::take_trace;
 use crate::{
+    call::Call,
     describe::{Children, Describe, Descriptor, KeyOp},
     encoding::{Decode, Encode},
     merk::{BackingStore, ProofStore},
+    prelude::query::QueryPlugin,
     query::Query,
     state::State,
     store::{self, Read, Shared, Store, Write},
@@ -18,13 +20,19 @@ pub enum StepResult<T: Query, U> {
     FetchQuery(T::Query, u64),
 }
 
+pub trait Client<T: Query + Call> {
+    async fn query(&self, query: &T::Query) -> Result<Store>;
+
+    async fn call(&self, call: &T::Call) -> Result<()>;
+}
+
 pub async fn execute<T, U>(
     store: Store,
-    client: &impl Client,
-    query_fn: impl Fn(T) -> Result<U>,
-) -> Result<U>
+    client: &impl Client<QueryPlugin<T>>,
+    mut query_fn: impl FnMut(QueryPlugin<T>) -> Result<U>,
+) -> Result<(U, Store)>
 where
-    T: State + Query + Describe,
+    T: State + Query + Call + Describe,
 {
     let mut store = store;
     let mut last_n = None;
@@ -42,18 +50,15 @@ where
     };
 
     loop {
-        let res = match step(store.clone(), &query_fn)? {
-            StepResult::Done(value) => return Ok(value),
+        let res = match step(store.clone(), &mut query_fn)? {
+            StepResult::Done(value) => return Ok((value, store)),
             StepResult::FetchKey(key, n) => {
                 check_n(n)?;
-                let query = QueryPluginQuery::Key(key).encode()?;
-                client.query(query.as_slice()).await?
+                client.query(&QueryPluginQuery::RawKey(key)).await?
             }
             StepResult::FetchQuery(query, n) => {
                 check_n(n)?;
-                let query = query.encode()?;
-                let res = client.query(query.as_slice()).await?;
-                res
+                client.query(&QueryPluginQuery::Query(query)).await?
             }
         };
 
@@ -61,27 +66,31 @@ where
     }
 }
 
-#[derive(Encode, Decode)]
-enum QueryPluginQuery {
-    Query(Vec<u8>),
-    Foo,
-    Key(Vec<u8>),
-}
+type QueryPluginQuery<T> = <QueryPlugin<T> as Query>::Query;
 
-pub fn step<T, U>(store: Store, query_fn: impl Fn(T) -> Result<U>) -> Result<StepResult<T, U>>
+pub fn step<T, U>(
+    store: Store,
+    mut query_fn: impl FnMut(QueryPlugin<T>) -> Result<U>,
+) -> Result<StepResult<T, U>>
 where
     T: State + Query + Describe,
 {
-    let root_bytes = match store.get(&[])? {
-        Some(bytes) => bytes,
-        None => return Ok(StepResult::FetchKey(vec![], 0)),
+    take_trace();
+
+    let root_bytes = match store.get(&[]) {
+        Err(Error::StoreErr(store::Error::ReadUnknown(_))) | Ok(None) => {
+            return Ok(StepResult::FetchKey(vec![], 0))
+        }
+        Err(err) => return Err(err),
+        Ok(Some(bytes)) => bytes,
     };
-    let app = T::load(store, &mut root_bytes.as_slice())?;
+
+    let app = QueryPlugin::<T>::load(store, &mut root_bytes.as_slice())?;
 
     let key = match query_fn(app) {
-        Ok(value) => return Ok(StepResult::Done(value)),
         Err(Error::StoreErr(store::Error::ReadUnknown(key))) => key,
         Err(other_err) => return Err(other_err),
+        Ok(value) => return Ok(StepResult::Done(value)),
     };
 
     let (traces, push_count) = take_trace();
@@ -232,7 +241,7 @@ mod tests {
     async fn execute_simple() {
         let client = setup();
 
-        let res = execute(Store::default(), &client, |app: QueryPlugin<Foo>| {
+        let (res, store) = execute(Store::default(), &client, |app: QueryPlugin<Foo>| {
             Ok(app.inner.borrow().bar)
         })
         .await
@@ -245,7 +254,7 @@ mod tests {
     async fn execute_deque_access_none() {
         let client = setup();
 
-        let res = execute(Store::default(), &client, |app: QueryPlugin<Foo>| {
+        let (res, store) = execute(Store::default(), &client, |app: QueryPlugin<Foo>| {
             Ok(app.inner.borrow().baz.get(123)?.is_none())
         })
         .await
@@ -261,11 +270,12 @@ mod tests {
     async fn execute_deque_access_some() {
         let client = setup();
 
-        let res = execute(Store::default(), &client, |app: QueryPlugin<Foo>| {
+        let (res, store) = execute(Store::default(), &client, |app: QueryPlugin<Foo>| {
             Ok(*app.inner.borrow().baz.get(0)?.unwrap().get(2)?.unwrap())
         })
         .await
         .unwrap();
+
         assert_eq!(res, 3);
         assert_eq!(
             client.queries.take(),

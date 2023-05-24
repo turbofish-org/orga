@@ -1,8 +1,12 @@
 use std::{any::Any, cell::RefCell, marker::PhantomData};
 
+use ed::Terminated;
+
 use crate::{
+    call::Call,
     encoding::{Decode, Encode},
     merk::BackingStore,
+    plugins::QueryPlugin,
     query::Query,
     state::State,
     store::{
@@ -12,7 +16,7 @@ use crate::{
     Error, Result,
 };
 
-use super::Client;
+use super::exec::Client;
 
 #[derive(Clone, Default)]
 pub struct MockClient<T> {
@@ -21,16 +25,27 @@ pub struct MockClient<T> {
     _marker: PhantomData<T>,
 }
 
-impl<T: State + Query> Client for MockClient<T> {
-    async fn query(&self, query: &[u8]) -> Result<Store> {
-        self.queries.borrow_mut().push(query.to_vec());
+impl<T> MockClient<T> {
+    pub fn with_store(store: Store) -> Self {
+        Self {
+            queries: RefCell::new(vec![]),
+            store,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<T: State + Query + Call> Client<QueryPlugin<T>> for MockClient<QueryPlugin<T>> {
+    async fn query(&self, query: &<QueryPlugin<T> as Query>::Query) -> Result<Store> {
+        let query_bytes = query.encode()?;
+        self.queries.borrow_mut().push(query_bytes.clone());
 
         let store = Store::new(BackingStore::Other(Shared::new(Box::new(ReadLog::new(
             self.store.clone(),
         )))));
         let root_bytes = store.get(&[])?.unwrap_or_default();
-        let app = T::load(store.clone(), &mut root_bytes.as_slice())?;
-        let query = T::Query::decode(query)?;
+        let app = QueryPlugin::<T>::load(store.clone(), &mut root_bytes.as_slice())?;
+        let query = <QueryPlugin<_> as Query>::Query::decode(query_bytes.as_slice())?;
         app.query(query)?;
         drop(app);
 
@@ -47,15 +62,15 @@ impl<T: State + Query> Client for MockClient<T> {
                 None => out_store.delete(&key)?,
             }
         }
-        let map = out_store.into_map();
-        let out_store = BufStore::wrap_with_map(crate::store::null::Unknown, map);
+        // let map = out_store.into_map();
+        // let out_store = BufStore::wrap_with_map(crate::store::null::Unknown, map);
 
         Ok(Store::new(BackingStore::PartialMapStore(Shared::new(
             out_store,
         ))))
     }
 
-    async fn call(&self, call: &[u8]) -> Result<()> {
+    async fn call(&self, call: &<QueryPlugin<T> as Call>::Call) -> Result<()> {
         todo!()
     }
 }

@@ -81,7 +81,6 @@ impl<'a, 'b> Loader<'a, 'b> {
     }
 
     pub fn load_transparent_child_inner<T: State>(&mut self) -> Result<T> {
-        dbg!(std::any::type_name::<T>());
         if !compat_mode() {
             *self.bytes = &self.bytes[1..];
         }

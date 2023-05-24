@@ -27,13 +27,15 @@ pub fn push_trace<T: 'static>(method_prefix: Vec<u8>, method_args: Vec<u8>) -> R
             .try_borrow_mut()
             .map_err(|_| Error::Call("Call tracer is already borrowed".to_string()))?;
 
+        if traces.0.is_empty() {
+            traces.1 += 1;
+        }
+
         traces.0.push(Trace {
             type_id,
             method_prefix,
             method_args,
         });
-
-        traces.1 += 1;
 
         Result::Ok(())
     })
