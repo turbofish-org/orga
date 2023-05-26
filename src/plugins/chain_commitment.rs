@@ -1,3 +1,5 @@
+use orga_macros::orga;
+
 use super::GetNonce;
 use super::{sdk_compat::sdk::Tx as SdkTx, ConvertSdkTx};
 use crate::call::Call as CallTrait;
@@ -5,25 +7,19 @@ use crate::context::Context;
 use crate::describe::{Describe, Descriptor};
 use crate::encoding::{Decode, Encode};
 use crate::migrate::{MigrateFrom, MigrateInto};
+use crate::prelude::LengthVec;
 use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
-use std::marker::PhantomData;
 use std::ops::Deref;
 
-#[derive(Encode, Decode, Default, State)]
-#[state(transparent)]
-pub struct ChainCommitmentPlugin<T, const ID: &'static str> {
+#[orga(skip(Call, MigrateFrom))]
+pub struct ChainCommitmentPlugin<T> {
+    pub chain_id: LengthVec<u8, u8>,
     pub inner: T,
 }
 
-impl<T: Describe, const ID: &'static str> Describe for ChainCommitmentPlugin<T, ID> {
-    fn describe() -> Descriptor {
-        T::describe()
-    }
-}
-
-impl<T, const ID: &'static str> GetNonce for ChainCommitmentPlugin<T, ID>
+impl<T> GetNonce for ChainCommitmentPlugin<T>
 where
     T: GetNonce,
 {
@@ -32,70 +28,66 @@ where
     }
 }
 
-impl<T1, T2, const ID1: &'static str, const ID2: &'static str>
-    MigrateFrom<ChainCommitmentPlugin<T1, ID1>> for ChainCommitmentPlugin<T2, ID2>
+impl<T1, T2> MigrateFrom<ChainCommitmentPlugin<T1>> for ChainCommitmentPlugin<T2>
 where
     T1: MigrateInto<T2>,
 {
-    fn migrate_from(other: ChainCommitmentPlugin<T1, ID1>) -> Result<Self> {
+    fn migrate_from(other: ChainCommitmentPlugin<T1>) -> Result<Self> {
+        // TODO: will have to migrate from old versions which don't store a chain id
         Ok(Self {
+            chain_id: other.chain_id,
             inner: other.inner.migrate_into()?,
         })
     }
 }
 
-pub struct ChainId(pub &'static str);
+pub struct ChainId(pub String);
 
 impl Deref for ChainId {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
-        self.0
+        self.0.as_str()
     }
 }
 
-impl<T: CallTrait, const ID: &'static str> CallTrait for ChainCommitmentPlugin<T, ID> {
+impl<T: CallTrait> CallTrait for ChainCommitmentPlugin<T> {
     type Call = Vec<u8>;
 
     fn call(&mut self, call: Self::Call) -> Result<()> {
-        Context::add(ChainId(ID));
-        let expected_id: Vec<u8> = ID.bytes().collect();
-        if call.len() < expected_id.len() {
+        if self.chain_id.len() == 0 {
+            return Err(Error::App("Chain ID not set".into()));
+        }
+
+        if call.len() < self.chain_id.len() {
             return Err(Error::App("Invalid chain ID length".into()));
         }
-        let chain_id = &call[..expected_id.len()];
-        if chain_id != expected_id {
+
+        let chain_id = &call[..self.chain_id.len()];
+        if chain_id != self.chain_id.as_slice() {
             return Err(Error::App(format!(
                 "Invalid chain ID (expected {}, got {})",
-                ID,
+                String::from_utf8(self.chain_id.to_vec()).unwrap(),
                 String::from_utf8(chain_id.to_vec()).unwrap_or_default()
             )));
         }
-        dbg!(&call);
-        dbg!(&call[chain_id.len()..]);
-        let inner_call = Decode::decode(&call[chain_id.len()..])?;
-        dbg!(&inner_call);
+
+        let inner_call = Decode::decode(&call[self.chain_id.len()..])?;
+        Context::add(ChainId(String::from_utf8(self.chain_id.to_vec()).unwrap()));
         self.inner.call(inner_call)
     }
 }
 
-impl<T: Query, const ID: &'static str> Query for ChainCommitmentPlugin<T, ID> {
-    type Query = T::Query;
-
-    fn query(&self, query: Self::Query) -> Result<()> {
-        self.inner.query(query)
-    }
-}
-
-impl<T, const ID: &'static str> ConvertSdkTx for ChainCommitmentPlugin<T, ID>
+impl<T> ConvertSdkTx for ChainCommitmentPlugin<T>
 where
     T: ConvertSdkTx<Output = T::Call> + CallTrait,
 {
     type Output = Vec<u8>;
 
     fn convert(&self, sdk_tx: &SdkTx) -> Result<Vec<u8>> {
-        Context::add(ChainId(ID));
-        let id_bytes = ID.as_bytes();
+        Context::add(String::from_utf8(self.chain_id.to_vec()).unwrap());
+
+        let id_bytes = self.chain_id.as_slice();
         let inner_call = self.inner.convert(sdk_tx)?;
 
         let mut call_bytes = Vec::with_capacity(id_bytes.len() + inner_call.encoding_length()?);
@@ -106,7 +98,7 @@ where
     }
 }
 
-// impl<T, const ID: &'static str> Describe for ChainCommitmentPlugin<T, ID>
+// impl<T> Describe for ChainCommitmentPlugin<T>
 // where
 //     T: State + Describe + 'static,
 // {
@@ -129,7 +121,7 @@ mod abci {
     use super::*;
     use crate::abci::{BeginBlock, EndBlock, InitChain};
 
-    impl<T, const ID: &'static str> BeginBlock for ChainCommitmentPlugin<T, ID>
+    impl<T> BeginBlock for ChainCommitmentPlugin<T>
     where
         T: BeginBlock + State,
     {
@@ -138,7 +130,7 @@ mod abci {
         }
     }
 
-    impl<T, const ID: &'static str> EndBlock for ChainCommitmentPlugin<T, ID>
+    impl<T> EndBlock for ChainCommitmentPlugin<T>
     where
         T: EndBlock + State,
     {
@@ -147,7 +139,7 @@ mod abci {
         }
     }
 
-    impl<T, const ID: &'static str> InitChain for ChainCommitmentPlugin<T, ID>
+    impl<T> InitChain for ChainCommitmentPlugin<T>
     where
         T: InitChain + State,
     {
@@ -156,7 +148,7 @@ mod abci {
         }
     }
 
-    impl<T, const ID: &'static str> crate::abci::AbciQuery for ChainCommitmentPlugin<T, ID>
+    impl<T> crate::abci::AbciQuery for ChainCommitmentPlugin<T>
     where
         T: crate::abci::AbciQuery + State,
     {

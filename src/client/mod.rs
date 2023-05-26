@@ -24,7 +24,7 @@ pub mod wallet;
 pub use exec::Client;
 pub use wallet::Wallet;
 
-pub struct AppClient<T, C, S, const ID: &'static str, W> {
+pub struct AppClient<T, C, S, W> {
     _pd: PhantomData<(T, S)>,
     client: C,
     wallet: W,
@@ -33,7 +33,7 @@ pub struct AppClient<T, C, S, const ID: &'static str, W> {
 
 use crate::plugins::DefaultPlugins;
 
-impl<T, C, S, W> AppClient<T, C, S, "foo", W>
+impl<T, C, S, W> AppClient<T, C, S, W>
 where
     W: Clone,
 {
@@ -52,17 +52,20 @@ where
         payee: impl FnOnce(&T) -> T::Call,
     ) -> Result<()>
     where
-        C: Client<DefaultPlugins<S, T, "foo">>,
-        T: Call + State + Query + Default,
+        C: Client<DefaultPlugins<S, T>>,
+        T: Call + State + Query + Default + Describe + ConvertSdkTx,
         W: Wallet,
-        DefaultPlugins<S, T, "foo">: Call + Query + State + Describe + Default,
+        DefaultPlugins2<S, T>: Call + Query + State + Describe + Default,
+        S: Symbol,
     {
-        let app = &T::default(); // TODO
-        let payer_call = payer(app);
+        // let app = &T::default(); // TODO
+        let app = self.query(|app| Ok(app)).await?;
+
+        let payer_call = payer(&app);
         let payer_call_bytes = payer_call.encode()?;
         let payer = <T as Call>::Call::decode(payer_call_bytes.as_slice())?;
 
-        let paid = payee(app);
+        let paid = payee(&app);
         let call = PayableCall::Paid(PaidCall { payer, paid });
         let nonce = self.wallet.nonce_hint()?;
         // TODO: if nonce is none, query current value
@@ -83,8 +86,8 @@ where
     pub async fn query<U, F: FnMut(T) -> Result<U>>(&self, mut op: F) -> Result<U>
     where
         T: State + Query + Call + Describe + ConvertSdkTx,
-        DefaultPlugins2<S, T, "foo">: Query + Describe + State + Call,
-        C: Client<DefaultPlugins<S, T, "foo">>,
+        DefaultPlugins2<S, T>: Query + Describe + State + Call,
+        C: Client<DefaultPlugins<S, T>>,
         S: Symbol,
     {
         let store = self.store.take().unwrap_or(Store::with_partial_map_store());
@@ -191,11 +194,12 @@ mod tests {
 
     #[tokio::test]
     async fn plugin_client() -> Result<()> {
-        type App = DefaultPlugins<Simp, Foo, "foo">;
+        type App = DefaultPlugins<Simp, Foo>;
         let mut store = Store::with_map_store();
         let mut app = App::default();
 
         {
+            app.inner.borrow_mut().inner.inner.chain_id = b"foo".to_vec().try_into()?;
             let inner_app = &mut app.inner.borrow_mut().inner.inner.inner.inner.inner;
 
             let mut inner_map = Map::<u32, u64>::default();
@@ -238,7 +242,7 @@ mod tests {
         let mut mock_client = MockClient::<App>::with_store(store);
 
         {
-            let client = AppClient::<Foo, _, _, "foo", _>::new(&mut mock_client, Unsigned);
+            let client = AppClient::<Foo, _, _, _>::new(&mut mock_client, Unsigned);
 
             let bar_b = client.query(|app| Ok(app.bar.b)).await?;
             assert_eq!(bar_b, 8);
@@ -272,7 +276,7 @@ mod tests {
         }
 
         {
-            let client = AppClient::<Foo, _, _, "foo", _>::new(&mut mock_client, Unsigned);
+            let client = AppClient::<Foo, _, _, _>::new(&mut mock_client, Unsigned);
             let bar_b = client.query(|app| Ok(app.bar.b)).await?;
             assert_eq!(bar_b, 12);
         }

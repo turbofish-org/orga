@@ -32,21 +32,21 @@ macro_rules! type_chain {
     };
 }
 
-pub type DefaultPlugins<S, T, const ID: &'static str> = type_chain! {
+pub type DefaultPlugins<S, T> = type_chain! {
     QueryPlugin<_>,
     SdkCompatPlugin<S, _>,
     SignerPlugin<_>,
-    ChainCommitmentPlugin<_, ID>,
+    ChainCommitmentPlugin<_>,
     NoncePlugin<_>,
     PayablePlugin<_>,
     FeePlugin<S, _>,
     T
 };
 
-pub type DefaultPlugins2<S, T, const ID: &'static str> = type_chain! {
+pub type DefaultPlugins2<S, T> = type_chain! {
     SdkCompatPlugin<S, _>,
     SignerPlugin<_>,
-    ChainCommitmentPlugin<_, ID>,
+    ChainCommitmentPlugin<_>,
     NoncePlugin<_>,
     PayablePlugin<_>,
     FeePlugin<S, _>,

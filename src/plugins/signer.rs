@@ -221,9 +221,7 @@ where
         };
         Context::add(signer_ctx);
 
-        dbg!("decoding signer plugin inner call..");
         let inner_call = Decode::decode(call.call_bytes.as_slice())?;
-        dbg!(&inner_call);
         self.inner.call(inner_call)
     }
 }
@@ -587,7 +585,7 @@ mod tests {
             },
         };
 
-        Context::add(ChainId("testchain"));
+        Context::add(ChainId("testchain".to_string()));
 
         // sign bytes: {"account_number":"0","chain_id":"testchain","fee":{"amount":[{"amount":"0","denom":"unom"}],"gas":"10000"},"memo":"","msgs":[{"type":"x","value":{}}],"sequence":"1"}
         // signature and pubkey taken from metamask
