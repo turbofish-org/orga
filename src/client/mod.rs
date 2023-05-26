@@ -59,7 +59,10 @@ where
         S: Symbol,
     {
         // let app = &T::default(); // TODO
-        let app = self.query(|app| Ok(app)).await?;
+        let chain_id = self
+            .query_root(|app| Ok(app.inner.borrow().inner.inner.chain_id.to_vec()))
+            .await?;
+        let app = self.query(Ok).await?;
 
         let payer_call = payer(&app);
         let payer_call_bytes = payer_call.encode()?;
@@ -73,7 +76,7 @@ where
             nonce,
             inner_call: call,
         };
-        let call = [b"foo".to_vec(), call.encode()?].concat();
+        let call = [chain_id, call.encode()?].concat();
         let call = self.wallet.sign(&call)?;
         let call = sdk_compat::Call::Native(call);
         let call_bytes = call.encode()?;
@@ -81,6 +84,24 @@ where
         self.client.call(&call).await?;
 
         Ok(())
+    }
+
+    pub async fn query_root<U, F: FnMut(DefaultPlugins<S, T>) -> Result<U>>(
+        &self,
+        mut op: F,
+    ) -> Result<U>
+    where
+        DefaultPlugins2<S, T>: Query + Describe + State + Call,
+        C: Client<DefaultPlugins<S, T>>,
+        S: Symbol,
+    {
+        let store = self.store.take().unwrap_or(Store::with_partial_map_store());
+
+        let (res, store) = exec::execute(store, &self.client, |app| op(app)).await?;
+
+        self.store.replace(Some(store));
+
+        Ok(res)
     }
 
     pub async fn query<U, F: FnMut(T) -> Result<U>>(&self, mut op: F) -> Result<U>
