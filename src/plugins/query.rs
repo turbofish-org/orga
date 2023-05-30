@@ -15,6 +15,14 @@ pub struct QueryPlugin<T> {
     pub inner: RefCell<T>,
 }
 
+impl<T: Call> Call for QueryPlugin<T> {
+    type Call = T::Call;
+
+    fn call(&mut self, call: Self::Call) -> Result<()> {
+        self.inner.borrow_mut().call(call)
+    }
+}
+
 #[derive(Clone, Encode, Decode, Educe)]
 #[educe(Debug)]
 pub enum Query<T: QueryTrait + Call> {
@@ -38,18 +46,53 @@ where
     }
 }
 
-impl<T> Call for QueryPlugin<T>
-where
-    T: QueryTrait + Call,
-{
-    type Call = T::Call;
+// TODO: Remove dependency on ABCI for this otherwise-pure plugin.
+#[cfg(feature = "abci")]
+mod abci {
+    use super::super::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
+    use super::*;
+    use crate::abci::{BeginBlock, EndBlock, InitChain};
+    use crate::state::State;
 
-    fn call(&mut self, call: Self::Call) -> Result<()> {
-        self.inner.borrow_mut().call(call)
+    impl<T> BeginBlock for QueryPlugin<T>
+    where
+        T: BeginBlock + State,
+    {
+        fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
+            self.inner.begin_block(ctx)
+        }
+    }
+
+    impl<T> EndBlock for QueryPlugin<T>
+    where
+        T: EndBlock + State,
+    {
+        fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
+            self.inner.end_block(ctx)
+        }
+    }
+
+    impl<T> InitChain for QueryPlugin<T>
+    where
+        T: InitChain + State + Call,
+    {
+        fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
+            self.inner.init_chain(ctx)
+        }
+    }
+
+    impl<T> crate::abci::AbciQuery for QueryPlugin<T>
+    where
+        T: crate::abci::AbciQuery + State + Call,
+    {
+        fn abci_query(
+            &self,
+            request: &tendermint_proto::abci::RequestQuery,
+        ) -> Result<tendermint_proto::abci::ResponseQuery> {
+            self.inner.abci_query(request)
+        }
     }
 }
-
-// TODO: abci method passthroughs
 
 #[cfg(test)]
 mod tests {

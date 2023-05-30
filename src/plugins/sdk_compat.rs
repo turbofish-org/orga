@@ -12,7 +12,7 @@ use std::ops::{Deref, DerefMut};
 pub const MAX_CALL_SIZE: usize = 65_535;
 pub const NATIVE_CALL_FLAG: u8 = 0xff;
 
-#[derive(State, Default, Clone, FieldQuery, Describe)]
+#[derive(State, FieldQuery, Default, Clone, Describe)]
 pub struct SdkCompatPlugin<S, T> {
     pub(crate) symbol: PhantomData<S>,
     pub inner: T,
@@ -359,20 +359,6 @@ where
         };
 
         self.inner.call(call)
-    }
-}
-
-pub struct SdkCompatAdapter<T, U, S> {
-    inner: std::marker::PhantomData<fn(T, S)>,
-    parent: U,
-}
-
-impl<T, U: Clone, S> Clone for SdkCompatAdapter<T, U, S> {
-    fn clone(&self) -> Self {
-        Self {
-            inner: std::marker::PhantomData,
-            parent: self.parent.clone(),
-        }
     }
 }
 

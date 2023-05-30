@@ -38,7 +38,7 @@ impl<T> MockClient<T> {
 }
 
 impl<T: State + Query + Call> Client<QueryPlugin<T>> for MockClient<QueryPlugin<T>> {
-    async fn query(&self, query: &<QueryPlugin<T> as Query>::Query) -> Result<Store> {
+    async fn query(&self, query: <QueryPlugin<T> as Query>::Query) -> Result<Store> {
         let query_bytes = query.encode()?;
         self.queries.borrow_mut().push(query_bytes.clone());
 
@@ -47,7 +47,6 @@ impl<T: State + Query + Call> Client<QueryPlugin<T>> for MockClient<QueryPlugin<
         )))));
         let root_bytes = store.get(&[])?.unwrap_or_default();
         let app = QueryPlugin::<T>::load(store.clone(), &mut root_bytes.as_slice())?;
-        let query = <QueryPlugin<_> as Query>::Query::decode(query_bytes.as_slice())?;
         app.query(query)?;
         drop(app);
 
@@ -70,7 +69,7 @@ impl<T: State + Query + Call> Client<QueryPlugin<T>> for MockClient<QueryPlugin<
         ))))
     }
 
-    async fn call(&self, call: &<QueryPlugin<T> as Call>::Call) -> Result<()> {
+    async fn call(&self, call: <QueryPlugin<T> as Call>::Call) -> Result<()> {
         self.calls.borrow_mut().push(call.encode()?);
 
         let root_bytes = self.store.get(&[])?.unwrap_or_default();

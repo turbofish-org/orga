@@ -6,7 +6,7 @@ use crate::{
     describe::{Children, Describe, Descriptor, KeyOp},
     encoding::{Decode, Encode},
     merk::{BackingStore, ProofStore},
-    prelude::query::QueryPlugin,
+    prelude::{query::QueryPlugin, DefaultPlugins},
     query::Query,
     state::State,
     store::{self, Read, Shared, Store, Write},
@@ -21,17 +21,17 @@ pub enum StepResult<T: Query, U> {
 }
 
 pub trait Client<T: Query + Call> {
-    async fn query(&self, query: &T::Query) -> Result<Store>;
+    async fn query(&self, query: T::Query) -> Result<Store>;
 
-    async fn call(&self, call: &T::Call) -> Result<()>;
+    async fn call(&self, call: T::Call) -> Result<()>;
 }
 
 impl<T: Client<U>, U: Query + Call> Client<U> for &mut T {
-    async fn query(&self, query: &<U as Query>::Query) -> Result<Store> {
+    async fn query(&self, query: <U as Query>::Query) -> Result<Store> {
         (**self).query(query).await
     }
 
-    async fn call(&self, call: &<U as Call>::Call) -> Result<()> {
+    async fn call(&self, call: <U as Call>::Call) -> Result<()> {
         (**self).call(call).await
     }
 }
@@ -64,11 +64,11 @@ where
             StepResult::Done(value) => return Ok((value, store)),
             StepResult::FetchKey(key, n) => {
                 check_n(n)?;
-                client.query(&QueryPluginQuery::RawKey(key)).await?
+                client.query(QueryPluginQuery::RawKey(key)).await?
             }
             StepResult::FetchQuery(query, n) => {
                 check_n(n)?;
-                client.query(&QueryPluginQuery::Query(query)).await?
+                client.query(QueryPluginQuery::Query(query)).await?
             }
         };
 

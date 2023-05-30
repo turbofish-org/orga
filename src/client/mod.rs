@@ -53,12 +53,10 @@ where
     ) -> Result<()>
     where
         C: Client<DefaultPlugins<S, T>>,
-        T: Call + State + Query + Default + Describe + ConvertSdkTx,
+        T: Call + State + Query + Default + Describe + ConvertSdkTx<Output = PaidCall<T::Call>>,
         W: Wallet,
-        DefaultPlugins2<S, T>: Call + Query + State + Describe + Default,
         S: Symbol,
     {
-        // let app = &T::default(); // TODO
         let chain_id = self
             .query_root(|app| Ok(app.inner.borrow().inner.inner.chain_id.to_vec()))
             .await?;
@@ -79,25 +77,23 @@ where
         let call = [chain_id, call.encode()?].concat();
         let call = self.wallet.sign(&call)?;
         let call = sdk_compat::Call::Native(call);
-        let call_bytes = call.encode()?;
-        let call = Decode::decode(call_bytes.as_slice())?;
-        self.client.call(&call).await?;
+        self.client.call(call).await?;
 
         Ok(())
     }
 
     pub async fn query_root<U, F: FnMut(DefaultPlugins<S, T>) -> Result<U>>(
         &self,
-        mut op: F,
+        op: F,
     ) -> Result<U>
     where
-        DefaultPlugins2<S, T>: Query + Describe + State + Call,
+        T: State + Query + Call + Describe + ConvertSdkTx<Output = PaidCall<T::Call>>,
         C: Client<DefaultPlugins<S, T>>,
         S: Symbol,
     {
         let store = self.store.take().unwrap_or(Store::with_partial_map_store());
 
-        let (res, store) = exec::execute(store, &self.client, |app| op(app)).await?;
+        let (res, store) = exec::execute(store, &self.client, op).await?;
 
         self.store.replace(Some(store));
 
@@ -106,8 +102,7 @@ where
 
     pub async fn query<U, F: FnMut(T) -> Result<U>>(&self, mut op: F) -> Result<U>
     where
-        T: State + Query + Call + Describe + ConvertSdkTx,
-        DefaultPlugins2<S, T>: Query + Describe + State + Call,
+        T: State + Query + Call + Describe + ConvertSdkTx<Output = PaidCall<T::Call>>,
         C: Client<DefaultPlugins<S, T>>,
         S: Symbol,
     {
@@ -187,6 +182,7 @@ mod tests {
 
     impl ConvertSdkTx for Foo {
         type Output = PaidCall<<Self as Call>::Call>;
+
         fn convert(&self, _msg: &orga::prelude::sdk_compat::sdk::Tx) -> Result<Self::Output> {
             unimplemented!()
         }
