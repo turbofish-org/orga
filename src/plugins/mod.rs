@@ -42,13 +42,3 @@ pub type DefaultPlugins<S, T> = type_chain! {
     FeePlugin<S, _>,
     T
 };
-
-pub type DefaultPlugins2<S, T> = type_chain! {
-    SdkCompatPlugin<S, _>,
-    SignerPlugin<_>,
-    ChainCommitmentPlugin<_>,
-    NoncePlugin<_>,
-    PayablePlugin<_>,
-    FeePlugin<S, _>,
-    T
-};

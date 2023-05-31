@@ -77,7 +77,7 @@ mod abci {
         T: InitChain + State + Call,
     {
         fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
-            self.inner.init_chain(ctx)
+            self.inner.borrow_mut().init_chain(ctx)
         }
     }
 

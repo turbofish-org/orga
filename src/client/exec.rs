@@ -6,7 +6,7 @@ use crate::{
     describe::{Children, Describe, Descriptor, KeyOp},
     encoding::{Decode, Encode},
     merk::{BackingStore, ProofStore},
-    prelude::{query::QueryPlugin, DefaultPlugins},
+    prelude::{query::QueryPlugin, ABCIPlugin, App, DefaultPlugins},
     query::Query,
     state::State,
     store::{self, Read, Shared, Store, Write},
@@ -36,13 +36,15 @@ impl<T: Client<U>, U: Query + Call> Client<U> for &mut T {
     }
 }
 
+// TODO: remove need for ABCIPlugin wrapping at this level, and App bound
+
 pub async fn execute<T, U>(
     store: Store,
-    client: &impl Client<QueryPlugin<T>>,
-    mut query_fn: impl FnMut(QueryPlugin<T>) -> Result<U>,
+    client: &impl Client<ABCIPlugin<QueryPlugin<T>>>,
+    mut query_fn: impl FnMut(ABCIPlugin<QueryPlugin<T>>) -> Result<U>,
 ) -> Result<(U, Store)>
 where
-    T: State + Query + Call + Describe,
+    T: App + State + Query + Call + Describe,
 {
     let mut store = store;
     let mut last_n = None;
@@ -80,10 +82,10 @@ type QueryPluginQuery<T> = <QueryPlugin<T> as Query>::Query;
 
 pub fn step<T, U>(
     store: Store,
-    mut query_fn: impl FnMut(QueryPlugin<T>) -> Result<U>,
+    mut query_fn: impl FnMut(ABCIPlugin<QueryPlugin<T>>) -> Result<U>,
 ) -> Result<StepResult<T, U>>
 where
-    T: State + Query + Describe,
+    T: App + State + Query + Describe,
 {
     take_trace();
 
@@ -95,7 +97,7 @@ where
         Ok(Some(bytes)) => bytes,
     };
 
-    let app = QueryPlugin::<T>::load(store, &mut root_bytes.as_slice())?;
+    let app = ABCIPlugin::<QueryPlugin<T>>::load(store, &mut root_bytes.as_slice())?;
 
     let key = match query_fn(app) {
         Err(Error::StoreErr(store::Error::ReadUnknown(key))) => key,
@@ -222,23 +224,23 @@ mod tests {
         pub baz: Deque<Deque<u32>>,
     }
 
-    fn setup() -> MockClient<QueryPlugin<Foo>> {
+    fn setup() -> MockClient<ABCIPlugin<QueryPlugin<Foo>>> {
         let mut client = MockClient::default();
         client.store = Store::with_map_store();
 
-        let mut foo = QueryPlugin::<Foo>::default();
+        let mut foo = ABCIPlugin::<QueryPlugin<Foo>>::default();
         foo.attach(client.store.clone()).unwrap();
 
-        foo.inner.borrow_mut().bar = 123;
+        foo.inner.inner.borrow_mut().bar = 123;
 
         let mut d = Deque::new();
         d.push_back(1).unwrap();
         d.push_back(2).unwrap();
         d.push_back(3).unwrap();
-        foo.inner.borrow_mut().baz.push_back(d).unwrap();
+        foo.inner.inner.borrow_mut().baz.push_back(d).unwrap();
 
         let d = Deque::new();
-        foo.inner.borrow_mut().baz.push_back(d).unwrap();
+        foo.inner.inner.borrow_mut().baz.push_back(d).unwrap();
 
         let mut bytes = vec![];
         foo.flush(&mut bytes).unwrap();
@@ -251,9 +253,11 @@ mod tests {
     async fn execute_simple() {
         let client = setup();
 
-        let (res, store) = execute(Store::default(), &client, |app: QueryPlugin<Foo>| {
-            Ok(app.inner.borrow().bar)
-        })
+        let (res, store) = execute(
+            Store::default(),
+            &client,
+            |app: ABCIPlugin<QueryPlugin<Foo>>| Ok(app.inner.inner.borrow().bar),
+        )
         .await
         .unwrap();
         assert_eq!(res, 123);
@@ -264,9 +268,13 @@ mod tests {
     async fn execute_deque_access_none() {
         let client = setup();
 
-        let (res, store) = execute(Store::default(), &client, |app: QueryPlugin<Foo>| {
-            Ok(app.inner.borrow().baz.get(123)?.is_none())
-        })
+        let (res, store) = execute(
+            Store::default(),
+            &client,
+            |app: ABCIPlugin<QueryPlugin<Foo>>| {
+                Ok(app.inner.inner.borrow().baz.get(123)?.is_none())
+            },
+        )
         .await
         .unwrap();
         assert!(res);
@@ -280,9 +288,21 @@ mod tests {
     async fn execute_deque_access_some() {
         let client = setup();
 
-        let (res, store) = execute(Store::default(), &client, |app: QueryPlugin<Foo>| {
-            Ok(*app.inner.borrow().baz.get(0)?.unwrap().get(2)?.unwrap())
-        })
+        let (res, store) = execute(
+            Store::default(),
+            &client,
+            |app: ABCIPlugin<QueryPlugin<Foo>>| {
+                Ok(*app
+                    .inner
+                    .inner
+                    .borrow()
+                    .baz
+                    .get(0)?
+                    .unwrap()
+                    .get(2)?
+                    .unwrap())
+            },
+        )
         .await
         .unwrap();
 

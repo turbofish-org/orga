@@ -7,6 +7,7 @@ use crate::{
     encoding::{Decode, Encode},
     merk::BackingStore,
     plugins::QueryPlugin,
+    prelude::{ABCIPlugin, App},
     query::Query,
     state::State,
     store::{
@@ -37,8 +38,10 @@ impl<T> MockClient<T> {
     }
 }
 
-impl<T: State + Query + Call> Client<QueryPlugin<T>> for MockClient<QueryPlugin<T>> {
-    async fn query(&self, query: <QueryPlugin<T> as Query>::Query) -> Result<Store> {
+impl<T: App + State + Query + Call> Client<ABCIPlugin<QueryPlugin<T>>>
+    for MockClient<ABCIPlugin<QueryPlugin<T>>>
+{
+    async fn query(&self, query: <ABCIPlugin<QueryPlugin<T>> as Query>::Query) -> Result<Store> {
         let query_bytes = query.encode()?;
         self.queries.borrow_mut().push(query_bytes.clone());
 
@@ -69,7 +72,7 @@ impl<T: State + Query + Call> Client<QueryPlugin<T>> for MockClient<QueryPlugin<
         ))))
     }
 
-    async fn call(&self, call: <QueryPlugin<T> as Call>::Call) -> Result<()> {
+    async fn call(&self, call: <ABCIPlugin<QueryPlugin<T>> as Call>::Call) -> Result<()> {
         self.calls.borrow_mut().push(call.encode()?);
 
         let root_bytes = self.store.get(&[])?.unwrap_or_default();

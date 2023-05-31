@@ -388,7 +388,7 @@ mod abci {
 
     impl<S, T: State> InitChain for SdkCompatPlugin<S, T>
     where
-        T: InitChain + State + CallTrait,
+        T: InitChain + State,
     {
         fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
             self.inner.init_chain(ctx)

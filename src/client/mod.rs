@@ -4,7 +4,9 @@ use crate::describe::{Children, Describe, Descriptor, KeyOp};
 use crate::encoding::{Decode, Encode};
 use crate::merk::{BackingStore, ProofStore};
 use crate::plugins::{PaidCall, PayableCall};
-use crate::prelude::{sdk_compat, ConvertSdkTx, DefaultPlugins2, QueryPlugin, Shared, SignerCall};
+use crate::prelude::{
+    sdk_compat, ABCICall, ABCIPlugin, App, ConvertSdkTx, QueryPlugin, Shared, SignerCall,
+};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
@@ -52,13 +54,19 @@ where
         payee: impl FnOnce(&T) -> T::Call,
     ) -> Result<()>
     where
-        C: Client<DefaultPlugins<S, T>>,
-        T: Call + State + Query + Default + Describe + ConvertSdkTx<Output = PaidCall<T::Call>>,
+        C: Client<ABCIPlugin<DefaultPlugins<S, T>>>,
+        T: App
+            + Call
+            + State
+            + Query
+            + Default
+            + Describe
+            + ConvertSdkTx<Output = PaidCall<T::Call>>,
         W: Wallet,
         S: Symbol,
     {
         let chain_id = self
-            .query_root(|app| Ok(app.inner.borrow().inner.inner.chain_id.to_vec()))
+            .query_root(|app| Ok(app.inner.inner.borrow().inner.inner.chain_id.to_vec()))
             .await?;
         let app = self.query(Ok).await?;
 
@@ -76,22 +84,22 @@ where
         };
         let call = [chain_id, call.encode()?].concat();
         let call = self.wallet.sign(&call)?;
-        let call = sdk_compat::Call::Native(call);
+        let call = ABCICall::DeliverTx(sdk_compat::Call::Native(call));
         self.client.call(call).await?;
 
         Ok(())
     }
 
-    pub async fn query_root<U, F: FnMut(DefaultPlugins<S, T>) -> Result<U>>(
+    pub async fn query_root<U, F: FnMut(ABCIPlugin<DefaultPlugins<S, T>>) -> Result<U>>(
         &self,
         op: F,
     ) -> Result<U>
     where
-        T: State + Query + Call + Describe + ConvertSdkTx<Output = PaidCall<T::Call>>,
-        C: Client<DefaultPlugins<S, T>>,
+        T: App + State + Query + Call + Describe + ConvertSdkTx<Output = PaidCall<T::Call>>,
+        C: Client<ABCIPlugin<DefaultPlugins<S, T>>>,
         S: Symbol,
     {
-        let store = self.store.take().unwrap_or(Store::with_partial_map_store());
+        let store = self.store.take().unwrap_or_default();
 
         let (res, store) = exec::execute(store, &self.client, op).await?;
 
@@ -102,14 +110,23 @@ where
 
     pub async fn query<U, F: FnMut(T) -> Result<U>>(&self, mut op: F) -> Result<U>
     where
-        T: State + Query + Call + Describe + ConvertSdkTx<Output = PaidCall<T::Call>>,
-        C: Client<DefaultPlugins<S, T>>,
+        T: App + State + Query + Call + Describe + ConvertSdkTx<Output = PaidCall<T::Call>>,
+        C: Client<ABCIPlugin<DefaultPlugins<S, T>>>,
         S: Symbol,
     {
-        let store = self.store.take().unwrap_or(Store::with_partial_map_store());
+        let store = self.store.take().unwrap_or_default();
 
         let (res, store) = exec::execute(store, &self.client, |app| {
-            op(app.inner.into_inner().inner.inner.inner.inner.inner.inner)
+            op(app
+                .inner
+                .inner
+                .into_inner()
+                .inner
+                .inner
+                .inner
+                .inner
+                .inner
+                .inner)
         })
         .await?;
 
@@ -211,13 +228,13 @@ mod tests {
 
     #[tokio::test]
     async fn plugin_client() -> Result<()> {
-        type App = DefaultPlugins<Simp, Foo>;
+        type App = ABCIPlugin<DefaultPlugins<Simp, Foo>>;
         let mut store = Store::with_map_store();
         let mut app = App::default();
 
         {
-            app.inner.borrow_mut().inner.inner.chain_id = b"foo".to_vec().try_into()?;
-            let inner_app = &mut app.inner.borrow_mut().inner.inner.inner.inner.inner;
+            app.inner.inner.borrow_mut().inner.inner.chain_id = b"foo".to_vec().try_into()?;
+            let inner_app = &mut app.inner.inner.borrow_mut().inner.inner.inner.inner.inner;
 
             let mut inner_map = Map::<u32, u64>::default();
             let mut deque_inner_map = Map::<u32, Bar>::default();
