@@ -85,7 +85,7 @@ where
     type Output = Vec<u8>;
 
     fn convert(&self, sdk_tx: &SdkTx) -> Result<Vec<u8>> {
-        Context::add(String::from_utf8(self.chain_id.to_vec()).unwrap());
+        Context::add(ChainId(String::from_utf8(self.chain_id.to_vec()).unwrap()));
 
         let id_bytes = self.chain_id.as_slice();
         let inner_call = self.inner.convert(sdk_tx)?;
@@ -144,6 +144,13 @@ mod abci {
         T: InitChain + State,
     {
         fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
+            self.chain_id = Context::resolve::<ChainId>()
+                .ok_or_else(|| Error::App("Chain ID context not set".into()))?
+                .0
+                .as_bytes()
+                .to_vec()
+                .try_into()?;
+
             self.inner.init_chain(ctx)
         }
     }
