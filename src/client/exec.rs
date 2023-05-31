@@ -107,12 +107,22 @@ where
 
     let (traces, push_count) = take_trace();
     if let Some(trace) = traces.first() {
-        let res = T::describe().resolve_by_type_id(trace.type_id, key.as_slice(), vec![], vec![]);
+        let res = ABCIPlugin::<QueryPlugin<T>>::describe().resolve_by_type_id(
+            trace.type_id,
+            key.as_slice(),
+            vec![],
+            vec![],
+        );
         let receiver_pfx = match res {
             Ok(pfx) => pfx,
             Err(_) => return Ok(StepResult::FetchKey(key, push_count)),
         };
-        let query_bytes = [receiver_pfx, trace.bytes()].concat();
+        let query_bytes = [
+            // TODO: shouldn't have to cut off ABCIPlugin, QueryPlugin prefixes here
+            receiver_pfx[2..].to_vec(),
+            trace.bytes(),
+        ]
+        .concat();
         let query = T::Query::decode(query_bytes.as_slice())?;
         return Ok(StepResult::FetchQuery(query, push_count));
     }
