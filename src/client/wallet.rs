@@ -71,8 +71,9 @@ impl DerivedKey {
 
 impl Wallet for DerivedKey {
     fn sign(&self, call_bytes: &[u8]) -> Result<SignerCall> {
+        use secp256k1::hashes::sha256;
         let secp = secp256k1::Secp256k1::new();
-        let msg = secp256k1::Message::from_slice(call_bytes)?;
+        let msg = secp256k1::Message::from_hashed_data::<sha256::Hash>(call_bytes);
         let sig = secp.sign_ecdsa(&msg, &self.privkey);
         let sig_bytes = sig.serialize_compact();
 
