@@ -30,7 +30,6 @@ pub fn main() {
     pretty_env_logger::init();
 
     let home = tempdir::TempDir::new("orga-foo").unwrap();
-    dbg!(&home);
     let node = orga::abci::Node::<DefaultPlugins<FooCoin, App>>::new(
         home.path().clone(),
         orga::prelude::DefaultConfig {

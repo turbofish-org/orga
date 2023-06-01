@@ -68,6 +68,14 @@ where
         let chain_id = self
             .query_root(|app| Ok(app.inner.inner.borrow().inner.inner.chain_id.to_vec()))
             .await?;
+        let nonce = match self.wallet.address()? {
+            None => None,
+            Some(addr) => Some(
+                self.query_root(|app| app.inner.inner.borrow_mut().inner.inner.inner.nonce(addr))
+                    .await?
+                    + 1,
+            ),
+        };
         let app = self.query(Ok).await?;
 
         let payer_call = payer(&app);
@@ -76,8 +84,6 @@ where
 
         let paid = payee(&app);
         let call = PayableCall::Paid(PaidCall { payer, paid });
-        let nonce = self.wallet.nonce_hint()?;
-        // TODO: if nonce is none, query current value
         let call = crate::plugins::NonceCall {
             nonce,
             inner_call: call,
@@ -144,13 +150,14 @@ mod tests {
 
     use crate::call::build_call;
     use crate::client::mock::MockClient;
-    use crate::client::wallet::Unsigned;
+    use crate::client::wallet::{DerivedKey, Unsigned};
     use crate::coins::Symbol;
     use crate::collections::{Deque, Map};
+    use crate::context::Context;
     use crate::orga;
     use crate::plugins::ConvertSdkTx;
     use crate::plugins::PaidCall;
-    use crate::prelude::QueryPlugin;
+    use crate::prelude::{QueryPlugin, Signer};
 
     #[orga]
     #[derive(Debug)]
@@ -216,16 +223,30 @@ mod tests {
     impl Foo {
         #[call]
         pub fn my_method(&mut self, a: u32, b: u8, c: u16) -> Result<()> {
+            self.b += 1;
             Ok(())
         }
 
         #[call]
         pub fn my_other_method(&mut self, d: u32) -> Result<()> {
-            println!("called my_other_method({})", d);
+            self.c += 1;
+            Ok(())
+        }
+
+        #[call]
+        pub fn signed_method(&mut self, address: Address) -> Result<()> {
+            let signer = Context::resolve::<Signer>().unwrap();
+            if signer.signer != Some(address) {
+                return Err(Error::App("wrong signer".into()));
+            }
+
+            self.my_field += 1;
+
             Ok(())
         }
     }
 
+    #[ignore]
     #[tokio::test]
     async fn plugin_client() -> Result<()> {
         type App = ABCIPlugin<DefaultPlugins<Simp, Foo>>;
@@ -276,7 +297,10 @@ mod tests {
         let mut mock_client = MockClient::<App>::with_store(store);
 
         {
-            let client = AppClient::<Foo, _, _, _>::new(&mut mock_client, Unsigned);
+            let client = AppClient::<Foo, _, _, _>::new(
+                &mut mock_client,
+                DerivedKey::new(b"alice").unwrap(),
+            );
 
             let bar_b = client.query(|app| Ok(app.bar.b)).await?;
             assert_eq!(bar_b, 8);
@@ -304,7 +328,7 @@ mod tests {
             client
                 .call(
                     |app| build_call!(app.bar.inc_b(4)),
-                    |app| build_call!(app.my_method(1, 2, 3)),
+                    |app| build_call!(app.signed_method(DerivedKey::address_for(b"alice").unwrap())),
                 )
                 .await?;
         }

@@ -97,7 +97,7 @@ where
         Ok(Some(bytes)) => bytes,
     };
 
-    let app = ABCIPlugin::<QueryPlugin<T>>::load(store, &mut root_bytes.as_slice())?;
+    let app = ABCIPlugin::<QueryPlugin<T>>::load(store, &mut &root_bytes[..])?;
 
     let key = match query_fn(app) {
         Err(Error::StoreErr(store::Error::ReadUnknown(key))) => key,

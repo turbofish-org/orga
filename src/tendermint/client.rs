@@ -77,12 +77,15 @@ impl<T: App + Call + Query + State + Default> Client<ABCIPlugin<T>> for HttpClie
 #[cfg(test)]
 mod tests {
     use crate::{
-        client::{wallet::Unsigned, AppClient},
+        client::{
+            wallet::{DerivedKey, Unsigned},
+            AppClient,
+        },
         coins::{Accounts, Address, Symbol},
         collections::Map,
         context::Context,
         plugins::{ChainId, ConvertSdkTx, DefaultPlugins, PaidCall},
-        prelude::InitChain,
+        prelude::{InitChain, Signer},
     };
 
     use super::*;
@@ -112,6 +115,13 @@ mod tests {
         pub fn increment_foo(&mut self) -> orga::Result<()> {
             self.foo += 1;
             Ok(())
+        }
+    }
+
+    impl InitChain for App {
+        fn init_chain(&mut self, ctx: &orga::prelude::InitChainCtx) -> Result<()> {
+            self.accounts
+                .deposit(DerivedKey::address_for(b"alice").unwrap(), 100_000.into())
         }
     }
 
@@ -156,22 +166,27 @@ mod tests {
         spawn_node();
 
         let client = HttpClient::new("http://localhost:26657").unwrap();
-        let client = AppClient::<App, _, FooCoin, _>::new(client, Unsigned);
+        let client =
+            AppClient::<App, _, FooCoin, _>::new(client, DerivedKey::new(b"alice").unwrap());
 
-        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+        // TODO: node spawn should return future which waits for node to be ready
+        tokio::time::sleep(std::time::Duration::from_secs(15)).await;
 
         let res = client.query(|app| Ok(app.bar)).await.unwrap();
         assert_eq!(res, 0);
 
         let res = client
-            .query(|app| app.accounts.balance(Address::NULL))
+            .query(|app| {
+                app.accounts
+                    .balance(DerivedKey::address_for(b"alice").unwrap())
+            })
             .await
             .unwrap();
-        assert_eq!(res.value, 0);
+        assert_eq!(res.value, 100_000);
 
         client
             .call(
-                |app| build_call!(app.accounts.take_as_funding(1234.into())),
+                |app| build_call!(app.accounts.take_as_funding(50_000.into())),
                 |app| build_call!(app.increment_foo()),
             )
             .await

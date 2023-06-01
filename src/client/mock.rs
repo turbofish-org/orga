@@ -43,13 +43,13 @@ impl<T: App + State + Query + Call> Client<ABCIPlugin<QueryPlugin<T>>>
 {
     async fn query(&self, query: <ABCIPlugin<QueryPlugin<T>> as Query>::Query) -> Result<Store> {
         let query_bytes = query.encode()?;
-        self.queries.borrow_mut().push(query_bytes.clone());
+        self.queries.borrow_mut().push(query_bytes);
 
         let store = Store::new(BackingStore::Other(Shared::new(Box::new(ReadLog::new(
             self.store.clone(),
         )))));
         let root_bytes = store.get(&[])?.unwrap_or_default();
-        let app = QueryPlugin::<T>::load(store.clone(), &mut root_bytes.as_slice())?;
+        let app = ABCIPlugin::<QueryPlugin<T>>::load(store.clone(), &mut root_bytes.as_slice())?;
         app.query(query)?;
         drop(app);
 
@@ -76,8 +76,9 @@ impl<T: App + State + Query + Call> Client<ABCIPlugin<QueryPlugin<T>>>
         self.calls.borrow_mut().push(call.encode()?);
 
         let root_bytes = self.store.get(&[])?.unwrap_or_default();
-        let mut app = QueryPlugin::<T>::load(self.store.clone(), &mut root_bytes.as_slice())?;
-        let call = <QueryPlugin<T> as Call>::Call::decode(call.encode()?.as_slice())?;
+        let mut app =
+            ABCIPlugin::<QueryPlugin<T>>::load(self.store.clone(), &mut root_bytes.as_slice())?;
+        let call = <ABCIPlugin<QueryPlugin<T>> as Call>::Call::decode(call.encode()?.as_slice())?;
         app.call(call)?;
 
         let mut out = vec![];
