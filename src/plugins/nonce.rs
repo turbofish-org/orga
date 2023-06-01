@@ -1,5 +1,7 @@
 use std::any::type_name;
 
+use orga_macros::orga;
+
 use super::{sdk_compat::sdk::Tx as SdkTx, ConvertSdkTx, Signer};
 use crate::call::Call;
 use crate::coins::Address;
@@ -14,22 +16,10 @@ use crate::{Error, Result};
 
 const NONCE_INCREASE_LIMIT: u64 = 1000;
 
-#[derive(State, Default, FieldQuery, Describe)]
+#[orga(skip(Call))]
 pub struct NoncePlugin<T> {
     pub map: Map<Address, u64>,
     pub inner: T,
-}
-
-impl<T1: State, T2: State> MigrateFrom<NoncePlugin<T1>> for NoncePlugin<T2>
-where
-    T1: MigrateInto<T2>,
-{
-    fn migrate_from(other: NoncePlugin<T1>) -> Result<Self> {
-        Ok(Self {
-            map: other.map.migrate_into()?,
-            inner: other.inner.migrate_into()?,
-        })
-    }
 }
 
 impl<T: State> NoncePlugin<T> {

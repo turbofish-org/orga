@@ -11,7 +11,6 @@ use std::cell::RefCell;
 // TODO: #[call(transparent)]
 pub struct QueryPlugin<T> {
     store: Store,
-    #[state(transparent)]
     pub inner: RefCell<T>,
 }
 
@@ -41,7 +40,9 @@ where
         match query {
             Query::Query(query) => self.inner.borrow().query(query),
             Query::Call(call) => self.inner.borrow_mut().call(call),
-            Query::RawKey(key) => self.store.get(&key).map(|_| ()),
+            Query::RawKey(key) => unsafe { self.store.with_prefix(vec![]) }
+                .get(&key)
+                .map(|_| ()),
         }
     }
 }

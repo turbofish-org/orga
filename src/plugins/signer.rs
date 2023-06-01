@@ -12,33 +12,14 @@ use crate::query::Query;
 use crate::state::State;
 use crate::{call::Call, migrate::MigrateInto};
 use crate::{Error, Result};
+use orga_macros::FieldQuery;
 use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
 use serde::Serialize;
 use std::ops::Deref;
 
-#[derive(Default, Encode, Decode, State)]
-#[state(transparent)]
+#[orga(skip(Call))]
 pub struct SignerPlugin<T> {
     pub inner: T,
-}
-impl<T> Describe for SignerPlugin<T>
-where
-    T: Describe,
-{
-    fn describe() -> crate::describe::Descriptor {
-        T::describe()
-    }
-}
-
-impl<T1, T2> MigrateFrom<SignerPlugin<T1>> for SignerPlugin<T2>
-where
-    T1: MigrateInto<T2>,
-{
-    fn migrate_from(other: SignerPlugin<T1>) -> Result<Self> {
-        Ok(Self {
-            inner: other.inner.migrate_into()?,
-        })
-    }
 }
 
 pub struct Signer {
@@ -223,14 +204,6 @@ where
 
         let inner_call = Decode::decode(call.call_bytes.as_slice())?;
         self.inner.call(inner_call)
-    }
-}
-
-impl<T: Query> Query for SignerPlugin<T> {
-    type Query = T::Query;
-
-    fn query(&self, query: Self::Query) -> Result<()> {
-        self.inner.query(query)
     }
 }
 

@@ -1,3 +1,5 @@
+use orga_macros::orga;
+
 use crate::call::Call as CallTrait;
 use crate::coins::{Address, Symbol};
 use crate::describe::Describe;
@@ -12,22 +14,10 @@ use std::ops::{Deref, DerefMut};
 pub const MAX_CALL_SIZE: usize = 65_535;
 pub const NATIVE_CALL_FLAG: u8 = 0xff;
 
-#[derive(State, FieldQuery, Default, Clone, Describe)]
+#[orga(skip(Call, FieldCall))]
 pub struct SdkCompatPlugin<S, T> {
     pub(crate) symbol: PhantomData<S>,
     pub inner: T,
-}
-
-impl<S1, S2, T1: State, T2: State> MigrateFrom<SdkCompatPlugin<S1, T1>> for SdkCompatPlugin<S2, T2>
-where
-    T1: MigrateInto<T2>,
-{
-    fn migrate_from(other: SdkCompatPlugin<S1, T1>) -> Result<Self> {
-        Ok(Self {
-            symbol: other.symbol.migrate_into()?,
-            inner: other.inner.migrate_into()?,
-        })
-    }
 }
 
 #[derive(Debug)]

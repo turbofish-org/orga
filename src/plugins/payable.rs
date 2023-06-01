@@ -1,3 +1,5 @@
+use orga_macros::orga;
+
 use super::sdk_compat::{sdk::Tx as SdkTx, ConvertSdkTx};
 use crate::call::Call;
 use crate::coins::{Amount, Coin, Symbol};
@@ -14,20 +16,9 @@ use std::ops::{Deref, DerefMut};
 
 const MAX_SUBCALL_LEN: u32 = 200_000;
 
-#[orga_macros::orga(skip(MigrateFrom, Call))]
+#[orga(skip(Call))]
 pub struct PayablePlugin<T> {
     pub inner: T,
-}
-
-impl<T1, T2> MigrateFrom<PayablePlugin<T1>> for PayablePlugin<T2>
-where
-    T1: MigrateInto<T2>,
-{
-    fn migrate_from(other: PayablePlugin<T1>) -> Result<Self> {
-        Ok(Self {
-            inner: other.inner.migrate_into()?,
-        })
-    }
 }
 
 #[derive(Default)]
