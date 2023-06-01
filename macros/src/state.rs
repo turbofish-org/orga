@@ -202,7 +202,7 @@ impl StateInputReceiver {
                     if field.skip {
                         quote! { #name: loader.load_skipped_child()? }
                     } else {
-                        quote! { #name: loader.load_child()? }
+                        quote! { #name: loader.load_child::<Self, _>()? }
                     }
                 }
             });
