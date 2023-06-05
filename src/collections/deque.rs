@@ -213,6 +213,18 @@ impl<T: State> Deque<T> {
         let j = j + self.meta.head;
         self.map.swap(i, j)
     }
+
+    pub fn swap_remove_front(&mut self, i: u64) -> Result<()> {
+        self.swap(i, 0)?;
+        self.pop_front()?;
+        Ok(())
+    }
+
+    pub fn swap_remove_back(&mut self, i: u64) -> Result<()> {
+        self.swap(i, self.len() - 1)?;
+        self.pop_back()?;
+        Ok(())
+    }
 }
 
 // TODO: use derive(Client)
@@ -422,6 +434,40 @@ mod test {
         let mut iter = deque.iter().unwrap();
 
         assert_eq!(*iter.next().unwrap().unwrap(), 42);
+        assert_eq!(*iter.next().unwrap().unwrap(), 1);
+        assert_eq!(*iter.next().unwrap().unwrap(), 43);
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn deque_swap_remove_front() {
+        let mut deque: Deque<u32> = Deque::new();
+
+        deque.push_back(42).unwrap();
+        deque.push_back(43).unwrap();
+        deque.push_back(1).unwrap();
+
+        deque.swap_remove_front(1).unwrap();
+
+        let mut iter = deque.iter().unwrap();
+
+        assert_eq!(*iter.next().unwrap().unwrap(), 42);
+        assert_eq!(*iter.next().unwrap().unwrap(), 1);
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn deque_swap_remove_back() {
+        let mut deque: Deque<u32> = Deque::new();
+
+        deque.push_back(42).unwrap();
+        deque.push_back(43).unwrap();
+        deque.push_back(1).unwrap();
+
+        deque.swap_remove_back(0).unwrap();
+
+        let mut iter = deque.iter().unwrap();
+
         assert_eq!(*iter.next().unwrap().unwrap(), 1);
         assert_eq!(*iter.next().unwrap().unwrap(), 43);
         assert!(iter.next().is_none());
