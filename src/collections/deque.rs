@@ -207,6 +207,12 @@ impl<T: State> Deque<T> {
     pub fn back_mut(&mut self) -> Result<Option<ChildMut<u64, T>>> {
         self.get_mut(self.len() - 1)
     }
+
+    pub fn swap(&mut self, i: u64, j: u64) -> Result<()> {
+        let i = i + self.meta.head;
+        let j = j + self.meta.head;
+        self.map.swap(i, j)
+    }
 }
 
 // TODO: use derive(Client)
@@ -399,6 +405,24 @@ mod test {
 
         assert_eq!(*iter.next().unwrap().unwrap(), 1);
         assert_eq!(*iter.next().unwrap().unwrap(), 42);
+        assert_eq!(*iter.next().unwrap().unwrap(), 43);
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn deque_swap() {
+        let mut deque: Deque<u32> = Deque::new();
+
+        deque.push_front(42).unwrap();
+        deque.push_back(43).unwrap();
+        deque.push_front(1).unwrap();
+
+        deque.swap(0, 1).unwrap();
+
+        let mut iter = deque.iter().unwrap();
+
+        assert_eq!(*iter.next().unwrap().unwrap(), 42);
+        assert_eq!(*iter.next().unwrap().unwrap(), 1);
         assert_eq!(*iter.next().unwrap().unwrap(), 43);
         assert!(iter.next().is_none());
     }
