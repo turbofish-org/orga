@@ -1,4 +1,5 @@
 use crate::encoding::{Decode, Encode};
+use crate::query::{MethodQuery, QueryMethodDescriptor};
 use crate::state::State;
 use crate::{Error, Result};
 use std::any::{type_name, TypeId};
@@ -15,6 +16,7 @@ pub struct Builder {
     type_id: TypeId,
     type_name: String,
     state_version: u32,
+    query_methods: Vec<QueryMethodDescriptor>,
     load: LoadFn,
     children: Option<Children>,
     meta: Option<Box<Descriptor>>,
@@ -27,6 +29,7 @@ impl Builder {
             type_id: TypeId::of::<T>(),
             type_name: type_name::<T>().to_string(),
             state_version: 0, // TODO
+            query_methods: vec![],
             load: |store, bytes| Ok(Box::new(T::load(store, bytes)?)),
             meta: None,
             children: None,
@@ -104,6 +107,11 @@ impl Builder {
         self
     }
 
+    pub fn query_methods<T: MethodQuery>(mut self) -> Self {
+        self.query_methods = T::describe_methods();
+        self
+    }
+
     pub fn access<T: Inspect + 'static, U: Inspect + 'static>(
         value: InspectRef,
         access: fn(&T) -> &U,
@@ -121,6 +129,7 @@ impl Builder {
             type_id: self.type_id,
             type_name: self.type_name,
             state_version: self.state_version,
+            query_methods: self.query_methods,
             load: Some(self.load),
             children: self.children.unwrap_or_default(),
             meta: self.meta,

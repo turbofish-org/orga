@@ -146,7 +146,7 @@ impl<K, V> Default for Map<K, V> {
 #[orga]
 impl<K, V> Map<K, V>
 where
-    K: Encode + Terminated + 'static,
+    K: Encode + Terminated + Describe + 'static,
     V: State,
 {
     #[query]
@@ -217,9 +217,9 @@ where
 
 impl<K1, V1, K2, V2> MigrateFrom<Map<K1, V1>> for Map<K2, V2>
 where
-    K1: MigrateInto<K2> + Encode + Decode + Terminated + Clone + 'static,
+    K1: MigrateInto<K2> + Encode + Decode + Terminated + Clone + Describe + 'static,
     V1: MigrateInto<V2> + State,
-    K2: Encode + Decode + Terminated + Clone + 'static,
+    K2: Encode + Decode + Terminated + Clone + Describe + 'static,
     V2: State,
 {
     fn migrate_from(mut other: Map<K1, V1>) -> Result<Self> {
@@ -252,7 +252,7 @@ where
 
 impl<K, V> Map<K, V>
 where
-    K: Encode + Terminated + 'static,
+    K: Encode + Terminated + Describe + 'static,
     V: State + Default,
 {
     pub fn get_or_default(&self, key: K) -> Result<Ref<V>> {
@@ -306,7 +306,7 @@ where
 #[orga]
 impl<K, V> Map<K, V>
 where
-    K: Encode + Terminated + Clone + 'static,
+    K: Encode + Terminated + Clone + Describe + 'static,
     V: State,
 {
     /// Gets a mutable reference to the value in the map for the given key, or
@@ -759,7 +759,7 @@ pub enum ChildMut<'a, K, V> {
 
 impl<'a, K, V> ChildMut<'a, K, V>
 where
-    K: Encode + Terminated + Clone + 'static,
+    K: Encode + Terminated + Clone + Describe + 'static,
     V: State,
 {
     /// Removes the value and all of its child key/value entries (if any) from
@@ -888,7 +888,7 @@ impl<K: Encode + Decode + Terminated + 'static, V: State> Map<K, V> {
 
 impl<'a, K, V> Entry<'a, K, V>
 where
-    K: Encode + Terminated + Clone + 'static,
+    K: Encode + Terminated + Clone + Describe + 'static,
     V: State,
 {
     /// Removes the value for the `Entry` if it exists. Returns a boolean which

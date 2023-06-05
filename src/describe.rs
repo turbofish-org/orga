@@ -18,21 +18,29 @@ pub mod value;
 use value::Value;
 
 pub use crate::macros::Describe;
+use crate::query::QueryMethodDescriptor;
 pub use builder::Builder;
 
 pub trait Describe {
     fn describe() -> Descriptor;
 }
 
-// #[wasm_bindgen(getter_with_clone, inspectable)]
+#[wasm_bindgen(getter_with_clone, inspectable)]
 #[derive(Clone)]
 pub struct Descriptor {
+    #[wasm_bindgen(skip)]
     pub type_id: TypeId,
     pub type_name: String,
     pub state_version: u32,
+    #[wasm_bindgen(skip)]
+    pub query_methods: Vec<QueryMethodDescriptor>,
+
     children: Children,
+    #[wasm_bindgen(skip)]
     pub load: Option<LoadFn>,
+    #[wasm_bindgen(skip)]
     pub meta: Option<Box<Self>>,
+    #[wasm_bindgen(skip)]
     pub parse: Option<ParseFn>,
 }
 

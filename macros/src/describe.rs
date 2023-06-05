@@ -47,6 +47,7 @@ pub fn derive(item: TokenStream) -> TokenStream {
                         stringify!(#names), |v, mut op| op(::orga::describe::Builder::access(v, |v: &Self| &v.#names).unwrap())
                     )
                 )*
+                .query_methods::<Self>()
                 .build()
             }
         }

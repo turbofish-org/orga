@@ -150,6 +150,8 @@ fn method_query_impl(tokens: &mut TokenStream2, item: &ItemImpl) {
         method_query_trait,
         query_trait,
         result_ty,
+        query_method_desc_ty,
+        describe_trait,
         ..
     } = Types::default();
     let ident = self_ty_ident(&item);
@@ -184,6 +186,49 @@ fn method_query_impl(tokens: &mut TokenStream2, item: &ItemImpl) {
     arms.push(quote! {
         Noop(_) => {}
     });
+    let descriptors = query_methods(&item).into_iter().map(|method| {
+        let name = method.sig.ident.to_string();
+        let args = method
+            .sig
+            .inputs
+            .iter()
+            .skip(1)
+            .map(|arg| {
+                if let FnArg::Typed(PatType { ty, pat, .. }) = arg {
+                    quote! { (stringify!(#pat).to_string(), <#ty as #describe_trait>::describe()) }
+                } else {
+                    panic!("Expected a typed argument")
+                }
+            })
+            .collect_vec();
+        let comment = method
+            .attrs
+            .iter()
+            .filter_map(|attr| {
+                if let Ok(Meta::NameValue(MetaNameValue {
+                    path,
+                    lit: Lit::Str(lit),
+                    ..
+                })) = attr.parse_meta()
+                {
+                    if path.is_ident("doc") {
+                        Some(lit.value())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .join("\n");
+        quote! {
+            #query_method_desc_ty {
+                name: #name.to_string(),
+                args: vec![ #( #args ),* ],
+                comment: #comment.to_string(),
+            }
+        }
+    });
 
     let enum_bound = quote! { #enum_ident #ty: #encode_trait + #decode_trait + ::std::fmt::Debug };
     let wher = match wher {
@@ -202,6 +247,10 @@ fn method_query_impl(tokens: &mut TokenStream2, item: &ItemImpl) {
                 };
 
                 Ok(())
+            }
+
+            fn describe_methods() -> Vec<#query_method_desc_ty> {
+                vec![ #( #descriptors ),* ]
             }
         }
     })

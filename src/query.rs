@@ -1,3 +1,4 @@
+use crate::describe::Descriptor;
 use crate::encoding::{Decode, Encode};
 use crate::{Error, Result};
 use std::error::Error as StdError;
@@ -5,6 +6,9 @@ use std::io::Read;
 use std::result::Result as StdResult;
 
 pub use orga_macros::{query_block, FieldQuery};
+use serde::{Deserialize, Serialize};
+use wasm_bindgen::prelude::wasm_bindgen;
+use wasm_bindgen::JsValue;
 
 pub const PREFIX_OFFSET: u8 = 0x80;
 pub trait Query {
@@ -248,16 +252,44 @@ pub trait FieldQuery {
     fn field_query(&self, query: Self::FieldQuery) -> Result<()>;
 }
 
+pub struct Baz {
+    pub foo: Vec<String>,
+}
+
+#[wasm_bindgen(getter_with_clone, inspectable)]
+#[derive(Clone, Debug)]
+pub struct QueryMethodDescriptor {
+    pub name: String,
+    #[wasm_bindgen(skip)]
+    pub args: Vec<(String, Descriptor)>,
+    pub comment: String,
+    // pub return_type: Descriptor,
+}
+
+#[wasm_bindgen]
+impl QueryMethodDescriptor {
+    pub fn arg_names(&self) -> Vec<JsValue> {
+        self.args.iter().map(|arg| arg.0.clone().into()).collect()
+    }
+}
+
 pub trait MethodQuery {
     type MethodQuery: Encode + Decode + std::fmt::Debug = ();
 
     fn method_query(&self, query: Self::MethodQuery) -> Result<()>;
+
+    fn describe_methods() -> Vec<QueryMethodDescriptor>;
 }
 
 impl<T> MethodQuery for T {
     default type MethodQuery = ();
+
     default fn method_query(&self, _query: Self::MethodQuery) -> Result<()> {
         Err(Error::Query("Method not found".to_string()))
+    }
+
+    default fn describe_methods() -> Vec<QueryMethodDescriptor> {
+        vec![]
     }
 }
 

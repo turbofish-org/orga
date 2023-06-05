@@ -87,7 +87,7 @@ where
 impl<T> EntryMap<T>
 where
     T: Entry,
-    T::Key: Encode + Terminated + 'static,
+    T::Key: Encode + Terminated + Describe + 'static,
     T::Value: State,
 {
     pub fn insert(&mut self, entry: T) -> Result<()> {
@@ -99,7 +99,7 @@ where
 impl<T> EntryMap<T>
 where
     T: Entry,
-    T::Key: Encode + Terminated + Clone + 'static,
+    T::Key: Encode + Terminated + Clone + Describe + 'static,
     T::Value: State,
 {
     pub fn delete(&mut self, entry: T) -> Result<()> {
@@ -114,7 +114,7 @@ where
 impl<T> EntryMap<T>
 where
     T: Entry,
-    T::Key: Encode + Terminated + Clone + 'static,
+    T::Key: Encode + Terminated + Clone + Describe + 'static,
     T::Value: State + Eq,
 {
     // #[query]
@@ -193,10 +193,10 @@ where
 impl<T1, T2> MigrateFrom<EntryMap<T1>> for EntryMap<T2>
 where
     T1: Entry,
-    T1::Key: Next + Decode + Encode + Terminated + Clone + 'static,
+    T1::Key: Next + Decode + Encode + Terminated + Clone + Describe + 'static,
     T1::Value: State + Clone,
     T2: Entry + MigrateFrom<T1>,
-    T2::Key: Encode + Terminated + 'static,
+    T2::Key: Encode + Terminated + Describe + 'static,
     T2::Value: State,
 {
     fn migrate_from(other: EntryMap<T1>) -> Result<Self> {

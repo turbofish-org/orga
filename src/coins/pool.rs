@@ -1,6 +1,7 @@
 use super::{Amount, Balance, Coin, Decimal, Give, Symbol};
 use crate::collections::map::{ChildMut as MapChildMut, Ref as MapRef};
 use crate::collections::{Map, Next};
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, Terminated};
 use crate::orga;
 use crate::state::State;
@@ -79,7 +80,7 @@ where
 
 impl<K, V, S> Pool<K, V, S>
 where
-    K: Encode + Decode + Terminated + Clone + 'static,
+    K: Encode + Decode + Terminated + Clone + Describe + 'static,
     V: State + Balance<S, Decimal> + Give<(u8, Amount)> + Default,
     S: Symbol,
 {
@@ -207,7 +208,7 @@ pub type IterEntry<'a, K, V, S> = Result<(K, Child<'a, V, S>)>;
 impl<K, V, S> Pool<K, V, S>
 where
     S: Symbol,
-    K: Encode + Decode + Terminated + Clone + Next + 'static,
+    K: Encode + Decode + Terminated + Clone + Next + Describe + 'static,
     V: State + Balance<S, Decimal> + Give<(u8, Amount)> + Default,
 {
     pub fn range<B>(&self, bounds: B) -> Result<impl Iterator<Item = IterEntry<K, V, S>>>

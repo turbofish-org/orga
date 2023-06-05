@@ -5,6 +5,7 @@ use std::sync::{Arc, RwLock};
 
 use crate::describe::{err_to_js, Children, Describe, Descriptor, Inspect, JsIter, WasmResult};
 use crate::encoding::{Decode, Encode, Terminated};
+use crate::query::QueryMethodDescriptor;
 use crate::store::{Iter, Read, Store};
 use crate::{Error, Result};
 use js_sys::Uint8Array;
@@ -93,6 +94,11 @@ impl Value {
         }
     }
 
+    pub fn query_methods(&self) -> Vec<QueryMethodDescriptor> {
+        let desc = self.with(|v| v.describe());
+        desc.query_methods.clone()
+    }
+
     pub fn entries(&self) -> Option<EntryIter> {
         let desc = self.with(|v| v.describe());
         match desc.children {
@@ -159,6 +165,14 @@ impl Value {
     #[wasm_bindgen(js_name = childNames)]
     pub fn child_names_js(&self) -> Vec<JsValue> {
         self.child_names().iter().map(|s| s.into()).collect()
+    }
+
+    #[wasm_bindgen(js_name = queryMethods)]
+    pub fn query_methods_js(&self) -> Vec<JsValue> {
+        self.query_methods()
+            .iter()
+            .map(|s| s.clone().into())
+            .collect()
     }
 
     #[wasm_bindgen(js_name = encode)]

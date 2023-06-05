@@ -100,13 +100,13 @@ impl OrgaSubStruct {
             quote! { ::orga::encoding::VersionedEncoding },
         );
         maybe_add("State", quote! { ::orga::state::State });
+        maybe_add("Describe", quote! { ::orga::describe::Describe });
 
         if self.is_last {
             // maybe_add("Call", quote! { ::orga::call::Call });
             maybe_add("Call", quote! { ::orga::call::FieldCall });
             maybe_add("Query", quote! { ::orga::query::FieldQuery });
             // maybe_add("Client", quote! { ::orga::client::Client });
-            maybe_add("Describe", quote! { ::orga::describe::Describe });
         }
 
         let mut attrs: Vec<Attribute> = vec![parse_quote! {#[derive(#(#derives),*)]}];

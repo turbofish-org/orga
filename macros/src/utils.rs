@@ -217,6 +217,8 @@ pub struct Types {
     pub field_query_trait: TokenStream,
     pub method_query_trait: TokenStream,
     pub query_item_ty: TokenStream,
+    pub query_method_desc_ty: TokenStream,
+    pub describe_trait: TokenStream,
 }
 
 impl Default for Types {
@@ -250,6 +252,8 @@ impl Default for Types {
             field_query_trait: quote! { ::orga::query::FieldQuery },
             method_query_trait: quote! { ::orga::query::MethodQuery },
             query_item_ty: quote! { ::orga::query::Item },
+            query_method_desc_ty: quote! { ::orga::query::QueryMethodDescriptor },
+            describe_trait: quote! { ::orga::describe::Describe },
         }
     }
 }
