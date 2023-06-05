@@ -79,6 +79,7 @@ pub use educe::Educe;
 pub use error::*;
 pub use futures_lite::future::Boxed as BoxFuture;
 pub use orga_macros as macros;
+pub use serde;
 pub use serde_json::Value as JsonValue;
 
 pub mod prelude {

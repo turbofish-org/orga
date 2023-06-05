@@ -73,6 +73,22 @@ impl Read for BackingStore {
             BackingStore::Other(ref store) => store.borrow().get_next(key),
         }
     }
+
+    fn get_prev(&self, key: Option<&[u8]>) -> Result<Option<KV>> {
+        match self {
+            #[cfg(feature = "merk-full")]
+            BackingStore::WrappedMerk(ref store) => store.get_prev(key),
+            #[cfg(feature = "merk-full")]
+            BackingStore::ProofBuilder(ref builder) => builder.get_prev(key),
+            #[cfg(feature = "merk-full")]
+            BackingStore::Merk(ref store) => store.get_prev(key),
+            BackingStore::MapStore(ref store) => store.get_prev(key),
+            BackingStore::PartialMapStore(ref store) => store.get_prev(key),
+            BackingStore::ProofMap(ref map) => map.get_prev(key),
+            BackingStore::Null(ref null) => null.get_prev(key),
+            BackingStore::Other(ref store) => store.borrow().get_prev(key),
+        }
+    }
 }
 
 impl Write for BackingStore {
@@ -216,6 +232,15 @@ impl Read for ProofStore {
                 Error::Merk(err)
             }
         })?;
+        Ok(item.map(|(k, v)| (k.to_vec(), v.to_vec())))
+    }
+
+    fn get_prev(&self, key: Option<&[u8]>) -> Result<Option<KV>> {
+        let mut iter = self.0.range((
+            Bound::Unbounded,
+            key.map_or(Bound::Unbounded, Bound::Excluded),
+        ));
+        let item = iter.next_back().transpose()?;
         Ok(item.map(|(k, v)| (k.to_vec(), v.to_vec())))
     }
 }

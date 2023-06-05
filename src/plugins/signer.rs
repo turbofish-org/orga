@@ -15,7 +15,7 @@ use crate::{Error, Result};
 use orga_macros::FieldQuery;
 use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
 use serde::Serialize;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
 #[orga(skip(Call))]
 pub struct SignerPlugin<T> {
@@ -92,7 +92,8 @@ struct Value {
 }
 
 fn adr36_bytes(call_bytes: &[u8], address: Address) -> Result<Vec<u8>> {
-    let data_b64 = base64::encode(call_bytes);
+    use base64::Engine;
+    let data_b64 = base64::prelude::BASE64_STANDARD.encode(call_bytes);
     let msg = Adr36Msg {
         chain_id: "".to_string(),
         account_number: "0".to_string(),
@@ -412,10 +413,14 @@ pub mod keplr {
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(feature = "abci")]
 pub fn load_privkey() -> Result<SecretKey> {
-    // Ensure orga home directory exists
-    let orga_home = home::home_dir()
-        .expect("No home directory set")
-        .join(".orga-wallet");
+    use std::path::PathBuf;
+
+    let home = match std::env::var("NOMIC_HOME_DIR") {
+        Ok(home) => Some(PathBuf::from(home)),
+        Err(_) => home::home_dir(),
+    };
+
+    let orga_home = home.expect("No home directory set").join(".orga-wallet");
 
     std::fs::create_dir_all(&orga_home)?;
     let keypair_path = orga_home.join("privkey");
@@ -493,8 +498,8 @@ mod abci {
     {
         fn abci_query(
             &self,
-            request: &tendermint_proto::abci::RequestQuery,
-        ) -> Result<tendermint_proto::abci::ResponseQuery> {
+            request: &tendermint_proto::v0_34::abci::RequestQuery,
+        ) -> Result<tendermint_proto::v0_34::abci::ResponseQuery> {
             self.inner.abci_query(request)
         }
     }

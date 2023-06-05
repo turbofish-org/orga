@@ -102,6 +102,11 @@ impl Read for UnknownStore {
     fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
         Ok(None)
     }
+
+    #[inline]
+    fn get_prev(&self, key: Option<&[u8]>) -> Result<Option<KV>> {
+        Ok(None)
+    }
 }
 
 impl Write for UnknownStore {

@@ -7,7 +7,8 @@ use crate::encoding::{Decode, Encode};
 use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::query::{FieldQuery, Query};
 use crate::state::State;
-use crate::{Error, Result};
+use crate::{compat_mode, Error, Result};
+
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
@@ -192,8 +193,10 @@ pub mod sdk {
                         .ok_or_else(|| Error::App("No signatures provided".to_string()))?
                         .pub_key
                         .value;
-
-                    base64::decode(pubkey_b64).map_err(|e| Error::App(e.to_string()))?
+                    use base64::Engine;
+                    base64::prelude::BASE64_STANDARD
+                        .decode(pubkey_b64)
+                        .map_err(|e| Error::App(e.to_string()))?
                 }
                 Tx::Protobuf(tx) => tx
                     .auth_info
@@ -228,7 +231,10 @@ pub mod sdk {
                         .ok_or_else(|| Error::App("No signatures provided".to_string()))?
                         .signature;
 
-                    base64::decode(sig_b64).map_err(|e| Error::App(e.to_string()))?
+                    use base64::Engine;
+                    base64::prelude::BASE64_STANDARD
+                        .decode(sig_b64)
+                        .map_err(|e| Error::App(e.to_string()))?
                 }
                 Tx::Protobuf(tx) => tx
                     .signatures
@@ -391,8 +397,8 @@ mod abci {
     {
         fn abci_query(
             &self,
-            request: &tendermint_proto::abci::RequestQuery,
-        ) -> Result<tendermint_proto::abci::ResponseQuery> {
+            request: &tendermint_proto::v0_34::abci::RequestQuery,
+        ) -> Result<tendermint_proto::v0_34::abci::ResponseQuery> {
             self.inner.abci_query(request)
         }
     }

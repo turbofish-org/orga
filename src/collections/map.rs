@@ -13,6 +13,7 @@ use crate::state::State;
 use crate::store::*;
 use crate::{Error, Result};
 use ed::*;
+use serde::Serialize;
 
 #[derive(Clone, Debug)]
 pub struct MapKey<K> {
@@ -88,7 +89,7 @@ impl<K> Eq for MapKey<K> {}
 /// changes to the backing store.
 #[derive(FieldQuery, FieldCall)]
 pub struct Map<K, V> {
-    store: Store,
+    pub(super) store: Store,
     children: BTreeMap<MapKey<K>, Option<V>>,
 }
 
@@ -176,7 +177,12 @@ where
             .get(key_bytes.as_slice())?
             .map(|value_bytes| {
                 let substore = self.store.sub(key_bytes.as_slice());
-                let value = V::load(substore, &mut value_bytes.as_slice())?;
+                let mut value_bytes = value_bytes.as_slice();
+                let value = V::load(substore, &mut value_bytes)?;
+                debug_assert!(
+                    value_bytes.is_empty(),
+                    "Value had leftover bytes after decode"
+                );
                 Ok(value)
             })
             .transpose()
@@ -231,18 +237,12 @@ where
         }
 
         for key in old_keys.iter() {
-            let old_key_bytes = key.encode()?;
-            let mut value_bytes = vec![];
             let value = other.remove(key.clone())?.unwrap().into_inner();
-            value.flush(&mut value_bytes)?;
-            let value = V1::load(
-                other.store.sub(old_key_bytes.as_slice()),
-                &mut value_bytes.as_slice(),
-            )?;
             let new_key = key.clone().migrate_into()?;
             let new_value = value.migrate_into()?;
             map.insert(new_key, new_value)?;
         }
+
         let mut out = vec![];
         other.flush(&mut out)?;
 
@@ -377,10 +377,10 @@ where
             encode_bound(range.start_bound())?,
             encode_bound(range.end_bound())?,
         );
-        let store_iter = StoreNextIter::new(&self.store, encoded_range)?.peekable();
+        let store_iter = StoreNextIter::new(&self.store, encoded_range)?;
 
         Ok(Iter {
-            parent_store: &self.store,
+            parent: self,
             map_iter,
             store_iter,
         })
@@ -454,9 +454,9 @@ where
     K: Decode + Encode + Terminated + 'static,
     V: State,
 {
-    parent_store: &'a Store,
+    parent: &'a Map<K, V>,
     map_iter: Peekable<btree_map::Range<'a, MapKey<K>, Option<V>>>,
-    store_iter: Peekable<StoreNextIter<'a, Store>>,
+    store_iter: StoreNextIter<'a, Store>,
 }
 
 impl<'a, K, V> Iter<'a, K, V>
@@ -464,18 +464,36 @@ where
     K: Encode + Decode + Terminated + 'static,
     V: State,
 {
-    fn iter_merge_next(&mut self) -> Result<Option<(Ref<'a, K>, Ref<'a, V>)>> {
+    fn iter_merge_next(&mut self, forward: bool) -> Result<Option<(Ref<'a, K>, Ref<'a, V>)>> {
         loop {
-            let has_map_entry = self.map_iter.peek().is_some();
-            let has_backing_entry = self.store_iter.peek().is_some();
+            let (map_entry, backing_entry) = if forward {
+                (self.map_iter.peek().cloned(), self.store_iter.peek())
+            } else {
+                (self.peek_map_back(), self.store_iter.peek_back())
+            };
 
-            return Ok(match (has_map_entry, has_backing_entry) {
+            let mut map_next = || {
+                if forward {
+                    self.map_iter.next()
+                } else {
+                    self.map_iter.next_back()
+                }
+            };
+            let mut store_next = || {
+                if forward {
+                    self.store_iter.next()
+                } else {
+                    self.store_iter.next_back()
+                }
+            };
+
+            return Ok(match (map_entry, backing_entry) {
                 // consumed both iterators, end here
-                (false, false) => None,
+                (None, None) => None,
 
                 // consumed backing iterator, still have map values
-                (true, false) => {
-                    match self.map_iter.next().unwrap() {
+                (Some(_), None) => {
+                    match map_next().unwrap() {
                         // map value has not been deleted, emit value
                         (key, Some(value)) => {
                             Some((Ref::Borrowed(&key.inner), Ref::Borrowed(value)))
@@ -487,58 +505,73 @@ where
                 }
 
                 // consumed map iterator, still have backing values
-                (false, true) => {
-                    let entry = self
-                        .store_iter
-                        .next()
+                (None, Some(res)) => {
+                    res?;
+                    let entry = store_next()
                         .transpose()?
                         .expect("Peek ensures this arm is unreachable");
 
-                    let key = Decode::decode(entry.0.as_slice())?;
+                    let mut key_bytes = entry.0.as_slice();
+                    let key = Decode::decode(&mut key_bytes)?;
+                    debug_assert!(key_bytes.is_empty(), "Key had leftover bytes after decode");
 
-                    let value = V::load(
-                        self.parent_store.sub(entry.0.as_slice()),
-                        &mut entry.1.as_slice(),
-                    )?;
+                    let mut value_bytes = entry.1.as_slice();
+                    let value =
+                        V::load(self.parent.store.sub(entry.0.as_slice()), &mut value_bytes)?;
+                    debug_assert!(
+                        value_bytes.is_empty(),
+                        "Value had leftover bytes after decode"
+                    );
 
                     Some((Ref::Owned(key), Ref::Owned(value)))
                 }
 
                 // merge values from both iterators
-                (true, true) => {
-                    let map_key = self.map_iter.peek().unwrap().0;
-                    let backing_key = match self.store_iter.peek().unwrap() {
+                (Some(map_entry), Some(store_res)) => {
+                    let map_key = map_entry.0;
+                    let backing_key = match store_res {
                         Err(_) => {
                             return Err(Error::Store("Backing key does not exist".into()));
                         }
                         Ok((ref key, _)) => key,
                     };
 
-                    let decoded_backing_key = Decode::decode(backing_key.as_slice())?;
+                    let mut key_bytes = backing_key.as_slice();
+                    let key = Decode::decode(&mut key_bytes)?;
+                    debug_assert!(
+                        key_bytes.is_empty(),
+                        "Key had leftover bytes after decode: key={} leftover={}",
+                        hex::encode(backing_key),
+                        hex::encode(key_bytes),
+                    );
 
                     //so compare backing_key with map_key.inner_bytes
                     let key_cmp = map_key.inner_bytes.cmp(backing_key);
 
-                    // map_key > backing_key, emit the backing entry
-                    if key_cmp == Ordering::Greater {
-                        let entry = self.store_iter.next().unwrap()?;
-                        let key: K = decoded_backing_key;
+                    // map_key is past backing_key, emit the backing entry
+                    if (forward && key_cmp == Ordering::Greater)
+                        || (!forward && key_cmp == Ordering::Less)
+                    {
+                        let entry = store_next().unwrap()?;
 
-                        let value = V::load(
-                            self.parent_store.sub(entry.0.as_slice()),
-                            &mut entry.1.as_slice(),
-                        )?;
+                        let mut value_bytes = entry.1.as_slice();
+                        let value =
+                            V::load(self.parent.store.sub(entry.0.as_slice()), &mut value_bytes)?;
+                        debug_assert!(
+                            value_bytes.is_empty(),
+                            "Value had leftover bytes after decode"
+                        );
 
                         return Ok(Some((Ref::Owned(key), Ref::Owned(value))));
                     }
 
                     // map_key == backing_key, map entry shadows backing entry
                     if key_cmp == Ordering::Equal {
-                        self.store_iter.next().transpose()?;
+                        store_next().transpose()?;
                     }
 
-                    // map_key < backing_key
-                    match self.map_iter.next().unwrap() {
+                    // map_key is before or at backing_key
+                    match map_next().unwrap() {
                         (key, Some(value)) => {
                             Some((Ref::Borrowed(&key.inner), Ref::Borrowed(value)))
                         }
@@ -550,6 +583,24 @@ where
             });
         }
     }
+
+    fn peek_map_back(&mut self) -> Option<(&'a MapKey<K>, &'a Option<V>)> {
+        self.map_iter.next_back().map(|back_entry| {
+            let maybe_front_entry = self.map_iter.next();
+
+            self.map_iter = self
+                .parent
+                .children
+                .range((
+                    maybe_front_entry
+                        .map_or(Bound::Included(back_entry.0), |(k, _)| Bound::Included(k)),
+                    Bound::Included(back_entry.0),
+                ))
+                .peekable();
+
+            back_entry
+        })
+    }
 }
 
 impl<'a, K, V> Iterator for Iter<'a, K, V>
@@ -560,16 +611,27 @@ where
     type Item = Result<(Ref<'a, K>, Ref<'a, V>)>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter_merge_next().transpose()
+        self.iter_merge_next(true).transpose()
+    }
+}
+
+impl<'a, K, V> DoubleEndedIterator for Iter<'a, K, V>
+where
+    K: Decode + Encode + Terminated,
+    V: State,
+{
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.iter_merge_next(false).transpose()
     }
 }
 
 struct StoreNextIter<'a, S: Default + Read> {
     store: &'a S,
-    next_key: Option<Vec<u8>>,
+    next_key: Bound<Vec<u8>>,
     end_key: Bound<Vec<u8>>,
 }
 
+// TODO: dedupe this with the same code in Store
 fn increment_bytes(mut bytes: Vec<u8>) -> Vec<u8> {
     for byte in bytes.iter_mut().rev() {
         if *byte == 255 {
@@ -588,34 +650,38 @@ fn increment_bytes(mut bytes: Vec<u8>) -> Vec<u8> {
     bytes
 }
 
-impl<'a, S: Default + Read> StoreNextIter<'a, S> {
-    fn new<B: RangeBounds<Vec<u8>>>(store: &'a S, range: B) -> Result<Self> {
-        let next_key = match range.start_bound() {
-            Bound::Included(inner) => Some(inner.encode()?),
-            Bound::Excluded(inner) => Some(increment_bytes(inner.encode()?)),
-            Bound::Unbounded => None,
-        };
+fn decrement_bytes(mut bytes: Vec<u8>) -> Option<Vec<u8>> {
+    for byte in bytes.iter_mut().rev() {
+        if *byte == 0 {
+            *byte = 255;
+        } else {
+            *byte -= 1;
+            return Some(bytes);
+        }
+    }
 
-        let end_key = encode_bound(range.end_bound())?;
-
-        Ok(StoreNextIter {
-            store,
-            next_key,
-            end_key,
-        })
+    if bytes.is_empty() {
+        bytes.pop();
+        Some(bytes)
+    } else {
+        None
     }
 }
 
-impl<'a, S: Default + Read> Iterator for StoreNextIter<'a, S> {
-    type Item = Result<(Vec<u8>, Vec<u8>)>;
+impl<'a, S: Default + Read> StoreNextIter<'a, S> {
+    pub fn new<B: RangeBounds<Vec<u8>>>(store: &'a S, range: B) -> Result<Self> {
+        Ok(StoreNextIter {
+            store,
+            next_key: encode_bound(range.start_bound())?,
+            end_key: encode_bound(range.end_bound())?,
+        })
+    }
 
-    fn next(&mut self) -> Option<Self::Item> {
+    pub fn peek(&self) -> Option<Result<(Vec<u8>, Vec<u8>)>> {
         let get_res = match self.next_key.as_ref() {
-            Some(key) => self.store.get_next_inclusive(key.as_slice()),
-
-            // this will be None if the iter had an unbounded start range. start
-            // iterating from beginning of keyspace (empty key), exclusive
-            None => self.store.get_next(&[]),
+            Bound::Included(key) => self.store.get_next_inclusive(key.as_slice()),
+            Bound::Excluded(key) => self.store.get_next(key.as_slice()),
+            Bound::Unbounded => self.store.get_next(&[]),
         };
 
         let (key, value) = match get_res {
@@ -625,21 +691,56 @@ impl<'a, S: Default + Read> Iterator for StoreNextIter<'a, S> {
         };
 
         match &self.end_key {
-            Bound::Excluded(end) => {
-                if key >= *end {
-                    return None;
-                }
-            }
-            Bound::Included(end) => {
-                if key > *end {
-                    return None;
-                }
-            }
+            Bound::Excluded(end) if key >= *end => return None,
+            Bound::Included(end) if key > *end => return None,
             _ => {}
         };
 
-        self.next_key = Some(increment_bytes(key.clone()));
         Some(Ok((key, value)))
+    }
+
+    pub fn peek_back(&self) -> Option<Result<(Vec<u8>, Vec<u8>)>> {
+        let get_res = match self.end_key.as_ref() {
+            Bound::Included(key) => self.store.get_prev_inclusive(Some(key.as_slice())),
+            Bound::Excluded(key) => self.store.get_prev(Some(key.as_slice())),
+            Bound::Unbounded => self.store.get_prev(None),
+        };
+
+        let (key, value) = match get_res {
+            Err(e) => return Some(Err(e)),
+            Ok(None) => return None,
+            Ok(Some((key, value))) => (key, value),
+        };
+
+        match &self.next_key {
+            Bound::Excluded(end) if key <= *end => return None,
+            Bound::Included(end) if key < *end => return None,
+            _ => {}
+        };
+
+        Some(Ok((key, value)))
+    }
+}
+
+impl<'a, S: Default + Read> Iterator for StoreNextIter<'a, S> {
+    type Item = Result<(Vec<u8>, Vec<u8>)>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        Some(self.peek()?.map(|(key, value)| {
+            self.next_key = Bound::Included(increment_bytes(key.clone()));
+            (key, value)
+        }))
+    }
+}
+
+impl<'a, S: Default + Read> DoubleEndedIterator for StoreNextIter<'a, S> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        Some(self.peek_back()?.map(|(key, value)| {
+            self.end_key = decrement_bytes(key.clone())
+                .map(Bound::Included)
+                .unwrap_or(Bound::Excluded(vec![]));
+            (key, value)
+        }))
     }
 }
 
@@ -935,6 +1036,7 @@ impl<'a, K: Encode, V> From<Entry<'a, K, V>> for Option<ChildMut<'a, K, V>> {
 mod tests {
     use super::super::deque::Deque;
     use super::{Map, *};
+    use crate::set_compat_mode;
     use crate::store::{MapStore, Store};
 
     fn enc(n: u32) -> Vec<u8> {
@@ -1065,22 +1167,22 @@ mod tests {
 
     #[test]
     fn iter_merge_next_map_only() {
-        let (store, mut map) = setup();
+        let (_, mut map) = setup();
 
         map.entry(12).unwrap().or_insert(24).unwrap();
         map.entry(13).unwrap().or_insert(26).unwrap();
         map.entry(14).unwrap().or_insert(28).unwrap();
 
         let map_iter = map.children.range(..).peekable();
-        let store_iter = StoreNextIter::new(&map.store, ..).unwrap().peekable();
+        let store_iter = StoreNextIter::new(&map.store, ..).unwrap();
 
         let mut iter = Iter {
-            parent_store: &store,
+            parent: &map,
             map_iter,
             store_iter,
         };
 
-        let iter_next = Iter::iter_merge_next(&mut iter).unwrap();
+        let iter_next = Iter::iter_merge_next(&mut iter, true).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(*key, 12);
@@ -1089,7 +1191,7 @@ mod tests {
             None => panic!("Expected Some"),
         }
 
-        let iter_next = Iter::iter_merge_next(&mut iter).unwrap();
+        let iter_next = Iter::iter_merge_next(&mut iter, true).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(*key, 13);
@@ -1098,7 +1200,7 @@ mod tests {
             None => panic!("Expected Some"),
         }
 
-        let iter_next = Iter::iter_merge_next(&mut iter).unwrap();
+        let iter_next = Iter::iter_merge_next(&mut iter, true).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(*key, 14);
@@ -1107,7 +1209,7 @@ mod tests {
             None => panic!("Expected Some"),
         }
 
-        let iter_next = Iter::iter_merge_next(&mut iter).unwrap();
+        let iter_next = Iter::iter_merge_next(&mut iter, true).unwrap();
         assert!(iter_next.is_none());
     }
 
@@ -1125,27 +1227,27 @@ mod tests {
         let read_map: Map<u32, u32> = Map::with_store(store.clone()).unwrap();
 
         let map_iter = read_map.children.range(..).peekable();
-        let store_iter = StoreNextIter::new(&store, ..).unwrap().peekable();
+        let store_iter = StoreNextIter::new(&store, ..).unwrap();
 
         let mut iter = Iter {
-            parent_store: &store,
+            parent: &read_map,
             map_iter,
             store_iter,
         };
 
-        let iter_next = Iter::iter_merge_next(&mut iter).unwrap();
+        let iter_next = Iter::iter_merge_next(&mut iter, true).unwrap();
         assert_eq!(*iter_next.as_ref().unwrap().0, 12);
         assert_eq!(*iter_next.as_ref().unwrap().1, 24);
 
-        let iter_next = Iter::iter_merge_next(&mut iter).unwrap();
+        let iter_next = Iter::iter_merge_next(&mut iter, true).unwrap();
         assert_eq!(*iter_next.as_ref().unwrap().0, 13);
         assert_eq!(*iter_next.as_ref().unwrap().1, 26);
 
-        let iter_next = Iter::iter_merge_next(&mut iter).unwrap();
+        let iter_next = Iter::iter_merge_next(&mut iter, true).unwrap();
         assert_eq!(*iter_next.as_ref().unwrap().0, 14);
         assert_eq!(*iter_next.as_ref().unwrap().1, 28);
 
-        let iter_next = Iter::iter_merge_next(&mut iter).unwrap();
+        let iter_next = Iter::iter_merge_next(&mut iter, true).unwrap();
         assert!(iter_next.is_none());
     }
 
@@ -1163,15 +1265,15 @@ mod tests {
         read_map.insert(12, 26).unwrap();
 
         let map_iter = read_map.children.range(..).peekable();
-        let store_iter = StoreNextIter::new(&store, ..).unwrap().peekable();
+        let store_iter = StoreNextIter::new(&store, ..).unwrap();
 
         let mut iter = Iter {
-            parent_store: &store,
+            parent: &read_map,
             map_iter,
             store_iter,
         };
 
-        let iter_next = Iter::iter_merge_next(&mut iter).unwrap();
+        let iter_next = Iter::iter_merge_next(&mut iter, true).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(*key, 12);
@@ -1195,15 +1297,15 @@ mod tests {
         read_map.remove(12).unwrap();
 
         let map_iter = read_map.children.range(..).peekable();
-        let store_iter = StoreNextIter::new(&store, ..).unwrap().peekable();
+        let store_iter = StoreNextIter::new(&store, ..).unwrap();
 
         let mut iter = Iter {
-            parent_store: &store,
+            parent: &read_map,
             map_iter,
             store_iter,
         };
 
-        let iter_next = Iter::iter_merge_next(&mut iter).unwrap();
+        let iter_next = Iter::iter_merge_next(&mut iter, true).unwrap();
         assert!(iter_next.is_none());
     }
 
@@ -1221,15 +1323,15 @@ mod tests {
         read_map.entry(14).unwrap().or_insert(28).unwrap();
 
         let map_iter = read_map.children.range(..).peekable();
-        let store_iter = StoreNextIter::new(&store, ..).unwrap().peekable();
+        let store_iter = StoreNextIter::new(&store, ..).unwrap();
 
         let mut iter = Iter {
-            parent_store: &store,
+            parent: &read_map,
             map_iter,
             store_iter,
         };
 
-        let iter_next = Iter::iter_merge_next(&mut iter).unwrap();
+        let iter_next = Iter::iter_merge_next(&mut iter, true).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(*key, 12);
@@ -1238,7 +1340,7 @@ mod tests {
             None => panic!("Expected Some"),
         }
 
-        let iter_next = Iter::iter_merge_next(&mut iter).unwrap();
+        let iter_next = Iter::iter_merge_next(&mut iter, true).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(*key, 14);
@@ -1265,15 +1367,15 @@ mod tests {
         read_map.entry(14).unwrap().or_insert(28).unwrap();
 
         let map_iter = read_map.children.range(..).peekable();
-        let store_iter = StoreNextIter::new(&store, ..).unwrap().peekable();
+        let store_iter = StoreNextIter::new(&store, ..).unwrap();
 
         let mut iter = Iter {
-            parent_store: &store,
+            parent: &read_map,
             map_iter,
             store_iter,
         };
 
-        let iter_next = Iter::iter_merge_next(&mut iter).unwrap();
+        let iter_next = Iter::iter_merge_next(&mut iter, true).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(*key, 12);
@@ -1282,7 +1384,7 @@ mod tests {
             None => panic!("Expected Some"),
         }
 
-        let iter_next = Iter::iter_merge_next(&mut iter).unwrap();
+        let iter_next = Iter::iter_merge_next(&mut iter, true).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(*key, 13);
@@ -1304,15 +1406,15 @@ mod tests {
         map.remove(12).unwrap();
 
         let map_iter = map.children.range(..).peekable();
-        let store_iter = StoreNextIter::new(&store, ..).unwrap().peekable();
+        let store_iter = StoreNextIter::new(&store, ..).unwrap();
 
         let mut iter = Iter {
-            parent_store: &store,
+            parent: &map,
             map_iter,
             store_iter,
         };
 
-        let iter_next = Iter::iter_merge_next(&mut iter).unwrap();
+        let iter_next = Iter::iter_merge_next(&mut iter, true).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(*key, 13);
@@ -1337,15 +1439,15 @@ mod tests {
         read_map.remove(12).unwrap();
 
         let map_iter = read_map.children.range(..).peekable();
-        let store_iter = StoreNextIter::new(&store, ..).unwrap().peekable();
+        let store_iter = StoreNextIter::new(&store, ..).unwrap();
 
         let mut iter = Iter {
-            parent_store: &store,
+            parent: &read_map,
             map_iter,
             store_iter,
         };
 
-        let iter_next = Iter::iter_merge_next(&mut iter).unwrap();
+        let iter_next = Iter::iter_merge_next(&mut iter, true).unwrap();
         match iter_next {
             Some((key, value)) => {
                 assert_eq!(*key, 13);
@@ -1353,6 +1455,58 @@ mod tests {
             }
             None => panic!("Expected Some"),
         }
+    }
+
+    #[test]
+    fn iter_merge_next_rev() {
+        let (store, mut edit_map) = setup();
+
+        edit_map.entry(13).unwrap().or_insert(26).unwrap();
+        edit_map.entry(15).unwrap().or_insert(26).unwrap();
+        edit_map.entry(16).unwrap().or_insert(26).unwrap();
+        edit_map.entry(17).unwrap().or_insert(26).unwrap();
+
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
+
+        let mut read_map: Map<u32, u32> = Map::with_store(store.clone()).unwrap();
+
+        read_map.insert(12, 28).unwrap();
+        read_map.insert(14, 28).unwrap();
+        read_map.insert(16, 28).unwrap();
+        read_map.entry(17).unwrap().remove().unwrap();
+
+        let map_iter = read_map.children.range(..).peekable();
+        let store_iter = StoreNextIter::new(&store, ..).unwrap();
+
+        let mut iter = Iter {
+            parent: &read_map,
+            map_iter,
+            store_iter,
+        };
+
+        let iter_next = Iter::iter_merge_next(&mut iter, false).unwrap().unwrap();
+        assert_eq!(*iter_next.0, 16);
+        assert_eq!(*iter_next.1, 28);
+
+        let iter_next = Iter::iter_merge_next(&mut iter, false).unwrap().unwrap();
+        assert_eq!(*iter_next.0, 15);
+        assert_eq!(*iter_next.1, 26);
+
+        let iter_next = Iter::iter_merge_next(&mut iter, false).unwrap().unwrap();
+        assert_eq!(*iter_next.0, 14);
+        assert_eq!(*iter_next.1, 28);
+
+        let iter_next = Iter::iter_merge_next(&mut iter, false).unwrap().unwrap();
+        assert_eq!(*iter_next.0, 13);
+        assert_eq!(*iter_next.1, 26);
+
+        let iter_next = Iter::iter_merge_next(&mut iter, false).unwrap().unwrap();
+        assert_eq!(*iter_next.0, 12);
+        assert_eq!(*iter_next.1, 28);
+
+        let iter_next = Iter::iter_merge_next(&mut iter, false).unwrap();
+        assert!(iter_next.is_none());
     }
 
     #[test]
@@ -1935,5 +2089,50 @@ mod tests {
 
         let actual = read_map.entry(12).unwrap().or_insert(28).unwrap();
         assert_eq!(26, *actual);
+    }
+
+    #[orga(version = 1)]
+    struct Foo {
+        #[orga(version(V1))]
+        bar: u32,
+
+        baz: u32,
+    }
+
+    impl MigrateFrom<FooV0> for FooV1 {
+        fn migrate_from(from: FooV0) -> Result<Self> {
+            Ok(Self {
+                bar: 0,
+                baz: from.baz,
+            })
+        }
+    }
+
+    #[test]
+    fn migrate() {
+        let mut store = mapstore();
+        store.put(vec![0, 0, 0, 12], vec![0, 0, 0, 0, 123]).unwrap();
+
+        let map0: Map<u32, Foo> = Map::with_store(store).unwrap();
+        let map1: Map<u32, Foo> = map0.migrate_into().unwrap();
+
+        assert_eq!(map1.get(12).unwrap().unwrap().bar, 0);
+        assert_eq!(map1.get(12).unwrap().unwrap().baz, 123);
+    }
+
+    #[test]
+    fn migrate_compat_mode() {
+        set_compat_mode(true);
+
+        let mut store = mapstore();
+        store.put(vec![0, 0, 0, 12], vec![0, 0, 0, 123]).unwrap();
+
+        let map0: Map<u32, Foo> = Map::with_store(store).unwrap();
+        let map1: Map<u32, Foo> = map0.migrate_into().unwrap();
+
+        set_compat_mode(false);
+
+        assert_eq!(map1.get(12).unwrap().unwrap().bar, 0);
+        assert_eq!(map1.get(12).unwrap().unwrap().baz, 123);
     }
 }

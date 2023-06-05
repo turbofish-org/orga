@@ -32,6 +32,12 @@ impl<T: Read> Read for ReadLog<T> {
         self.reads.borrow_mut().push(key.to_vec());
         self.inner.get_next(key)
     }
+
+    fn get_prev(&self, key: Option<&[u8]>) -> Result<Option<KV>> {
+        // TODO: handle None
+        self.reads.borrow_mut().push(key.unwrap().to_vec());
+        self.inner.get_prev(key)
+    }
 }
 
 impl<T: Write> Write for ReadLog<T> {

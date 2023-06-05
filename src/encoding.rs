@@ -9,7 +9,11 @@ pub mod decoder;
 pub mod encoder;
 
 use derive_more::{Deref, DerefMut, Into};
-use std::convert::{TryFrom, TryInto};
+use serde::Serialize;
+use std::{
+    convert::{TryFrom, TryInto},
+    str::FromStr,
+};
 
 #[derive(
     Deref,
@@ -148,11 +152,240 @@ where
     fn attach(&mut self, _store: crate::store::Store) -> crate::Result<()> {
         Ok(())
     }
+
     fn flush<W: std::io::Write>(self, out: &mut W) -> crate::Result<()> {
         self.encode_into(out)?;
         Ok(())
     }
+
     fn load(_store: crate::store::Store, bytes: &mut &[u8]) -> crate::Result<Self> {
         Ok(Self::decode(bytes)?)
+    }
+}
+
+#[derive(Clone, Debug, Deref, Serialize, Default)]
+#[serde(transparent)]
+pub struct ByteTerminatedString<const B: u8, T: FromStr + ToString = String>(pub T);
+
+impl<T: FromStr + ToString, const B: u8> Encode for ByteTerminatedString<B, T> {
+    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+        for byte in self.0.to_string().as_bytes() {
+            debug_assert!(byte != &B);
+        }
+
+        dest.write_all(self.0.to_string().as_bytes())?;
+        dest.write_all(&[B])?;
+        Ok(())
+    }
+
+    fn encoding_length(&self) -> ed::Result<usize> {
+        Ok(self.0.to_string().len() + 1)
+    }
+}
+
+impl<T: FromStr + ToString, const B: u8> Decode for ByteTerminatedString<B, T> {
+    fn decode<R: std::io::Read>(input: R) -> ed::Result<Self> {
+        let mut bytes = vec![];
+        for byte in input.bytes() {
+            let byte = byte?;
+            if byte == B {
+                break;
+            }
+            bytes.push(byte);
+        }
+
+        let inner = String::from_utf8(bytes)
+            .map_err(|_| ed::Error::UnexpectedByte(4))?
+            .parse()
+            .map_err(|_| ed::Error::UnexpectedByte(4))?;
+
+        Ok(Self(inner))
+    }
+}
+
+impl<T: FromStr + ToString + 'static, const B: u8> State for ByteTerminatedString<B, T>
+where
+    Self: Encode + Decode,
+{
+    fn attach(&mut self, _store: crate::store::Store) -> crate::Result<()> {
+        Ok(())
+    }
+
+    fn flush<W: std::io::Write>(self, out: &mut W) -> crate::Result<()> {
+        self.encode_into(out)?;
+        Ok(())
+    }
+
+    fn load(_store: crate::store::Store, bytes: &mut &[u8]) -> crate::Result<Self> {
+        Ok(Self::decode(bytes)?)
+    }
+}
+
+impl<T: FromStr + ToString, const B: u8> Terminated for ByteTerminatedString<B, T> {}
+
+impl<T: FromStr + ToString, const B: u8> From<T> for ByteTerminatedString<B, T> {
+    fn from(value: T) -> Self {
+        Self(value)
+    }
+}
+
+#[derive(Clone, Debug, Deref, Serialize, Default)]
+#[serde(transparent)]
+pub struct EofTerminatedString<T: FromStr + ToString = String>(pub T);
+
+impl<T: FromStr + ToString> Encode for EofTerminatedString<T> {
+    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+        dest.write_all(self.0.to_string().as_bytes())?;
+        Ok(())
+    }
+
+    fn encoding_length(&self) -> ed::Result<usize> {
+        Ok(self.0.to_string().len() + 1)
+    }
+}
+
+impl<T: FromStr + ToString> Decode for EofTerminatedString<T> {
+    fn decode<R: std::io::Read>(mut input: R) -> ed::Result<Self> {
+        let mut string = String::new();
+        input.read_to_string(&mut string)?;
+
+        let inner = string.parse().map_err(|_| ed::Error::UnexpectedByte(4))?;
+
+        Ok(Self(inner))
+    }
+}
+
+impl<T: FromStr + ToString> Terminated for EofTerminatedString<T> {}
+
+impl<T: FromStr + ToString + 'static> State for EofTerminatedString<T>
+where
+    Self: Encode + Decode,
+{
+    fn attach(&mut self, _store: crate::store::Store) -> crate::Result<()> {
+        Ok(())
+    }
+
+    fn flush<W: std::io::Write>(self, out: &mut W) -> crate::Result<()> {
+        self.encode_into(out)?;
+        Ok(())
+    }
+
+    fn load(_store: crate::store::Store, bytes: &mut &[u8]) -> crate::Result<Self> {
+        Ok(Self::decode(bytes)?)
+    }
+}
+
+impl<T: FromStr + ToString> From<T> for EofTerminatedString<T> {
+    fn from(value: T) -> Self {
+        Self(value)
+    }
+}
+
+impl<T: FromStr + ToString> EofTerminatedString<T> {
+    pub fn into_inner(self) -> T {
+        self.0
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct FixedString<const S: &'static str>;
+
+impl<const S: &'static str> Encode for FixedString<S> {
+    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+        dest.write_all(S.as_bytes())?;
+        Ok(())
+    }
+
+    fn encoding_length(&self) -> ed::Result<usize> {
+        Ok(S.len())
+    }
+}
+
+impl<const S: &'static str> Decode for FixedString<S> {
+    fn decode<R: std::io::Read>(mut input: R) -> ed::Result<Self> {
+        let mut bytes = vec![0; S.len()];
+        input.read_exact(&mut bytes)?;
+
+        if bytes != S.as_bytes() {
+            return Err(ed::Error::UnexpectedByte(3));
+        }
+
+        Ok(Self)
+    }
+}
+
+impl<const S: &'static str> Terminated for FixedString<S> {}
+
+impl<const S: &'static str> State for FixedString<S>
+where
+    Self: Encode + Decode,
+{
+    fn attach(&mut self, _store: crate::store::Store) -> crate::Result<()> {
+        Ok(())
+    }
+
+    fn flush<W: std::io::Write>(self, out: &mut W) -> crate::Result<()> {
+        self.encode_into(out)?;
+        Ok(())
+    }
+
+    fn load(_store: crate::store::Store, bytes: &mut &[u8]) -> crate::Result<Self> {
+        Ok(Self::decode(bytes)?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::store::Store;
+
+    type CommaTerminatedU64 = ByteTerminatedString<b',', u64>;
+
+    #[test]
+    fn byte_terminated_string_encode_decode() {
+        let value: CommaTerminatedU64 = ByteTerminatedString(1234);
+
+        let mut bytes = value.encode().unwrap();
+        assert_eq!(bytes, b"1234,");
+
+        bytes.extend_from_slice(b"567,8,");
+        let decoded = CommaTerminatedU64::decode(&bytes[..]).unwrap();
+        assert_eq!(*decoded, *value);
+    }
+
+    #[test]
+    fn byte_terminated_string_state() {
+        let value: CommaTerminatedU64 = ByteTerminatedString(1234);
+
+        let mut bytes = vec![];
+        value.clone().flush(&mut bytes).unwrap();
+        assert_eq!(bytes, b"1234,");
+
+        bytes.extend_from_slice(b"567,8,");
+        let decoded = CommaTerminatedU64::load(Store::default(), &mut &bytes[..]).unwrap();
+        assert_eq!(*decoded, *value);
+    }
+
+    #[test]
+    fn eof_terminated_string_encode_decode() {
+        let value: EofTerminatedString<u64> = EofTerminatedString(1234);
+
+        let bytes = value.encode().unwrap();
+        assert_eq!(bytes, b"1234");
+
+        let decoded = EofTerminatedString::<u64>::decode(&bytes[..]).unwrap();
+        assert_eq!(*decoded, *value);
+    }
+
+    #[test]
+    fn eof_terminated_string_state() {
+        let value: EofTerminatedString<u64> = EofTerminatedString(1234);
+
+        let mut bytes = vec![];
+        value.clone().flush(&mut bytes).unwrap();
+        assert_eq!(bytes, b"1234");
+
+        let decoded = EofTerminatedString::<u64>::load(Store::default(), &mut &bytes[..]).unwrap();
+        assert_eq!(*decoded, *value);
     }
 }

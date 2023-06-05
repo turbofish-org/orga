@@ -62,17 +62,12 @@ impl Descriptor {
 pub type LoadFn = fn(Store, &mut &[u8]) -> Result<()>;
 pub type ApplyQueryBytesFn = fn(Vec<u8>) -> Vec<u8>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub enum Children {
+    #[default]
     None,
     Named(Vec<NamedChild>),
     Dynamic(DynamicChild),
-}
-
-impl Default for Children {
-    fn default() -> Self {
-        Children::None
-    }
 }
 
 // #[wasm_bindgen(getter_with_clone, inspectable)]

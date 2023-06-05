@@ -17,6 +17,11 @@ impl Read for Empty {
     fn get_next(&self, _: &[u8]) -> Result<Option<KV>> {
         Ok(None)
     }
+
+    #[inline]
+    fn get_prev(&self, _key: Option<&[u8]>) -> Result<Option<KV>> {
+        Ok(None)
+    }
 }
 
 impl Write for Empty {
@@ -41,6 +46,13 @@ impl Read for Unknown {
     #[inline]
     fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
         Err(OrgaError::StoreErr(Error::ReadUnknown(key.to_vec())))
+    }
+
+    #[inline]
+    fn get_prev(&self, key: Option<&[u8]>) -> Result<Option<KV>> {
+        Err(OrgaError::StoreErr(Error::ReadUnknown(
+            key.unwrap().to_vec(),
+        )))
     }
 }
 
@@ -69,5 +81,11 @@ mod tests {
     fn get_next() {
         let store = Empty;
         assert_eq!(store.get_next(&[1]).unwrap(), None)
+    }
+
+    #[test]
+    fn get_prev() {
+        let store = Empty;
+        assert_eq!(store.get_prev(Some(&[1])).unwrap(), None)
     }
 }

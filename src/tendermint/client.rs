@@ -31,7 +31,7 @@ impl<T: App + Call + Query + State + Default> Client<ABCIPlugin<T>> for HttpClie
             _ => return Err(Error::Client("Unexpected call type".into())),
         };
         let call_bytes = call.encode()?;
-        let res = self.client.broadcast_tx_commit(call_bytes.into()).await?;
+        let res = self.client.broadcast_tx_commit(call_bytes).await?;
 
         if let tendermint::abci::Code::Err(code) = res.check_tx.code {
             let msg = format!("code {}: {}", code, res.check_tx.log);

@@ -186,6 +186,29 @@ impl<S: Read> Read for Store<S> {
             .map(|(k, v)| (k[self.prefix.len()..].into(), v));
         Ok(maybe_kv)
     }
+
+    #[inline]
+    fn get_prev(&self, key: Option<&[u8]>) -> Result<Option<KV>> {
+        let maybe_kv = if let Some(key) = key {
+            let prefixed = concat(self.prefix.as_slice(), key);
+            self.store
+                .get_prev(Some(prefixed.as_slice()))?
+                .filter(|(k, _)| k.starts_with(self.prefix.as_slice()))
+                .map(|(k, v)| (k[self.prefix.len()..].into(), v))
+        } else {
+            let incremented = increment_bytes(self.prefix.clone());
+            let end_key = if !self.prefix.is_empty() {
+                Some(incremented.as_slice())
+            } else {
+                None
+            };
+            self.store
+                .get_prev(end_key)?
+                .filter(|(k, _)| k.starts_with(self.prefix.as_slice()))
+                .map(|(k, v)| (k[self.prefix.len()..].into(), v))
+        };
+        Ok(maybe_kv)
+    }
 }
 
 impl<S: Write> Write for Store<S> {
@@ -218,6 +241,25 @@ fn concat(a: &[u8], b: &[u8]) -> Vec<u8> {
     value.extend_from_slice(a);
     value.extend_from_slice(b);
     value
+}
+
+#[inline]
+fn increment_bytes(mut bytes: Vec<u8>) -> Vec<u8> {
+    for byte in bytes.iter_mut().rev() {
+        if *byte == 255 {
+            *byte = 0;
+        } else {
+            *byte += 1;
+            return bytes;
+        }
+    }
+
+    bytes.push(0);
+    if bytes.len() > 1 {
+        bytes[0] += 1;
+    }
+
+    bytes
 }
 
 #[cfg(test)]
@@ -255,5 +297,17 @@ mod test {
         store.delete(&[1]).unwrap();
         assert!(backing.get(&[1, 3, 1]).unwrap().is_none());
         assert_eq!(backing.get(&[1, 3, 2]).unwrap().unwrap(), vec![5, 0]);
+    }
+
+    #[test]
+    fn get_prev_empty_key() {
+        let mut backing = MapStore::new();
+        backing.put(vec![0, 0], vec![0]).unwrap();
+
+        let store = Store::new(&mut backing);
+        assert_eq!(
+            store.get_prev(None).unwrap().unwrap(),
+            (vec![0, 0], vec![0])
+        );
     }
 }

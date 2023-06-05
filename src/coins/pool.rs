@@ -5,6 +5,7 @@ use crate::encoding::{Decode, Encode, Terminated};
 use crate::orga;
 use crate::state::State;
 use crate::{Error, Result};
+use serde::Serialize;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;

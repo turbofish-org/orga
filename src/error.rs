@@ -1,3 +1,4 @@
+use std::num::TryFromIntError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -28,6 +29,9 @@ pub enum Error {
     Ed(#[from] ed::Error),
     #[error("Ibc Error: {0}")]
     Ibc(String),
+    #[cfg(feature = "ibc")]
+    #[error(transparent)]
+    IbcContext(#[from] ibc::core::ContextError),
     #[error("Invalid ID")]
     InvalidID,
     #[error(transparent)]
@@ -50,6 +54,8 @@ pub enum Error {
     #[cfg(feature = "abci")]
     #[error(transparent)]
     TendermintRPC(#[from] tendermint_rpc::Error),
+    #[error(transparent)]
+    TryFromInt(#[from] TryFromIntError),
     #[cfg(feature = "merk-full")]
     #[error(transparent)]
     RocksDB(#[from] merk::rocksdb::Error),
