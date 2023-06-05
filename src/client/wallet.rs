@@ -43,7 +43,7 @@ impl DerivedKey {
     pub fn new(seed: &[u8]) -> Result<Self> {
         use sha2::Digest;
         let mut hasher = sha2::Sha256::new();
-        hasher.update(&seed);
+        hasher.update(seed);
         let hash = hasher.finalize();
 
         let privkey = secp256k1::SecretKey::from_slice(&hash)?;

@@ -2,11 +2,12 @@ use std::any::TypeId;
 
 use super::trace::take_trace;
 use crate::{
+    abci::App,
     call::Call,
     describe::{Children, Describe, Descriptor, KeyOp},
-    encoding::{Decode, Encode},
+    encoding::Decode,
     merk::{BackingStore, ProofStore},
-    prelude::{query::QueryPlugin, ABCIPlugin, App, DefaultPlugins},
+    plugins::{query::QueryPlugin, ABCIPlugin},
     query::Query,
     state::State,
     store::{self, Read, Shared, Store, Write},
@@ -226,7 +227,7 @@ mod tests {
     use crate::client::mock::MockClient;
     use crate::collections::Deque;
     use crate::orga;
-    use crate::prelude::query::QueryPlugin;
+    use crate::plugins::query::QueryPlugin;
 
     #[orga]
     struct Foo {
@@ -263,7 +264,7 @@ mod tests {
     async fn execute_simple() {
         let client = setup();
 
-        let (res, store) = execute(
+        let (res, _store) = execute(
             Store::default(),
             &client,
             |app: ABCIPlugin<QueryPlugin<Foo>>| Ok(app.inner.inner.borrow().bar),
@@ -278,7 +279,7 @@ mod tests {
     async fn execute_deque_access_none() {
         let client = setup();
 
-        let (res, store) = execute(
+        let (res, _store) = execute(
             Store::default(),
             &client,
             |app: ABCIPlugin<QueryPlugin<Foo>>| {
@@ -298,7 +299,7 @@ mod tests {
     async fn execute_deque_access_some() {
         let client = setup();
 
-        let (res, store) = execute(
+        let (res, _store) = execute(
             Store::default(),
             &client,
             |app: ABCIPlugin<QueryPlugin<Foo>>| {

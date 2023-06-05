@@ -5,8 +5,7 @@ use orga::{
     coins::{Accounts, Symbol},
     collections::Map,
     orga,
-    plugins::DefaultPlugins,
-    prelude::{ConvertSdkTx, PaidCall},
+    plugins::{ConvertSdkTx, DefaultPlugins, PaidCall},
 };
 
 #[orga]
@@ -31,8 +30,8 @@ pub fn main() {
 
     let home = tempdir::TempDir::new("orga-foo").unwrap();
     let node = orga::abci::Node::<DefaultPlugins<FooCoin, App>>::new(
-        home.path().clone(),
-        orga::prelude::DefaultConfig {
+        home.path(),
+        orga::abci::DefaultConfig {
             seeds: None,
             timeout_commit: None,
         },
@@ -44,7 +43,7 @@ pub fn main() {
 impl ConvertSdkTx for App {
     type Output = PaidCall<<App as Call>::Call>;
 
-    fn convert(&self, msg: &orga::prelude::sdk_compat::sdk::Tx) -> orga::Result<Self::Output> {
+    fn convert(&self, _msg: &orga::plugins::sdk_compat::sdk::Tx) -> orga::Result<Self::Output> {
         todo!()
     }
 }

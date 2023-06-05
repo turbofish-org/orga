@@ -1,17 +1,13 @@
-use std::any::type_name;
-
 use orga_macros::orga;
-use serde::Serialize;
 
 use super::{sdk_compat::sdk::Tx as SdkTx, ConvertSdkTx, Signer};
 use crate::call::Call;
 use crate::coins::Address;
 use crate::collections::Map;
 use crate::context::GetContext;
-use crate::describe::Describe;
+
 use crate::encoding::{Decode, Encode};
-use crate::migrate::{MigrateFrom, MigrateInto};
-use crate::query::FieldQuery;
+
 use crate::state::State;
 use crate::{Error, Result};
 
@@ -111,79 +107,6 @@ where
             )),
         }
     }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-#[cfg(feature = "abci")]
-fn nonce_path() -> Result<std::path::PathBuf> {
-    let orga_home = home::home_dir()
-        .expect("No home directory set")
-        .join(".orga-wallet");
-
-    std::fs::create_dir_all(&orga_home)?;
-    Ok(orga_home.join("nonce"))
-}
-
-#[cfg(target_arch = "wasm32")]
-fn load_nonce() -> Result<u64> {
-    let window = web_sys::window().unwrap();
-    let storage = window
-        .local_storage()
-        .map_err(|_| Error::Nonce("Could not get local storage".into()))?
-        .unwrap();
-    let res = storage
-        .get("orga/nonce")
-        .map_err(|_| Error::Nonce("Could not load from local storage".into()))?;
-    match res {
-        Some(nonce) => Ok(nonce.parse()?),
-        None => Ok(1),
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-#[cfg(feature = "abci")]
-fn load_nonce() -> Result<u64> {
-    let nonce_path = nonce_path()?;
-    if nonce_path.exists() {
-        let bytes = std::fs::read(&nonce_path)?;
-        Ok(Decode::decode(bytes.as_slice())?)
-    } else {
-        let bytes = 1u64.encode()?;
-        std::fs::write(&nonce_path, bytes)?;
-        Ok(1)
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-#[cfg(not(feature = "abci"))]
-fn load_nonce() -> Result<u64> {
-    unimplemented!()
-}
-
-#[cfg(target_arch = "wasm32")]
-fn write_nonce(nonce: u64) -> Result<()> {
-    let window = web_sys::window().unwrap();
-    let storage = window
-        .local_storage()
-        .map_err(|_| Error::Nonce("Could not get local storage".into()))?
-        .unwrap();
-    storage
-        .set("orga/nonce", nonce.to_string().as_str())
-        .map_err(|_| Error::Nonce("Could not write to local storage".into()))?;
-    Ok(())
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-#[cfg(feature = "abci")]
-fn write_nonce(nonce: u64) -> Result<()> {
-    let nonce_path = nonce_path()?;
-    Ok(std::fs::write(nonce_path, nonce.encode()?)?)
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-#[cfg(not(feature = "abci"))]
-fn write_nonce(nonce: u64) -> Result<()> {
-    unimplemented!()
 }
 
 // TODO: Remove dependency on ABCI for this otherwise-pure plugin.

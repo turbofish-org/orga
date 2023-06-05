@@ -222,7 +222,7 @@ fn _method_arg_generics(item: &ItemImpl) -> Vec<Ident> {
         .collect()
 }
 
-fn add_tracing(item_impl: &mut ItemImpl) {
+fn _add_tracing(item_impl: &mut ItemImpl) {
     let Types {
         trace_fn,
         encode_trait,

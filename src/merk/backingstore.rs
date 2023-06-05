@@ -1,7 +1,6 @@
 #[cfg(feature = "merk-full")]
 use super::{MerkStore, ProofBuilder};
-use crate::prelude::bufstore::PartialMapStore;
-use crate::store::{BufStore, Empty, MapStore, Read, Shared, Write, KV};
+use crate::store::{bufstore::PartialMapStore, BufStore, Empty, MapStore, Read, Shared, Write, KV};
 use crate::{Error, Result};
 use merk::proofs::query::Map as ProofMap;
 use std::any::Any;

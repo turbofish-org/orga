@@ -69,11 +69,6 @@ pub fn derive_child(item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro]
-pub fn resolve_path(input: TokenStream) -> TokenStream {
-    child::resolve_path(input)
-}
-
-#[proc_macro]
 pub fn build_call(input: TokenStream) -> TokenStream {
     build_call::build_call(input)
 }

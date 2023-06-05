@@ -1,9 +1,10 @@
 use crate::{
+    abci::App,
     call::Call,
     client::Client,
-    encoding::{Decode, Encode},
+    encoding::Encode,
     merk::{BackingStore, ProofStore},
-    prelude::{ABCICall, ABCIPlugin, App},
+    plugins::{ABCICall, ABCIPlugin},
     query::Query,
     state::State,
     store::{Shared, Store},
@@ -77,15 +78,12 @@ impl<T: App + Call + Query + State + Default> Client<ABCIPlugin<T>> for HttpClie
 #[cfg(test)]
 mod tests {
     use crate::{
-        client::{
-            wallet::{DerivedKey, Unsigned},
-            AppClient,
-        },
-        coins::{Accounts, Address, Symbol},
+        abci::InitChain,
+        client::{wallet::DerivedKey, AppClient},
+        coins::{Accounts, Symbol},
         collections::Map,
         context::Context,
         plugins::{ChainId, ConvertSdkTx, DefaultPlugins, PaidCall},
-        prelude::{InitChain, Signer},
     };
 
     use super::*;
@@ -119,7 +117,7 @@ mod tests {
     }
 
     impl InitChain for App {
-        fn init_chain(&mut self, ctx: &orga::prelude::InitChainCtx) -> Result<()> {
+        fn init_chain(&mut self, _ctx: &crate::plugins::InitChainCtx) -> Result<()> {
             self.accounts
                 .deposit(DerivedKey::address_for(b"alice").unwrap(), 100_000.into())
         }
@@ -135,8 +133,8 @@ mod tests {
 
             let home = tempdir::TempDir::new("orga-node").unwrap();
             let node = orga::abci::Node::<DefaultPlugins<FooCoin, App>>::new(
-                home.path().clone(),
-                orga::prelude::DefaultConfig {
+                home.path(),
+                orga::abci::DefaultConfig {
                     seeds: None,
                     timeout_commit: None,
                 },
@@ -154,7 +152,10 @@ mod tests {
     impl ConvertSdkTx for App {
         type Output = PaidCall<<App as Call>::Call>;
 
-        fn convert(&self, msg: &orga::prelude::sdk_compat::sdk::Tx) -> orga::Result<Self::Output> {
+        fn convert(
+            &self,
+            _msg: &crate::plugins::sdk_compat::sdk::Tx,
+        ) -> orga::Result<Self::Output> {
             todo!()
         }
     }

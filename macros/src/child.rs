@@ -1,9 +1,9 @@
 use crate::utils::Types;
 use darling::{ast, FromDeriveInput, FromField};
 use proc_macro::TokenStream;
-use proc_macro2::{Span, TokenStream as TokenStream2};
-use quote::{quote, quote_spanned, ToTokens};
-use syn::{parse::Parse, punctuated::Punctuated, *};
+use proc_macro2::TokenStream as TokenStream2;
+use quote::{quote, ToTokens};
+use syn::*;
 
 #[derive(Clone, Debug, FromDeriveInput)]
 #[darling(supports(struct_named))]
@@ -53,18 +53,6 @@ impl ToTokens for ChildInputReceiver {
 pub fn const_field_id(ident: &Ident) -> TokenStream2 {
     let ident = ident.to_string();
     return quote! { #ident };
-    // let ident = ident.as_bytes();
-    // let ident = ident.iter().map(|b| *b as u128).collect_vec();
-
-    // let mut id = 0;
-    // for (i, b) in ident.iter().enumerate() {
-    //     id += b << (i * 8);
-    //     if i == 15 {
-    //         break;
-    //     }
-    // }
-
-    // quote! { #id }
 }
 
 pub fn const_ident(field: TokenStream) -> TokenStream {
@@ -72,51 +60,6 @@ pub fn const_ident(field: TokenStream) -> TokenStream {
     let field_id = const_field_id(&ident);
 
     field_id.into()
-}
-
-struct ResolveInput {
-    root_type: Path,
-    segments: Punctuated<Ident, Token![.]>,
-}
-
-impl Parse for ResolveInput {
-    fn parse(input: parse::ParseStream) -> Result<Self> {
-        let root_type = input.parse()?;
-        let _ = input.parse::<Token![,]>()?;
-        let segments = Punctuated::parse_terminated(input)?;
-        Ok(Self {
-            root_type,
-            segments,
-        })
-    }
-}
-pub fn resolve_path(input: TokenStream) -> TokenStream {
-    unimplemented!()
-    // let Types {
-    //     child_trait,
-    //     child_field_ty,
-    //     ..
-    // } = Types::default();
-    // let inp = input.clone();
-    // let item = parse_macro_input!(inp as ResolveInput);
-    // let root_type = item.root_type;
-
-    // let def_site = Span::def_site();
-    // let resolved_type = item
-    //     .segments
-    //     .iter()
-    //     .skip(1)
-    //     .fold(quote_spanned! { def_site=> #root_type }, |acc, segment| {
-    //         let const_field_id = const_field_id(segment);
-    //         quote_spanned! { def_site=> <#child_field_ty<#acc, #const_field_id> as #child_trait>::Child}
-    //     });
-
-    // let call_site = Span::call_site();
-    // let output = quote_spanned! { call_site=>
-    //     #resolved_type
-    // };
-
-    // output.into()
 }
 
 pub fn derive(item: TokenStream) -> TokenStream {

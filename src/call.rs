@@ -338,6 +338,12 @@ impl<T> CallBuilder<T> {
     }
 }
 
+impl<T> Default for CallBuilder<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T> CallBuilder<T> {
     pub fn build_call<
         const ID: &'static str,

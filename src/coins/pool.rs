@@ -5,7 +5,7 @@ use crate::encoding::{Decode, Encode, Terminated};
 use crate::orga;
 use crate::state::State;
 use crate::{Error, Result};
-use serde::Serialize;
+
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
@@ -317,7 +317,7 @@ where
                 }
             };
 
-            let mut entry = self.entry.get_mut();
+            let entry = self.entry.get_mut();
 
             entry.shares = match (entry.shares + new_shares).result() {
                 Ok(value) => value,

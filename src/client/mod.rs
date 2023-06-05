@@ -1,22 +1,19 @@
 use crate::call::Call;
-use crate::coins::{Address, Symbol};
-use crate::describe::{Children, Describe, Descriptor, KeyOp};
+use crate::coins::Symbol;
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
-use crate::merk::{BackingStore, ProofStore};
+
+use crate::abci::App;
+use crate::plugins::{sdk_compat, ABCICall, ABCIPlugin, ConvertSdkTx};
 use crate::plugins::{PaidCall, PayableCall};
-use crate::prelude::{
-    sdk_compat, ABCICall, ABCIPlugin, App, ConvertSdkTx, QueryPlugin, Shared, SignerCall,
-};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
-use crate::store::{Read, Write};
-use crate::{Error, Result};
-use educe::Educe;
-use std::any::TypeId;
-use std::cell::{Cell, RefCell};
+
+use crate::Result;
+
+use std::cell::Cell;
 use std::marker::PhantomData;
-use std::sync::Arc;
 
 pub mod exec;
 pub mod mock;
@@ -144,20 +141,19 @@ where
 
 #[cfg(test)]
 mod tests {
-    use serial_test::serial;
 
     use super::*;
 
     use crate::call::build_call;
     use crate::client::mock::MockClient;
     use crate::client::wallet::{DerivedKey, Unsigned};
-    use crate::coins::Symbol;
+    use crate::coins::{Address, Symbol};
     use crate::collections::{Deque, Map};
     use crate::context::Context;
-    use crate::orga;
     use crate::plugins::ConvertSdkTx;
     use crate::plugins::PaidCall;
-    use crate::prelude::{QueryPlugin, Signer};
+    use crate::{orga, Error};
+    use crate::{plugins::Signer, store::Write};
 
     #[orga]
     #[derive(Debug)]
@@ -207,7 +203,7 @@ mod tests {
     impl ConvertSdkTx for Foo {
         type Output = PaidCall<<Self as Call>::Call>;
 
-        fn convert(&self, _msg: &orga::prelude::sdk_compat::sdk::Tx) -> Result<Self::Output> {
+        fn convert(&self, _msg: &crate::plugins::sdk_compat::sdk::Tx) -> Result<Self::Output> {
             unimplemented!()
         }
     }
@@ -222,13 +218,13 @@ mod tests {
     #[orga]
     impl Foo {
         #[call]
-        pub fn my_method(&mut self, a: u32, b: u8, c: u16) -> Result<()> {
+        pub fn my_method(&mut self, _a: u32, _b: u8, _c: u16) -> Result<()> {
             self.b += 1;
             Ok(())
         }
 
         #[call]
-        pub fn my_other_method(&mut self, d: u32) -> Result<()> {
+        pub fn my_other_method(&mut self, _d: u32) -> Result<()> {
             self.c += 1;
             Ok(())
         }

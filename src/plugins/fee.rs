@@ -1,15 +1,11 @@
-use orga_macros::{orga, FieldQuery};
-use serde::{Deserialize, Serialize};
+use orga_macros::orga;
 
 use super::sdk_compat::{sdk::Tx as SdkTx, ConvertSdkTx};
 use super::Paid;
 use crate::call::Call;
 use crate::coins::{Coin, Symbol};
 use crate::context::{Context, GetContext};
-use crate::describe::Describe;
-use crate::encoding::{Decode, Encode};
-use crate::migrate::{MigrateFrom, MigrateInto};
-use crate::query::Query;
+
 use crate::state::State;
 use crate::{Error, Result};
 use std::marker::PhantomData;

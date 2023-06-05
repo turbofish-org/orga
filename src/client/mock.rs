@@ -1,18 +1,16 @@
 use std::{any::Any, cell::RefCell, marker::PhantomData};
 
-use ed::Terminated;
-
 use crate::{
+    abci::App,
     call::Call,
     encoding::{Decode, Encode},
     merk::BackingStore,
-    plugins::QueryPlugin,
-    prelude::{ABCIPlugin, App},
+    plugins::{ABCIPlugin, QueryPlugin},
     query::Query,
     state::State,
     store::{
-        bufstore::PartialMapStore, log::ReadLog, BufStore, Error as StoreError, Read, Shared,
-        Store, Write, KV,
+        bufstore::PartialMapStore, log::ReadLog, Error as StoreError, Read, Shared, Store, Write,
+        KV,
     },
     Error, Result,
 };
@@ -99,12 +97,12 @@ impl Read for UnknownStore {
     }
 
     #[inline]
-    fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
+    fn get_next(&self, _key: &[u8]) -> Result<Option<KV>> {
         Ok(None)
     }
 
     #[inline]
-    fn get_prev(&self, key: Option<&[u8]>) -> Result<Option<KV>> {
+    fn get_prev(&self, _key: Option<&[u8]>) -> Result<Option<KV>> {
         Ok(None)
     }
 }

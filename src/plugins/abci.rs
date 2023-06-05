@@ -2,7 +2,7 @@ use crate::abci::{prost::Adapter, AbciQuery, App};
 use crate::call::Call;
 use crate::collections::{Entry, EntryMap, Map};
 use crate::context::Context;
-use crate::describe::{Builder, Describe};
+use crate::describe::{Describe};
 use crate::encoding::{Decode, Encode};
 use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::query::Query;

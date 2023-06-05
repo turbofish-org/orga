@@ -83,19 +83,10 @@ pub use serde;
 pub use serde_json::Value as JsonValue;
 
 pub mod prelude {
-    pub use secp256k1;
-
-    pub use crate::abci::*;
-    pub use crate::call::*;
-    pub use crate::coins::*;
-    pub use crate::collections::*;
-    pub use crate::context::*;
-    pub use crate::encoding::*;
-    #[cfg(merk)]
-    pub use crate::merk;
-    pub use crate::plugins::*;
-    pub use crate::query::*;
-    pub use crate::state::*;
-    pub use crate::store::*;
-    pub use crate::Result;
+    pub use crate::call::{Call, FieldCall, MethodCall};
+    pub use crate::encoding::{Decode, Encode, Terminated};
+    pub use crate::query::{FieldQuery, MethodQuery, Query};
+    pub use crate::state::State;
+    pub use crate::store::{Read, Store, Write};
+    pub use crate::{Error, Result};
 }

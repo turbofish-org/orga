@@ -320,7 +320,7 @@ impl ToTokens for FieldQueryEnum {
             }
         };
 
-        let enum_debug = {
+        let _enum_debug = {
             let sc_parent_ident = to_snake_case(&self.parent.ident);
             let child_debugs = self.data.iter().map(|field| {
                 let cc_ident = to_camel_case(field.ident.as_ref().unwrap());

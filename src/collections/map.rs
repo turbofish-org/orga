@@ -13,7 +13,7 @@ use crate::state::State;
 use crate::store::*;
 use crate::{Error, Result};
 use ed::*;
-use serde::Serialize;
+
 
 #[derive(Clone, Debug)]
 pub struct MapKey<K> {

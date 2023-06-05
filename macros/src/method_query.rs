@@ -57,7 +57,6 @@ fn method_query_enum(tokens: &mut TokenStream2, item: &ItemImpl) {
     let Types {
         encode_trait,
         decode_trait,
-        query_trait,
         ..
     } = Types::default();
     let parent_ident = self_ty_ident(item);

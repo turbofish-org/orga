@@ -56,7 +56,7 @@ impl Builder {
         name: &'static str,
     ) -> Self {
         if let Some(keyop) = T::field_keyop(name) {
-            return self.named_child_keyop::<U>(name, keyop);
+            self.named_child_keyop::<U>(name, keyop)
         } else {
             self
         }
