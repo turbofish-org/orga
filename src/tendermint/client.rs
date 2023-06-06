@@ -168,7 +168,7 @@ mod tests {
 
         let client = HttpClient::new("http://localhost:26657").unwrap();
         let client =
-            AppClient::<App, _, FooCoin, _>::new(client, DerivedKey::new(b"alice").unwrap());
+            AppClient::<App, App, _, FooCoin, _>::new(client, DerivedKey::new(b"alice").unwrap());
 
         // TODO: node spawn should return future which waits for node to be ready
         tokio::time::sleep(std::time::Duration::from_secs(15)).await;

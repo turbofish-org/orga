@@ -23,32 +23,48 @@ pub mod wallet;
 pub use exec::Client;
 pub use wallet::Wallet;
 
-pub struct AppClient<T, C, S, W> {
-    _pd: PhantomData<(T, S)>,
+pub struct AppClient<T, U, C, S, W> {
+    _pd: PhantomData<(T, U, S)>,
     client: C,
     wallet: W,
     store: Cell<Option<Store>>,
+    sub: fn(T) -> U,
 }
 
 use crate::plugins::DefaultPlugins;
 
-impl<T, C, S, W> AppClient<T, C, S, W>
+impl<T, U, C, S, W> AppClient<T, U, C, S, W>
 where
     W: Clone,
 {
-    pub fn new(client: C, wallet: W) -> Self {
+    pub fn new(client: C, wallet: W) -> Self
+    where
+        T: Into<U>,
+    {
         Self {
             _pd: PhantomData,
             client,
             wallet,
             store: Cell::new(None),
+            sub: Into::into,
         }
     }
 
+    pub fn sub<U2>(self, sub: fn(T) -> U2) -> AppClient<T, U2, C, S, W> {
+        AppClient {
+            _pd: PhantomData,
+            client: self.client,
+            wallet: self.wallet,
+            store: self.store,
+            sub,
+        }
+    }
+
+    // TODO: support subclients
     pub async fn call(
         &self,
-        payer: impl FnOnce(&T) -> T::Call,
-        payee: impl FnOnce(&T) -> T::Call,
+        payer: impl FnOnce(&U) -> T::Call,
+        payee: impl FnOnce(&U) -> T::Call,
     ) -> Result<()>
     where
         C: Client<ABCIPlugin<DefaultPlugins<S, T>>>,
@@ -93,10 +109,10 @@ where
         Ok(())
     }
 
-    pub async fn query_root<U, F: FnMut(ABCIPlugin<DefaultPlugins<S, T>>) -> Result<U>>(
+    pub async fn query_root<U2, F2: FnMut(ABCIPlugin<DefaultPlugins<S, T>>) -> Result<U2>>(
         &self,
-        op: F,
-    ) -> Result<U>
+        op: F2,
+    ) -> Result<U2>
     where
         T: App + State + Query + Call + Describe + ConvertSdkTx<Output = PaidCall<T::Call>>,
         C: Client<ABCIPlugin<DefaultPlugins<S, T>>>,
@@ -111,7 +127,7 @@ where
         Ok(res)
     }
 
-    pub async fn query<U, F: FnMut(T) -> Result<U>>(&self, mut op: F) -> Result<U>
+    pub async fn query<U2, F2: FnMut(U) -> Result<U2>>(&self, mut op: F2) -> Result<U2>
     where
         T: App + State + Query + Call + Describe + ConvertSdkTx<Output = PaidCall<T::Call>>,
         C: Client<ABCIPlugin<DefaultPlugins<S, T>>>,
@@ -120,7 +136,7 @@ where
         let store = self.store.take().unwrap_or_default();
 
         let (res, store) = exec::execute(store, &self.client, |app| {
-            op(app
+            let inner = app
                 .inner
                 .inner
                 .into_inner()
@@ -129,7 +145,8 @@ where
                 .inner
                 .inner
                 .inner
-                .inner)
+                .inner;
+            op((self.sub)(inner))
         })
         .await?;
 
@@ -244,7 +261,7 @@ mod tests {
 
     #[ignore]
     #[tokio::test]
-    async fn plugin_client() -> Result<()> {
+    async fn appclient() -> Result<()> {
         type App = ABCIPlugin<DefaultPlugins<Simp, Foo>>;
         let mut store = Store::with_map_store();
         let mut app = App::default();
@@ -293,7 +310,7 @@ mod tests {
         let mut mock_client = MockClient::<App>::with_store(store);
 
         {
-            let client = AppClient::<Foo, _, _, _>::new(
+            let client = AppClient::<Foo, Foo, _, _, _>::new(
                 &mut mock_client,
                 DerivedKey::new(b"alice").unwrap(),
             );
@@ -330,10 +347,80 @@ mod tests {
         }
 
         {
-            let client = AppClient::<Foo, _, _, _>::new(&mut mock_client, Unsigned);
+            let client = AppClient::<Foo, Foo, _, _, _>::new(&mut mock_client, Unsigned);
             let bar_b = client.query(|app| Ok(app.bar.b)).await?;
             assert_eq!(bar_b, 12);
         }
+
+        Ok(())
+    }
+
+    #[ignore]
+    #[tokio::test]
+    async fn sub() -> Result<()> {
+        type App = ABCIPlugin<DefaultPlugins<Simp, Foo>>;
+        let mut store = Store::with_map_store();
+        let mut app = App::default();
+
+        {
+            app.inner.inner.borrow_mut().inner.inner.chain_id = b"foo".to_vec().try_into()?;
+            let inner_app = &mut app.inner.inner.borrow_mut().inner.inner.inner.inner.inner;
+
+            let mut inner_map = Map::<u32, u64>::default();
+            let mut deque_inner_map = Map::<u32, Bar>::default();
+            inner_map.insert(16, 32)?;
+            deque_inner_map.insert(
+                13,
+                Bar {
+                    a: 3,
+                    b: 4,
+                    ..Default::default()
+                },
+            )?;
+            inner_app.b = 42;
+            inner_app.deque.push_back(deque_inner_map)?;
+            inner_app.e.insert(
+                12,
+                Bar {
+                    a: 1,
+                    b: 2,
+                    c: inner_map,
+                },
+            )?;
+            inner_app.e.insert(
+                13,
+                Bar {
+                    a: 3,
+                    b: 4,
+                    c: Default::default(),
+                },
+            )?;
+            inner_app.bar.b = 8;
+        }
+        app.attach(store.clone())?;
+
+        let mut bytes = vec![];
+        app.flush(&mut bytes)?;
+        store.put(vec![], bytes)?;
+
+        let mut mock_client = MockClient::<App>::with_store(store);
+
+        let bar_client = AppClient::<Foo, Foo, _, _, _>::new(
+            &mut mock_client,
+            DerivedKey::new(b"alice").unwrap(),
+        )
+        .sub(|app| app.bar);
+
+        let bar_b = bar_client.query(|bar| Ok(bar.b)).await?;
+        assert_eq!(bar_b, 8);
+
+        // TODO
+        // bar_client
+        //     .call(
+        //         |bar| build_call!(bar.inc_b(4)),
+        //         |bar| build_call!(bar.inc_b(4)),
+        //     )
+        //     .await?;
 
         Ok(())
     }
