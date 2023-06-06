@@ -194,6 +194,24 @@ impl<T: State> Deque<T> {
 
         Ok(())
     }
+
+    pub fn retain_unordered<F>(&mut self, mut f: F) -> Result<()>
+    where
+        F: FnMut(Ref<T>) -> bool,
+    {
+        let mut i = 0;
+        let mut len = self.len();
+        while i < len {
+            let item = self.get(i)?.unwrap();
+            if !f(item) {
+                self.swap_remove_back(i)?;
+                len -= 1;
+                continue;
+            }
+            i += 1;
+        }
+        Ok(())
+    }
 }
 
 impl<'a, T: State> Deque<T> {
@@ -575,6 +593,82 @@ mod test {
         assert_eq!(*iter.next().unwrap().unwrap(), 4);
         assert_eq!(*iter.next().unwrap().unwrap(), 5);
         assert_eq!(*iter.next().unwrap().unwrap(), 6);
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn deque_retain_empty() {
+        let mut deque: Deque<u32> = Deque::new();
+        deque.retain(|_| true).unwrap();
+
+        let mut iter = deque.iter().unwrap();
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn deque_retain_unordered() {
+        let mut deque: Deque<u32> = Deque::new();
+
+        deque.push_back(1).unwrap();
+        deque.push_back(2).unwrap();
+        deque.push_back(3).unwrap();
+        deque.push_back(4).unwrap();
+        deque.push_back(5).unwrap();
+        deque.push_back(6).unwrap();
+
+        deque.retain_unordered(|x| *x != 3 && *x != 4).unwrap();
+
+        let mut iter = deque.iter().unwrap();
+
+        assert_eq!(*iter.next().unwrap().unwrap(), 1);
+        assert_eq!(*iter.next().unwrap().unwrap(), 2);
+        assert_eq!(*iter.next().unwrap().unwrap(), 6);
+        assert_eq!(*iter.next().unwrap().unwrap(), 5);
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn deque_retain_unordered_overlap() {
+        let mut deque: Deque<u32> = Deque::new();
+
+        deque.push_back(1).unwrap();
+        deque.push_back(2).unwrap();
+        deque.push_back(3).unwrap();
+        deque.push_back(4).unwrap();
+        deque.push_back(5).unwrap();
+        deque.push_back(6).unwrap();
+
+        deque
+            .retain_unordered(|x| *x != 3 && *x != 4 && *x != 6)
+            .unwrap();
+
+        let mut iter = deque.iter().unwrap();
+
+        assert_eq!(*iter.next().unwrap().unwrap(), 1);
+        assert_eq!(*iter.next().unwrap().unwrap(), 2);
+        assert_eq!(*iter.next().unwrap().unwrap(), 5);
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn deque_retain_unordered_single() {
+        let mut deque: Deque<u32> = Deque::new();
+
+        deque.push_back(1).unwrap();
+
+        deque.retain_unordered(|x| *x != 1).unwrap();
+
+        let mut iter = deque.iter().unwrap();
+
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn deque_retain_unordered_none() {
+        let mut deque: Deque<u32> = Deque::new();
+        deque.retain_unordered(|_| true).unwrap();
+
+        let mut iter = deque.iter().unwrap();
         assert!(iter.next().is_none());
     }
 }
