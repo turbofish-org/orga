@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use super::utils::{named_fields, Types};
 use darling::{
     ast,
+    export::NestedMeta,
     usage::{GenericsExt, Options, Purpose, UsesTypeParams},
     uses_type_params, FromDeriveInput, FromField, FromMeta,
 };

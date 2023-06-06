@@ -200,7 +200,7 @@ impl FieldCallFieldReceiver {
     fn is_call(&self) -> bool {
         self.attrs
             .iter()
-            .any(|attr| attr.path.segments.iter().any(|seg| seg.ident == "call"))
+            .any(|attr| attr.path().segments.iter().any(|seg| seg.ident == "call"))
     }
 }
 
