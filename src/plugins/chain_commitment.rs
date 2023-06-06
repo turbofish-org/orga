@@ -12,7 +12,6 @@ use crate::{
     migrate::{MigrateFrom, MigrateInto},
 };
 
-use crate::state::State;
 use crate::{Error, Result};
 use std::ops::Deref;
 

@@ -1,5 +1,3 @@
-
-
 use super::map::Iter as MapIter;
 use super::map::Map;
 use super::map::ReadOnly;
@@ -225,7 +223,7 @@ where
 
 #[cfg(all(test, feature = "merk"))]
 mod tests {
-    use crate::merk::BackingStore;
+    use crate::store::BackingStore;
 
     use super::*;
 

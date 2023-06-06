@@ -1,7 +1,11 @@
 use crate::error::Result;
-use std::ops::{Bound, Deref, DerefMut, RangeBounds};
+use std::{
+    any::Any,
+    ops::{Bound, Deref, DerefMut, RangeBounds},
+};
 use thiserror::Error;
 
+pub mod backingstore;
 pub mod bufstore;
 pub mod iter;
 pub mod log;
@@ -10,6 +14,7 @@ pub mod share;
 #[allow(clippy::module_inception)]
 pub mod store;
 
+pub use backingstore::BackingStore;
 pub use bufstore::{BufStore, Map as BufStoreMap, MapStore};
 pub use iter::Iter;
 pub use null::Empty;
@@ -138,5 +143,15 @@ impl<S: Write, T: DerefMut<Target = S>> Write for T {
     #[inline]
     fn delete(&mut self, key: &[u8]) -> Result<()> {
         self.deref_mut().delete(key)
+    }
+}
+
+pub trait ReadWrite: Read + Write + Any + 'static {
+    fn into_any(self: Box<Self>) -> Box<dyn Any>;
+}
+
+impl<T: Read + Write + 'static> ReadWrite for T {
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
     }
 }

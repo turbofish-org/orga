@@ -6,13 +6,15 @@ use crate::{
     call::Call,
     describe::{Children, Describe, Descriptor, KeyOp},
     encoding::Decode,
-    merk::{BackingStore, ProofStore},
     plugins::{query::QueryPlugin, ABCIPlugin},
     query::Query,
     state::State,
-    store::{self, Read, Shared, Store, Write},
+    store::{self, BackingStore, Read, Shared, Store, Write},
     Error, Result,
 };
+
+#[cfg(feature = "merk")]
+use crate::merk::ProofStore;
 
 #[derive(Debug, Clone)]
 pub enum StepResult<T: Query, U> {
@@ -147,6 +149,7 @@ pub fn join_store(dst: Store, src: Store) -> Result<Store> {
             }
             Ok(Store::new(BackingStore::PartialMapStore(Shared::new(dst))))
         }
+        #[cfg(feature = "merk")]
         (BackingStore::ProofMap(dst), BackingStore::ProofMap(src)) => {
             let dst = dst.into_inner();
             let src = src.into_inner();

@@ -4,13 +4,12 @@ use crate::{
     abci::App,
     call::Call,
     encoding::{Decode, Encode},
-    merk::BackingStore,
     plugins::{ABCIPlugin, QueryPlugin},
     query::Query,
     state::State,
     store::{
-        bufstore::PartialMapStore, log::ReadLog, Error as StoreError, Read, Shared, Store, Write,
-        KV,
+        bufstore::PartialMapStore, log::ReadLog, BackingStore, Error as StoreError, Read, Shared,
+        Store, Write, KV,
     },
     Error, Result,
 };
@@ -46,6 +45,7 @@ impl<T: App + State + Query + Call> Client<ABCIPlugin<QueryPlugin<T>>>
         let store = Store::new(BackingStore::Other(Shared::new(Box::new(ReadLog::new(
             self.store.clone(),
         )))));
+
         let root_bytes = store.get(&[])?.unwrap_or_default();
         let app = ABCIPlugin::<QueryPlugin<T>>::load(store.clone(), &mut root_bytes.as_slice())?;
         app.query(query)?;

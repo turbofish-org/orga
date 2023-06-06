@@ -204,7 +204,7 @@ impl<T: 'static> State for PhantomData<T> {
 
     #[inline]
     fn load(_store: Store, _bytes: &mut &[u8]) -> Result<Self> {
-        Ok(PhantomData::default())
+        Ok(PhantomData)
     }
 }
 

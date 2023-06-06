@@ -1,12 +1,12 @@
 use super::{ABCIStateMachine, ABCIStore, AbciQuery, App, Application, WrappedMerk};
 use crate::call::Call;
 use crate::encoding::Decode;
-use crate::merk::{BackingStore, MerkStore};
+use crate::merk::MerkStore;
 use crate::migrate::MigrateInto;
 use crate::plugins::{ABCICall, ABCIPlugin};
 use crate::query::Query;
 use crate::state::State;
-use crate::store::{Read, Shared, Store, Write};
+use crate::store::{BackingStore, Read, Shared, Store, Write};
 use crate::tendermint::Tendermint;
 use crate::Result;
 use home::home_dir;
