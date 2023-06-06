@@ -17,6 +17,12 @@ pub use tendermint_proto::v0_34::abci as messages;
 mod server {
     use super::*;
     use crate::merk::MerkStore;
+    use crate::store::{BufStore, BufStoreMap, MapStore, Read, Shared, Write, KV};
+    use crate::Error;
+    use log::info;
+    use std::env;
+    use std::net::ToSocketAddrs;
+    use std::sync::mpsc::{self, Receiver, Sender, SyncSender};
     use tendermint_proto::v0_34::abci::request::Value as Req;
     use tendermint_proto::v0_34::abci::response::Value as Res;
 
