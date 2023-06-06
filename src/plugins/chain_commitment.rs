@@ -122,6 +122,7 @@ mod abci {
     use super::super::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
     use super::*;
     use crate::abci::{BeginBlock, EndBlock, InitChain};
+    use crate::state::State;
 
     impl<T> BeginBlock for ChainCommitmentPlugin<T>
     where

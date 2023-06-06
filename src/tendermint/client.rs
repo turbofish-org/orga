@@ -180,8 +180,6 @@ mod tests {
     async fn basic() -> Result<()> {
         spawn_node();
 
-        let create_client = || {};
-
         // TODO: node spawn should return future which waits for node to be ready
         tokio::time::sleep(std::time::Duration::from_secs(15)).await;
 
