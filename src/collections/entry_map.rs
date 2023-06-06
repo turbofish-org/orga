@@ -1,34 +1,29 @@
-use serde::Serialize;
-
 use super::map::Iter as MapIter;
 use super::map::Map;
 use super::map::ReadOnly;
 
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, Terminated};
 use crate::migrate::{MigrateFrom, MigrateInto};
 use std::ops::RangeBounds;
 
 use super::{Entry, Next};
-use crate::call::Call;
-use crate::query::Query;
+use crate::call::FieldCall;
+use crate::query::FieldQuery;
 use crate::state::*;
 use crate::store::*;
 use crate::Result;
 
-#[derive(Query, Call, Encode, Decode, Serialize)]
-#[serde(bound(
-    serialize = "T::Key: Serialize + Terminated + Clone, T::Value: Serialize + State",
-    deserialize = "T::Key: Deserialize<'de> + Terminated + Clone, T::Value: Deserialize<'de> + State",
-))]
-
+#[derive(FieldQuery, FieldCall, Encode, Decode, Describe)]
 pub struct EntryMap<T: Entry> {
     map: Map<T::Key, T::Value>,
 }
 
 impl<T: Entry> State for EntryMap<T>
 where
-    T::Key: Encode + Terminated,
+    T::Key: Encode + Terminated + 'static,
     T::Value: State,
+    Self: 'static,
 {
     fn attach(&mut self, store: Store) -> Result<()> {
         self.map.attach(store)
@@ -76,7 +71,7 @@ impl<T: Entry> EntryMap<T> {
 
 impl<T: Entry> EntryMap<T>
 where
-    T::Key: Encode + Terminated,
+    T::Key: Encode + Terminated + 'static,
     T::Value: State,
 {
     pub fn with_store(store: Store) -> Result<Self> {
@@ -92,25 +87,19 @@ where
 impl<T> EntryMap<T>
 where
     T: Entry,
-    T::Key: Encode + Terminated,
+    T::Key: Encode + Terminated + 'static,
     T::Value: State,
 {
     pub fn insert(&mut self, entry: T) -> Result<()> {
         let (key, value) = entry.into_entry();
         self.map.insert(key, value)
     }
-
-    #[query]
-    pub fn contains_entry_key(&self, entry: T) -> Result<bool> {
-        let (key, _) = entry.into_entry();
-        self.map.contains_key(key)
-    }
 }
 
 impl<T> EntryMap<T>
 where
     T: Entry,
-    T::Key: Encode + Terminated + Clone,
+    T::Key: Encode + Terminated + Clone + 'static,
     T::Value: State,
 {
     pub fn delete(&mut self, entry: T) -> Result<()> {
@@ -121,13 +110,14 @@ where
     }
 }
 
+// #[orga]
 impl<T> EntryMap<T>
 where
     T: Entry,
-    T::Key: Encode + Terminated + Clone,
+    T::Key: Encode + Terminated + Clone + 'static,
     T::Value: State + Eq,
 {
-    #[query]
+    // #[query]
     pub fn contains(&self, entry: T) -> Result<bool> {
         let (key, value) = entry.into_entry();
 
@@ -144,6 +134,14 @@ where
             }
             false => Ok(false),
         }
+    }
+
+    // TODO: this query can be moved to an impl with more permissive bounds
+    // after some query macro changes
+    // #[query]
+    pub fn contains_entry_key(&self, entry: T) -> Result<bool> {
+        let (key, _) = entry.into_entry();
+        self.map.contains_key(key)
     }
 }
 
@@ -167,7 +165,7 @@ where
 
 pub struct Iter<'a, T: Entry>
 where
-    T::Key: Next + Decode + Encode + Terminated + Clone,
+    T::Key: Next + Decode + Encode + Terminated + Clone + 'static,
     T::Value: State + Clone,
 {
     map_iter: MapIter<'a, T::Key, T::Value>,
@@ -175,7 +173,7 @@ where
 
 impl<'a, T: Entry> Iterator for Iter<'a, T>
 where
-    T::Key: Next + Decode + Encode + Terminated + Clone,
+    T::Key: Next + Decode + Encode + Terminated + Clone + 'static,
     T::Value: State + Clone,
 {
     type Item = Result<ReadOnly<T>>;
@@ -195,10 +193,10 @@ where
 impl<T1, T2> MigrateFrom<EntryMap<T1>> for EntryMap<T2>
 where
     T1: Entry,
-    T1::Key: Next + Decode + Encode + Terminated + Clone,
+    T1::Key: Next + Decode + Encode + Terminated + Clone + 'static,
     T1::Value: State + Clone,
     T2: Entry + MigrateFrom<T1>,
-    T2::Key: Encode + Terminated,
+    T2::Key: Encode + Terminated + 'static,
     T2::Value: State,
 {
     fn migrate_from(mut other: EntryMap<T1>) -> Result<Self> {
@@ -225,7 +223,7 @@ where
 
 #[cfg(all(test, feature = "merk"))]
 mod tests {
-    use crate::merk::BackingStore;
+    use crate::store::BackingStore;
 
     use super::*;
 
@@ -241,7 +239,7 @@ mod tests {
 
     fn setup<T: Entry>() -> (Store, EntryMap<T>)
     where
-        T::Key: Terminated,
+        T::Key: Terminated + 'static,
         T::Value: State,
     {
         let backing_store = BackingStore::MapStore(Shared::new(MapStore::new()));

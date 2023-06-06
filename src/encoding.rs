@@ -1,7 +1,6 @@
-use crate::call::Call;
-use crate::client::Client;
+use crate::describe::Describe;
 use crate::migrate::MigrateFrom;
-use crate::query::Query;
+use crate::query::FieldQuery;
 use crate::state::State;
 use crate::store::Store;
 pub use ed::*;
@@ -24,21 +23,18 @@ use std::{
     Default,
     Clone,
     Debug,
-    Call,
-    Query,
+    FieldQuery,
     MigrateFrom,
     PartialEq,
     Hash,
     Eq,
-    Client,
-    Serialize,
+    Describe,
 )]
 pub struct LengthVec<P, T>
 where
     P: Encode + Decode + TryInto<usize> + Terminated + Clone,
     T: Encode + Decode + Terminated,
 {
-    #[serde(skip)]
     len: P,
 
     #[deref]
@@ -91,6 +87,7 @@ impl<P, T> State for LengthVec<P, T>
 where
     P: Encode + Decode + TryInto<usize> + Terminated + Clone,
     T: Encode + Decode + Terminated,
+    Self: 'static,
 {
     fn attach(&mut self, _store: Store) -> crate::Result<()> {
         Ok(())
@@ -150,7 +147,7 @@ pub struct Adapter<T>(pub T);
 
 impl<T> State for Adapter<T>
 where
-    Self: Encode + Decode,
+    Self: Encode + Decode + 'static,
 {
     fn attach(&mut self, _store: crate::store::Store) -> crate::Result<()> {
         Ok(())
@@ -206,7 +203,7 @@ impl<T: FromStr + ToString, const B: u8> Decode for ByteTerminatedString<B, T> {
     }
 }
 
-impl<T: FromStr + ToString, const B: u8> State for ByteTerminatedString<B, T>
+impl<T: FromStr + ToString + 'static, const B: u8> State for ByteTerminatedString<B, T>
 where
     Self: Encode + Decode,
 {
@@ -260,7 +257,7 @@ impl<T: FromStr + ToString> Decode for EofTerminatedString<T> {
 
 impl<T: FromStr + ToString> Terminated for EofTerminatedString<T> {}
 
-impl<T: FromStr + ToString> State for EofTerminatedString<T>
+impl<T: FromStr + ToString + 'static> State for EofTerminatedString<T>
 where
     Self: Encode + Decode,
 {

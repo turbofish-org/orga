@@ -40,7 +40,8 @@ impl<'a, 'b> Loader<'a, 'b> {
         Ok(value)
     }
 
-    pub fn load_child<U>(&mut self) -> Result<U>
+    // TODO: paramterize type with T so we don't have to pass it here
+    pub fn load_child<T, U>(&mut self) -> Result<U>
     where
         U: State,
     {
@@ -54,7 +55,7 @@ impl<'a, 'b> Loader<'a, 'b> {
                     "Expected version {}, got {} for {}",
                     self.version,
                     self.bytes[0],
-                    type_name::<U>()
+                    type_name::<T>()
                 )));
             }
             *self.bytes = &self.bytes[1..];
@@ -72,7 +73,7 @@ impl<'a, 'b> Loader<'a, 'b> {
         U: From<T> + State,
         T: State,
     {
-        let value = self.load_child::<T>()?;
+        let value = self.load_child::<T, T>()?;
         Ok(value.into())
     }
 

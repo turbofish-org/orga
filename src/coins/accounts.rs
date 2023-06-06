@@ -13,6 +13,7 @@ pub struct Accounts<S: Symbol> {
     accounts: Map<Address, Coin<S>>,
 }
 
+#[orga]
 impl<S: Symbol> Accounts<S> {
     #[call]
     pub fn transfer(&mut self, to: Address, amount: Amount) -> Result<()> {

@@ -1,22 +1,16 @@
 use crate::encoding::{Decode, Encode};
 use crate::{Error, Result};
 use std::error::Error as StdError;
+use std::io::Read;
 use std::result::Result as StdResult;
 
-pub use orga_macros::{query, Query};
+pub use orga_macros::{query_block, FieldQuery};
 
+pub const PREFIX_OFFSET: u8 = 0x80;
 pub trait Query {
     type Query: Encode + Decode + std::fmt::Debug;
 
     fn query(&self, query: Self::Query) -> Result<()>;
-}
-
-impl<T: Query> Query for &T {
-    type Query = T::Query;
-
-    fn query(&self, query: Self::Query) -> Result<()> {
-        (*self).query(query)
-    }
 }
 
 impl<T: Query, E: StdError> Query for StdResult<T, E> {
@@ -184,5 +178,99 @@ impl<T: Query, const N: usize> Query for [T; N] {
         }
 
         self[index].query(subquery)
+    }
+}
+
+pub enum Item<T: std::fmt::Debug, U: std::fmt::Debug> {
+    Field(T),
+    Method(U),
+}
+
+impl<T: std::fmt::Debug, U: std::fmt::Debug> std::fmt::Debug for Item<T, U> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Item::Field(field) => field.fmt(f),
+            Item::Method(method) => method.fmt(f),
+        }
+    }
+}
+
+impl<T: Encode + std::fmt::Debug, U: Encode + std::fmt::Debug> Encode for Item<T, U> {
+    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+        match self {
+            Item::Field(field) => {
+                field.encode_into(dest)?;
+            }
+            Item::Method(method) => {
+                let mut bytes = method.encode()?;
+                if !bytes.is_empty() && bytes[0] < PREFIX_OFFSET {
+                    bytes[0] += PREFIX_OFFSET;
+                } else {
+                    return Err(ed::Error::UnencodableVariant);
+                }
+                dest.write_all(&bytes)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn encoding_length(&self) -> ed::Result<usize> {
+        match self {
+            Item::Field(field) => field.encoding_length(),
+            Item::Method(method) => method.encoding_length(),
+        }
+    }
+}
+
+impl<T: Decode + std::fmt::Debug, U: Decode + std::fmt::Debug> Decode for Item<T, U> {
+    fn decode<R: std::io::Read>(input: R) -> ed::Result<Self> {
+        let mut input = input;
+        let mut buf = [0u8; 1];
+        input.read_exact(&mut buf)?;
+        let prefix = buf[0];
+
+        if prefix < PREFIX_OFFSET {
+            let input = buf.chain(input);
+            let field = T::decode(input)?;
+            Ok(Item::Field(field))
+        } else {
+            let bytes = [prefix - PREFIX_OFFSET; 1];
+            let input = bytes.chain(input);
+            let method = U::decode(input)?;
+            Ok(Item::Method(method))
+        }
+    }
+}
+pub trait FieldQuery {
+    type FieldQuery: Encode + Decode + std::fmt::Debug = ();
+
+    fn field_query(&self, query: Self::FieldQuery) -> Result<()>;
+}
+
+pub trait MethodQuery {
+    type MethodQuery: Encode + Decode + std::fmt::Debug = ();
+
+    fn method_query(&self, query: Self::MethodQuery) -> Result<()>;
+}
+
+impl<T> MethodQuery for T {
+    default type MethodQuery = ();
+    default fn method_query(&self, _query: Self::MethodQuery) -> Result<()> {
+        Err(Error::Query("Method not found".to_string()))
+    }
+}
+
+impl<T> Query for T
+where
+    T: FieldQuery + MethodQuery,
+{
+    type Query = Item<T::FieldQuery, T::MethodQuery>;
+
+    fn query(&self, query: Self::Query) -> Result<()> {
+        match query {
+            Item::Field(query) => self.field_query(query),
+            Item::Method(query) => self.method_query(query),
+        }
     }
 }

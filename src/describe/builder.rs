@@ -1,45 +1,41 @@
-use crate::{
-    encoding::{Decode, Encode},
-    state::State,
-    Error, Result,
-};
-use std::{any::type_name, marker::PhantomData, str::FromStr};
+use crate::state::State;
+use std::any::{type_name, TypeId};
 
 use super::{
-    AccessFn, Children, DecodeFn, Describe, Descriptor, DynamicChild, Inspect, KeyOp, NamedChild,
-    ParseFn, Value,
+    ApplyQueryBytesFn, Children, Describe, Descriptor, DynamicChild, Inspect, KeyOp, LoadFn,
+    NamedChild,
 };
 
 pub struct Builder {
+    type_id: TypeId,
     type_name: String,
     state_version: u32,
-    decode: DecodeFn,
-    parse: ParseFn,
+    load: LoadFn,
     children: Option<Children>,
+    meta: Option<Box<Descriptor>>,
 }
 
 impl Builder {
-    pub fn new<T: Encode + Decode + State + Inspect + 'static>() -> Self {
+    pub fn new<T: State + Inspect + 'static>() -> Self {
         Builder {
+            type_id: TypeId::of::<T>(),
             type_name: type_name::<T>().to_string(),
             state_version: 0, // TODO
-            decode: |bytes| Ok(Value::new(T::decode(bytes)?)),
-            parse: |s| maybe_from_str::<T>(s),
+            load: |store, bytes| {
+                T::load(store, bytes)?;
+                Ok(())
+            },
+            // meta: Some(Box::new(<u8 as Describe>::describe())),
+            meta: None,
             children: None,
         }
     }
 
-    pub fn named_child_keyop<T: Describe>(
-        mut self,
-        name: &'static str,
-        keyop: KeyOp,
-        access: AccessFn,
-    ) -> Self {
+    pub fn named_child_keyop<T: Describe>(mut self, name: &'static str, keyop: KeyOp) -> Self {
         let child = NamedChild {
             name: name.to_string(),
             store_key: keyop,
             desc: T::describe(),
-            access: Some(access),
         };
 
         match self.children {
@@ -51,19 +47,36 @@ impl Builder {
         self
     }
 
-    pub fn named_child<T: Describe>(
-        self,
-        name: &'static str,
-        store_suffix: &[u8],
-        access: AccessFn,
-    ) -> Self {
-        self.named_child_keyop::<T>(name, KeyOp::Append(store_suffix.to_vec()), access)
+    pub fn named_child<T: Describe>(self, name: &'static str, store_suffix: &[u8]) -> Self {
+        self.named_child_keyop::<T>(name, KeyOp::Append(store_suffix.to_vec()))
     }
 
-    pub fn dynamic_child<K: Describe, V: Describe>(mut self) -> Self {
+    pub fn named_child_from_state<T: State + Describe, U: Describe>(
+        self,
+        name: &'static str,
+    ) -> Self {
+        if let Some(keyop) = T::field_keyop(name) {
+            self.named_child_keyop::<U>(name, keyop)
+        } else {
+            self
+        }
+    }
+
+    pub fn meta<T: Describe>(self) -> Self {
+        Builder {
+            meta: Some(Box::new(T::describe())),
+            ..self
+        }
+    }
+
+    pub fn dynamic_child<K: Describe, V: Describe>(
+        mut self,
+        apply_query_bytes: ApplyQueryBytesFn,
+    ) -> Self {
         let child = DynamicChild {
             key_desc: Box::new(K::describe()),
             value_desc: Box::new(V::describe()),
+            apply_query_bytes,
         };
 
         match self.children {
@@ -76,57 +89,13 @@ impl Builder {
 
     pub fn build(self) -> Descriptor {
         Descriptor {
+            type_id: self.type_id,
             type_name: self.type_name,
             state_version: self.state_version,
-            decode: Some(self.decode),
-            parse: Some(self.parse),
+            load: Some(self.load),
             children: self.children.unwrap_or_default(),
+            meta: self.meta,
         }
-    }
-
-    pub fn access<T: 'static, U: Encode + Decode + Inspect + 'static>(
-        value: &Value,
-        access: fn(T) -> U,
-    ) -> Result<Option<Value>> {
-        let cloned = value.to_any()?;
-        let parent: T = *cloned.downcast().unwrap();
-        let child = access(parent);
-        Ok(Some(Value::new(child)))
-    }
-
-    pub fn maybe_access<T: 'static, U: Encode + Decode + Inspect + 'static>(
-        value: &Value,
-        access: fn(T) -> Option<U>,
-    ) -> Result<Option<Value>> {
-        let cloned = value.to_any()?;
-        let parent: T = *cloned.downcast().unwrap();
-        Ok(access(parent).map(|child| Value::new(child)))
-    }
-}
-
-fn maybe_from_str<T>(s: &str) -> Result<Option<Value>> {
-    FromStrWrapper::<T>::maybe_from_str(s)
-}
-
-trait MaybeFromStr {
-    // TODO: Result
-    fn maybe_from_str(s: &str) -> Result<Option<Value>>;
-}
-
-struct FromStrWrapper<T>(PhantomData<T>);
-
-impl<T> MaybeFromStr for FromStrWrapper<T> {
-    default fn maybe_from_str(_s: &str) -> Result<Option<Value>> {
-        Ok(None)
-    }
-}
-
-impl<T: FromStr + Inspect + 'static> MaybeFromStr for FromStrWrapper<T>
-where
-    Error: From<<T as FromStr>::Err>,
-{
-    fn maybe_from_str(s: &str) -> Result<Option<Value>> {
-        Ok(Some(Value::new(T::from_str(s)?)))
     }
 }
 

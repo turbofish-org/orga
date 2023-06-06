@@ -1,26 +1,14 @@
-use std::clone::Clone;
-use std::env;
-use std::net::ToSocketAddrs;
-use std::sync::mpsc::{self, Receiver, Sender, SyncSender};
-
-use log::info;
-
 use crate::call::Call;
 use crate::query::Query;
 use crate::state::State;
-use crate::store::{BufStore, BufStoreMap, MapStore, Read, Shared, Write, KV};
-use crate::{Error, Result};
+
+use crate::Result;
 #[cfg(feature = "abci")]
 mod node;
 #[cfg(feature = "abci")]
 pub use node::*;
 
 pub mod prost;
-
-#[cfg(feature = "abci")]
-pub mod tendermint_client;
-#[cfg(feature = "abci")]
-pub use tendermint_client::TendermintClient;
 
 use messages::*;
 pub use tendermint_proto::v0_34::abci as messages;
@@ -29,6 +17,12 @@ pub use tendermint_proto::v0_34::abci as messages;
 mod server {
     use super::*;
     use crate::merk::MerkStore;
+    use crate::store::{BufStore, BufStoreMap, MapStore, Read, Shared, Write, KV};
+    use crate::Error;
+    use log::info;
+    use std::env;
+    use std::net::ToSocketAddrs;
+    use std::sync::mpsc::{self, Receiver, Sender, SyncSender};
     use tendermint_proto::v0_34::abci::request::Value as Req;
     use tendermint_proto::v0_34::abci::response::Value as Res;
 

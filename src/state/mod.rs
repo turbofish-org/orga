@@ -1,3 +1,4 @@
+use crate::describe::KeyOp;
 use crate::encoding::{Decode, Encode};
 use crate::store::Store;
 use crate::{Error, Result};
@@ -15,10 +16,16 @@ use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
-pub trait State: Sized {
+pub trait State: Sized + 'static {
     fn attach(&mut self, store: Store) -> Result<()>;
+
     fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()>;
+
     fn load(store: Store, bytes: &mut &[u8]) -> Result<Self>;
+
+    fn field_keyop(_field_name: &str) -> Option<KeyOp> {
+        None
+    }
 }
 
 macro_rules! state_impl {
@@ -184,7 +191,7 @@ impl<T: State> State for RefCell<T> {
     }
 }
 
-impl<T> State for PhantomData<T> {
+impl<T: 'static> State for PhantomData<T> {
     #[inline]
     fn attach(&mut self, _store: Store) -> Result<()> {
         Ok(())
@@ -197,7 +204,7 @@ impl<T> State for PhantomData<T> {
 
     #[inline]
     fn load(_store: Store, _bytes: &mut &[u8]) -> Result<Self> {
-        Ok(PhantomData::default())
+        Ok(PhantomData)
     }
 }
 
@@ -270,26 +277,36 @@ mod tests {
     use crate::orga;
     use crate::store::Store;
 
-    #[orga]
-    struct ExplicitPrefixes {
+    #[orga(channels(Alpha, Beta))]
+    pub struct ExplicitPrefixes {
         a: u32,
 
         #[state(prefix(6))]
         store: Store,
 
+        #[orga(channel(Alpha))]
         b: u32,
+
+        #[orga(channel(Beta))]
+        b: u64,
 
         #[state(absolute_prefix(1))]
         other_store: Store,
     }
 
+    #[orga(channels(Alpha, Beta))]
+    impl ExplicitPrefixes {
+        pub fn _foo(&self) {}
+    }
+
     #[test]
     fn explicit_prefixes() -> Result<()> {
         let store = Store::default();
-        let mut value = <(ExplicitPrefixes, u32)>::default();
+        let mut value = <(ExplicitPrefixesAlpha, u32)>::default();
         value.attach(store)?;
         assert_eq!(value.0.store.prefix(), &[0, 6]);
         assert_eq!(value.0.other_store.prefix(), &[1]);
+        value.0._foo();
         Ok(())
     }
 }

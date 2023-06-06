@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::ops::RangeBounds;
 
-use super::{Iter, Read, Shared, Write, KV};
+use super::{BackingStore, Iter, Read, Shared, Write, KV};
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, Terminated};
 use crate::migrate::MigrateFrom;
 use crate::state::State;
@@ -13,10 +14,7 @@ use crate::{Error, Result};
 /// The default backing store used as the type parameter given to `Store`. This
 /// is used to prevent generic parameters bubbling up to the application level
 /// for state types when they often all use the same backing store.
-#[cfg(any(feature = "merk", feature = "merk-verify"))]
-pub type DefaultBackingStore = crate::merk::BackingStore;
-#[cfg(all(not(feature = "merk"), not(feature = "merk-verify")))]
-pub type DefaultBackingStore = Shared<super::MapStore>;
+pub type DefaultBackingStore = BackingStore;
 
 /// Wraps a "backing store" (an implementation of `Read` and possibly `Write`),
 /// and applies all operations to a certain part of the backing store's keyspace
@@ -33,20 +31,34 @@ pub struct Store<S = DefaultBackingStore> {
     store: Shared<S>,
 }
 
+impl Store {
+    pub fn with_map_store() -> Self {
+        use super::MapStore;
+        Self::new(BackingStore::MapStore(Shared::new(MapStore::new())))
+    }
+
+    pub fn with_partial_map_store() -> Self {
+        use super::bufstore::PartialMapStore;
+        Self::new(BackingStore::PartialMapStore(Shared::new(
+            PartialMapStore::new(),
+        )))
+    }
+}
+
 impl MigrateFrom for Store {
     fn migrate_from(other: Self) -> Result<Self> {
         Ok(other)
     }
 }
 
-// impl<S> Describe for Store<S>
-// where
-//     Self: State + 'static,
-// {
-//     fn describe() -> crate::describe::Descriptor {
-//         crate::describe::Builder::new::<Self>().build()
-//     }
-// }
+impl<S> Describe for Store<S>
+where
+    Self: State + 'static,
+{
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>().build()
+    }
+}
 
 impl<S> Encode for Store<S> {
     fn encode_into<W: std::io::Write>(&self, _dest: &mut W) -> ed::Result<()> {

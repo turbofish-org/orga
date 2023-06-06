@@ -17,7 +17,7 @@ pub use map::{ChildMut, Ref};
 ///
 /// This is useful when it is conceptually easier to think about values as
 /// singular structs while storing them in a map as a key/value pair.
-pub trait Entry {
+pub trait Entry: 'static {
     /// Represents the key type for the key/value pair.
     type Key: Encode + Decode;
 

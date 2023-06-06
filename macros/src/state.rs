@@ -6,6 +6,7 @@ use darling::{
     usage::{GenericsExt, Options, Purpose, UsesTypeParams},
     uses_type_params, FromDeriveInput, FromField, FromMeta,
 };
+use itertools::Itertools;
 use proc_macro::TokenStream;
 
 use proc_macro2::TokenStream as TokenStream2;
@@ -201,7 +202,7 @@ impl StateInputReceiver {
                     if field.skip {
                         quote! { #name: loader.load_skipped_child()? }
                     } else {
-                        quote! { #name: loader.load_child()? }
+                        quote! { #name: loader.load_child::<Self, _>()? }
                     }
                 }
             });
@@ -233,6 +234,29 @@ impl StateInputReceiver {
         }
     }
 
+    fn field_keyop_method(&self) -> TokenStream2 {
+        let Types { keyop_ty, .. } = Default::default();
+        let arms = self
+            .state_fields()
+            .iter()
+            .map(|(name, field)| {
+                let prefix = field.prefix();
+                quote! {
+                    stringify!(#name) => Some(#prefix),
+                }
+            })
+            .collect_vec();
+
+        quote! {
+            fn field_keyop(field_name: &str) -> Option<#keyop_ty> {
+                match field_name {
+                    #(#arms)*
+                    _ => None,
+                }
+            }
+        }
+    }
+
     fn bounds(&self) -> TokenStream2 {
         let Types {
             terminated_trait,
@@ -240,7 +264,8 @@ impl StateInputReceiver {
             ..
         } = Default::default();
         let n_fields = self.state_fields().len();
-        self.state_fields()
+        let field_bounds: TokenStream2 = self
+            .state_fields()
             .iter()
             .enumerate()
             .map(|(i, (_name, field))| {
@@ -260,7 +285,9 @@ impl StateInputReceiver {
                 };
                 quote! { #maybe_term_bound #maybe_state_bound }
             })
-            .collect()
+            .collect();
+
+        quote! { Self: 'static, #field_bounds }
     }
 
     fn state_fields(&self) -> Vec<(TokenStream2, StateFieldReceiver)> {
@@ -315,6 +342,7 @@ impl ToTokens for StateInputReceiver {
         let attach_method = self.attach_method();
         let flush_method = self.flush_method();
         let load_method = self.load_method();
+        let field_keyop_method = self.field_keyop_method();
 
         let bounds = self.bounds();
 
@@ -329,6 +357,7 @@ impl ToTokens for StateInputReceiver {
                 #attach_method
                 #flush_method
                 #load_method
+                #field_keyop_method
             }
         });
     }
@@ -364,6 +393,29 @@ impl StateFieldReceiver {
 enum Prefix {
     Relative(Vec<u8>),
     Absolute(Vec<u8>),
+}
+
+impl ToTokens for Prefix {
+    fn to_tokens(&self, tokens: &mut TokenStream2) {
+        // This implementation expects the keyop to be used as a
+        // describe::KeyOp. The store prefixing in `attach` parses the Prefix
+        // enum directly instead of using the ToTokens trait.
+
+        let Types { keyop_ty, .. } = Default::default();
+
+        match self {
+            Prefix::Relative(bytes) => {
+                let byte_seq = bytes.iter().map(|b| quote! {#b});
+                let prefix = quote! {vec![#(#byte_seq),*]};
+                tokens.extend(quote! { #keyop_ty::Append(#prefix) })
+            }
+            Prefix::Absolute(bytes) => {
+                let byte_seq = bytes.iter().map(|b| quote! {#b});
+                let prefix = quote! {vec![#(#byte_seq),*]};
+                tokens.extend(quote! { #keyop_ty::Absolute(#prefix) })
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

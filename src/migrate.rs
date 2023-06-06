@@ -130,12 +130,12 @@ mod tests {
         encoding::{Decode, Encode},
         orga,
         state::State,
-        store::{DefaultBackingStore, MapStore, Read, Shared, Store, Write},
+        store::{BackingStore, MapStore, Read, Shared, Store, Write},
         Result,
     };
 
     #[orga(version = 2)]
-    #[derive(Clone)]
+    #[derive(Clone, PartialEq, Eq)]
     struct Number {
         #[orga(version(V0))]
         value: u16,
@@ -160,7 +160,7 @@ mod tests {
     }
 
     #[orga(version = 1)]
-    #[derive(Entry)]
+    #[derive(Entry, Eq, PartialEq)]
     struct NumberEntry {
         #[key]
         index: u8,
@@ -212,10 +212,7 @@ mod tests {
     }
 
     fn create_foo_v0_store() -> Result<Store> {
-        #[cfg(any(feature = "merk", feature = "merk-verify"))]
-        let mut store = Store::new(DefaultBackingStore::MapStore(Shared::new(MapStore::new())));
-        #[cfg(all(not(feature = "merk"), not(feature = "merk-verify")))]
-        let mut store = Store::new(DefaultBackingStore::new(MapStore::new()));
+        let mut store = Store::new(BackingStore::MapStore(Shared::new(MapStore::new())));
 
         let mut foo = FooV0 {
             bar: 42,

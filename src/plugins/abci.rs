@@ -2,6 +2,7 @@ use crate::abci::{prost::Adapter, AbciQuery, App};
 use crate::call::Call;
 use crate::collections::{Entry, EntryMap, Map};
 use crate::context::Context;
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::query::Query;
@@ -488,15 +489,25 @@ impl<T: State> State for ABCIPlugin<T> {
         let mut loader = crate::state::Loader::new(store, bytes, 0);
 
         Ok(Self {
-            inner: loader.load_child()?,
+            inner: loader.load_child::<Self, _>()?,
             validator_updates: None,
-            updates: loader.load_child()?,
-            current_vp: Rc::new(RefCell::new(Some(loader.load_child()?))),
-            cons_key_by_op_addr: Rc::new(RefCell::new(Some(loader.load_child()?))),
+            updates: loader.load_child::<Self, _>()?,
+            current_vp: Rc::new(RefCell::new(Some(loader.load_child::<Self, _>()?))),
+            cons_key_by_op_addr: Rc::new(RefCell::new(Some(loader.load_child::<Self, _>()?))),
             events: None,
             time: None,
             logs: None,
         })
+    }
+}
+
+impl<T: State + Describe> Describe for ABCIPlugin<T> {
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>()
+            .meta::<T>()
+            .named_child::<T>("inner", &[0])
+            // TODO: other fields
+            .build()
     }
 }
 

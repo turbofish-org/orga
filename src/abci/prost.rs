@@ -7,7 +7,7 @@ use std::io::{Error as IOError, ErrorKind as IOErrorKind, Read, Write};
 #[derive(Debug)]
 pub struct Adapter<T: Message + Default>(pub(crate) T);
 
-impl<T: Message + Default> State for Adapter<T> {
+impl<T: Message + Default + 'static> State for Adapter<T> {
     fn attach(&mut self, _store: Store) -> crate::Result<()> {
         Ok(())
     }

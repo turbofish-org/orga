@@ -19,6 +19,9 @@ pub use chain_commitment::{ChainCommitmentPlugin, ChainId};
 pub mod sdk_compat;
 pub use sdk_compat::{ConvertSdkTx, SdkCompatPlugin};
 
+pub mod query;
+pub use query::QueryPlugin;
+
 macro_rules! type_chain {
     ($name:tt<$($pfx_params:ident,)* _ $(,$sfx_params:ident)*>, $($tail:tt)*) => {
         $name<$($pfx_params,)* type_chain!($($tail)*), $($sfx_params),*>
@@ -29,10 +32,11 @@ macro_rules! type_chain {
     };
 }
 
-pub type DefaultPlugins<S, T, const ID: &'static str> = type_chain! {
+pub type DefaultPlugins<S, T> = type_chain! {
+    QueryPlugin<_>,
     SdkCompatPlugin<S, _>,
     SignerPlugin<_>,
-    ChainCommitmentPlugin<_, ID>,
+    ChainCommitmentPlugin<_>,
     NoncePlugin<_>,
     PayablePlugin<_>,
     FeePlugin<S, _>,
