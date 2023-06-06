@@ -50,6 +50,7 @@ where
         }
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn sub<U2>(self, sub: fn(T) -> U2) -> AppClient<T, U2, C, S, W> {
         AppClient {
             _pd: PhantomData,
@@ -259,10 +260,9 @@ mod tests {
         }
     }
 
-    #[ignore]
-    #[tokio::test]
-    async fn appclient() -> Result<()> {
-        type App = ABCIPlugin<DefaultPlugins<Simp, Foo>>;
+    type App = ABCIPlugin<DefaultPlugins<Simp, Foo>>;
+
+    fn setup() -> Result<MockClient<App>> {
         let mut store = Store::with_map_store();
         let mut app = App::default();
 
@@ -307,7 +307,13 @@ mod tests {
         app.flush(&mut bytes)?;
         store.put(vec![], bytes)?;
 
-        let mut mock_client = MockClient::<App>::with_store(store);
+        Ok(MockClient::<App>::with_store(store))
+    }
+
+    #[ignore]
+    #[tokio::test]
+    async fn appclient() -> Result<()> {
+        let mut mock_client = setup()?;
 
         {
             let client = AppClient::<Foo, Foo, _, _, _>::new(
@@ -317,6 +323,16 @@ mod tests {
 
             let bar_b = client.query(|app| Ok(app.bar.b)).await?;
             assert_eq!(bar_b, 8);
+
+            {
+                // TODO: if bar doesn't drop, other queries will fail because
+                // Bar holds on to a reference to the store. this should isntead
+                // be locked at a different level so we can do concurrent
+                // queries with the same client, and either join the values
+                // separately or e.g. wait for equivalent queries to finish
+                let bar = client.query(|app| Ok(app.bar)).await?;
+                assert_eq!(bar.b, 8);
+            }
 
             let value = client
                 .query(|app| app.e.get(12)?.unwrap().get_from_map(14, 2))
@@ -358,53 +374,7 @@ mod tests {
     #[ignore]
     #[tokio::test]
     async fn sub() -> Result<()> {
-        type App = ABCIPlugin<DefaultPlugins<Simp, Foo>>;
-        let mut store = Store::with_map_store();
-        let mut app = App::default();
-
-        {
-            app.inner.inner.borrow_mut().inner.inner.chain_id = b"foo".to_vec().try_into()?;
-            let inner_app = &mut app.inner.inner.borrow_mut().inner.inner.inner.inner.inner;
-
-            let mut inner_map = Map::<u32, u64>::default();
-            let mut deque_inner_map = Map::<u32, Bar>::default();
-            inner_map.insert(16, 32)?;
-            deque_inner_map.insert(
-                13,
-                Bar {
-                    a: 3,
-                    b: 4,
-                    ..Default::default()
-                },
-            )?;
-            inner_app.b = 42;
-            inner_app.deque.push_back(deque_inner_map)?;
-            inner_app.e.insert(
-                12,
-                Bar {
-                    a: 1,
-                    b: 2,
-                    c: inner_map,
-                },
-            )?;
-            inner_app.e.insert(
-                13,
-                Bar {
-                    a: 3,
-                    b: 4,
-                    c: Default::default(),
-                },
-            )?;
-            inner_app.bar.b = 8;
-        }
-        app.attach(store.clone())?;
-
-        let mut bytes = vec![];
-        app.flush(&mut bytes)?;
-        store.put(vec![], bytes)?;
-
-        let mut mock_client = MockClient::<App>::with_store(store);
-
+        let mut mock_client = setup()?;
         let bar_client = AppClient::<Foo, Foo, _, _, _>::new(
             &mut mock_client,
             DerivedKey::new(b"alice").unwrap(),
@@ -424,72 +394,4 @@ mod tests {
 
         Ok(())
     }
-
-    // #[test]
-    // #[serial]
-    // fn basic_call_client() -> Result<()> {
-    //     let mut client = Client::<Foo, _>::new();
-
-    //     let call_bytes = client.call(|foo| foo.bar.insert_into_map(6, 14))?;
-
-    //     assert_eq!(
-    //         call_bytes.as_slice(),
-    //         &[17, 65, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 14]
-    //     );
-    //     let _call = <Foo as Call>::Call::decode(call_bytes.as_slice())?;
-
-    //     Ok(())
-    // }
-
-    // #[test]
-    // fn resolve_child_encoding() -> Result<()> {
-    //     let desc = Foo::describe();
-    //     let foo = Foo::default();
-    //     let mut bytes_before = vec![];
-    //     foo.flush(&mut bytes_before)?;
-
-    //     let mut foo = Foo::default();
-    //     foo.d = 42;
-    //     let mut bytes_after = vec![];
-    //     foo.flush(&mut bytes_after)?;
-
-    //     let store_op = StoreOp {
-    //         key: vec![],
-    //         old_value: Some(bytes_before),
-    //         new_value: Some(bytes_after),
-    //     };
-
-    //     let tid = TypeId::of::<u64>();
-    //     let store_key = desc.resolve_by_type_id(tid, store_op, vec![])?;
-
-    //     assert_eq!(store_key, vec![3]);
-
-    //     Ok(())
-    // }
-
-    // #[test]
-    // fn dynamic_child() -> Result<()> {
-    //     let desc = Foo::describe();
-    //     let bar = Bar::default();
-    //     let mut bytes_before = vec![];
-    //     bar.flush(&mut bytes_before)?;
-
-    //     let mut bar = Bar::default();
-    //     bar.b = 42;
-    //     let mut bytes_after = vec![];
-    //     bar.flush(&mut bytes_after)?;
-
-    //     let store_op = StoreOp {
-    //         key: vec![4, 0, 0, 0, 7],
-    //         old_value: Some(bytes_before),
-    //         new_value: Some(bytes_after),
-    //     };
-
-    //     let tid = TypeId::of::<u64>();
-    //     let store_key = desc.resolve_by_type_id(tid, store_op, vec![])?;
-
-    //     assert_eq!(store_key, vec![4, 0, 0, 0, 7, 1]);
-
-    //     Ok(())
-    // }
 }
