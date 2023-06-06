@@ -8,7 +8,7 @@ fn is_key_field(field: &syn::Field) -> bool {
     let maybe_keys: Vec<String> = field
         .attrs
         .iter()
-        .map(|attr| attr.path.get_ident().unwrap().to_string())
+        .map(|attr| attr.path().get_ident().unwrap().to_string())
         .collect();
     let key = "key";
 

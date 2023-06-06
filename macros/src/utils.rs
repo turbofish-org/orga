@@ -101,23 +101,19 @@ pub fn _relevant_impls(names: Vec<&Ident>, source: &File) -> Vec<ItemImpl> {
         .collect()
 }
 
-pub fn _relevant_methods(
-    name: &Ident,
-    attr: &str,
-    source: &File,
-) -> Vec<(ImplItemMethod, ItemImpl)> {
+pub fn _relevant_methods(name: &Ident, attr: &str, source: &File) -> Vec<(ImplItemFn, ItemImpl)> {
     let get_methods = |item: ItemImpl| -> Vec<_> {
         item.items
             .iter()
             .filter_map(|item| match item {
-                ImplItem::Method(method) => Some(method),
+                ImplItem::Fn(method) => Some(method),
                 _ => None,
             })
             .filter(|method| {
                 method
                     .attrs
                     .iter()
-                    .find(|a| a.path.is_ident(&attr))
+                    .find(|a| a.path().is_ident(&attr))
                     .is_some()
             })
             .filter(|method| matches!(method.vis, Visibility::Public(_)))
@@ -255,7 +251,7 @@ impl Default for Types {
 }
 
 pub fn is_attr_with_ident(attr: &Attribute, ident: &str) -> bool {
-    attr.path
+    attr.path()
         .get_ident()
         .map_or(false, |attr_ident| attr_ident.to_string() == ident)
 }
@@ -271,7 +267,7 @@ pub fn to_snake_case(ident: &Ident) -> Ident {
 pub fn impl_item_attrs(item: &ImplItem) -> Vec<Attribute> {
     use ImplItem::*;
     match item {
-        Method(method) => method.attrs.clone(),
+        Fn(method) => method.attrs.clone(),
         Const(constant) => constant.attrs.clone(),
         Type(ty) => ty.attrs.clone(),
         Macro(macro_) => macro_.attrs.clone(),

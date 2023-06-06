@@ -11,11 +11,11 @@ use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{format_ident, quote};
 use syn::*;
 
-fn call_methods(item: &ItemImpl) -> Vec<&ImplItemMethod> {
+fn call_methods(item: &ItemImpl) -> Vec<&ImplItemFn> {
     item.items
         .iter()
         .filter_map(|item| {
-            if let ImplItem::Method(method) = item {
+            if let ImplItem::Fn(method) = item {
                 method
                     .attrs
                     .iter()
@@ -36,7 +36,7 @@ fn self_ty_ident(item: &ItemImpl) -> Ident {
     }
 }
 
-fn method_args(method: &ImplItemMethod) -> Vec<Type> {
+fn method_args(method: &ImplItemFn) -> Vec<Type> {
     method
         .sig
         .inputs
@@ -197,7 +197,7 @@ fn method_call_impl(tokens: &mut TokenStream2, item: &ItemImpl) {
 
 fn strip_call_attr(item: &mut ItemImpl) {
     for item in item.items.iter_mut() {
-        if let ImplItem::Method(method) = item {
+        if let ImplItem::Fn(method) = item {
             method
                 .attrs
                 .retain(|attr| !is_attr_with_ident(attr, "call"));
@@ -230,7 +230,7 @@ fn _add_tracing(item_impl: &mut ItemImpl) {
     } = Types::default();
     let mut call_index: u8 = 0x40;
     for item in item_impl.items.iter_mut() {
-        if let ImplItem::Method(method) = item {
+        if let ImplItem::Fn(method) = item {
             if method
                 .attrs
                 .iter()
@@ -326,8 +326,7 @@ fn call_builder(tokens: &mut TokenStream2, item: &ItemImpl) {
     }
 }
 
-pub fn call_block(args: TokenStream, input: TokenStream) -> TokenStream {
-    let _attr_args = parse_macro_input!(args as AttributeArgs);
+pub fn call_block(_args: TokenStream, input: TokenStream) -> TokenStream {
     let mut item = syn::parse::<ItemImpl>(input.clone()).unwrap();
     // add_tracing(&mut item);
     let call_methods = call_methods(&item);

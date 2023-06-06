@@ -8,11 +8,11 @@ use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{format_ident, quote};
 use syn::*;
 
-fn query_methods(item: &ItemImpl) -> Vec<&ImplItemMethod> {
+fn query_methods(item: &ItemImpl) -> Vec<&ImplItemFn> {
     item.items
         .iter()
         .filter_map(|item| {
-            if let ImplItem::Method(method) = item {
+            if let ImplItem::Fn(method) = item {
                 method
                     .attrs
                     .iter()
@@ -33,7 +33,7 @@ fn self_ty_ident(item: &ItemImpl) -> Ident {
     }
 }
 
-fn method_args(method: &ImplItemMethod) -> Vec<Type> {
+fn method_args(method: &ImplItemFn) -> Vec<Type> {
     method
         .sig
         .inputs
@@ -208,7 +208,7 @@ fn method_query_impl(tokens: &mut TokenStream2, item: &ItemImpl) {
 
 fn strip_query_attr(item: &mut ItemImpl) {
     for item in item.items.iter_mut() {
-        if let ImplItem::Method(method) = item {
+        if let ImplItem::Fn(method) = item {
             method
                 .attrs
                 .retain(|attr| !is_attr_with_ident(attr, "query"));
@@ -241,7 +241,7 @@ fn add_tracing(item_impl: &mut ItemImpl) {
     } = Types::default();
     let mut query_index: u8 = 0x80;
     for item in item_impl.items.iter_mut() {
-        if let ImplItem::Method(method) = item {
+        if let ImplItem::Fn(method) = item {
             if method
                 .attrs
                 .iter()
@@ -293,8 +293,7 @@ fn add_tracing(item_impl: &mut ItemImpl) {
     }
 }
 
-pub fn query_block(args: TokenStream, input: TokenStream) -> TokenStream {
-    let _attr_args = parse_macro_input!(args as AttributeArgs);
+pub fn query_block(_args: TokenStream, input: TokenStream) -> TokenStream {
     let mut item = syn::parse::<ItemImpl>(input.clone()).unwrap();
     add_tracing(&mut item);
     let query_methods = query_methods(&item);

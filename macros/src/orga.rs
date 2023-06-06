@@ -1,7 +1,9 @@
 use crate::utils::{impl_item_attrs, path_to_ident};
 
 use super::utils::is_attr_with_ident;
-use darling::{ast, FromAttributes, FromDeriveInput, FromField, FromMeta, ToTokens};
+use darling::{
+    ast, export::NestedMeta, FromAttributes, FromDeriveInput, FromField, FromMeta, ToTokens,
+};
 use itertools::Itertools;
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
@@ -332,7 +334,7 @@ struct OrgaMethodAttr {
     channel: Option<HashMap<Ident, ()>>,
 }
 
-fn expand_item_impl(attr_args: AttributeArgs, item: ItemImpl) -> TokenStream {
+fn expand_item_impl(attr_args: Vec<NestedMeta>, item: ItemImpl) -> TokenStream {
     let attrs = OrgaImplAttrReceiver::from_list(&attr_args).unwrap();
     let channels = attrs
         .channels
@@ -383,7 +385,7 @@ fn expand_item_impl(attr_args: AttributeArgs, item: ItemImpl) -> TokenStream {
 }
 
 pub fn orga(args: TokenStream, input: TokenStream) -> TokenStream {
-    let attr_args = parse_macro_input!(args as AttributeArgs);
+    let attr_args = NestedMeta::parse_meta_list(args.into()).unwrap();
     if let Ok(item_impl) = syn::parse::<ItemImpl>(input.clone()) {
         return expand_item_impl(attr_args, item_impl);
     }
