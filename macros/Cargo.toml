@@ -2,7 +2,7 @@
 name = "orga-macros"
 version = "0.3.1"
 authors = ["Matt Bell <mappum@gmail.com>"]
-edition = "2018"
+edition = "2021"
 description = "Macros for the orga crate"
 license = "MIT"
 
