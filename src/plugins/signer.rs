@@ -9,13 +9,13 @@ use crate::encoding::{Decode, Encode};
 use crate::migrate::MigrateFrom;
 use crate::orga;
 
+use crate::call::Call;
 use crate::state::State;
-use crate::{call::Call};
 use crate::{Error, Result};
 
 use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
 use serde::Serialize;
-use std::ops::{Deref};
+use std::ops::Deref;
 
 #[orga(skip(Call))]
 pub struct SignerPlugin<T> {

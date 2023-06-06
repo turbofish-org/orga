@@ -6,7 +6,6 @@ use crate::store::ReadWrite;
 use crate::store::{bufstore::PartialMapStore, Empty, MapStore, Read, Shared, Write, KV};
 use crate::{Error, Result};
 
-
 #[cfg(feature = "merk-full")]
 type WrappedMerkStore = Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>;
 

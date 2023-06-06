@@ -5,12 +5,10 @@ use crate::coins::{Address, Symbol};
 
 use crate::encoding::{Decode, Encode};
 
-
 use crate::state::State;
 use crate::{Error, Result};
 
 use std::marker::PhantomData;
-
 
 pub const MAX_CALL_SIZE: usize = 65_535;
 pub const NATIVE_CALL_FLAG: u8 = 0xff;

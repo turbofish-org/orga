@@ -14,7 +14,6 @@ use crate::store::*;
 use crate::{Error, Result};
 use ed::*;
 
-
 #[derive(Clone, Debug)]
 pub struct MapKey<K> {
     inner: K,
