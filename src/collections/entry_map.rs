@@ -225,7 +225,7 @@ where
 
 #[cfg(all(test, feature = "merk"))]
 mod tests {
-    use crate::merk::BackingStore;
+    use crate::store::BackingStore;
 
     use super::*;
 

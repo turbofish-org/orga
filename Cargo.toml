@@ -70,6 +70,7 @@ pretty_env_logger = "0.5.0"
 features = ["abci", "merk/full"]
 
 [features]
+default = ["tokio/full"]
 abci = ["abci2", "tendermint", "tendermint-rpc", "is_executable", "home", "secp256k1/rand-std", "tokio", "tonic", "ibc-proto/server"]
 merk-verify = ["merk/verify"]
 merk-full = ["merk/full", "ics23"]

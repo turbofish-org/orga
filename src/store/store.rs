@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::ops::RangeBounds;
 
-use super::{Iter, Read, Shared, Write, KV};
+use super::{BackingStore, Iter, Read, Shared, Write, KV};
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, Terminated};
 use crate::migrate::MigrateFrom;
@@ -14,10 +14,7 @@ use crate::{Error, Result};
 /// The default backing store used as the type parameter given to `Store`. This
 /// is used to prevent generic parameters bubbling up to the application level
 /// for state types when they often all use the same backing store.
-#[cfg(any(feature = "merk", feature = "merk-verify"))]
-pub type DefaultBackingStore = crate::merk::BackingStore;
-#[cfg(all(not(feature = "merk"), not(feature = "merk-verify")))]
-pub type DefaultBackingStore = Shared<super::MapStore>;
+pub type DefaultBackingStore = BackingStore;
 
 /// Wraps a "backing store" (an implementation of `Read` and possibly `Write`),
 /// and applies all operations to a certain part of the backing store's keyspace
@@ -35,26 +32,16 @@ pub struct Store<S = DefaultBackingStore> {
 }
 
 impl Store {
-    #[cfg(feature = "merk")]
     pub fn with_map_store() -> Self {
         use super::MapStore;
-        Self::new(crate::merk::BackingStore::MapStore(Shared::new(
-            MapStore::new(),
-        )))
+        Self::new(BackingStore::MapStore(Shared::new(MapStore::new())))
     }
 
-    #[cfg(feature = "merk")]
     pub fn with_partial_map_store() -> Self {
-        use crate::store::bufstore::PartialMapStore;
-        Self::new(crate::merk::BackingStore::PartialMapStore(Shared::new(
+        use super::bufstore::PartialMapStore;
+        Self::new(BackingStore::PartialMapStore(Shared::new(
             PartialMapStore::new(),
         )))
-    }
-
-    #[cfg(not(feature = "merk"))]
-    pub fn with_map_store() -> Self {
-        use super::MapStore;
-        Self::new(Shared::new(MapStore::new()))
     }
 }
 
