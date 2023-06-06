@@ -153,6 +153,47 @@ impl<T: State> Deque<T> {
     pub fn back(&self) -> Result<Option<Ref<T>>> {
         self.map.get(self.meta.tail - 1)
     }
+
+    pub fn retain<F>(&mut self, mut f: F) -> Result<()>
+    where
+        F: FnMut(Ref<T>) -> bool,
+    {
+        let len = self.len();
+        let mut retained_index = 0;
+        let mut curr_index = 0;
+
+        while curr_index < len {
+            // Unwrapping in this situation is safe because the index is always in bounds
+            // and given that there is no remove by index operation on Deque and pop_front
+            // and pop_back update the head and tail indices respectively, there will be
+            // no removed, None values in the Deque between flushes
+            if !f(self.get(curr_index)?.unwrap()) {
+                curr_index += 1;
+                break;
+            }
+            curr_index += 1;
+            retained_index += 1;
+        }
+
+        while curr_index < len {
+            if !f(self.get(curr_index)?.unwrap()) {
+                curr_index += 1;
+                continue;
+            }
+
+            self.swap(retained_index, curr_index)?;
+            curr_index += 1;
+            retained_index += 1;
+        }
+
+        if curr_index != retained_index {
+            while self.len() > retained_index {
+                self.pop_back()?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl<'a, T: State> Deque<T> {
@@ -470,6 +511,70 @@ mod test {
 
         assert_eq!(*iter.next().unwrap().unwrap(), 1);
         assert_eq!(*iter.next().unwrap().unwrap(), 43);
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn deque_retain() {
+        let mut deque: Deque<u32> = Deque::new();
+
+        deque.push_back(42).unwrap();
+        deque.push_back(43).unwrap();
+        deque.push_back(1).unwrap();
+
+        deque.retain(|x| *x != 43).unwrap();
+
+        let mut iter = deque.iter().unwrap();
+
+        assert_eq!(*iter.next().unwrap().unwrap(), 42);
+        assert_eq!(*iter.next().unwrap().unwrap(), 1);
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn deque_retain_order_preservation() {
+        let mut deque: Deque<u32> = Deque::new();
+
+        deque.push_back(1).unwrap();
+        deque.push_back(2).unwrap();
+        deque.push_back(3).unwrap();
+        deque.push_back(4).unwrap();
+        deque.push_back(5).unwrap();
+        deque.push_back(6).unwrap();
+
+        deque.retain(|x| *x != 3 && *x != 4).unwrap();
+
+        let mut iter = deque.iter().unwrap();
+
+        assert_eq!(*iter.next().unwrap().unwrap(), 1);
+        assert_eq!(*iter.next().unwrap().unwrap(), 2);
+        assert_eq!(*iter.next().unwrap().unwrap(), 5);
+        assert_eq!(*iter.next().unwrap().unwrap(), 6);
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn deque_retained_with_popped_element() {
+        let mut deque: Deque<u32> = Deque::new();
+
+        deque.push_back(1).unwrap();
+        deque.push_back(2).unwrap();
+        deque.push_back(3).unwrap();
+        deque.push_back(4).unwrap();
+        deque.push_back(5).unwrap();
+        deque.push_back(6).unwrap();
+
+        deque.pop_front().unwrap().unwrap();
+
+        deque.retain(|x| *x != 1).unwrap();
+
+        let mut iter = deque.iter().unwrap();
+
+        assert_eq!(*iter.next().unwrap().unwrap(), 2);
+        assert_eq!(*iter.next().unwrap().unwrap(), 3);
+        assert_eq!(*iter.next().unwrap().unwrap(), 4);
+        assert_eq!(*iter.next().unwrap().unwrap(), 5);
+        assert_eq!(*iter.next().unwrap().unwrap(), 6);
         assert!(iter.next().is_none());
     }
 }
