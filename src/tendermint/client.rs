@@ -1,25 +1,36 @@
+use std::cell::RefCell;
+
 use crate::{
     abci::App,
     call::Call,
     client::Client,
     encoding::Encode,
-    merk::{BackingStore, ProofStore},
+    merk::ProofStore,
     plugins::{ABCICall, ABCIPlugin},
     query::Query,
     state::State,
-    store::{Shared, Store},
+    store::{BackingStore, Shared, Store},
     Error, Result,
 };
 use tendermint_rpc::{self as tm, Client as _};
 
 pub struct HttpClient {
     client: tm::HttpClient,
+    height: RefCell<Option<u32>>,
 }
 
 impl HttpClient {
     pub fn new(url: &str) -> Result<Self> {
         Ok(Self {
             client: tm::HttpClient::new(url)?,
+            height: RefCell::new(None),
+        })
+    }
+
+    pub fn with_height(url: &str, height: u32) -> Result<Self> {
+        Ok(Self {
+            client: tm::HttpClient::new(url)?,
+            height: RefCell::new(Some(height)),
         })
     }
 }
@@ -44,15 +55,18 @@ impl<T: App + Call + Query + State + Default> Client<ABCIPlugin<T>> for HttpClie
 
     async fn query(&self, query: T::Query) -> Result<Store> {
         let query_bytes = query.encode()?;
+        let maybe_height = self.height.borrow().map(Into::into);
         let res = self
             .client
-            .abci_query(None, query_bytes, None, true)
+            .abci_query(None, query_bytes, maybe_height, true)
             .await?;
 
         if let tendermint::abci::Code::Err(code) = res.code {
             let msg = format!("code {}: {}", code, res.log);
             return Err(Error::Query(msg));
         }
+
+        self.height.replace(Some(res.height.value() as u32));
 
         // TODO: we shouldn't need to include the root hash in the result, it
         // should come from a trusted source
@@ -166,12 +180,14 @@ mod tests {
     async fn basic() -> Result<()> {
         spawn_node();
 
-        let client = HttpClient::new("http://localhost:26657").unwrap();
-        let client =
-            AppClient::<App, App, _, FooCoin, _>::new(client, DerivedKey::new(b"alice").unwrap());
+        let create_client = || {};
 
         // TODO: node spawn should return future which waits for node to be ready
         tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+
+        let client = HttpClient::new("http://localhost:26657").unwrap();
+        let client =
+            AppClient::<App, App, _, FooCoin, _>::new(client, DerivedKey::new(b"alice").unwrap());
 
         let res = client.query(|app| Ok(app.bar)).await.unwrap();
         assert_eq!(res, 0);
@@ -192,6 +208,33 @@ mod tests {
             )
             .await
             .unwrap();
+
+        let old_height = 2; // TODO: get from call response
+        let client = HttpClient::with_height("http://localhost:26657", old_height).unwrap();
+        let client =
+            AppClient::<App, App, _, FooCoin, _>::new(client, DerivedKey::new(b"alice").unwrap());
+
+        let res = client
+            .query(|app| {
+                app.accounts
+                    .balance(DerivedKey::address_for(b"alice").unwrap())
+            })
+            .await
+            .unwrap();
+        assert_eq!(res.value, 100_000, "should still query past height");
+
+        let client = HttpClient::new("http://localhost:26657").unwrap();
+        let client =
+            AppClient::<App, App, _, FooCoin, _>::new(client, DerivedKey::new(b"alice").unwrap());
+
+        let res = client
+            .query(|app| {
+                app.accounts
+                    .balance(DerivedKey::address_for(b"alice").unwrap())
+            })
+            .await
+            .unwrap();
+        assert_eq!(res.value, 50_000);
 
         Ok(())
     }

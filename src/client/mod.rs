@@ -375,11 +375,12 @@ mod tests {
     #[tokio::test]
     async fn sub() -> Result<()> {
         let mut mock_client = setup()?;
-        let bar_client = AppClient::<Foo, Foo, _, _, _>::new(
+        let client = AppClient::<Foo, Foo, _, _, _>::new(
             &mut mock_client,
             DerivedKey::new(b"alice").unwrap(),
-        )
-        .sub(|app| app.bar);
+        );
+
+        let bar_client = client.sub(|app| app.bar);
 
         let bar_b = bar_client.query(|bar| Ok(bar.b)).await?;
         assert_eq!(bar_b, 8);
