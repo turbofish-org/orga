@@ -130,7 +130,7 @@ mod tests {
         encoding::{Decode, Encode},
         orga,
         state::State,
-        store::{BackingStore, DefaultBackingStore, MapStore, Read, Shared, Store, Write},
+        store::{BackingStore, MapStore, Read, Shared, Store, Write},
         Result,
     };
 

@@ -3,9 +3,9 @@ use crate::merk::ProofStore;
 #[cfg(feature = "merk-full")]
 use crate::merk::{MerkStore, ProofBuilder};
 use crate::store::ReadWrite;
-use crate::store::{bufstore::PartialMapStore, BufStore, Empty, MapStore, Read, Shared, Write, KV};
+use crate::store::{bufstore::PartialMapStore, Empty, MapStore, Read, Shared, Write, KV};
 use crate::{Error, Result};
-use std::ops::Bound;
+
 
 #[cfg(feature = "merk-full")]
 type WrappedMerkStore = Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>;
