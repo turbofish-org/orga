@@ -167,6 +167,18 @@ where
 #[serde(transparent)]
 pub struct ByteTerminatedString<const B: u8, T: FromStr + ToString = String>(pub T);
 
+impl<const B: u8, T: FromStr + ToString> MigrateFrom for ByteTerminatedString<B, T> {
+    fn migrate_from(other: Self) -> crate::Result<Self> {
+        Ok(other)
+    }
+}
+
+impl<const B: u8, T: FromStr + ToString + 'static> Describe for ByteTerminatedString<B, T> {
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>().build()
+    }
+}
+
 impl<T: FromStr + ToString, const B: u8> Encode for ByteTerminatedString<B, T> {
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
         for byte in self.0.to_string().as_bytes() {
@@ -233,6 +245,18 @@ impl<T: FromStr + ToString, const B: u8> From<T> for ByteTerminatedString<B, T> 
 #[serde(transparent)]
 pub struct EofTerminatedString<T: FromStr + ToString = String>(pub T);
 
+impl<T: FromStr + ToString + 'static> Describe for EofTerminatedString<T> {
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>().build()
+    }
+}
+
+impl<T: FromStr + ToString> MigrateFrom for EofTerminatedString<T> {
+    fn migrate_from(other: Self) -> crate::Result<Self> {
+        Ok(other)
+    }
+}
+
 impl<T: FromStr + ToString> Encode for EofTerminatedString<T> {
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
         dest.write_all(self.0.to_string().as_bytes())?;
@@ -289,6 +313,12 @@ impl<T: FromStr + ToString> EofTerminatedString<T> {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct FixedString<const S: &'static str>;
+
+impl<const S: &'static str> MigrateFrom for FixedString<S> {
+    fn migrate_from(other: Self) -> crate::Result<Self> {
+        Ok(other)
+    }
+}
 
 impl<const S: &'static str> Encode for FixedString<S> {
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
