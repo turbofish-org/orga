@@ -68,6 +68,9 @@ pub mod upgrade;
 
 mod error;
 
+#[cfg(feature = "ibc")]
+pub mod ibc;
+
 pub use cosmrs;
 
 mod compat;

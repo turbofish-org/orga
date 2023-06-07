@@ -26,9 +26,12 @@ use serde::Serialize;
 
 use crate::coins::Address;
 use crate::collections::{Deque, Map};
+use crate::describe::{Describe, Descriptor};
 use crate::encoding::{
     Adapter, ByteTerminatedString, Decode, Encode, EofTerminatedString, FixedString,
 };
+use crate::migrate::MigrateFrom;
+use crate::state::State;
 use crate::store::Store;
 use crate::{orga, Error};
 use ibc::core::timestamp::Timestamp as IbcTimestamp;
@@ -86,6 +89,7 @@ pub struct Ibc {
     store: Store,
 }
 
+#[orga]
 impl Ibc {
     #[call]
     pub fn deliver(&mut self, messages: IbcTx) -> crate::Result<()> {
@@ -135,6 +139,12 @@ pub type EpochHeight = EofTerminatedString;
 #[derive(Debug)]
 pub struct Timestamp {
     inner: IbcTimestamp,
+}
+
+impl Describe for Timestamp {
+    fn describe() -> Descriptor {
+        crate::describe::Builder::new::<Self>().build()
+    }
 }
 
 impl Encode for Adapter<Timestamp> {
@@ -258,13 +268,19 @@ impl From<EofTerminatedString> for ClientType {
     }
 }
 
-#[derive(Encode, Decode, Serialize, Clone, Debug)]
+#[derive(State, Encode, Decode, Serialize, Clone, Debug, MigrateFrom)]
 pub struct PortChannel(
     #[serde(skip)] FixedString<"ports/">,
     SlashTerminatedString<PortId>,
     #[serde(skip)] FixedString<"channels/">,
     EofTerminatedString<ChannelId>,
 );
+
+impl Describe for PortChannel {
+    fn describe() -> Descriptor {
+        crate::describe::Builder::new::<Self>().build()
+    }
+}
 
 impl PortChannel {
     pub fn new(port_id: PortId, channel_id: ChannelId) -> Self {
@@ -321,7 +337,7 @@ port_channel_from_impl!(SeqSendPath);
 port_channel_from_impl!(SeqRecvPath);
 port_channel_from_impl!(SeqAckPath);
 
-#[derive(Encode, Decode, Serialize, Clone, Debug)]
+#[derive(State, Encode, Decode, Serialize, Clone, Debug, MigrateFrom)]
 pub struct PortChannelSequence(
     #[serde(skip)] FixedString<"ports/">,
     SlashTerminatedString<PortId>,
@@ -330,6 +346,12 @@ pub struct PortChannelSequence(
     #[serde(skip)] FixedString<"sequences/">,
     EofTerminatedString<Sequence>,
 );
+
+impl Describe for PortChannelSequence {
+    fn describe() -> Descriptor {
+        crate::describe::Builder::new::<Self>().build()
+    }
+}
 
 impl PortChannelSequence {
     pub fn new(port_id: PortId, channel_id: ChannelId, sequence: Sequence) -> Self {
@@ -459,6 +481,18 @@ macro_rules! protobuf_newtype {
                 outer.inner.into()
             }
         }
+
+        impl MigrateFrom for $newtype {
+            fn migrate_from(other: Self) -> crate::Result<Self> {
+                Ok(other)
+            }
+        }
+
+        impl Describe for $newtype {
+            fn describe() -> Descriptor {
+                crate::describe::Builder::new::<Self>().build()
+            }
+        }
     };
 }
 
@@ -494,9 +528,8 @@ mod tests {
 
     use super::*;
     use crate::{
-        merk::BackingStore,
         state::State,
-        store::{MapStore, Shared, Store},
+        store::{BackingStore, MapStore, Shared, Store},
     };
 
     #[orga]
