@@ -23,13 +23,13 @@ pub enum StepResult<T: Query, U> {
     FetchQuery(T::Query, u64),
 }
 
-pub trait Client<T: Query + Call> {
+pub trait Transport<T: Query + Call> {
     async fn query(&self, query: T::Query) -> Result<Store>;
 
     async fn call(&self, call: T::Call) -> Result<()>;
 }
 
-impl<T: Client<U>, U: Query + Call> Client<U> for &mut T {
+impl<T: Transport<U>, U: Query + Call> Transport<U> for &mut T {
     async fn query(&self, query: <U as Query>::Query) -> Result<Store> {
         (**self).query(query).await
     }
@@ -43,7 +43,7 @@ impl<T: Client<U>, U: Query + Call> Client<U> for &mut T {
 
 pub async fn execute<T, U>(
     store: Store,
-    client: &impl Client<ABCIPlugin<QueryPlugin<T>>>,
+    client: &impl Transport<ABCIPlugin<QueryPlugin<T>>>,
     mut query_fn: impl FnMut(ABCIPlugin<QueryPlugin<T>>) -> Result<U>,
 ) -> Result<(U, Store)>
 where

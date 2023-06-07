@@ -14,7 +14,7 @@ use crate::{
     Error, Result,
 };
 
-use super::exec::Client;
+use super::exec::Transport;
 
 #[derive(Clone, Default)]
 pub struct MockClient<T> {
@@ -35,7 +35,7 @@ impl<T> MockClient<T> {
     }
 }
 
-impl<T: App + State + Query + Call> Client<ABCIPlugin<QueryPlugin<T>>>
+impl<T: App + State + Query + Call> Transport<ABCIPlugin<QueryPlugin<T>>>
     for MockClient<ABCIPlugin<QueryPlugin<T>>>
 {
     async fn query(&self, query: <ABCIPlugin<QueryPlugin<T>> as Query>::Query) -> Result<Store> {
