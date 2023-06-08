@@ -197,13 +197,13 @@ impl<T: State> Deque<T> {
 
     pub fn retain_unordered<F>(&mut self, mut f: F) -> Result<()>
     where
-        F: FnMut(Ref<T>) -> bool,
+        F: FnMut(ChildMut<u64, T>) -> Result<bool>,
     {
         let mut i = 0;
         let mut len = self.len();
         while i < len {
-            let item = self.get(i)?.unwrap();
-            if !f(item) {
+            let item = self.get_mut(i)?.unwrap();
+            if !f(item)? {
                 self.swap_remove_back(i)?;
                 len -= 1;
                 continue;
@@ -616,7 +616,7 @@ mod test {
         deque.push_back(5).unwrap();
         deque.push_back(6).unwrap();
 
-        deque.retain_unordered(|x| *x != 3 && *x != 4).unwrap();
+        deque.retain_unordered(|x| Ok(*x != 3 && *x != 4)).unwrap();
 
         let mut iter = deque.iter().unwrap();
 
@@ -639,7 +639,7 @@ mod test {
         deque.push_back(6).unwrap();
 
         deque
-            .retain_unordered(|x| *x != 3 && *x != 4 && *x != 6)
+            .retain_unordered(|x| Ok(*x != 3 && *x != 4 && *x != 6))
             .unwrap();
 
         let mut iter = deque.iter().unwrap();
@@ -656,7 +656,7 @@ mod test {
 
         deque.push_back(1).unwrap();
 
-        deque.retain_unordered(|x| *x != 1).unwrap();
+        deque.retain_unordered(|x| Ok(*x != 1)).unwrap();
 
         let mut iter = deque.iter().unwrap();
 
@@ -666,7 +666,7 @@ mod test {
     #[test]
     fn deque_retain_unordered_none() {
         let mut deque: Deque<u32> = Deque::new();
-        deque.retain_unordered(|_| true).unwrap();
+        deque.retain_unordered(|_| Ok(true)).unwrap();
 
         let mut iter = deque.iter().unwrap();
         assert!(iter.next().is_none());
