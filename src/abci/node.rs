@@ -511,8 +511,11 @@ impl<A: App> InternalApp<ABCIPlugin<A>> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        abci::{InitChain, Node},
-        client::{wallet::DerivedKey, AppClient},
+        abci::{BeginBlock, InitChain, Node},
+        client::{
+            wallet::{DerivedKey, Unsigned},
+            AppClient,
+        },
         coins::{Accounts, Symbol},
         collections::Map,
         context::Context,
@@ -534,26 +537,14 @@ mod tests {
 
     #[orga]
     pub struct App {
-        pub foo: u32,
-        pub bar: u32,
-        pub map: Map<u32, u32>,
-        #[call]
-        pub accounts: Accounts<FooCoin>,
+        pub count: u32,
     }
 
-    #[orga]
-    impl App {
-        #[call]
-        pub fn increment_foo(&mut self) -> orga::Result<()> {
-            self.foo += 1;
+    impl BeginBlock for App {
+        fn begin_block(&mut self, ctx: &orga::plugins::BeginBlockCtx) -> Result<()> {
+            self.count += 1;
+
             Ok(())
-        }
-    }
-
-    impl InitChain for App {
-        fn init_chain(&mut self, _ctx: &crate::plugins::InitChainCtx) -> Result<()> {
-            self.accounts
-                .deposit(DerivedKey::address_for(b"alice").unwrap(), 100_000.into())
         }
     }
 
@@ -598,62 +589,17 @@ mod tests {
     #[ignore]
     #[tokio::test]
     #[serial_test::serial]
-    async fn basic() -> Result<()> {
+    async fn historical_queries() -> Result<()> {
         spawn_node();
 
         // TODO: node spawn should return future which waits for node to be ready
         tokio::time::sleep(std::time::Duration::from_secs(15)).await;
 
-        let client = HttpClient::new("http://localhost:26657").unwrap();
-        let client =
-            AppClient::<App, App, _, FooCoin, _>::new(client, DerivedKey::new(b"alice").unwrap());
-
-        let res = client.query(|app| Ok(app.bar)).await.unwrap();
-        assert_eq!(res, 0);
-
-        let res = client
-            .query(|app| {
-                app.accounts
-                    .balance(DerivedKey::address_for(b"alice").unwrap())
-            })
-            .await
-            .unwrap();
-        assert_eq!(res.value, 100_000);
-
-        client
-            .call(
-                |app| build_call!(app.accounts.take_as_funding(50_000.into())),
-                |app| build_call!(app.increment_foo()),
-            )
-            .await
-            .unwrap();
-
-        let old_height = 2; // TODO: get from call response
-        let client = HttpClient::with_height("http://localhost:26657", old_height).unwrap();
-        let client =
-            AppClient::<App, App, _, FooCoin, _>::new(client, DerivedKey::new(b"alice").unwrap());
-
-        let res = client
-            .query(|app| {
-                app.accounts
-                    .balance(DerivedKey::address_for(b"alice").unwrap())
-            })
-            .await
-            .unwrap();
-        assert_eq!(res.value, 100_000, "should still query past height");
-
-        let client = HttpClient::new("http://localhost:26657").unwrap();
-        let client =
-            AppClient::<App, App, _, FooCoin, _>::new(client, DerivedKey::new(b"alice").unwrap());
-
-        let res = client
-            .query(|app| {
-                app.accounts
-                    .balance(DerivedKey::address_for(b"alice").unwrap())
-            })
-            .await
-            .unwrap();
-        assert_eq!(res.value, 50_000);
+        for i in 1..5 {
+            let client = HttpClient::with_height("http://localhost:26657", i).unwrap();
+            let client = AppClient::<App, App, _, FooCoin, _>::new(client, Unsigned);
+            assert_eq!(client.query(|app| Ok(app.count)).await.unwrap(), i);
+        }
 
         Ok(())
     }
