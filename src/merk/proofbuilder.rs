@@ -40,7 +40,7 @@ impl<T: Prove> ProofBuilder<T> {
     pub fn build(self) -> Result<Vec<u8>> {
         let store = self.store.borrow();
         let query = self.query.take();
-        Ok(store.prove(query)?)
+        store.prove(query)
     }
 }
 

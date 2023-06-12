@@ -129,7 +129,7 @@ impl Write for BackingStore {
                 panic!("put() is not implemented for ProofBuilder")
             }
             #[cfg(feature = "merk-full")]
-            BackingStore::ProofBuilderSnapshot(ref builder) => {
+            BackingStore::ProofBuilderSnapshot(_) => {
                 panic!("put() is not implemented for ProofBuilderSnapshot")
             }
             #[cfg(feature = "merk")]
@@ -155,7 +155,7 @@ impl Write for BackingStore {
                 panic!("delete() is not implemented for ProofBuilder")
             }
             #[cfg(feature = "merk-full")]
-            BackingStore::ProofBuilderSnapshot(ref builder) => {
+            BackingStore::ProofBuilderSnapshot(_) => {
                 panic!("delete() is not implemented for ProofBuilderSnapshot")
             }
             #[cfg(feature = "merk-full")]

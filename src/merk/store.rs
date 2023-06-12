@@ -1,14 +1,9 @@
 use crate::abci::ABCIStore;
 use crate::error::{Error, Result};
 use crate::store::*;
-use merk::{
-    chunks::ChunkProducer, proofs::query::Map as ProofMap, restore::Restorer, rocksdb, tree::Tree,
-    BatchEntry, Hash, Merk, Op,
-};
-use std::cell::RefCell;
+use merk::{proofs::query::Map as ProofMap, restore::Restorer, tree::Tree, BatchEntry, Merk, Op};
 use std::{collections::BTreeMap, convert::TryInto};
 use std::{
-    mem::transmute,
     ops::Bound,
     path::{Path, PathBuf},
 };

@@ -109,7 +109,7 @@ pub struct Snapshots {
 impl Snapshots {
     pub fn new(path: &Path) -> Result<Self> {
         if !path.exists() {
-            std::fs::create_dir(&path).expect("Failed to create snapshot directory");
+            std::fs::create_dir(path).expect("Failed to create snapshot directory");
         }
 
         Ok(Self {

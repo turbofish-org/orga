@@ -1,5 +1,3 @@
-use tendermint_proto::v0_34::types::Header;
-
 use crate::call::Call;
 use crate::query::Query;
 use crate::state::State;
@@ -27,6 +25,7 @@ mod server {
     use std::sync::mpsc::{self, Receiver, Sender, SyncSender};
     use tendermint_proto::v0_34::abci::request::Value as Req;
     use tendermint_proto::v0_34::abci::response::Value as Res;
+    use tendermint_proto::v0_34::types::Header;
 
     /// Top-level struct for running an ABCI application. Maintains an ABCI server,
     /// mempool, and handles committing data to the store.

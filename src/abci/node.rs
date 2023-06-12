@@ -511,13 +511,9 @@ impl<A: App> InternalApp<ABCIPlugin<A>> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        abci::{BeginBlock, InitChain, Node},
-        client::{
-            wallet::{DerivedKey, Unsigned},
-            AppClient,
-        },
-        coins::{Accounts, Symbol},
-        collections::Map,
+        abci::{BeginBlock, Node},
+        client::{wallet::Unsigned, AppClient},
+        coins::Symbol,
         context::Context,
         plugins::{ChainId, ConvertSdkTx, DefaultPlugins, PaidCall},
         tendermint::client::HttpClient,
@@ -525,7 +521,6 @@ mod tests {
 
     use super::*;
     use orga::orga;
-    use orga_macros::build_call;
 
     #[orga]
     #[derive(Debug, Clone, Copy)]
@@ -541,7 +536,7 @@ mod tests {
     }
 
     impl BeginBlock for App {
-        fn begin_block(&mut self, ctx: &orga::plugins::BeginBlockCtx) -> Result<()> {
+        fn begin_block(&mut self, _ctx: &orga::plugins::BeginBlockCtx) -> Result<()> {
             self.count += 1;
 
             Ok(())
