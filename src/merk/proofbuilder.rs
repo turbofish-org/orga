@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use super::snapshot::Snapshot;
 use super::MerkStore;
 use crate::store;
 use crate::store::Shared;
@@ -100,6 +101,12 @@ pub trait Prove {
 impl Prove for MerkStore {
     fn prove(&self, query: Query) -> Result<Vec<u8>> {
         Ok(self.merk().prove(query)?)
+    }
+}
+
+impl Prove for Snapshot {
+    fn prove(&self, query: Query) -> Result<Vec<u8>> {
+        Ok(self.checkpoint.borrow().prove(query)?)
     }
 }
 

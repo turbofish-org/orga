@@ -183,6 +183,17 @@ impl BackingStore {
     }
 
     #[cfg(feature = "merk-full")]
+    pub fn into_proof_builder_snapshot(self) -> Result<ProofBuilder<Snapshot>> {
+        match self {
+            #[cfg(feature = "merk-full")]
+            BackingStore::ProofBuilderSnapshot(builder) => Ok(builder),
+            _ => Err(Error::Downcast(
+                "Failed to downcast backing store to proof builder snapshot".into(),
+            )),
+        }
+    }
+
+    #[cfg(feature = "merk-full")]
     pub fn into_wrapped_merk(self) -> Result<WrappedMerkStore> {
         match self {
             #[cfg(feature = "merk-full")]

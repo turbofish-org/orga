@@ -10,7 +10,7 @@ use tendermint_proto::v0_34::abci::{RequestLoadSnapshotChunk, Snapshot as AbciSn
 
 #[derive(Clone)]
 pub struct Snapshot {
-    checkpoint: Rc<RefCell<Merk>>,
+    pub(crate) checkpoint: Rc<RefCell<Merk>>,
     chunks: Rc<RefCell<Option<ChunkProducer<'static>>>>,
     length: u32,
     hash: Hash,

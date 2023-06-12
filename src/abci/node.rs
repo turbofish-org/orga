@@ -1,7 +1,7 @@
 use super::{ABCIStateMachine, ABCIStore, AbciQuery, App, Application, WrappedMerk};
 use crate::call::Call;
 use crate::encoding::Decode;
-use crate::merk::MerkStore;
+use crate::merk::{MerkStore, ProofBuilder};
 use crate::migrate::MigrateInto;
 use crate::plugins::{ABCICall, ABCIPlugin};
 use crate::query::Query;
@@ -448,24 +448,24 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
     }
 
     fn query(&self, merk_store: Shared<MerkStore>, req: RequestQuery) -> Result<ResponseQuery> {
-        let create_state = |store| -> Result<ABCIPlugin<A>> {
+        let create_state = |store| {
             let store = Store::new(store);
             let state_bytes = store
                 .get(&[])?
                 .ok_or_else(|| crate::Error::Query("Store is empty".to_string()))?;
-            let state: ABCIPlugin<A> = State::load(store, &mut state_bytes.as_slice())?;
-            Ok(state)
+            ABCIPlugin::<A>::load(store, &mut state_bytes.as_slice())
         };
+        let store = merk_store.borrow();
+        let height = if req.height == 0 {
+            store.height()?
+        } else {
+            req.height.try_into()?
+        };
+        let snapshot = store.snapshots().get(height).ok_or_else(|| {
+            crate::Error::Query(format!("Cannot query for height {}", req.height))
+        })?;
 
         if !req.path.is_empty() {
-            let err = || crate::Error::Query(format!("Cannot query for height {}", req.height));
-            let store = merk_store.borrow();
-            let height = if req.height == 0 {
-                store.height()?
-            } else {
-                req.height.try_into().map_err(|_| err())?
-            };
-            let snapshot = store.snapshots().get(height).ok_or_else(err)?;
             let store = BackingStore::Snapshot(Shared::new(snapshot.clone()));
             let state = create_state(store)?;
             let mut res = state.abci_query(&req)?;
@@ -473,19 +473,14 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
             return Ok(res);
         }
 
-        let backing_store: BackingStore = merk_store.clone().into();
-        let store_height = merk_store.borrow().height()?;
-        let state = create_state(backing_store.clone())?;
-
-        // Check which keys are accessed by the query and build a proof
-        let query_bytes = req.data;
-        let query_decode_res = Decode::decode(query_bytes.to_vec().as_slice());
-        let query = query_decode_res?;
-
+        let query = Decode::decode(&*req.data)?;
+        let store =
+            BackingStore::ProofBuilderSnapshot(ProofBuilder::new(Shared::new(snapshot.clone())));
+        let state = create_state(store.clone())?;
         state.query(query)?;
 
-        let proof_builder = backing_store.into_proof_builder()?;
-        let root_hash = merk_store.borrow().merk().root_hash();
+        let root_hash = snapshot.checkpoint.as_ref().borrow().root_hash();
+        let proof_builder = store.into_proof_builder_snapshot()?;
         let proof_bytes = proof_builder.build()?;
 
         // TODO: we shouldn't need to include the root hash in the response
@@ -495,7 +490,7 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
 
         let res = ResponseQuery {
             code: 0,
-            height: store_height as i64,
+            height: height.try_into()?,
             value: value.into(),
             ..Default::default()
         };
@@ -510,5 +505,156 @@ struct InternalApp<A> {
 impl<A: App> InternalApp<ABCIPlugin<A>> {
     pub fn new() -> Self {
         Self { _app: PhantomData }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        abci::{InitChain, Node},
+        client::{wallet::DerivedKey, AppClient},
+        coins::{Accounts, Symbol},
+        collections::Map,
+        context::Context,
+        plugins::{ChainId, ConvertSdkTx, DefaultPlugins, PaidCall},
+        tendermint::client::HttpClient,
+    };
+
+    use super::*;
+    use orga::orga;
+    use orga_macros::build_call;
+
+    #[orga]
+    #[derive(Debug, Clone, Copy)]
+    pub struct FooCoin();
+
+    impl Symbol for FooCoin {
+        const INDEX: u8 = 123;
+    }
+
+    #[orga]
+    pub struct App {
+        pub foo: u32,
+        pub bar: u32,
+        pub map: Map<u32, u32>,
+        #[call]
+        pub accounts: Accounts<FooCoin>,
+    }
+
+    #[orga]
+    impl App {
+        #[call]
+        pub fn increment_foo(&mut self) -> orga::Result<()> {
+            self.foo += 1;
+            Ok(())
+        }
+    }
+
+    impl InitChain for App {
+        fn init_chain(&mut self, _ctx: &crate::plugins::InitChainCtx) -> Result<()> {
+            self.accounts
+                .deposit(DerivedKey::address_for(b"alice").unwrap(), 100_000.into())
+        }
+    }
+
+    // TODO: dedupe w/ tendermint::client tests
+    pub fn spawn_node() {
+        pretty_env_logger::init();
+
+        std::thread::spawn(move || {
+            // TODO: find available ports
+
+            Context::add(ChainId("foo".to_string()));
+
+            let home = tempdir::TempDir::new("orga-node").unwrap();
+            let node = Node::<DefaultPlugins<FooCoin, App>>::new(
+                home.path(),
+                orga::abci::DefaultConfig {
+                    seeds: None,
+                    timeout_commit: None,
+                },
+            );
+            node.run().unwrap();
+            home.close().unwrap();
+        });
+
+        // TODO: wait for node to be ready
+
+        // TODO: return type which kills node after drop
+        // TODO: return client which talks to the node (or just RPC address)
+    }
+
+    impl ConvertSdkTx for App {
+        type Output = PaidCall<<App as Call>::Call>;
+
+        fn convert(
+            &self,
+            _msg: &crate::plugins::sdk_compat::sdk::Tx,
+        ) -> orga::Result<Self::Output> {
+            todo!()
+        }
+    }
+
+    #[ignore]
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn basic() -> Result<()> {
+        spawn_node();
+
+        // TODO: node spawn should return future which waits for node to be ready
+        tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+
+        let client = HttpClient::new("http://localhost:26657").unwrap();
+        let client =
+            AppClient::<App, App, _, FooCoin, _>::new(client, DerivedKey::new(b"alice").unwrap());
+
+        let res = client.query(|app| Ok(app.bar)).await.unwrap();
+        assert_eq!(res, 0);
+
+        let res = client
+            .query(|app| {
+                app.accounts
+                    .balance(DerivedKey::address_for(b"alice").unwrap())
+            })
+            .await
+            .unwrap();
+        assert_eq!(res.value, 100_000);
+
+        client
+            .call(
+                |app| build_call!(app.accounts.take_as_funding(50_000.into())),
+                |app| build_call!(app.increment_foo()),
+            )
+            .await
+            .unwrap();
+
+        let old_height = 2; // TODO: get from call response
+        let client = HttpClient::with_height("http://localhost:26657", old_height).unwrap();
+        let client =
+            AppClient::<App, App, _, FooCoin, _>::new(client, DerivedKey::new(b"alice").unwrap());
+
+        let res = client
+            .query(|app| {
+                app.accounts
+                    .balance(DerivedKey::address_for(b"alice").unwrap())
+            })
+            .await
+            .unwrap();
+        assert_eq!(res.value, 100_000, "should still query past height");
+
+        let client = HttpClient::new("http://localhost:26657").unwrap();
+        let client =
+            AppClient::<App, App, _, FooCoin, _>::new(client, DerivedKey::new(b"alice").unwrap());
+
+        let res = client
+            .query(|app| {
+                app.accounts
+                    .balance(DerivedKey::address_for(b"alice").unwrap())
+            })
+            .await
+            .unwrap();
+        assert_eq!(res.value, 50_000);
+
+        Ok(())
     }
 }
