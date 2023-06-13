@@ -24,6 +24,7 @@ use ibc_proto::ibc::core::{
 use ibc_proto::protobuf::Protobuf;
 use serde::Serialize;
 
+use crate::call::Call;
 use crate::coins::Address;
 use crate::collections::{Deque, Map};
 use crate::describe::{Describe, Descriptor};
@@ -31,6 +32,7 @@ use crate::encoding::{
     Adapter, ByteTerminatedString, Decode, Encode, EofTerminatedString, FixedString,
 };
 use crate::migrate::MigrateFrom;
+use crate::plugins::{ConvertSdkTx, PaidCall};
 use crate::state::State;
 use crate::store::Store;
 use crate::{orga, Error};
@@ -509,6 +511,14 @@ impl TryFrom<Signer> for Address {
             .as_ref()
             .parse()
             .map_err(|_| crate::Error::Ibc("Invalid signer".to_string()))
+    }
+}
+
+impl ConvertSdkTx for Ibc {
+    type Output = PaidCall<<Self as Call>::Call>;
+
+    fn convert(&self, msg: &orga::plugins::sdk_compat::sdk::Tx) -> orga::Result<Self::Output> {
+        todo!()
     }
 }
 
