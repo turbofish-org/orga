@@ -517,7 +517,7 @@ impl TryFrom<Signer> for Address {
 impl ConvertSdkTx for Ibc {
     type Output = PaidCall<<Self as Call>::Call>;
 
-    fn convert(&self, msg: &orga::plugins::sdk_compat::sdk::Tx) -> orga::Result<Self::Output> {
+    fn convert(&self, _msg: &orga::plugins::sdk_compat::sdk::Tx) -> orga::Result<Self::Output> {
         todo!()
     }
 }

@@ -1,5 +1,4 @@
 use crate::call::Call;
-use crate::coins::Symbol;
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 
@@ -57,8 +56,8 @@ where
 
     async fn call(
         &self,
-        payer: impl FnOnce(&U) -> U::Call,
-        payee: impl FnOnce(&U) -> U::Call,
+        _payer: impl FnOnce(&U) -> U::Call,
+        _payee: impl FnOnce(&U) -> U::Call,
     ) -> Result<()> {
         // self.call(payer, payee).await
         todo!()
