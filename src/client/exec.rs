@@ -23,13 +23,13 @@ pub enum StepResult<T: Query, U> {
     FetchQuery(T::Query, u64),
 }
 
-pub trait Client<T: Query + Call> {
+pub trait Transport<T: Query + Call> {
     async fn query(&self, query: T::Query) -> Result<Store>;
 
     async fn call(&self, call: T::Call) -> Result<()>;
 }
 
-impl<T: Client<U>, U: Query + Call> Client<U> for &mut T {
+impl<T: Transport<U>, U: Query + Call> Transport<U> for &mut T {
     async fn query(&self, query: <U as Query>::Query) -> Result<Store> {
         (**self).query(query).await
     }
@@ -43,7 +43,7 @@ impl<T: Client<U>, U: Query + Call> Client<U> for &mut T {
 
 pub async fn execute<T, U>(
     store: Store,
-    client: &impl Client<ABCIPlugin<QueryPlugin<T>>>,
+    client: &impl Transport<ABCIPlugin<QueryPlugin<T>>>,
     mut query_fn: impl FnMut(ABCIPlugin<QueryPlugin<T>>) -> Result<U>,
 ) -> Result<(U, Store)>
 where
@@ -108,8 +108,8 @@ where
         Ok(value) => return Ok(StepResult::Done(value)),
     };
 
-    let (traces, push_count) = take_trace();
-    if let Some(trace) = traces.first() {
+    let traces = take_trace();
+    if let Some(trace) = traces.stack.first() {
         let res = ABCIPlugin::<QueryPlugin<T>>::describe().resolve_by_type_id(
             trace.type_id,
             key.as_slice(),
@@ -118,7 +118,7 @@ where
         );
         let receiver_pfx = match res {
             Ok(pfx) => pfx,
-            Err(_) => return Ok(StepResult::FetchKey(key, push_count)),
+            Err(_) => return Ok(StepResult::FetchKey(key, traces.history.len() as u64)),
         };
         let query_bytes = [
             // TODO: shouldn't have to cut off ABCIPlugin, QueryPlugin prefixes here
@@ -127,7 +127,7 @@ where
         ]
         .concat();
         let query = T::Query::decode(query_bytes.as_slice())?;
-        return Ok(StepResult::FetchQuery(query, push_count));
+        return Ok(StepResult::FetchQuery(query, traces.history.len() as u64));
     }
 
     Ok(StepResult::FetchKey(key, 0))

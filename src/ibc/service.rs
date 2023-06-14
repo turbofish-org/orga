@@ -1,11 +1,9 @@
-use std::marker::PhantomData;
+use std::fmt::Debug;
 use std::str::FromStr;
 
-use ibc::core::ics24_host::identifier::{ClientId, PortId};
-use ibc::core::ics24_host::{
-    identifier::{ChannelId, ConnectionId},
-    path::ChannelEndPath,
-};
+use futures_lite::Future;
+use ibc::core::ics24_host::identifier::{ClientId, ConnectionId, PortId};
+use ibc::core::ics24_host::{identifier::ChannelId, path::ChannelEndPath};
 
 use ibc_proto::cosmos::auth::v1beta1::{
     query_server::Query as AuthQuery, query_server::QueryServer as AuthQueryServer,
@@ -26,6 +24,9 @@ use ibc_proto::cosmos::bank::v1beta1::{
     QuerySpendableBalancesResponse, QuerySupplyOfRequest, QuerySupplyOfResponse,
     QueryTotalSupplyRequest, QueryTotalSupplyResponse,
 };
+use ibc_proto::ibc::core::channel::v1::{Channel, IdentifiedChannel, PacketState};
+use ibc_proto::ibc::core::client::v1::{ConsensusStateWithHeight, IdentifiedClientState};
+use ibc_proto::ibc::core::connection::v1::IdentifiedConnection;
 use ibc_proto::ibc::core::{
     channel::v1::{
         query_server::{Query as ChannelQuery, QueryServer as ChannelQueryServer},
@@ -99,9 +100,12 @@ use ibc_proto::{
 };
 use prost::Message;
 use tendermint_proto::p2p::DefaultNodeInfo;
+use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
 
-use super::{Ibc, PortChannel};
+use crate::client::Client;
+
+use super::{ConnectionEnd, Ibc, PortChannel};
 
 impl From<crate::Error> for tonic::Status {
     fn from(err: crate::Error) -> Self {
@@ -110,13 +114,8 @@ impl From<crate::Error> for tonic::Status {
 }
 
 pub struct IbcClientService {
-    ibc: Client<Ibc>,
-}
-
-impl IbcClientService {
-    pub fn new(ibc: Client<Ibc>) -> Self {
-        Self { ibc }
-    }
+    client_states: Actor<(), Vec<IdentifiedClientState>>,
+    consensus_states: Actor<ClientId, Vec<ConsensusStateWithHeight>>,
 }
 
 #[tonic::async_trait]
@@ -133,10 +132,9 @@ impl ClientQuery for IbcClientService {
         _request: Request<QueryClientStatesRequest>,
     ) -> Result<Response<QueryClientStatesResponse>, Status> {
         let res = QueryClientStatesResponse {
-            client_states: self.ibc.query(|ibc| ibc.query_client_states()).await?,
+            client_states: self.client_states.req(()).await,
             ..Default::default()
         };
-
         Ok(Response::new(res))
     }
 
@@ -157,15 +155,11 @@ impl ClientQuery for IbcClientService {
             .parse()
             .map_err(|_| Status::invalid_argument("Invalid client ID".to_string()))?;
 
-        let consensus_states = self
-            .ibc
-            .query(|ibc| ibc.query_consensus_states(client_id.clone().into()))
-            .await?;
-
-        Ok(Response::new(QueryConsensusStatesResponse {
-            consensus_states,
+        let res = QueryConsensusStatesResponse {
+            consensus_states: self.consensus_states.req(client_id).await,
             ..Default::default()
-        }))
+        };
+        Ok(Response::new(res))
     }
 
     async fn consensus_state_heights(
@@ -205,13 +199,9 @@ impl ClientQuery for IbcClientService {
 }
 
 pub struct IbcConnectionService {
-    ibc: Client<Ibc>,
-}
-
-impl IbcConnectionService {
-    pub fn new(ibc: Client<Ibc>) -> Self {
-        Self { ibc }
-    }
+    connection: Actor<ConnectionId, Option<ConnectionEnd>>,
+    connections: Actor<(), Vec<IdentifiedConnection>>,
+    client_connections: Actor<ClientId, Vec<super::ConnectionId>>,
 }
 
 #[tonic::async_trait]
@@ -223,14 +213,8 @@ impl ConnectionQuery for IbcConnectionService {
         let conn_id = ConnectionId::from_str(&request.into_inner().connection_id)
             .map_err(|_| Status::invalid_argument("Invalid connection ID".to_string()))?;
 
-        let connection = self
-            .ibc
-            .query(|ibc| ibc.query_connection(conn_id.clone().into()))
-            .await?
-            .map(|v| v.into());
-
         Ok(Response::new(QueryConnectionResponse {
-            connection,
+            connection: self.connection.req(conn_id).await.map(Into::into),
             ..Default::default()
         }))
     }
@@ -239,10 +223,8 @@ impl ConnectionQuery for IbcConnectionService {
         &self,
         _request: Request<QueryConnectionsRequest>,
     ) -> Result<Response<QueryConnectionsResponse>, Status> {
-        let connections = self.ibc.query(|ibc| ibc.query_all_connections()).await?;
-
         Ok(Response::new(QueryConnectionsResponse {
-            connections,
+            connections: self.connections.req(()).await,
             ..Default::default()
         }))
     }
@@ -256,10 +238,7 @@ impl ConnectionQuery for IbcConnectionService {
             .client_id
             .parse()
             .map_err(|_| Status::invalid_argument("Invalid client ID".to_string()))?;
-        let connection_ids = self
-            .ibc
-            .query(|ibc| ibc.query_client_connections(client_id.clone().into()))
-            .await?;
+        let connection_ids = self.client_connections.req(client_id).await;
 
         Ok(Response::new(QueryClientConnectionsResponse {
             connection_paths: connection_ids.into_iter().map(|v| v.to_string()).collect(),
@@ -283,13 +262,13 @@ impl ConnectionQuery for IbcConnectionService {
 }
 
 pub struct IbcChannelService {
-    ibc: Client<Ibc>,
-}
-
-impl IbcChannelService {
-    pub fn new(ibc: Client<Ibc>) -> Self {
-        Self { ibc }
-    }
+    channel: Actor<ChannelEndPath, Option<Channel>>,
+    channels: Actor<(), Vec<IdentifiedChannel>>,
+    connection_channels: Actor<ConnectionId, Vec<IdentifiedChannel>>,
+    packet_commitments: Actor<PortChannel, Vec<PacketState>>,
+    packet_acks: Actor<PortChannel, Vec<PacketState>>,
+    unreceived_packets: Actor<(PortChannel, Vec<u64>), Vec<u64>>,
+    unreceived_acks: Actor<(PortChannel, Vec<u64>), Vec<u64>>,
 }
 
 #[tonic::async_trait]
@@ -306,13 +285,8 @@ impl ChannelQuery for IbcChannelService {
 
         let path = ChannelEndPath(port_id, channel_id);
 
-        let channel = self
-            .ibc
-            .query(|ibc| ibc.query_channel(path.clone().into()))
-            .await?;
-
         Ok(Response::new(QueryChannelResponse {
-            channel,
+            channel: self.channel.req(path).await,
             ..Default::default()
         }))
     }
@@ -322,7 +296,7 @@ impl ChannelQuery for IbcChannelService {
         _request: Request<QueryChannelsRequest>,
     ) -> Result<Response<QueryChannelsResponse>, Status> {
         Ok(Response::new(QueryChannelsResponse {
-            channels: self.ibc.query(|ibc| ibc.query_all_channels()).await?,
+            channels: self.channels.req(()).await,
             ..Default::default()
         }))
     }
@@ -334,13 +308,8 @@ impl ChannelQuery for IbcChannelService {
         let conn_id = ConnectionId::from_str(&request.get_ref().connection)
             .map_err(|_| Status::invalid_argument("invalid connection id"))?;
 
-        let channels = self
-            .ibc
-            .query(|ibc| ibc.query_connection_channels(conn_id.clone().into()))
-            .await?;
-
         Ok(Response::new(QueryConnectionChannelsResponse {
-            channels,
+            channels: self.connection_channels.req(conn_id).await,
             ..Default::default()
         }))
     }
@@ -378,13 +347,8 @@ impl ChannelQuery for IbcChannelService {
 
         let path = PortChannel::new(port_id, channel_id);
 
-        let commitments = self
-            .ibc
-            .query(|ibc| ibc.query_packet_commitments(path.clone()))
-            .await?;
-
         Ok(Response::new(QueryPacketCommitmentsResponse {
-            commitments,
+            commitments: self.packet_commitments.req(path).await,
             ..Default::default()
         }))
     }
@@ -415,13 +379,8 @@ impl ChannelQuery for IbcChannelService {
 
         let path = PortChannel::new(port_id, channel_id);
 
-        let acknowledgements = self
-            .ibc
-            .query(|ibc| ibc.query_packet_acks(path.clone()))
-            .await?;
-
         Ok(Response::new(QueryPacketAcknowledgementsResponse {
-            acknowledgements,
+            acknowledgements: self.packet_acks.req(path).await,
             ..Default::default()
         }))
     }
@@ -438,15 +397,11 @@ impl ChannelQuery for IbcChannelService {
         let sequences_to_check: Vec<u64> = request.packet_commitment_sequences;
         let path = PortChannel::new(port_id, channel_id);
 
-        let sequences = self
-            .ibc
-            .query(|ibc| {
-                ibc.query_unreceived_packets(path.clone(), sequences_to_check.clone().try_into()?)
-            })
-            .await?;
-
         Ok(Response::new(QueryUnreceivedPacketsResponse {
-            sequences,
+            sequences: self
+                .unreceived_packets
+                .req((path, sequences_to_check))
+                .await,
             ..Default::default()
         }))
     }
@@ -463,15 +418,8 @@ impl ChannelQuery for IbcChannelService {
         let sequences_to_check: Vec<u64> = request.packet_ack_sequences;
         let path = PortChannel::new(port_id, channel_id);
 
-        let sequences = self
-            .ibc
-            .query(|ibc| {
-                ibc.query_unreceived_acks(path.clone(), sequences_to_check.clone().try_into()?)
-            })
-            .await?;
-
         Ok(Response::new(QueryUnreceivedAcksResponse {
-            sequences,
+            sequences: self.unreceived_acks.req((path, sequences_to_check)).await,
             ..Default::default()
         }))
     }
@@ -846,15 +794,122 @@ pub struct GrpcOpts {
     pub port: u16,
 }
 
-pub async fn start_grpc(client: Client<Ibc>, opts: &GrpcOpts) {
+pub struct Actor<Req, Res> {
+    tx_req: tokio::sync::mpsc::Sender<Req>,
+    rx_res: Mutex<tokio::sync::mpsc::Receiver<Res>>,
+}
+
+impl<Req: Debug + 'static, Res: Debug + 'static> Actor<Req, Res> {
+    pub fn new<F: Fn(Req) -> R + 'static, R: Future<Output = Res> + 'static>(f: F) -> Self {
+        let (tx_req, mut rx_req) = tokio::sync::mpsc::channel(1);
+        let (tx_res, rx_res) = tokio::sync::mpsc::channel(1);
+
+        tokio::task::spawn_local(async move {
+            while let Some(req) = rx_req.recv().await {
+                let res = f(req).await;
+                tx_res.send(res).await.unwrap();
+            }
+        });
+
+        Self {
+            tx_req,
+            rx_res: Mutex::new(rx_res),
+        }
+    }
+
+    pub async fn req(&self, req: Req) -> Res {
+        self.tx_req.send(req).await.unwrap();
+        self.rx_res.lock().await.recv().await.unwrap()
+    }
+}
+
+pub async fn start_grpc<C: Client<Ibc> + 'static>(client: fn() -> C, opts: &GrpcOpts) {
     use tonic::transport::Server;
     let auth_service = AuthQueryServer::new(AuthService {});
     let bank_service = BankQueryServer::new(BankService {});
     let staking_service = StakingQueryServer::new(StakingService {});
-    let ibc_client_service = ClientQueryServer::new(IbcClientService::new(client.clone()));
-    let ibc_connection_service =
-        ConnectionQueryServer::new(IbcConnectionService::new(client.clone()));
-    let ibc_channel_service = ChannelQueryServer::new(IbcChannelService::new(client.clone()));
+    let ibc_client_service = ClientQueryServer::new(IbcClientService {
+        client_states: Actor::new(async move |_| {
+            client()
+                .query(|ibc| ibc.query_client_states())
+                .await
+                .unwrap()
+        }),
+        consensus_states: Actor::new(async move |client_id: ClientId| {
+            client()
+                .query(|ibc| ibc.query_consensus_states(client_id.clone().into()))
+                .await
+                .unwrap()
+        }),
+    });
+    let ibc_connection_service = ConnectionQueryServer::new(IbcConnectionService {
+        connection: Actor::new(async move |conn_id: ConnectionId| {
+            client()
+                .query(|ibc| ibc.query_connection(conn_id.clone().into()))
+                .await
+                .unwrap()
+        }),
+        connections: Actor::new(async move |_| {
+            client()
+                .query(|ibc| ibc.query_all_connections())
+                .await
+                .unwrap()
+        }),
+        client_connections: Actor::new(async move |client_id: ClientId| {
+            client()
+                .query(|ibc| ibc.query_client_connections(client_id.clone().into()))
+                .await
+                .unwrap()
+        }),
+    });
+    let ibc_channel_service = ChannelQueryServer::new(IbcChannelService {
+        channel: Actor::new(async move |path: ChannelEndPath| {
+            client()
+                .query(|ibc| ibc.query_channel(path.clone().into()))
+                .await
+                .unwrap()
+        }),
+        channels: Actor::new(async move |_| {
+            client()
+                .query(|ibc| ibc.query_all_channels())
+                .await
+                .unwrap()
+        }),
+        connection_channels: Actor::new(async move |conn_id: ConnectionId| {
+            client()
+                .query(|ibc| ibc.query_connection_channels(conn_id.clone().into()))
+                .await
+                .unwrap()
+        }),
+        packet_commitments: Actor::new(async move |path: PortChannel| {
+            client()
+                .query(|ibc| ibc.query_packet_commitments(path.clone()))
+                .await
+                .unwrap()
+        }),
+        packet_acks: Actor::new(async move |path: PortChannel| {
+            client()
+                .query(|ibc| ibc.query_packet_acks(path.clone()))
+                .await
+                .unwrap()
+        }),
+        unreceived_packets: Actor::new(async move |(path, seqs): (PortChannel, Vec<u64>)| {
+            client()
+                .query(|ibc| {
+                    ibc.query_unreceived_packets(path.clone(), seqs.clone().try_into().unwrap())
+                })
+                .await
+                .unwrap()
+        }),
+        unreceived_acks: Actor::new(async move |(path, seqs): (PortChannel, Vec<u64>)| {
+            client()
+                .query(|ibc| {
+                    ibc.query_unreceived_acks(path.clone(), seqs.clone().try_into().unwrap())
+                })
+                .await
+                .unwrap()
+        }),
+    });
     let health_service = HealthServer::new(AppHealthService {});
     let tx_service = TxServer::new(AppTxService {});
 
@@ -872,20 +927,38 @@ pub async fn start_grpc(client: Client<Ibc>, opts: &GrpcOpts) {
         .unwrap();
 }
 
-pub struct Client<T> {
-    inner: PhantomData<T>,
-}
-impl<T> Clone for Client<T> {
-    fn clone(&self) -> Self {
-        Self { inner: PhantomData }
+#[cfg(test)]
+mod tests {
+    use crate::client::{mock::MockClient, wallet::Unsigned, AppClient};
+
+    use super::*;
+    use crate::coins::Symbol;
+
+    #[crate::orga]
+    #[derive(Clone, Debug)]
+    struct FooCoin {}
+
+    impl Symbol for FooCoin {
+        const INDEX: u8 = 123;
+    }
+
+    #[ignore]
+    #[tokio::test]
+    async fn grpc() {
+        let local = tokio::task::LocalSet::new();
+        local
+            .run_until(async move {
+                start_grpc(
+                    || AppClient::<Ibc, Ibc, _, FooCoin, _>::new(MockClient::default(), Unsigned),
+                    &GrpcOpts {
+                        host: "0.0.0.0".to_string(),
+                        port: 9001,
+                    },
+                )
+                .await
+            })
+            .await
+
+        // TODO: run a test client against the server
     }
 }
-
-impl<T> Client<T> {
-    pub async fn query<F: Fn(T) -> crate::Result<U>, U>(&self, _op: F) -> crate::Result<U> {
-        todo!()
-    }
-}
-
-unsafe impl<T> Send for Client<T> {}
-unsafe impl<T> Sync for Client<T> {}
