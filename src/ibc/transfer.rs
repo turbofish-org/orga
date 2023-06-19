@@ -1,6 +1,6 @@
 use super::Ibc;
 use crate::{
-    coins::{Address, Amount},
+    coins::{Address, Amount, Coin, Symbol},
     collections::Map,
     encoding::LengthVec,
     orga,
@@ -28,10 +28,27 @@ use ibc::{
     Signer,
 };
 const ACCOUNT_PREFIX: &str = "nomic"; // TODO: configurable prefix
+impl From<TokenTransferError> for crate::Error {
+    fn from(err: TokenTransferError) -> Self {
+        crate::Error::Ibc(err.to_string())
+    }
+}
 
 #[orga]
 pub struct Transfer {
-    accounts: Map<Denom, Map<Address, Amount>>,
+    pub accounts: Map<Denom, Map<Address, Amount>>,
+}
+
+#[orga]
+impl Transfer {
+    pub fn balance(&self, address: Address, denom: Denom) -> crate::Result<Amount> {
+        Ok(*self
+            .accounts
+            .get(denom)?
+            .unwrap_or_default()
+            .get(address)?
+            .unwrap_or_default())
+    }
 }
 
 impl TokenTransferValidationContext for Ibc {
@@ -197,6 +214,15 @@ impl TokenTransferExecutionContext for Ibc {
         *receiver_balance = (*receiver_balance + amount).result()?;
 
         Ok(())
+    }
+}
+
+impl<S: Symbol> From<Coin<S>> for PrefixedCoin {
+    fn from(value: Coin<S>) -> Self {
+        Self {
+            amount: value.amount.value.into(),
+            denom: S::INDEX.to_string().parse().unwrap(),
+        }
     }
 }
 

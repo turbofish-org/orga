@@ -37,15 +37,17 @@ use crate::{orga, Error};
 use ibc::core::timestamp::Timestamp as IbcTimestamp;
 
 mod impls;
-mod transfer;
+pub mod transfer;
 use transfer::Transfer;
 mod service;
-pub use service::start_grpc;
+pub use service::{start_grpc, GrpcOpts};
 
-use self::messages::{IbcMessage, IbcTx};
+pub use self::messages::{IbcMessage, IbcTx, RawIbcTx};
 mod messages;
 mod query;
 mod router;
+// #[cfg(test)]
+// mod tests2;
 pub const IBC_QUERY_PATH: &str = "store/ibc/key";
 
 #[orga]
@@ -56,7 +58,7 @@ pub struct Ibc {
     channel_counter: u64,
     connection_counter: u64,
     client_counter: u64,
-    transfer: Transfer,
+    pub transfer: Transfer,
 
     #[state(absolute_prefix(b"clients/"))]
     clients: Map<ClientId, Client>,
@@ -92,7 +94,8 @@ pub struct Ibc {
 #[orga]
 impl Ibc {
     #[call]
-    pub fn deliver(&mut self, messages: IbcTx) -> crate::Result<()> {
+    pub fn deliver(&mut self, messages: RawIbcTx) -> crate::Result<()> {
+        let messages: IbcTx = messages.try_into()?;
         for message in messages.0 {
             use IbcMessage::*;
             match message {
@@ -511,6 +514,15 @@ impl TryFrom<Signer> for Address {
             .map_err(|_| crate::Error::Ibc("Invalid signer".to_string()))
     }
 }
+
+// #[cfg(test)]
+// impl crate::plugins::ConvertSdkTx for Ibc {
+//     type Output = crate::plugins::PaidCall<<tests2::IbcApp as crate::call::Call>::Call>;
+
+//     fn convert(&self, _msg: &crate::plugins::sdk_compat::sdk::Tx) -> crate::Result<Self::Output> {
+//         todo!()
+//     }
+// }
 
 #[cfg(test)]
 mod tests {

@@ -236,6 +236,8 @@ fn _method_arg_generics(item: &ItemImpl) -> Vec<Ident> {
 fn add_tracing(item_impl: &mut ItemImpl) {
     let Types {
         trace_fn,
+        maybe_pop_trace_fn,
+        trace_method_type_enum,
         encode_trait,
         ..
     } = Types::default();
@@ -270,7 +272,11 @@ fn add_tracing(item_impl: &mut ItemImpl) {
                     quote! { vec![ #(#encode_trait::encode(&#arg_names)?,)*].concat() }
                 };
                 let mut stmts = vec![parse_quote! {
-                    #trace_fn::<Self>(vec![#query_index], #encoded_args)?;
+                    #trace_fn::<Self>(
+                        #trace_method_type_enum::Query,
+                        vec![#query_index],
+                        #encoded_args,
+                    )?;
                 }];
                 query_index += 1;
                 stmts.append(&mut method.block.stmts);
@@ -278,7 +284,7 @@ fn add_tracing(item_impl: &mut ItemImpl) {
                 let block = &method.block;
 
                 method.block = parse_quote! {
-                    { ::orga::client::trace::maybe_pop_trace(move || { #block }) }
+                    { #maybe_pop_trace_fn(move || { #block }) }
                 };
 
                 let pfx = format!("{} (0x{:02x})", query_index - 1, query_index - 1);

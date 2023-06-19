@@ -1,5 +1,4 @@
 use crate::call::Call;
-use crate::coins::Symbol;
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 
@@ -20,30 +19,67 @@ pub mod mock;
 pub mod trace;
 pub mod wallet;
 
-pub use exec::Client;
+pub use exec::Transport;
 pub use wallet::Wallet;
 
-pub struct AppClient<T, U, C, S, W> {
-    _pd: PhantomData<(T, U, S)>,
-    client: C,
-    wallet: W,
+pub trait Client<T: Query + Call> {
+    async fn query<U, F: FnMut(T) -> Result<U>>(&self, f: F) -> Result<U>;
+
+    async fn call(
+        &self,
+        payer: impl FnOnce(&T) -> T::Call,
+        payee: impl FnOnce(&T) -> T::Call,
+    ) -> Result<()>;
+}
+
+pub struct AppClient<T, U, Transport, Symbol, Wallet> {
+    _pd: PhantomData<Symbol>,
+    transport: Transport,
+    wallet: Wallet,
+    // TODO: don't keep store here, and let something in the Transport layer
+    // handle persistence/joining/etc for composibility
     store: Cell<Option<Store>>,
     sub: fn(T) -> U,
 }
 
+impl<T, U, Transport, Symbol, Wallet> Client<U> for AppClient<T, U, Transport, Symbol, Wallet>
+where
+    Transport: exec::Transport<ABCIPlugin<DefaultPlugins<Symbol, T>>>,
+    T: App + Call + State + Query + Default + Describe + ConvertSdkTx<Output = PaidCall<T::Call>>,
+    U: App + Call + State + Query + Default + Describe + ConvertSdkTx<Output = PaidCall<T::Call>>,
+    Wallet: wallet::Wallet + Clone,
+    Symbol: crate::coins::Symbol,
+{
+    async fn query<R, F: FnMut(U) -> Result<R>>(&self, f: F) -> Result<R> {
+        self.query(f).await
+    }
+
+    async fn call(
+        &self,
+        _payer: impl FnOnce(&U) -> U::Call,
+        _payee: impl FnOnce(&U) -> U::Call,
+    ) -> Result<()> {
+        // self.call(payer, payee).await
+        todo!()
+    }
+}
+
 use crate::plugins::DefaultPlugins;
 
-impl<T, U, C, S, W> AppClient<T, U, C, S, W>
+impl<T, U, Transport, Symbol, Wallet> AppClient<T, U, Transport, Symbol, Wallet>
 where
-    W: Clone,
+    Transport: exec::Transport<ABCIPlugin<DefaultPlugins<Symbol, T>>>,
+    T: App + Call + State + Query + Default + Describe + ConvertSdkTx<Output = PaidCall<T::Call>>,
+    Wallet: wallet::Wallet + Clone,
+    Symbol: crate::coins::Symbol,
 {
-    pub fn new(client: C, wallet: W) -> Self
+    pub fn new(client: Transport, wallet: Wallet) -> Self
     where
         T: Into<U>,
     {
         Self {
             _pd: PhantomData,
-            client,
+            transport: client,
             wallet,
             store: Cell::new(None),
             sub: Into::into,
@@ -51,10 +87,10 @@ where
     }
 
     #[allow(clippy::should_implement_trait)]
-    pub fn sub<U2>(self, sub: fn(T) -> U2) -> AppClient<T, U2, C, S, W> {
+    pub fn sub<U2>(self, sub: fn(T) -> U2) -> AppClient<T, U2, Transport, Symbol, Wallet> {
         AppClient {
             _pd: PhantomData,
-            client: self.client,
+            transport: self.transport,
             wallet: self.wallet,
             store: self.store,
             sub,
@@ -62,23 +98,12 @@ where
     }
 
     // TODO: support subclients
+    // TODO: return object with result data (e.g. txid)
     pub async fn call(
         &self,
         payer: impl FnOnce(&U) -> T::Call,
         payee: impl FnOnce(&U) -> T::Call,
-    ) -> Result<()>
-    where
-        C: Client<ABCIPlugin<DefaultPlugins<S, T>>>,
-        T: App
-            + Call
-            + State
-            + Query
-            + Default
-            + Describe
-            + ConvertSdkTx<Output = PaidCall<T::Call>>,
-        W: Wallet,
-        S: Symbol,
-    {
+    ) -> Result<()> {
         let chain_id = self
             .query_root(|app| Ok(app.inner.inner.borrow().inner.inner.chain_id.to_vec()))
             .await?;
@@ -105,38 +130,28 @@ where
         let call = [chain_id, call.encode()?].concat();
         let call = self.wallet.sign(&call)?;
         let call = ABCICall::DeliverTx(sdk_compat::Call::Native(call));
-        self.client.call(call).await?;
+        self.transport.call(call).await?;
 
         Ok(())
     }
 
-    pub async fn query_root<U2, F2: FnMut(ABCIPlugin<DefaultPlugins<S, T>>) -> Result<U2>>(
+    pub async fn query_root<U2, F2: FnMut(ABCIPlugin<DefaultPlugins<Symbol, T>>) -> Result<U2>>(
         &self,
         op: F2,
-    ) -> Result<U2>
-    where
-        T: App + State + Query + Call + Describe + ConvertSdkTx<Output = PaidCall<T::Call>>,
-        C: Client<ABCIPlugin<DefaultPlugins<S, T>>>,
-        S: Symbol,
-    {
+    ) -> Result<U2> {
         let store = self.store.take().unwrap_or_default();
 
-        let (res, store) = exec::execute(store, &self.client, op).await?;
+        let (res, store) = exec::execute(store, &self.transport, op).await?;
 
         self.store.replace(Some(store));
 
         Ok(res)
     }
 
-    pub async fn query<U2, F2: FnMut(U) -> Result<U2>>(&self, mut op: F2) -> Result<U2>
-    where
-        T: App + State + Query + Call + Describe + ConvertSdkTx<Output = PaidCall<T::Call>>,
-        C: Client<ABCIPlugin<DefaultPlugins<S, T>>>,
-        S: Symbol,
-    {
+    pub async fn query<U2, F2: FnMut(U) -> Result<U2>>(&self, mut op: F2) -> Result<U2> {
         let store = self.store.take().unwrap_or_default();
 
-        let (res, store) = exec::execute(store, &self.client, |app| {
+        let (res, store) = exec::execute(store, &self.transport, |app| {
             let inner = app
                 .inner
                 .inner
@@ -310,7 +325,7 @@ mod tests {
         Ok(MockClient::<App>::with_store(store))
     }
 
-    #[ignore]
+    #[serial_test::serial]
     #[tokio::test]
     async fn appclient() -> Result<()> {
         let mut mock_client = setup()?;
@@ -371,7 +386,7 @@ mod tests {
         Ok(())
     }
 
-    #[ignore]
+    #[serial_test::serial]
     #[tokio::test]
     async fn sub() -> Result<()> {
         let mut mock_client = setup()?;
@@ -394,5 +409,22 @@ mod tests {
         //     .await?;
 
         Ok(())
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn generic() {
+        let mut mock_client = setup().unwrap();
+        let client = AppClient::<Foo, Foo, _, _, _>::new(
+            &mut mock_client,
+            DerivedKey::new(b"alice").unwrap(),
+        );
+
+        async fn do_query(client: impl Client<Foo>) {
+            let bar_b = client.query(|app| Ok(app.bar.b)).await.unwrap();
+            assert_eq!(bar_b, 8);
+        }
+
+        do_query(client).await;
     }
 }

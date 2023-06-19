@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use crate::{
     abci::App,
     call::Call,
-    client::Client,
+    client::Transport,
     encoding::Encode,
     merk::ProofStore,
     plugins::{ABCICall, ABCIPlugin},
@@ -35,7 +35,7 @@ impl HttpClient {
     }
 }
 
-impl<T: App + Call + Query + State + Default> Client<ABCIPlugin<T>> for HttpClient {
+impl<T: App + Call + Query + State + Default> Transport<ABCIPlugin<T>> for HttpClient {
     async fn call(&self, call: <ABCIPlugin<T> as Call>::Call) -> Result<()> {
         // TODO: shouldn't need to deal with ABCIPlugin at this level
         let call = match call {
@@ -148,6 +148,7 @@ mod tests {
             let home = tempdir::TempDir::new("orga-node").unwrap();
             let node = orga::abci::Node::<DefaultPlugins<FooCoin, App>>::new(
                 home.path(),
+                "foo",
                 orga::abci::DefaultConfig {
                     seeds: None,
                     timeout_commit: None,
