@@ -60,7 +60,7 @@ mod abci {
         T: BeginBlock + State,
     {
         fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
-            self.inner.begin_block(ctx)
+            self.inner.borrow_mut().begin_block(ctx)
         }
     }
 
@@ -69,7 +69,7 @@ mod abci {
         T: EndBlock + State,
     {
         fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
-            self.inner.end_block(ctx)
+            self.inner.borrow_mut().end_block(ctx)
         }
     }
 
@@ -90,7 +90,7 @@ mod abci {
             &self,
             request: &tendermint_proto::v0_34::abci::RequestQuery,
         ) -> Result<tendermint_proto::v0_34::abci::ResponseQuery> {
-            self.inner.abci_query(request)
+            self.inner.borrow().abci_query(request)
         }
     }
 }

@@ -4,6 +4,8 @@ mod ics23;
 #[cfg(feature = "merk-full")]
 mod proofbuilder;
 #[cfg(feature = "merk-full")]
+pub mod snapshot;
+#[cfg(feature = "merk-full")]
 pub mod store;
 
 pub use client::Client;
