@@ -57,7 +57,7 @@ pub struct DefaultConfig {
 }
 
 impl<A: App> Node<A> {
-    pub fn new<P: AsRef<Path>>(home: P, cfg_defaults: DefaultConfig) -> Self {
+    pub fn new<P: AsRef<Path>>(home: P, chain_id: &str, cfg_defaults: DefaultConfig) -> Self {
         let home = home.as_ref().to_path_buf();
         let merk_home = home.join("merk");
         let tm_home = home.join("tendermint");
@@ -98,6 +98,18 @@ impl<A: App> Node<A> {
                 toml["consensus"]["timeout_commit"] = toml_edit::value(timeout_commit);
                 write_toml(toml);
             }
+
+            let mut genesis_json: serde_json::Value =
+                std::fs::read_to_string(tm_home.join("config/genesis.json"))
+                    .expect("Failed to read genesis.json")
+                    .parse()
+                    .unwrap();
+            genesis_json["chain_id"] = serde_json::Value::String(chain_id.to_string());
+            std::fs::write(
+                tm_home.join("config/genesis.json"),
+                serde_json::to_string_pretty(&genesis_json).unwrap(),
+            )
+            .expect("Failed to modify genesis chain ID");
         }
 
         let abci_port: u16 = if cfg_path.exists() {

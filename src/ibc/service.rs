@@ -531,10 +531,11 @@ impl StakingQuery for StakingService {
         &self,
         _request: Request<StakingQueryParamsRequest>,
     ) -> Result<Response<StakingQueryParamsResponse>, Status> {
+        println!("get chain params req");
         Ok(Response::new(StakingQueryParamsResponse {
             params: Some(Params {
                 unbonding_time: Some(Duration {
-                    seconds: crate::coins::staking::UNBONDING_SECONDS as i64,
+                    seconds: 2 * 7 * 24 * 60 * 60,
                     nanos: 0,
                 }),
                 historical_entries: 1,
@@ -912,7 +913,6 @@ pub async fn start_grpc<C: Client<Ibc> + 'static>(client: fn() -> C, opts: &Grpc
     });
     let health_service = HealthServer::new(AppHealthService {});
     let tx_service = TxServer::new(AppTxService {});
-
     Server::builder()
         .add_service(health_service)
         .add_service(tx_service)
@@ -927,38 +927,38 @@ pub async fn start_grpc<C: Client<Ibc> + 'static>(client: fn() -> C, opts: &Grpc
         .unwrap();
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::client::{mock::MockClient, wallet::Unsigned, AppClient};
+// #[cfg(test)]
+// mod tests {
+//     use crate::client::{mock::MockClient, wallet::Unsigned, AppClient};
 
-    use super::*;
-    use crate::coins::Symbol;
+//     use super::*;
+//     use crate::coins::Symbol;
 
-    #[crate::orga]
-    #[derive(Clone, Debug)]
-    struct FooCoin {}
+//     #[crate::orga]
+//     #[derive(Clone, Debug)]
+//     struct FooCoin {}
 
-    impl Symbol for FooCoin {
-        const INDEX: u8 = 123;
-    }
+//     impl Symbol for FooCoin {
+//         const INDEX: u8 = 123;
+//     }
 
-    #[ignore]
-    #[tokio::test]
-    async fn grpc() {
-        let local = tokio::task::LocalSet::new();
-        local
-            .run_until(async move {
-                start_grpc(
-                    || AppClient::<Ibc, Ibc, _, FooCoin, _>::new(MockClient::default(), Unsigned),
-                    &GrpcOpts {
-                        host: "0.0.0.0".to_string(),
-                        port: 9001,
-                    },
-                )
-                .await
-            })
-            .await
+// #[ignore]
+// #[tokio::test]
+// async fn grpc() {
+//     let local = tokio::task::LocalSet::new();
+//     local
+//         .run_until(async move {
+//             start_grpc(
+//                 || AppClient::<Ibc, Ibc, _, FooCoin, _>::new(MockClient::default(), Unsigned),
+//                 &GrpcOpts {
+//                     host: "0.0.0.0".to_string(),
+//                     port: 9001,
+//                 },
+//             )
+//             .await
+//         })
+//         .await
 
-        // TODO: run a test client against the server
-    }
-}
+//     // TODO: run a test client against the server
+// }
+// }

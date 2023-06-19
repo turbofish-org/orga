@@ -148,6 +148,7 @@ mod tests {
             let home = tempdir::TempDir::new("orga-node").unwrap();
             let node = orga::abci::Node::<DefaultPlugins<FooCoin, App>>::new(
                 home.path(),
+                "foo",
                 orga::abci::DefaultConfig {
                     seeds: None,
                     timeout_commit: None,

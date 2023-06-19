@@ -41,7 +41,6 @@ const MAX_HOST_CONSENSUS_STATES: u64 = 100_000;
 impl BeginBlock for Ibc {
     fn begin_block(&mut self, ctx: &BeginBlockCtx) -> crate::Result<()> {
         self.height = ctx.height;
-
         let timestamp = if let Some(ref timestamp) = ctx.header.time {
             tendermint::Time::from_unix_timestamp(timestamp.seconds, timestamp.nanos as u32)
                 .map_err(|_| crate::Error::Ibc("Invalid timestamp".to_string()))?

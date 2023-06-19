@@ -31,6 +31,7 @@ pub fn main() {
     let home = tempdir::TempDir::new("orga-foo").unwrap();
     let node = orga::abci::Node::<DefaultPlugins<FooCoin, App>>::new(
         home.path(),
+        "orga-foo",
         orga::abci::DefaultConfig {
             seeds: None,
             timeout_commit: None,
