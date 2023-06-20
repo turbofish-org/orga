@@ -292,22 +292,14 @@ fn call_builder(tokens: &mut TokenStream2, item: &ItemImpl) {
     let Types {
         call_trait,
         build_call_trait,
-        field_call_trait,
         method_call_trait,
         ..
     } = Types::default();
 
     let ident = self_ty_ident(&item);
-    let enum_ident = enum_ident(&item);
 
     let (imp, ty, wher) = item.generics.split_for_impl();
-    let bound = quote! {
-        #ident #ty: #field_call_trait + #method_call_trait<MethodCall = #enum_ident #ty>,
-    };
-    let wher = match wher {
-        Some(w) => quote! { #w #bound },
-        None => quote! { where #bound },
-    };
+
     let call_methods = call_methods(&item);
     for call_method in call_methods.into_iter() {
         let method_ident = &call_method.sig.ident;
