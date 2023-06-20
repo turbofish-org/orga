@@ -109,7 +109,7 @@ where
     };
 
     let traces = take_trace();
-    if let Some(trace) = traces.stack.first() {
+    if let Some(trace) = traces.history.last() {
         let res = ABCIPlugin::<QueryPlugin<T>>::describe().resolve_by_type_id(
             trace.type_id,
             key.as_slice(),
