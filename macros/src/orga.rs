@@ -104,6 +104,7 @@ impl OrgaSubStruct {
             quote! { ::orga::encoding::VersionedEncoding },
         );
         maybe_add("State", quote! { ::orga::state::State });
+        maybe_add("Serialize", quote! { ::orga::serde::Serialize });
 
         if self.is_last {
             // maybe_add("Call", quote! { ::orga::call::Call });

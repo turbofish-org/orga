@@ -4,6 +4,7 @@ use std::convert::TryFrom;
 
 #[orga]
 #[derive(Debug, Clone, Copy)]
+#[serde(transparent)]
 pub struct Amount {
     pub(crate) value: u64,
 }
