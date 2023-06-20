@@ -52,7 +52,7 @@ impl<S: Symbol> Delegator<S> {
 
     pub(super) fn info(&self) -> Result<DelegationInfo> {
         let mut unbonds = vec![];
-        for i in 0..self.unbonding.len()? {
+        for i in 0..self.unbonding.len() {
             if let Some(unbond) = self.unbonding.get(i)? {
                 unbonds.push(UnbondInfo {
                     start_seconds: unbond.start_seconds,
@@ -77,7 +77,7 @@ impl<S: Symbol> Delegator<S> {
         if liveness_fault {
             return Ok(vec![]);
         }
-        for i in 0..self.unbonding.len()? {
+        for i in 0..self.unbonding.len() {
             let mut unbond = self
                 .unbonding
                 .get_mut(i)?
@@ -87,7 +87,7 @@ impl<S: Symbol> Delegator<S> {
         }
 
         let mut redelegations = vec![];
-        for i in 0..self.redelegations_out.len()? {
+        for i in 0..self.redelegations_out.len() {
             let redelegation = self
                 .redelegations_out
                 .get(i)?
@@ -115,7 +115,7 @@ impl<S: Symbol> Delegator<S> {
 
         let mut remaining_slash = (amount - stake_slash)?;
 
-        for i in 0..self.unbonding.len()? {
+        for i in 0..self.unbonding.len() {
             let unbond = self.unbonding.get_mut(i)?;
             if let Some(mut unbond) = unbond {
                 let unbond_slash = if remaining_slash > unbond.coins.shares.amount()? {
@@ -194,7 +194,7 @@ impl<S: Symbol> Delegator<S> {
         amount: Amount,
         start_seconds: Option<i64>,
     ) -> Result<Coin<S>> {
-        if !self.redelegations_in.is_empty()? {
+        if !self.redelegations_in.is_empty() {
             return Err(Error::Coins(
                 "Cannot redelegate from validator with inbound redelegations".into(),
             ));

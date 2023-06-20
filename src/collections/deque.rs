@@ -146,8 +146,8 @@ impl<T: State> State for Deque<T> {
 #[orga]
 impl<T: State> Deque<T> {
     #[query]
-    pub fn len(&self) -> Result<u64> {
-        Ok(self.meta.tail - self.meta.head)
+    pub fn len(&self) -> u64 {
+        self.meta.tail - self.meta.head
     }
 
     #[query]
@@ -156,8 +156,8 @@ impl<T: State> Deque<T> {
     }
 
     #[query]
-    pub fn is_empty(&self) -> Result<bool> {
-        Ok(self.len()? == 0)
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     #[query]
@@ -204,7 +204,7 @@ impl<T: State> Deque<T> {
     }
 
     pub fn pop_front(&mut self) -> Result<Option<ReadOnly<T>>> {
-        if self.is_empty()? {
+        if self.is_empty() {
             return Ok(None);
         }
 
@@ -213,7 +213,7 @@ impl<T: State> Deque<T> {
     }
 
     pub fn pop_back(&mut self) -> Result<Option<ReadOnly<T>>> {
-        if self.is_empty()? {
+        if self.is_empty() {
             return Ok(None);
         }
 
@@ -226,7 +226,7 @@ impl<T: State> Deque<T> {
     }
 
     pub fn back_mut(&mut self) -> Result<Option<ChildMut<u64, T>>> {
-        self.get_mut(self.len()? - 1)
+        self.get_mut(self.len() - 1)
     }
 }
 
@@ -288,7 +288,7 @@ mod test {
         let mut deque: Deque<u32> = Deque::new();
 
         deque.push_front(42).unwrap();
-        assert_eq!(deque.len().unwrap(), 1);
+        assert_eq!(deque.len(), 1);
     }
 
     #[test]
@@ -296,7 +296,7 @@ mod test {
         let mut deque: Deque<u32> = Deque::new();
 
         deque.push_back(42).unwrap();
-        assert_eq!(deque.len().unwrap(), 1);
+        assert_eq!(deque.len(), 1);
     }
 
     #[test]
@@ -311,7 +311,7 @@ mod test {
 
         deque.push_front(42).unwrap();
         assert_eq!(*deque.pop_front().unwrap().unwrap(), 42);
-        assert!(deque.is_empty().unwrap());
+        assert!(deque.is_empty());
     }
 
     #[test]
@@ -327,7 +327,7 @@ mod test {
 
         deque.push_back(42).unwrap();
         assert_eq!(*deque.pop_back().unwrap().unwrap(), 42);
-        assert!(deque.is_empty().unwrap());
+        assert!(deque.is_empty());
     }
 
     #[test]
