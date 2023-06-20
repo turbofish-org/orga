@@ -34,6 +34,7 @@ use crate::migrate::MigrateFrom;
 use crate::state::State;
 use crate::store::Store;
 use crate::{orga, Error};
+pub use ibc as ibc_rs;
 use ibc::core::timestamp::Timestamp as IbcTimestamp;
 
 mod impls;
