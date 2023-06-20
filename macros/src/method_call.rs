@@ -222,7 +222,7 @@ fn _method_arg_generics(item: &ItemImpl) -> Vec<Ident> {
         .collect()
 }
 
-fn add_tracing(item_impl: &mut ItemImpl) {
+fn _add_tracing(item_impl: &mut ItemImpl) {
     let Types {
         trace_fn,
         maybe_pop_trace_fn,
@@ -334,7 +334,7 @@ fn call_builder(tokens: &mut TokenStream2, item: &ItemImpl) {
 
 pub fn call_block(_args: TokenStream, input: TokenStream) -> TokenStream {
     let mut item = syn::parse::<ItemImpl>(input.clone()).unwrap();
-    add_tracing(&mut item);
+    // add_tracing(&mut item);
     let call_methods = call_methods(&item);
     if call_methods.is_empty() {
         return input;
