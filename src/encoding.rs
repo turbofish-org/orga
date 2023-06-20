@@ -9,7 +9,7 @@ pub mod decoder;
 pub mod encoder;
 
 use derive_more::{Deref, DerefMut, Into};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     convert::{TryFrom, TryInto},
     str::FromStr,
@@ -29,6 +29,8 @@ use std::{
     Hash,
     Eq,
     Describe,
+    Serialize,
+    Deserialize,
 )]
 pub struct LengthVec<P, T>
 where
