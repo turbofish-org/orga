@@ -1,24 +1,34 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use super::snapshot::Snapshot;
 use super::MerkStore;
 use crate::store;
 use crate::store::Shared;
 use crate::Result;
 use merk::proofs::query::Query;
+use store::Read;
 
 /// Records reads to a `MerkStore` and uses them to build a proof including all
 /// accessed keys.
-#[derive(Clone)]
-pub struct ProofBuilder {
-    store: Shared<MerkStore>,
+pub struct ProofBuilder<T> {
+    store: Shared<T>,
     query: Rc<RefCell<Query>>,
 }
 
-impl ProofBuilder {
+impl<T> Clone for ProofBuilder<T> {
+    fn clone(&self) -> Self {
+        ProofBuilder {
+            store: self.store.clone(),
+            query: self.query.clone(),
+        }
+    }
+}
+
+impl<T: Prove> ProofBuilder<T> {
     /// Constructs a `ProofBuilder` which provides read access to data in the
     /// given `MerkStore`.
-    pub fn new(store: Shared<MerkStore>) -> Self {
+    pub fn new(store: Shared<T>) -> Self {
         ProofBuilder {
             store,
             query: Rc::new(RefCell::new(Query::new())),
@@ -30,12 +40,11 @@ impl ProofBuilder {
     pub fn build(self) -> Result<Vec<u8>> {
         let store = self.store.borrow();
         let query = self.query.take();
-
-        Ok(store.merk().prove(query)?)
+        store.prove(query)
     }
 }
 
-impl store::Read for ProofBuilder {
+impl<T: Read> store::Read for ProofBuilder<T> {
     /// Gets the value from the underlying store, recording the key to be
     /// included in the proof when `build` is called.
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
@@ -82,6 +91,22 @@ impl store::Read for ProofBuilder {
         };
 
         Ok(maybe_entry)
+    }
+}
+
+pub trait Prove {
+    fn prove(&self, query: Query) -> Result<Vec<u8>>;
+}
+
+impl Prove for MerkStore {
+    fn prove(&self, query: Query) -> Result<Vec<u8>> {
+        Ok(self.merk().prove(query)?)
+    }
+}
+
+impl Prove for Snapshot {
+    fn prove(&self, query: Query) -> Result<Vec<u8>> {
+        Ok(self.checkpoint.borrow().prove(query)?)
     }
 }
 

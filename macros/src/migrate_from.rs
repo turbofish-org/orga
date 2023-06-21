@@ -27,7 +27,7 @@ impl ToTokens for MigrateFromInputReceiver {
         let (imp, ty, wher) = generics.split_for_impl();
         if *identity {
             return tokens.extend(quote! {
-                impl#imp ::orga::migrate::MigrateFrom for #ident#ty
+                impl #imp ::orga::migrate::MigrateFrom for #ident #ty
                 #wher
                 {
                     fn migrate_from(other: Self) -> ::orga::Result<Self> {
@@ -57,7 +57,7 @@ impl ToTokens for MigrateFromInputReceiver {
         };
 
         tokens.extend(quote! {
-            impl#imp ::orga::migrate::MigrateFrom for #ident#ty
+            impl #imp ::orga::migrate::MigrateFrom for #ident #ty
             #wher
             {
                 fn migrate_from(other: Self) -> ::orga::Result<Self> {

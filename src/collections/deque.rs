@@ -2,20 +2,35 @@ use serde::Serialize;
 
 use super::map::{ChildMut, Map, ReadOnly, Ref};
 use crate::call::Call;
-use crate::client::Client;
 use crate::collections::map::Iter as MapIter;
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::orga;
-use crate::query::Query;
+use crate::query::FieldQuery;
 use crate::state::State;
 use crate::store::Store;
 use crate::Result;
 
-#[derive(Query, Encode, Decode)]
+#[derive(FieldQuery, Encode, Decode)]
 pub struct Deque<T> {
     meta: Meta,
     map: Map<u64, T>,
+}
+
+impl<T> Describe for Deque<T>
+where
+    T: State + Describe,
+{
+    fn describe() -> crate::describe::Descriptor {
+        use crate::describe::Builder;
+        Builder::new::<Self>()
+            .dynamic_child::<u64, T>(|mut query_bytes| {
+                query_bytes.extend_from_slice(&[129]);
+                query_bytes
+            })
+            .build()
+    }
 }
 
 impl<T> Deque<T> {
@@ -128,10 +143,16 @@ impl<T: State> State for Deque<T> {
 //     }
 // }
 
+#[orga]
 impl<T: State> Deque<T> {
     #[query]
     pub fn len(&self) -> u64 {
         self.meta.tail - self.meta.head
+    }
+
+    #[query]
+    pub fn get_raw(&self, key: u64) -> Result<Option<Ref<T>>> {
+        self.map.get(key)
     }
 
     #[query]
@@ -284,13 +305,6 @@ impl<T: State> Deque<T> {
         self.pop_back()?;
         Ok(())
     }
-}
-
-// TODO: use derive(Client)
-impl<T, U: Clone + Send> Client<U> for Deque<T> {
-    type Client = ();
-
-    fn create_client(_: U) {}
 }
 
 impl<T1, T2> MigrateFrom<Deque<T1>> for Deque<T2>

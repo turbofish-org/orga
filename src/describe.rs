@@ -1,20 +1,19 @@
 use crate::{
     encoding::{Decode, Encode},
     state::State,
-    store::{Iter, Read, Store},
+    store::Store,
     Error, Result,
 };
 use ed::Terminated;
-use js_sys::{Array, Uint8Array};
 use serde::{Deserialize, Serialize};
 use std::{
-    any::Any,
+    any::{Any, TypeId},
     fmt::{Debug, Display},
-    ops::Deref,
 };
 use wasm_bindgen::prelude::*;
 
 mod builder;
+pub mod child;
 
 pub use crate::macros::Describe;
 pub use builder::Builder;
@@ -23,16 +22,15 @@ pub trait Describe {
     fn describe() -> Descriptor;
 }
 
-#[wasm_bindgen(getter_with_clone, inspectable)]
-#[derive(Clone, Serialize, Deserialize)]
+// #[wasm_bindgen(getter_with_clone, inspectable)]
+#[derive(Clone)]
 pub struct Descriptor {
+    pub type_id: TypeId,
     pub type_name: String,
     pub state_version: u32,
     children: Children,
-    #[serde(skip)]
-    decode: Option<DecodeFn>,
-    #[serde(skip)]
-    parse: Option<ParseFn>,
+    pub load: Option<LoadFn>,
+    pub meta: Option<Box<Self>>,
 }
 
 impl Debug for Descriptor {
@@ -46,22 +44,6 @@ impl Debug for Descriptor {
 }
 
 impl Descriptor {
-    pub fn decode(&self, bytes: &[u8]) -> Result<Value> {
-        (self
-            .decode
-            .ok_or_else(|| Error::App("Decode function is not available".to_string()))?)(
-            bytes
-        )
-    }
-
-    pub fn from_str(&self, string: &str) -> Result<Option<Value>> {
-        (self
-            .parse
-            .ok_or_else(|| Error::App("FromStr function is not available".to_string()))?)(
-            string
-        )
-    }
-
     pub fn children(&self) -> &Children {
         &self.children
     }
@@ -77,95 +59,31 @@ impl Descriptor {
     // }
 }
 
-#[wasm_bindgen]
-impl Descriptor {
-    #[wasm_bindgen(js_name = children)]
-    pub fn children_js(&self) -> JsValue {
-        match &self.children {
-            Children::None => JsValue::NULL,
-            Children::Named(children) => children
-                .iter()
-                .cloned()
-                .map(JsValue::from)
-                .collect::<Array>()
-                .into(),
-            Children::Dynamic(child) => child.clone().into(),
-        }
-    }
+pub type LoadFn = fn(Store, &mut &[u8]) -> Result<()>;
+pub type ApplyQueryBytesFn = fn(Vec<u8>) -> Vec<u8>;
 
-    #[wasm_bindgen(js_name = decode)]
-    pub fn decode_js(&self, bytes: js_sys::Uint8Array) -> Value {
-        // TODO: return Result
-        self.decode(bytes.to_vec().as_slice()).unwrap()
-    }
-}
-
-pub type DecodeFn = fn(&[u8]) -> Result<Value>;
-pub type ParseFn = fn(&str) -> Result<Option<Value>>;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default)]
 pub enum Children {
+    #[default]
     None,
     Named(Vec<NamedChild>),
     Dynamic(DynamicChild),
 }
 
-impl Default for Children {
-    fn default() -> Self {
-        Children::None
-    }
-}
-
-impl Children {
-    fn get_dynamic_child(&self, key_bytes: Vec<u8>, store: &Store) -> Result<Value> {
-        let value_desc = match self {
-            Children::Dynamic(desc) => &desc.value_desc,
-            _ => {
-                return Err(Error::Downcast(
-                    "Value does not have dynamic children".to_string(),
-                ))
-            }
-        };
-
-        let value_bytes = store
-            .get(key_bytes.as_slice())?
-            .ok_or_else(|| Error::Store("Value not found".to_string()))?;
-
-        let substore = store.sub(&key_bytes);
-        let mut value = value_desc.decode(value_bytes.as_slice())?;
-        value.attach(substore)?;
-
-        Ok(value)
-    }
-}
-
-#[wasm_bindgen(getter_with_clone, inspectable)]
-#[derive(Clone, Serialize, Deserialize)]
+// #[wasm_bindgen(getter_with_clone, inspectable)]
+#[derive(Clone, Debug)]
 pub struct NamedChild {
     pub name: String,
     pub desc: Descriptor,
-    store_key: KeyOp,
-    #[serde(skip)]
-    access: Option<AccessFn>,
+    pub store_key: KeyOp,
 }
 
-pub type AccessFn = fn(&Value) -> Result<Option<Value>>;
-
-impl Debug for NamedChild {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("NamedChild")
-            .field("name", &self.name)
-            .field("desc", &self.desc)
-            .field("store_key", &self.store_key)
-            .finish()
-    }
-}
-
-#[wasm_bindgen(inspectable)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+// #[wasm_bindgen(inspectable)]
+#[derive(Clone, Debug)]
 pub struct DynamicChild {
     key_desc: Box<Descriptor>,
     value_desc: Box<Descriptor>,
+    apply_query_bytes: ApplyQueryBytesFn,
 }
 
 impl DynamicChild {
@@ -175,6 +93,10 @@ impl DynamicChild {
 
     pub fn value_desc(&self) -> &Descriptor {
         &self.value_desc
+    }
+
+    pub fn apply_query_bytes(&self, bytes: Vec<u8>) -> Vec<u8> {
+        (self.apply_query_bytes)(bytes)
     }
 }
 
@@ -191,169 +113,16 @@ impl KeyOp {
             KeyOp::Append(prefix) => store.sub(prefix.as_slice()),
         }
     }
-}
 
-#[wasm_bindgen]
-pub struct WrappedStore(Store);
-
-#[wasm_bindgen(inspectable)]
-pub struct Value {
-    instance: Box<dyn Inspect>,
-    store: Store,
-}
-
-impl Value {
-    pub fn new<T: Inspect + 'static>(instance: T) -> Self {
-        Value {
-            instance: Box::new(instance),
-            store: Store::default(),
-        }
-    }
-
-    pub fn attach(&mut self, store: Store) -> Result<()> {
-        self.store = store.clone();
-        self.instance.attach(store)
-    }
-
-    pub fn downcast<T: Inspect + 'static>(&self) -> Option<T> {
-        let any = self.instance.to_any().unwrap();
-        match any.downcast::<T>() {
-            Ok(mut boxed) => {
-                // TODO: return Result
-                boxed.attach(self.store.clone()).unwrap();
-                Some(*boxed)
-            }
-            Err(_) => None,
-        }
-    }
-
-    pub fn child(&self, name: &str) -> Result<Option<Value>> {
-        let desc = self.describe();
-        match desc.children {
-            Children::None => Err(Error::Downcast("Value does not have children".to_string())),
-            Children::Named(children) => {
-                let cdesc = children
-                    .iter()
-                    .find(|c| c.name == name)
-                    .ok_or_else(|| Error::Downcast(format!("No child called '{}'", name)))?;
-
-                let substore = cdesc.store_key.apply(&self.store);
-                (cdesc
-                    .access
-                    .ok_or_else(|| Error::App("access function is not available".to_string()))?)(
-                    self,
-                )?
-                .map(|mut child| {
-                    child.attach(substore)?;
-                    Ok(child)
-                })
-                .transpose()
-            }
-            Children::Dynamic(ref child) => {
-                let key_bytes = child
-                    .key_desc
-                    .from_str(name)?
-                    .ok_or_else(|| {
-                        Error::Downcast(
-                            "Dynamic child key can not be parsed from string".to_string(),
-                        )
-                    })?
-                    .encode()?;
-                Ok(Some(
-                    desc.children.get_dynamic_child(key_bytes, &self.store)?,
-                ))
+    pub fn apply_bytes(&self, bytes: &[u8]) -> Vec<u8> {
+        match self {
+            KeyOp::Absolute(prefix) => prefix.clone(),
+            KeyOp::Append(prefix) => {
+                let mut bytes = bytes.to_vec();
+                bytes.extend_from_slice(prefix.as_slice());
+                bytes
             }
         }
-    }
-
-    pub fn entries(&self) -> Option<EntryIter> {
-        let desc = self.describe();
-        match desc.children {
-            Children::Dynamic(kv_desc) => Some(EntryIter {
-                kv_desc,
-                store_iter: self.store.range(..),
-            }),
-            _ => None,
-        }
-    }
-
-    pub fn maybe_to_json(&self) -> Result<Option<serde_json::Value>> {
-        self.instance.maybe_to_json()
-    }
-
-    pub fn to_json(&self) -> Result<serde_json::Value> {
-        self.maybe_to_json()?
-            .ok_or_else(|| Error::App(format!("Could not convert '{}' to JSON", self.type_name())))
-    }
-
-    pub fn write_json<W: std::io::Write + 'static>(&self, out: W) -> Result<()> {
-        self.instance.maybe_write_json(Box::new(out))
-    }
-
-    pub fn type_name(&self) -> String {
-        self.describe().type_name
-    }
-
-    pub fn store(&self) -> &Store {
-        &self.store
-    }
-}
-
-#[wasm_bindgen]
-impl Value {
-    #[wasm_bindgen(js_name = toString)]
-    pub fn to_string_js(&self) -> Option<String> {
-        self.maybe_to_string()
-    }
-
-    #[wasm_bindgen(js_name = toJSON)]
-    pub fn to_json_js(&self) -> WasmResult<JsValue> {
-        self.maybe_to_wasm().map(|opt| opt.unwrap_or(JsValue::NULL))
-    }
-
-    #[wasm_bindgen(js_name = debug)]
-    pub fn maybe_debug_js(&self, alternate: Option<bool>) -> Option<String> {
-        let alternate = alternate.unwrap_or_default();
-        self.maybe_debug(alternate)
-    }
-
-    #[wasm_bindgen(js_name = child)]
-    pub fn child_js(&self, name: &str) -> Option<Value> {
-        // TODO: return Result
-        self.child(name).unwrap()
-    }
-
-    #[wasm_bindgen(js_name = encode)]
-    pub fn encode_js(&self) -> Uint8Array {
-        // TODO: return Result
-        self.encode().unwrap().as_slice().into()
-    }
-
-    #[wasm_bindgen(js_name = entries)]
-    pub fn entries_js(&self) -> JsValue {
-        // TODO: needs to return object with Symbol.iterator property
-        self.entries()
-            .map(|iter| {
-                JsIter::new(iter.map(|res| match res {
-                    Ok(kv) => {
-                        let arr = js_sys::Array::new();
-                        arr.push(&kv.0.into());
-                        arr.push(&kv.1.into());
-                        Ok(arr.into())
-                    }
-                    Err(err) => Err(err_to_js(err)),
-                }))
-                .into()
-            })
-            .unwrap_or(JsValue::NULL)
-    }
-}
-
-impl Deref for Value {
-    type Target = dyn Inspect;
-
-    fn deref(&self) -> &Self::Target {
-        &*self.instance
     }
 }
 
@@ -379,7 +148,9 @@ pub trait Inspect {
     }
 
     // TODO: should this be a maybe impl?
-    fn encode(&self) -> Result<Vec<u8>>;
+    fn encode(&self) -> Result<Vec<u8>> {
+        unimplemented!()
+    }
 
     // TODO: should this be a maybe impl?
     fn describe(&self) -> Descriptor;
@@ -397,11 +168,7 @@ pub trait Inspect {
     // TODO: call
 }
 
-impl<T: Encode + State + Describe + 'static> Inspect for T {
-    fn encode(&self) -> Result<Vec<u8>> {
-        Ok(Encode::encode(self)?)
-    }
-
+impl<T: State + Describe + 'static> Inspect for T {
     fn describe(&self) -> Descriptor {
         Self::describe()
     }
@@ -502,25 +269,6 @@ impl<T: Serialize> MaybeToJson for ToJsonWrapper<T> {
     }
 }
 
-pub struct EntryIter {
-    kv_desc: DynamicChild,
-    store_iter: Iter<Store>,
-}
-
-impl Iterator for EntryIter {
-    type Item = Result<(Value, Value)>;
-
-    fn next(&mut self) -> Option<Result<(Value, Value)>> {
-        self.store_iter.next().map(|res| {
-            res.map(|(key_bytes, value_bytes)| {
-                let key = self.kv_desc.key_desc.decode(&key_bytes)?;
-                let value = self.kv_desc.value_desc.decode(&value_bytes)?;
-                Ok((key, value))
-            })?
-        })
-    }
-}
-
 pub fn err_to_js<E: std::error::Error>(err: E) -> JsValue {
     js_sys::Error::new(err.to_string().as_str()).into()
 }
@@ -595,20 +343,18 @@ impl<T: 'static> Describe for std::marker::PhantomData<T> {
 
 impl<T> Describe for std::cell::RefCell<T>
 where
-    T: State + Encode + Decode + Describe + 'static,
+    T: State + Describe + 'static,
 {
     fn describe() -> Descriptor {
         Builder::new::<Self>()
-            .named_child::<T>("inner", &[], |v| {
-                Builder::access(v, |v: Self| v.into_inner())
-            })
+            .named_child::<T>("inner", &[])
             .build()
     }
 }
 
 impl<T, const N: usize> Describe for [T; N]
 where
-    T: State + Encode + Decode + Terminated + Describe + 'static,
+    T: State + Describe + Terminated + 'static,
 {
     fn describe() -> Descriptor {
         // TODO: add child descriptors
@@ -618,7 +364,7 @@ where
 
 impl<T> Describe for Vec<T>
 where
-    T: State + Encode + Decode + Terminated + Describe + 'static,
+    T: State + Describe + Terminated + 'static,
 {
     fn describe() -> Descriptor {
         // TODO: add child descriptors
@@ -628,7 +374,7 @@ where
 
 impl<T> Describe for Option<T>
 where
-    T: State + Encode + Decode + Terminated + Describe + 'static,
+    T: State + Describe + 'static,
 {
     fn describe() -> Descriptor {
         Builder::new::<Self>()
@@ -647,8 +393,8 @@ macro_rules! tuple_impl {
             fn describe() -> Descriptor {
                 // TODO: add child descriptors
                 Builder::new::<Self>()
-                    $(.named_child::<$type>(stringify!($indices), &[$indices as u8], |v| Builder::access(v, |v: Self| v.$indices)))*
-                    .named_child::<$last_type>(stringify!($last_index), &[$last_index as u8], |v| Builder::access(v, |v: Self| v.$last_index))
+                    $(.named_child::<$type>(stringify!($indices), &[$indices as u8]))*
+                    .named_child::<$last_type>(stringify!($last_index), &[$last_index as u8])
                     .build()
             }
         }

@@ -4,15 +4,15 @@ use std::collections::{btree_map, BTreeMap};
 use std::iter::Peekable;
 use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
-use crate::call::Call;
-use crate::client::{AsyncCall, Client as ClientTrait};
+use crate::call::{Call, FieldCall};
+use crate::describe::Describe;
 use crate::migrate::{MigrateFrom, MigrateInto};
-use crate::query::Query;
+use crate::orga;
+use crate::query::{FieldQuery, Query};
 use crate::state::State;
 use crate::store::*;
 use crate::{Error, Result};
 use ed::*;
-use serde::Serialize;
 
 #[derive(Clone, Debug)]
 pub struct MapKey<K> {
@@ -86,7 +86,7 @@ impl<K> Eq for MapKey<K> {}
 /// When values in the map are mutated, inserted, or deleted, they are retained
 /// in an in-memory map until the call to `State::flush` which writes the
 /// changes to the backing store.
-#[derive(Query, Call)]
+#[derive(FieldQuery, FieldCall)]
 pub struct Map<K, V> {
     pub(super) store: Store,
     children: BTreeMap<MapKey<K>, Option<V>>,
@@ -102,7 +102,7 @@ impl<K, V> Terminated for Map<K, V> {}
 
 impl<K, V> State for Map<K, V>
 where
-    K: Encode + Terminated,
+    K: Encode + Terminated + 'static,
     V: State,
 {
     fn attach(&mut self, store: Store) -> Result<()> {
@@ -143,9 +143,10 @@ impl<K, V> Default for Map<K, V> {
     }
 }
 
+#[orga]
 impl<K, V> Map<K, V>
 where
-    K: Encode + Terminated,
+    K: Encode + Terminated + 'static,
     V: State,
 {
     #[query]
@@ -221,9 +222,9 @@ where
 
 impl<K1, V1, K2, V2> MigrateFrom<Map<K1, V1>> for Map<K2, V2>
 where
-    K1: MigrateInto<K2> + Encode + Decode + Terminated + Clone,
+    K1: MigrateInto<K2> + Encode + Decode + Terminated + Clone + 'static,
     V1: MigrateInto<V2> + State,
-    K2: Encode + Decode + Terminated + Clone,
+    K2: Encode + Decode + Terminated + Clone + 'static,
     V2: State,
 {
     fn migrate_from(mut other: Map<K1, V1>) -> Result<Self> {
@@ -250,7 +251,7 @@ where
 
 impl<K, V> Map<K, V>
 where
-    K: Encode + Terminated,
+    K: Encode + Terminated + 'static,
     V: State + Default,
 {
     pub fn get_or_default(&self, key: K) -> Result<Ref<V>> {
@@ -271,9 +272,26 @@ where
     }
 }
 
+impl<K, V> Describe for Map<K, V>
+where
+    K: Encode + Terminated + Clone + 'static + Describe,
+    V: State + Describe,
+{
+    fn describe() -> crate::describe::Descriptor {
+        use crate::describe::Builder;
+        Builder::new::<Self>()
+            .dynamic_child::<K, V>(|mut query_bytes| {
+                query_bytes.extend_from_slice(&[129]);
+                query_bytes
+            })
+            .build()
+    }
+}
+
+#[orga]
 impl<K, V> Map<K, V>
 where
-    K: Encode + Terminated + Clone,
+    K: Encode + Terminated + Clone + 'static,
     V: State,
 {
     /// Gets a mutable reference to the value in the map for the given key, or
@@ -285,7 +303,7 @@ where
     /// The returned value will reference the latest changes to the data even if
     /// the value was inserted, modified, or deleted since the last time the map
     /// was flushed.
-    #[call]
+    // TODO: #[call]
     pub fn get_mut(&mut self, key: K) -> Result<Option<ChildMut<K, V>>> {
         Ok(self.entry(key)?.into())
     }
@@ -366,7 +384,7 @@ where
 
 impl<'a, K, V> Map<K, V>
 where
-    K: Encode + Decode + Terminated + Clone,
+    K: Encode + Decode + Terminated + Clone + 'static,
     V: State,
 {
     pub fn iter(&'a self) -> Result<Iter<'a, K, V>> {
@@ -406,7 +424,7 @@ fn encode_bound<K: Encode>(bound: Bound<&K>) -> Result<Bound<Vec<u8>>> {
 
 impl<K, V> Map<K, V>
 where
-    K: Encode + Terminated,
+    K: Encode + Terminated + 'static,
     V: State,
 {
     /// Removes all values with the given prefix from the key/value store.
@@ -458,28 +476,9 @@ where
     }
 }
 
-impl<K: Serialize, V: Serialize> Serialize for Map<K, V>
-where
-    K: Encode + Decode + Terminated + Clone,
-    V: State,
-{
-    fn serialize<S: serde::Serializer>(
-        &self,
-        serializer: S,
-    ) -> std::result::Result<S::Ok, S::Error> {
-        use serde::ser::{Error, SerializeSeq};
-        let mut seq = serializer.serialize_seq(None)?;
-        for entry in self.iter().map_err(Error::custom)? {
-            let (key, value) = entry.map_err(Error::custom)?;
-            seq.serialize_element(&(&*key, &*value))?;
-        }
-        seq.end()
-    }
-}
-
 pub struct Iter<'a, K, V>
 where
-    K: Decode + Encode + Terminated,
+    K: Decode + Encode + Terminated + 'static,
     V: State,
 {
     parent: &'a Map<K, V>,
@@ -489,7 +488,7 @@ where
 
 impl<'a, K, V> Iter<'a, K, V>
 where
-    K: Encode + Decode + Terminated,
+    K: Encode + Decode + Terminated + 'static,
     V: State,
 {
     fn iter_merge_next(&mut self, forward: bool) -> Result<Option<(Ref<'a, K>, Ref<'a, V>)>> {
@@ -814,6 +813,14 @@ impl<'a, V: Query> Query for Ref<'a, V> {
     }
 }
 
+impl<'a, V> Query for Ref<'a, V> {
+    default type Query = ();
+
+    default fn query(&self, _query: Self::Query) -> Result<()> {
+        Err(Error::Query("Bounds not met".into()))
+    }
+}
+
 impl<'a, V> Deref for Ref<'a, V> {
     type Target = V;
 
@@ -851,14 +858,6 @@ impl<'a, V: Ord> Ord for Ref<'a, V> {
     }
 }
 
-impl<'a, T: ClientTrait<U>, U: Clone> ClientTrait<U> for Ref<'a, T> {
-    type Client = T::Client;
-
-    fn create_client(parent: U) -> Self::Client {
-        T::create_client(parent)
-    }
-}
-
 /// A mutable reference to an existing value in a collection.
 ///
 /// If the value is mutated, it will be retained in memory until the parent
@@ -874,7 +873,7 @@ pub enum ChildMut<'a, K, V> {
 
 impl<'a, K, V> ChildMut<'a, K, V>
 where
-    K: Encode + Terminated + Clone,
+    K: Encode + Terminated + Clone + 'static,
     V: State,
 {
     /// Removes the value and all of its child key/value entries (if any) from
@@ -993,7 +992,7 @@ where
     }
 }
 
-impl<K: Encode + Decode + Terminated, V: State> Map<K, V> {
+impl<K: Encode + Decode + Terminated + 'static, V: State> Map<K, V> {
     pub fn with_store(store: Store) -> Result<Self> {
         let mut map = Map::new();
         State::attach(&mut map, store)?;
@@ -1003,7 +1002,7 @@ impl<K: Encode + Decode + Terminated, V: State> Map<K, V> {
 
 impl<'a, K, V> Entry<'a, K, V>
 where
-    K: Encode + Terminated + Clone,
+    K: Encode + Terminated + Clone + 'static,
     V: State,
 {
     /// Removes the value for the `Entry` if it exists. Returns a boolean which
@@ -1057,76 +1056,6 @@ impl<'a, K: Encode, V> From<Entry<'a, K, V>> for Option<ChildMut<'a, K, V>> {
             Entry::Vacant { .. } => None,
             Entry::Occupied { child } => Some(child),
         }
-    }
-}
-
-pub struct Client<K, V, U: Clone> {
-    parent: U,
-    key: Option<K>,
-    _marker: std::marker::PhantomData<V>,
-}
-
-impl<K, V, U: Clone> ClientTrait<U> for Map<K, V> {
-    type Client = Client<K, V, U>;
-
-    fn create_client(parent: U) -> Self::Client {
-        Client {
-            parent,
-            key: None,
-            _marker: std::marker::PhantomData,
-        }
-    }
-}
-
-impl<K: Clone, V, U: Clone> Clone for Client<K, V, U> {
-    fn clone(&self) -> Self {
-        Client {
-            parent: self.parent.clone(),
-            key: self.key.clone(),
-            _marker: std::marker::PhantomData,
-        }
-    }
-}
-
-impl<K: Clone, V: Call, U: Clone> Client<K, V, U>
-where
-    V: ClientTrait<Self>,
-{
-    pub fn get_mut(&mut self, key: K) -> V::Client {
-        let mut adapter = self.clone();
-        adapter.key = Some(key);
-        V::create_client(adapter)
-    }
-}
-
-unsafe impl<K: Clone, V: Call, U: Clone> Send for Client<K, V, U>
-where
-    Map<K, V>: Call,
-    U: AsyncCall<Call = <Map<K, V> as Call>::Call>,
-    V::Call: Sync,
-    U: Send,
-    K: Send,
-{
-}
-
-#[async_trait::async_trait(?Send)]
-impl<K: Clone, V: Call, U: Clone> AsyncCall for Client<K, V, U>
-where
-    Map<K, V>: Call<Call = map_call::Call<K>>,
-    U: AsyncCall<Call = <Map<K, V> as Call>::Call>,
-    V::Call: Sync + Send,
-    U: Send,
-    K: Send,
-{
-    type Call = V::Call;
-
-    async fn call(&self, subcall: Self::Call) -> Result<()> {
-        let key = self.key.as_ref().unwrap().clone();
-
-        let subcall_bytes = subcall.encode()?;
-
-        let call = <Map<K, V> as Call>::Call::MethodGetMut(key, subcall_bytes);
-        self.parent.call(call).await
     }
 }
 

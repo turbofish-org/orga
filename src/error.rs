@@ -29,6 +29,9 @@ pub enum Error {
     Ed(#[from] ed::Error),
     #[error("Ibc Error: {0}")]
     Ibc(String),
+    #[cfg(feature = "ibc")]
+    #[error(transparent)]
+    IbcContext(#[from] ibc::core::ContextError),
     #[error("Invalid ID")]
     InvalidID,
     #[error(transparent)]
@@ -64,6 +67,8 @@ pub enum Error {
     Signer(String),
     #[error("Store Error: {0}")]
     Store(String),
+    #[error(transparent)]
+    StoreErr(#[from] crate::store::Error),
     #[error("State Error: {0}")]
     State(String),
     #[error("Test Error: {0}")]

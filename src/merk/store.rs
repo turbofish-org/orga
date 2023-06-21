@@ -1,59 +1,19 @@
 use crate::abci::ABCIStore;
 use crate::error::{Error, Result};
 use crate::store::*;
-use merk::{
-    chunks::ChunkProducer, restore::Restorer, rocksdb, tree::Tree, BatchEntry, Hash, Merk, Op,
-};
-use std::cell::RefCell;
+use merk::{proofs::query::Map as ProofMap, restore::Restorer, tree::Tree, BatchEntry, Merk, Op};
 use std::{collections::BTreeMap, convert::TryInto};
 use std::{
-    mem::transmute,
+    ops::Bound,
     path::{Path, PathBuf},
 };
-use tendermint_proto::abci::{self, *};
+use tendermint_proto::v0_34::abci::{self, *};
+
+use super::snapshot;
 type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
 pub const SNAPSHOT_INTERVAL: u64 = 1000;
-pub const SNAPSHOT_LIMIT: u64 = 4;
 pub const FIRST_SNAPSHOT_HEIGHT: u64 = 2;
-
-struct MerkSnapshot {
-    _checkpoint: Merk,
-    chunks: RefCell<Option<ChunkProducer<'static>>>,
-    length: u32,
-    hash: Hash,
-}
-
-impl MerkSnapshot {
-    fn new(checkpoint: Merk) -> Result<Self> {
-        let chunks = checkpoint.chunks()?;
-        let chunks: ChunkProducer<'static> = unsafe { transmute(chunks) };
-
-        let length = chunks.len() as u32;
-        let hash = checkpoint.root_hash();
-
-        Ok(Self {
-            _checkpoint: checkpoint,
-            chunks: RefCell::new(Some(chunks)),
-            length,
-            hash,
-        })
-    }
-
-    fn chunk(&self, index: usize) -> Result<Vec<u8>> {
-        let mut chunks = self.chunks.borrow_mut();
-        let chunks = chunks.as_mut().unwrap();
-        let chunk = chunks.chunk(index)?;
-        Ok(chunk)
-    }
-}
-
-impl Drop for MerkSnapshot {
-    fn drop(&mut self) {
-        // drop the self-referential ChunkProducer before the Merk instance
-        self.chunks.borrow_mut().take();
-    }
-}
 
 /// A [`store::Store`] implementation backed by a [`merk`](https://docs.rs/merk)
 /// Merkle key/value store.
@@ -61,7 +21,7 @@ pub struct MerkStore {
     merk: Option<Merk>,
     home: PathBuf,
     map: Option<Map>,
-    snapshots: BTreeMap<u64, MerkSnapshot>,
+    snapshots: snapshot::Snapshots,
     restorer: Option<Restorer>,
     target_snapshot: Option<Snapshot>,
 }
@@ -79,13 +39,16 @@ impl MerkStore {
         maybe_remove_restore(&home).expect("Failed to remove incomplete state sync restore");
 
         let snapshot_path = home.join("snapshots");
-
-        let no_snapshot = !snapshot_path.exists();
-        if no_snapshot {
-            std::fs::create_dir(&snapshot_path).expect("Failed to create 'snapshots' directory");
-        }
-
-        let snapshots = load_snapshots(&home).expect("Failed to load snapshots");
+        let snapshots = snapshot::Snapshots::load(snapshot_path.as_path())
+            .expect("Failed to load snapshots")
+            // TODO: make configurable
+            .with_filters(vec![
+                #[cfg(feature = "state-sync")]
+                snapshot::SnapshotFilter::specific_height(2, None),
+                #[cfg(feature = "state-sync")]
+                snapshot::SnapshotFilter::interval(1000, 4),
+                snapshot::SnapshotFilter::interval(1, 20),
+            ]);
 
         MerkStore {
             map: Some(Default::default()),
@@ -151,6 +114,10 @@ impl MerkStore {
     pub fn merk(&self) -> &Merk {
         self.merk.as_ref().unwrap()
     }
+
+    pub(crate) fn snapshots(&self) -> &snapshot::Snapshots {
+        &self.snapshots
+    }
 }
 
 /// Collects an iterator of key/value entries into a `Vec`.
@@ -176,94 +143,75 @@ impl Read for MerkStore {
     }
 
     fn get_next(&self, start: &[u8]) -> Result<Option<KV>> {
-        // TODO: use an iterator in merk which steps through in-memory nodes
-        // (loading if necessary)
-        let mut iter = self.merk().raw_iter();
-        iter.seek(start);
+        get_next(self.merk(), start)
+    }
+
+    fn get_prev(&self, end: Option<&[u8]>) -> Result<Option<KV>> {
+        get_prev(self.merk(), end)
+    }
+}
+
+pub(crate) fn get_next(merk: &Merk, start: &[u8]) -> Result<Option<KV>> {
+    // TODO: use an iterator in merk which steps through in-memory nodes
+    // (loading if necessary)
+    let mut iter = merk.raw_iter();
+    iter.seek(start);
+
+    if !iter.valid() {
+        iter.status()?;
+        return Ok(None);
+    }
+
+    if iter.key().unwrap() == start {
+        iter.next();
+
+        if !iter.valid() {
+            iter.status()?;
+            return Ok(None);
+        }
+    }
+
+    let key = iter.key().unwrap();
+    let tree_bytes = iter.value().unwrap();
+    let tree = Tree::decode(vec![], tree_bytes);
+    let value = tree.value();
+    Ok(Some((key.to_vec(), value.to_vec())))
+}
+
+pub(crate) fn get_prev(merk: &Merk, end: Option<&[u8]>) -> Result<Option<KV>> {
+    // TODO: use an iterator in merk which steps through in-memory nodes
+    // (loading if necessary)
+    let mut iter = merk.raw_iter();
+    if let Some(key) = end {
+        iter.seek(key);
 
         if !iter.valid() {
             iter.status()?;
             return Ok(None);
         }
 
-        if iter.key().unwrap() == start {
-            iter.next();
+        if iter.key().unwrap() == key {
+            iter.prev();
 
             if !iter.valid() {
                 iter.status()?;
                 return Ok(None);
             }
         }
+    } else {
+        iter.seek_to_last();
 
-        let key = iter.key().unwrap();
-        let tree_bytes = iter.value().unwrap();
-        let tree = Tree::decode(vec![], tree_bytes);
-        let value = tree.value();
-        Ok(Some((key.to_vec(), value.to_vec())))
-    }
-
-    fn get_prev(&self, end: Option<&[u8]>) -> Result<Option<KV>> {
-        // TODO: use an iterator in merk which steps through in-memory nodes
-        // (loading if necessary)
-        let mut iter = self.merk().raw_iter();
-        if let Some(key) = end {
-            iter.seek(key);
-
-            if !iter.valid() {
-                iter.status()?;
-                return Ok(None);
-            }
-
-            if iter.key().unwrap() == key {
-                iter.prev();
-
-                if !iter.valid() {
-                    iter.status()?;
-                    return Ok(None);
-                }
-            }
-        } else {
-            iter.seek_to_last();
-
-            if !iter.valid() {
-                iter.status()?;
-                return Ok(None);
-            }
+        if !iter.valid() {
+            iter.status()?;
+            return Ok(None);
         }
-
-        let key = iter.key().unwrap();
-        let tree_bytes = iter.value().unwrap();
-        let tree = Tree::decode(vec![], tree_bytes);
-        let value = tree.value();
-        Ok(Some((key.to_vec(), value.to_vec())))
     }
-}
 
-pub struct Iter<'a> {
-    iter: rocksdb::DBRawIterator<'a>,
-}
-
-impl<'a> Iterator for Iter<'a> {
-    type Item = (&'a [u8], &'a [u8]);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if !self.iter.valid() {
-            return None;
-        }
-
-        // here we use unsafe code to add lifetimes, since rust-rocksdb just
-        // returns the data with no lifetimes. the transmute calls convert from
-        // `&[u8]` to `&'a [u8]`, so there is no way this can make things *less*
-        // correct.
-        let entry = unsafe {
-            (
-                transmute(self.iter.key().unwrap()),
-                transmute(self.iter.value().unwrap()),
-            )
-        };
-        self.iter.next();
-        Some(entry)
-    }
+    let key = iter.key().unwrap();
+    let tree_bytes = iter.value().unwrap();
+    let tree = Tree::decode(vec![], tree_bytes);
+    let value = tree.value();
+    Ok(Some((key.to_vec(), value.to_vec())))
 }
 
 impl Write for MerkStore {
@@ -305,7 +253,8 @@ impl ABCIStore for MerkStore {
         Ok(calc_app_hash(merk_root.as_slice()))
     }
 
-    fn commit(&mut self, height: u64) -> Result<()> {
+    fn commit(&mut self, header: tendermint_proto::v0_34::types::Header) -> Result<()> {
+        let height = header.height as u64;
         let height_bytes = height.to_be_bytes();
 
         let metadata = vec![(b"height".to_vec(), Some(height_bytes.to_vec()))];
@@ -313,34 +262,29 @@ impl ABCIStore for MerkStore {
         self.write(metadata)?;
         self.merk.as_mut().unwrap().flush()?;
 
+        let recent = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64
+            - header.time.unwrap().seconds
+            < 10;
+
         #[cfg(feature = "state-sync")]
-        self.maybe_create_snapshot()?;
+        if recent && self.snapshots.should_create(height) {
+            let path = self.snapshots.path(height);
+            let checkpoint = self.merk.as_ref().unwrap().checkpoint(path)?;
+            self.snapshots.create(height, checkpoint)?;
+        }
 
         Ok(())
     }
 
     fn list_snapshots(&self) -> Result<Vec<Snapshot>> {
-        let snapshots = self
-            .snapshots
-            .iter()
-            .map(|(height, snapshot)| Snapshot {
-                chunks: snapshot.length,
-                hash: snapshot.hash.to_vec(),
-                height: *height,
-                ..Default::default()
-            })
-            .collect();
-        Ok(snapshots)
+        self.snapshots.abci_snapshots()
     }
 
     fn load_snapshot_chunk(&self, req: RequestLoadSnapshotChunk) -> Result<Vec<u8>> {
-        match self.snapshots.get(&req.height) {
-            Some(snapshot) => snapshot.chunk(req.chunk as usize),
-            // ABCI has no way to specify that we don't have the requested
-            // chunk, so we just return an empty one (and probably get banned by
-            // the client when they try to verify)
-            None => Ok(vec![]),
-        }
+        self.snapshots.abci_load_chunk(req)
     }
 
     fn apply_snapshot_chunk(&mut self, req: RequestApplySnapshotChunk) -> Result<()> {
@@ -351,7 +295,7 @@ impl ABCIStore for MerkStore {
             .expect("Tried to apply a snapshot chunk while no state sync is in progress");
 
         if self.restorer.is_none() {
-            let expected_hash: [u8; 32] = match target_snapshot.hash.clone().try_into() {
+            let expected_hash: [u8; 32] = match target_snapshot.hash.to_vec().try_into() {
                 Ok(inner) => inner,
                 Err(_) => {
                     return Err(Error::Store("Failed to convert expected root hash".into()));
@@ -367,7 +311,7 @@ impl ABCIStore for MerkStore {
         }
 
         let restorer = self.restorer.as_mut().unwrap();
-        let chunks_remaining = restorer.process_chunk(req.chunk.as_slice())?;
+        let chunks_remaining = restorer.process_chunk(req.chunk.to_vec().as_slice())?;
         if chunks_remaining == 0 {
             let restored = self.restorer.take().unwrap().finalize()?;
             self.merk.take().unwrap().destroy()?;
@@ -395,58 +339,15 @@ impl ABCIStore for MerkStore {
         if let Some(snapshot) = req.snapshot {
             let is_canonical_height = snapshot.height % SNAPSHOT_INTERVAL == 0
                 || snapshot.height == FIRST_SNAPSHOT_HEIGHT;
-            if is_canonical_height && calc_app_hash(snapshot.hash.as_slice()) == req.app_hash {
+            if is_canonical_height
+                && calc_app_hash(snapshot.hash.to_vec().as_slice()) == req.app_hash
+            {
                 self.target_snapshot = Some(snapshot);
                 res.set_result(abci::response_offer_snapshot::Result::Accept);
             }
         }
 
         Ok(res)
-    }
-}
-
-impl MerkStore {
-    fn maybe_create_snapshot(&mut self) -> Result<()> {
-        let height = self.height()?;
-        if height == 0 || (height % SNAPSHOT_INTERVAL != 0 && height != FIRST_SNAPSHOT_HEIGHT) {
-            return Ok(());
-        }
-        if self.snapshots.contains_key(&height) {
-            return Ok(());
-        }
-
-        let path = self.snapshot_path(height);
-        let merk = self.merk.as_ref().unwrap();
-        let checkpoint = merk.checkpoint(path)?;
-
-        let snapshot = MerkSnapshot::new(checkpoint)?;
-        self.snapshots.insert(height, snapshot);
-
-        self.maybe_prune_snapshots()
-    }
-
-    fn maybe_prune_snapshots(&mut self) -> Result<()> {
-        let height = self.height()?;
-        if height <= SNAPSHOT_INTERVAL * SNAPSHOT_LIMIT {
-            return Ok(());
-        }
-
-        // TODO: iterate through snapshot map rather than just pruning the
-        // expected oldest one
-
-        let remove_height = height - SNAPSHOT_INTERVAL * SNAPSHOT_LIMIT;
-        self.snapshots.remove(&remove_height);
-
-        let path = self.snapshot_path(remove_height);
-        if path.exists() {
-            std::fs::remove_dir_all(path)?;
-        }
-
-        Ok(())
-    }
-
-    fn snapshot_path(&self, height: u64) -> PathBuf {
-        self.path("snapshots").join(height.to_string())
     }
 }
 
@@ -459,28 +360,44 @@ fn maybe_remove_restore(home: &Path) -> Result<()> {
     Ok(())
 }
 
-fn load_snapshots(home: &Path) -> Result<BTreeMap<u64, MerkSnapshot>> {
-    let mut snapshots = BTreeMap::new();
-
-    let snapshot_dir = home.join("snapshots").read_dir()?;
-    for entry in snapshot_dir {
-        let entry = entry?;
-        let path = entry.path();
-
-        // TODO: open read-only
-        let checkpoint = Merk::open(&path)?;
-        let snapshot = MerkSnapshot::new(checkpoint)?;
-
-        let height_str = path.file_name().unwrap().to_str().unwrap();
-        let height: u64 = height_str.parse()?;
-        snapshots.insert(height, snapshot);
-    }
-
-    Ok(snapshots)
-}
-
 fn read_u64(bytes: &[u8]) -> u64 {
     let mut array = [0; 8];
     array.copy_from_slice(bytes);
     u64::from_be_bytes(array)
+}
+
+pub struct ProofStore(pub ProofMap);
+
+impl Read for ProofStore {
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        let maybe_value = self.0.get(key).map_err(|err| {
+            if let merk::Error::MissingData = err {
+                Error::StoreErr(crate::store::Error::ReadUnknown(key.to_vec()))
+            } else {
+                Error::Merk(err)
+            }
+        })?;
+        Ok(maybe_value.map(|value| value.to_vec()))
+    }
+
+    fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
+        let mut iter = self.0.range((Bound::Excluded(key), Bound::Unbounded));
+        let item = iter.next().transpose().map_err(|err| {
+            if let merk::Error::MissingData = err {
+                Error::StoreErr(crate::store::Error::ReadUnknown(key.to_vec()))
+            } else {
+                Error::Merk(err)
+            }
+        })?;
+        Ok(item.map(|(k, v)| (k.to_vec(), v.to_vec())))
+    }
+
+    fn get_prev(&self, key: Option<&[u8]>) -> Result<Option<KV>> {
+        let mut iter = self.0.range((
+            Bound::Unbounded,
+            key.map_or(Bound::Unbounded, Bound::Excluded),
+        ));
+        let item = iter.next_back().transpose()?;
+        Ok(item.map(|(k, v)| (k.to_vec(), v.to_vec())))
+    }
 }

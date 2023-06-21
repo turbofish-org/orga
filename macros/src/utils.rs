@@ -1,17 +1,19 @@
+use darling::util::path_to_string;
+use heck::{CamelCase, SnakeCase};
 use proc_macro2::TokenStream;
-use quote::quote;
+use quote::{format_ident, quote};
 use regex::Regex;
 use std::collections::HashSet;
 use syn::Ident;
 use syn::*;
 
-pub fn parse_parent() -> File {
+pub fn _parse_parent() -> File {
     let path = proc_macro::Span::call_site().source_file().path();
     let source = std::fs::read_to_string(path).unwrap_or_default();
     parse_file(source.as_str()).unwrap()
 }
 
-pub fn get_generic_requirements<I, J>(inputs: I, params: J) -> Vec<Ident>
+pub fn _get_generic_requirements<I, J>(inputs: I, params: J) -> Vec<Ident>
 where
     I: Iterator<Item = Type>,
     J: Iterator<Item = GenericParam>,
@@ -68,7 +70,7 @@ where
     req_set.into_iter().collect()
 }
 
-pub fn relevant_impls(names: Vec<&Ident>, source: &File) -> Vec<ItemImpl> {
+pub fn _relevant_impls(names: Vec<&Ident>, source: &File) -> Vec<ItemImpl> {
     source
         .items
         .iter()
@@ -99,23 +101,19 @@ pub fn relevant_impls(names: Vec<&Ident>, source: &File) -> Vec<ItemImpl> {
         .collect()
 }
 
-pub fn relevant_methods(
-    name: &Ident,
-    attr: &str,
-    source: &File,
-) -> Vec<(ImplItemMethod, ItemImpl)> {
+pub fn _relevant_methods(name: &Ident, attr: &str, source: &File) -> Vec<(ImplItemFn, ItemImpl)> {
     let get_methods = |item: ItemImpl| -> Vec<_> {
         item.items
             .iter()
             .filter_map(|item| match item {
-                ImplItem::Method(method) => Some(method),
+                ImplItem::Fn(method) => Some(method),
                 _ => None,
             })
             .filter(|method| {
                 method
                     .attrs
                     .iter()
-                    .find(|a| a.path.is_ident(&attr))
+                    .find(|a| a.path().is_ident(&attr))
                     .is_some()
             })
             .filter(|method| matches!(method.vis, Visibility::Public(_)))
@@ -126,7 +124,7 @@ pub fn relevant_methods(
             .collect()
     };
 
-    relevant_impls(vec![name, &strip_version(name)], source)
+    _relevant_impls(vec![name, &_strip_version(name)], source)
         .into_iter()
         .flat_map(get_methods)
         .collect()
@@ -157,7 +155,7 @@ pub fn gen_param_input(generics: &Generics, bracketed: bool) -> TokenStream {
     }
 }
 
-pub fn strip_version(ident: &Ident) -> Ident {
+pub fn _strip_version(ident: &Ident) -> Ident {
     let name = ident.to_string();
     let re = Regex::new(r"V([0-9]+)").unwrap();
     let stripped_name = re.replace_all(&name, "").to_string();
@@ -193,11 +191,30 @@ pub struct Types {
     pub flusher_ty: TokenStream,
     pub loader_ty: TokenStream,
     pub result_ty: TokenStream,
+    pub error_ty: TokenStream,
     pub terminated_trait: TokenStream,
     pub encode_trait: TokenStream,
     pub decode_trait: TokenStream,
     pub encoder_ty: TokenStream,
     pub decoder_ty: TokenStream,
+    pub field_call_trait: TokenStream,
+    pub method_call_trait: TokenStream,
+    pub call_trait: TokenStream,
+    pub trace_fn: TokenStream,
+    pub maybe_pop_trace_fn: TokenStream,
+    pub trace_method_type_enum: TokenStream,
+    pub keyop_ty: TokenStream,
+    pub ed_result_ty: TokenStream,
+    pub ed_error_ty: TokenStream,
+    pub call_item_ty: TokenStream,
+    pub child_trait: TokenStream,
+    pub child_field_ty: TokenStream,
+    pub build_call_trait: TokenStream,
+    pub call_builder_ty: TokenStream,
+    pub query_trait: TokenStream,
+    pub field_query_trait: TokenStream,
+    pub method_query_trait: TokenStream,
+    pub query_item_ty: TokenStream,
 }
 
 impl Default for Types {
@@ -209,17 +226,59 @@ impl Default for Types {
             flusher_ty: quote! { ::orga::state::Flusher },
             loader_ty: quote! { ::orga::state::Loader },
             result_ty: quote! { ::orga::Result },
+            error_ty: quote! { ::orga::Error },
             terminated_trait: quote! { ::orga::encoding::Terminated },
             encode_trait: quote! { ::orga::encoding::Encode },
             decode_trait: quote! { ::orga::encoding::Decode },
             encoder_ty: quote! { ::orga::encoding::encoder::Encoder },
             decoder_ty: quote! { ::orga::encoding::decoder::Decoder },
+            field_call_trait: quote! { ::orga::call::FieldCall },
+            method_call_trait: quote! { ::orga::call::MethodCall },
+            call_trait: quote! { ::orga::call::Call },
+            trace_fn: quote! { ::orga::client::trace::push_trace },
+            maybe_pop_trace_fn: quote! { ::orga::client::trace::maybe_pop_trace },
+            trace_method_type_enum: quote! { ::orga::client::trace::MethodType },
+            keyop_ty: quote! { ::orga::describe::KeyOp },
+            ed_result_ty: quote! { ::orga::encoding::Result },
+            ed_error_ty: quote! { ::orga::encoding::Error },
+            call_item_ty: quote! { ::orga::call::Item },
+            child_trait: quote! { ::orga::describe::child::Child },
+            child_field_ty: quote! { ::orga::describe::child::Field },
+            build_call_trait: quote! { ::orga::call::BuildCall },
+            call_builder_ty: quote! { ::orga::call::CallBuilder },
+            query_trait: quote! { ::orga::query::Query },
+            field_query_trait: quote! { ::orga::query::FieldQuery },
+            method_query_trait: quote! { ::orga::query::MethodQuery },
+            query_item_ty: quote! { ::orga::query::Item },
         }
     }
 }
 
 pub fn is_attr_with_ident(attr: &Attribute, ident: &str) -> bool {
-    attr.path
+    attr.path()
         .get_ident()
         .map_or(false, |attr_ident| attr_ident.to_string() == ident)
+}
+
+pub fn to_camel_case(ident: &Ident) -> Ident {
+    Ident::new(&format!("{}", ident).as_str().to_camel_case(), ident.span())
+}
+
+pub fn to_snake_case(ident: &Ident) -> Ident {
+    Ident::new(&format!("{}", ident).as_str().to_snake_case(), ident.span())
+}
+
+pub fn impl_item_attrs(item: &ImplItem) -> Vec<Attribute> {
+    use ImplItem::*;
+    match item {
+        Fn(method) => method.attrs.clone(),
+        Const(constant) => constant.attrs.clone(),
+        Type(ty) => ty.attrs.clone(),
+        Macro(macro_) => macro_.attrs.clone(),
+        _ => unimplemented!(),
+    }
+}
+
+pub fn path_to_ident(path: &Path) -> Ident {
+    format_ident!("{}", path_to_string(path))
 }

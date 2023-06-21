@@ -1,14 +1,11 @@
-use serde::{Deserialize, Serialize};
+use orga_macros::orga;
 
 use super::sdk_compat::{sdk::Tx as SdkTx, ConvertSdkTx};
 use super::Paid;
 use crate::call::Call;
-use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Coin, Symbol};
 use crate::context::{Context, GetContext};
-use crate::encoding::{Decode, Encode};
-use crate::migrate::{MigrateFrom, MigrateInto};
-use crate::query::Query;
+
 use crate::state::State;
 use crate::{Error, Result};
 use std::marker::PhantomData;
@@ -16,46 +13,10 @@ use std::ops::{Deref, DerefMut};
 
 pub const MIN_FEE: u64 = 10_000;
 
-#[derive(Encode, Decode, Default, Serialize, Deserialize, State)]
-#[state(transparent)]
+#[orga(skip(Call))]
 pub struct FeePlugin<S, T> {
-    #[state(skip)]
     _symbol: PhantomData<S>,
-    inner: T,
-}
-
-impl<S1, S2, T1, T2> MigrateFrom<FeePlugin<S1, T1>> for FeePlugin<S2, T2>
-where
-    T1: MigrateInto<T2>,
-{
-    fn migrate_from(other: FeePlugin<S1, T1>) -> Result<Self> {
-        Ok(Self {
-            _symbol: other._symbol.migrate_into()?,
-            inner: other.inner.migrate_into()?,
-        })
-    }
-}
-
-// impl<S, T> Describe for FeePlugin<S, T>
-// where
-//     S: Symbol,
-//     T: State + Describe + 'static,
-// {
-//     fn describe() -> crate::describe::Descriptor {
-//         crate::describe::Builder::new::<Self>()
-//             .named_child::<T>("inner", &[], |v| {
-//                 crate::describe::Builder::access(v, |v: Self| v.inner)
-//             })
-//             .build()
-//     }
-// }
-
-impl<S, T: Query> Query for FeePlugin<S, T> {
-    type Query = T::Query;
-
-    fn query(&self, query: Self::Query) -> Result<()> {
-        self.inner.query(query)
-    }
+    pub inner: T,
 }
 
 impl<S: Symbol, T: Call + State> Call for FeePlugin<S, T> {
@@ -86,73 +47,6 @@ impl<S, T: ConvertSdkTx> ConvertSdkTx for FeePlugin<S, T> {
 
     fn convert(&self, sdk_tx: &SdkTx) -> Result<T::Output> {
         self.inner.convert(sdk_tx)
-    }
-}
-
-pub struct FeeAdapter<T, U: Clone, S> {
-    parent: U,
-    marker: std::marker::PhantomData<fn(S, T)>,
-}
-
-unsafe impl<T, U: Send + Clone, S> Send for FeeAdapter<T, U, S> {}
-
-impl<T, U: Clone, S> Clone for FeeAdapter<T, U, S> {
-    fn clone(&self) -> Self {
-        FeeAdapter {
-            parent: self.parent.clone(),
-            marker: std::marker::PhantomData,
-        }
-    }
-}
-
-#[async_trait::async_trait(?Send)]
-impl<T: Call, U: AsyncCall<Call = T::Call> + Clone, S> AsyncCall for FeeAdapter<T, U, S>
-where
-    T::Call: Send,
-    U: Send,
-{
-    type Call = T::Call;
-
-    async fn call(&self, call: Self::Call) -> Result<()> {
-        self.parent.call(call).await
-    }
-}
-
-#[async_trait::async_trait(?Send)]
-impl<
-        T: Query + State,
-        U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = std::rc::Rc<FeePlugin<S, T>>> + Clone,
-        S,
-    > AsyncQuery for FeeAdapter<T, U, S>
-{
-    type Query = T::Query;
-    type Response<'a> = std::rc::Rc<T>;
-
-    async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
-    where
-        F: FnMut(Self::Response<'_>) -> Result<R>,
-    {
-        self.parent
-            .query(query, |plugin| {
-                check(std::rc::Rc::new(
-                    std::rc::Rc::try_unwrap(plugin)
-                        .map_err(|_| ())
-                        .unwrap()
-                        .inner,
-                ))
-            })
-            .await
-    }
-}
-
-impl<S, T: Client<FeeAdapter<T, U, S>>, U: Clone> Client<U> for FeePlugin<S, T> {
-    type Client = T::Client;
-
-    fn create_client(parent: U) -> Self::Client {
-        T::create_client(FeeAdapter {
-            parent,
-            marker: std::marker::PhantomData,
-        })
     }
 }
 
@@ -214,8 +108,8 @@ mod abci {
     {
         fn abci_query(
             &self,
-            request: &tendermint_proto::abci::RequestQuery,
-        ) -> Result<tendermint_proto::abci::ResponseQuery> {
+            request: &tendermint_proto::v0_34::abci::RequestQuery,
+        ) -> Result<tendermint_proto::v0_34::abci::ResponseQuery> {
             self.inner.abci_query(request)
         }
     }

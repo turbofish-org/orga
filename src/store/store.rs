@@ -1,11 +1,13 @@
 use serde::{Deserialize, Serialize};
-use std::ops::RangeBounds;
+use std::ops::{Bound, RangeBounds};
 
-use super::{Iter, Read, Shared, Write, KV};
-use crate::encoding::{Decode, Encode, Terminated};
+use super::{BackingStore, Iter, Read, Shared, Write, KV};
+use crate::describe::Describe;
+use crate::encoding::{Decode, Encode, LengthVec, Terminated};
 use crate::migrate::MigrateFrom;
+use crate::query::FieldQuery;
 use crate::state::State;
-use crate::{Error, Result};
+use crate::{orga, Error, Result};
 
 // TODO: figure out how to let users set DefaultBackingStore, similar to setting
 // the global allocator in the standard library
@@ -13,10 +15,7 @@ use crate::{Error, Result};
 /// The default backing store used as the type parameter given to `Store`. This
 /// is used to prevent generic parameters bubbling up to the application level
 /// for state types when they often all use the same backing store.
-#[cfg(any(feature = "merk", feature = "merk-verify"))]
-pub type DefaultBackingStore = crate::merk::BackingStore;
-#[cfg(all(not(feature = "merk"), not(feature = "merk-verify")))]
-pub type DefaultBackingStore = Shared<super::MapStore>;
+pub type DefaultBackingStore = BackingStore;
 
 /// Wraps a "backing store" (an implementation of `Read` and possibly `Write`),
 /// and applies all operations to a certain part of the backing store's keyspace
@@ -25,12 +24,26 @@ pub type DefaultBackingStore = Shared<super::MapStore>;
 /// This type is how high-level state types interact with the store, since they
 /// will often need to create substores (through the `store.sub(prefix)`
 /// method).
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize, FieldQuery)]
 pub struct Store<S = DefaultBackingStore> {
     #[serde(skip)]
     prefix: Vec<u8>,
     #[serde(skip)]
     store: Shared<S>,
+}
+
+impl Store {
+    pub fn with_map_store() -> Self {
+        use super::MapStore;
+        Self::new(BackingStore::MapStore(Shared::new(MapStore::new())))
+    }
+
+    pub fn with_partial_map_store() -> Self {
+        use super::bufstore::PartialMapStore;
+        Self::new(BackingStore::PartialMapStore(Shared::new(
+            PartialMapStore::new(),
+        )))
+    }
 }
 
 impl MigrateFrom for Store {
@@ -39,14 +52,14 @@ impl MigrateFrom for Store {
     }
 }
 
-// impl<S> Describe for Store<S>
-// where
-//     Self: State + 'static,
-// {
-//     fn describe() -> crate::describe::Descriptor {
-//         crate::describe::Builder::new::<Self>().build()
-//     }
-// }
+impl<S> Describe for Store<S>
+where
+    Self: State + 'static,
+{
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>().build()
+    }
+}
 
 impl<S> Encode for Store<S> {
     fn encode_into<W: std::io::Write>(&self, _dest: &mut W) -> ed::Result<()> {
@@ -75,7 +88,7 @@ impl<S> Clone for Store<S> {
     }
 }
 
-impl<S> Store<S> {
+impl<S: Read> Store<S> {
     /// Creates a new `Store` with no prefix, with `backing` as its backing
     /// store.
     #[inline]
@@ -123,6 +136,31 @@ impl<S> Store<S> {
         Self: Read,
     {
         Read::into_iter(self.clone(), bounds)
+    }
+}
+
+#[orga]
+impl Store {
+    #[query]
+    pub fn get_query(&self, key: LengthVec<u8, u8>) -> Result<Option<Vec<u8>>> {
+        self.store.get(key.as_slice())
+    }
+
+    #[query]
+    pub fn page(
+        &self,
+        start: LengthVec<u8, u8>,
+        end: Option<LengthVec<u8, u8>>,
+        limit: u32,
+    ) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
+        let limit = limit.min(100);
+
+        let start = Bound::Included(start.to_vec());
+        let end = match end {
+            Some(end) => Bound::Included(end.to_vec()),
+            None => Bound::Unbounded,
+        };
+        self.range((start, end)).take(limit as usize).collect()
     }
 }
 

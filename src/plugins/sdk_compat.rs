@@ -1,97 +1,22 @@
+use orga_macros::orga;
+
 use crate::call::Call as CallTrait;
-use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Address, Symbol};
+
 use crate::encoding::{Decode, Encode};
-use crate::migrate::{MigrateFrom, MigrateInto};
-use crate::prelude::{Attacher, Flusher, Loader, Store};
-use crate::query::Query;
+
 use crate::state::State;
-use crate::{compat_mode, Error, Result};
+use crate::{Error, Result};
 
 use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut};
 
 pub const MAX_CALL_SIZE: usize = 65_535;
 pub const NATIVE_CALL_FLAG: u8 = 0xff;
 
-// TODO: add version 1 so that plugin is transparent on `inner`
-
-#[derive(Default, Clone, Serialize)]
-pub struct SdkCompatPlugin<S, T: State> {
+#[orga(skip(Call, FieldCall))]
+pub struct SdkCompatPlugin<S, T> {
     pub(crate) symbol: PhantomData<S>,
-    pub(crate) inner: T,
-}
-
-impl<S, T: State> State for SdkCompatPlugin<S, T> {
-    fn attach(&mut self, store: Store) -> Result<()> {
-        if compat_mode() {
-            Attacher::new(store).attach_transparent_child(&mut self.inner)?;
-            return Ok(());
-        }
-
-        Attacher::new(store)
-            .attach_child(&mut self.symbol)?
-            .attach_child(&mut self.inner)?;
-        Ok(())
-    }
-
-    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
-        if compat_mode() {
-            Flusher::new(out)
-                .version(0u8)?
-                .flush_transparent_child(self.inner)?;
-            return Ok(());
-        }
-
-        Flusher::new(out)
-            .version(0u8)?
-            .flush_child(self.symbol)?
-            .flush_child(self.inner)?;
-        Ok(())
-    }
-
-    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
-        let mut loader = Loader::new(store.clone(), bytes, 0u8);
-        let mut value: Self = if compat_mode() {
-            Self {
-                symbol: loader.load_transparent_child_other()?,
-                inner: loader.load_transparent_child_inner()?,
-            }
-        } else {
-            Self {
-                symbol: loader.load_child()?,
-                inner: loader.load_child()?,
-            }
-        };
-        value.attach(store)?;
-        Ok(value)
-    }
-}
-
-impl<S1, S2, T1: State, T2: State> MigrateFrom<SdkCompatPlugin<S1, T1>> for SdkCompatPlugin<S2, T2>
-where
-    T1: MigrateInto<T2>,
-{
-    fn migrate_from(other: SdkCompatPlugin<S1, T1>) -> Result<Self> {
-        Ok(Self {
-            symbol: other.symbol.migrate_into()?,
-            inner: other.inner.migrate_into()?,
-        })
-    }
-}
-
-impl<S, T: State> Deref for SdkCompatPlugin<S, T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl<S, T: State> DerefMut for SdkCompatPlugin<S, T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
+    pub inner: T,
 }
 
 #[derive(Debug)]
@@ -266,8 +191,10 @@ pub mod sdk {
                         .ok_or_else(|| Error::App("No signatures provided".to_string()))?
                         .pub_key
                         .value;
-
-                    base64::decode(pubkey_b64).map_err(|e| Error::App(e.to_string()))?
+                    use base64::Engine;
+                    base64::prelude::BASE64_STANDARD
+                        .decode(pubkey_b64)
+                        .map_err(|e| Error::App(e.to_string()))?
                 }
                 Tx::Protobuf(tx) => tx
                     .auth_info
@@ -302,7 +229,10 @@ pub mod sdk {
                         .ok_or_else(|| Error::App("No signatures provided".to_string()))?
                         .signature;
 
-                    base64::decode(sig_b64).map_err(|e| Error::App(e.to_string()))?
+                    use base64::Engine;
+                    base64::prelude::BASE64_STANDARD
+                        .decode(sig_b64)
+                        .map_err(|e| Error::App(e.to_string()))?
                 }
                 Tx::Protobuf(tx) => tx
                     .signatures
@@ -413,7 +343,6 @@ pub trait ConvertSdkTx {
 impl<S: Symbol, T> CallTrait for SdkCompatPlugin<S, T>
 where
     T: CallTrait + State + ConvertSdkTx<Output = T::Call>,
-    T::Call: Encode + 'static,
 {
     type Call = Call<T::Call>;
 
@@ -424,135 +353,6 @@ where
         };
 
         self.inner.call(call)
-    }
-}
-
-impl<S, T: Query + State> Query for SdkCompatPlugin<S, T> {
-    type Query = T::Query;
-
-    fn query(&self, query: Self::Query) -> Result<()> {
-        self.inner.query(query)
-    }
-}
-
-pub struct SdkCompatAdapter<T, U, S> {
-    inner: std::marker::PhantomData<fn(T, S)>,
-    parent: U,
-}
-
-impl<T, U: Clone, S> Clone for SdkCompatAdapter<T, U, S> {
-    fn clone(&self) -> Self {
-        Self {
-            inner: std::marker::PhantomData,
-            parent: self.parent.clone(),
-        }
-    }
-}
-
-#[async_trait::async_trait(?Send)]
-impl<T: CallTrait, U, S> AsyncCall for SdkCompatAdapter<T, U, S>
-where
-    U: AsyncCall<Call = Call<T::Call>>,
-    T::Call: Send,
-{
-    type Call = T::Call;
-
-    async fn call(&self, call: Self::Call) -> Result<()> {
-        self.parent.call(Call::Native(call)).await
-    }
-}
-
-#[async_trait::async_trait(?Send)]
-impl<
-        T: Query + State,
-        U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = std::rc::Rc<SdkCompatPlugin<S, T>>>
-            + Clone,
-        S,
-    > AsyncQuery for SdkCompatAdapter<T, U, S>
-{
-    type Query = T::Query;
-    type Response<'a> = std::rc::Rc<T>;
-
-    async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
-    where
-        F: FnMut(Self::Response<'_>) -> Result<R>,
-    {
-        self.parent
-            .query(query, |plugin| {
-                check(std::rc::Rc::new(
-                    std::rc::Rc::try_unwrap(plugin)
-                        .map_err(|_| ())
-                        .unwrap()
-                        .inner,
-                ))
-            })
-            .await
-    }
-}
-
-pub struct SdkCompatClient<T: Client<SdkCompatAdapter<T, U, S>>, U: Clone, S> {
-    inner: T::Client,
-    _parent: U,
-}
-
-impl<T: Client<SdkCompatAdapter<T, U, S>>, U: Clone, S> Deref for SdkCompatClient<T, U, S> {
-    type Target = T::Client;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl<T: Client<SdkCompatAdapter<T, U, S>>, U: Clone, S> DerefMut for SdkCompatClient<T, U, S> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-
-use serde::Serialize;
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::JsValue;
-
-impl<
-        T: Client<SdkCompatAdapter<T, U, S>> + CallTrait,
-        U: Clone + AsyncCall<Call = Call<T::Call>>,
-        S,
-    > SdkCompatClient<T, U, S>
-{
-    #[cfg(target_arch = "wasm32")]
-    pub async fn send_sdk_tx(
-        &mut self,
-        sign_doc: sdk::SignDoc,
-    ) -> std::result::Result<(), JsValue> {
-        let signer = crate::plugins::signer::keplr::Signer;
-        let sig = signer.sign_sdk(sign_doc.clone()).await?;
-
-        let tx = sdk::Tx::Amino(sdk::AminoTx {
-            msg: sign_doc.msgs,
-            signatures: vec![sig],
-            fee: sign_doc.fee,
-            memo: sign_doc.memo,
-        });
-        self._parent
-            .call(Call::Sdk(tx))
-            .await
-            .map_err(|e| e.to_string().into())
-    }
-}
-
-impl<S, T: Client<SdkCompatAdapter<T, U, S>> + State, U: Clone> Client<U>
-    for SdkCompatPlugin<S, T>
-{
-    type Client = SdkCompatClient<T, U, S>;
-
-    fn create_client(parent: U) -> Self::Client {
-        SdkCompatClient {
-            inner: T::create_client(SdkCompatAdapter {
-                inner: std::marker::PhantomData,
-                parent: parent.clone(),
-            }),
-            _parent: parent,
-        }
     }
 }
 
@@ -582,7 +382,7 @@ mod abci {
 
     impl<S, T: State> InitChain for SdkCompatPlugin<S, T>
     where
-        T: InitChain + State + CallTrait,
+        T: InitChain + State,
     {
         fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
             self.inner.init_chain(ctx)
@@ -595,8 +395,8 @@ mod abci {
     {
         fn abci_query(
             &self,
-            request: &tendermint_proto::abci::RequestQuery,
-        ) -> Result<tendermint_proto::abci::ResponseQuery> {
+            request: &tendermint_proto::v0_34::abci::RequestQuery,
+        ) -> Result<tendermint_proto::v0_34::abci::ResponseQuery> {
             self.inner.abci_query(request)
         }
     }

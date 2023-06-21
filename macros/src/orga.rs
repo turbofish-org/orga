@@ -1,5 +1,10 @@
+use crate::utils::{impl_item_attrs, path_to_ident};
+
 use super::utils::is_attr_with_ident;
-use darling::{ast, FromDeriveInput, FromField, FromMeta, ToTokens};
+use darling::{
+    ast, export::NestedMeta, FromAttributes, FromDeriveInput, FromField, FromMeta, ToTokens,
+};
+use itertools::Itertools;
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
@@ -15,6 +20,14 @@ struct OrgaAttrReceiver {
     skip: HashMap<Ident, ()>,
     #[darling(default)]
     simple: bool,
+    #[darling(default)]
+    channels: HashMap<Ident, ()>,
+}
+
+#[derive(Debug, FromMeta)]
+struct OrgaImplAttrReceiver {
+    #[darling(default)]
+    channels: HashMap<Ident, ()>,
 }
 
 /// Field-level data. This type is used in both the meta struct and the sub
@@ -28,6 +41,7 @@ struct OrgaFieldReceiver {
     attrs: Vec<Attribute>,
     ty: Type,
     version: Option<HashMap<Ident, ()>>,
+    channel: Option<HashMap<Ident, ()>>,
 }
 
 /// Derive-style data about the top-level struct. Excludes attributes passed to
@@ -54,11 +68,23 @@ struct OrgaSubStruct {
     is_last: bool,
     skip: HashMap<Ident, ()>,
     simple: bool,
+    channel: Option<Ident>,
 }
 
 impl OrgaSubStruct {
     fn ident(&self) -> Ident {
-        format_ident!("{}V{}", self.base_ident, self.version)
+        if self.is_last {
+            return self.ident_with_channel();
+        }
+        format_ident!("{}V{}", self.ident_with_channel(), self.version)
+    }
+
+    fn ident_with_channel(&self) -> Ident {
+        if let Some(ref channel) = self.channel {
+            format_ident!("{}{}", self.base_ident, channel)
+        } else {
+            self.base_ident.clone()
+        }
     }
 
     fn all_attrs(&self) -> impl Iterator<Item = Attribute> {
@@ -76,12 +102,13 @@ impl OrgaSubStruct {
             quote! { ::orga::encoding::VersionedEncoding },
         );
         maybe_add("State", quote! { ::orga::state::State });
-        maybe_add("Serialize", quote! { ::orga::serde::Serialize });
 
         if self.is_last {
-            maybe_add("Call", quote! { ::orga::call::Call });
-            maybe_add("Query", quote! { ::orga::query::Query });
-            maybe_add("Client", quote! { ::orga::client::Client });
+            // maybe_add("Call", quote! { ::orga::call::Call });
+            maybe_add("Call", quote! { ::orga::call::FieldCall });
+            maybe_add("Query", quote! { ::orga::query::FieldQuery });
+            // maybe_add("Client", quote! { ::orga::client::Client });
+            maybe_add("Describe", quote! { ::orga::describe::Describe });
         }
 
         let mut attrs: Vec<Attribute> = vec![parse_quote! {#[derive(#(#derives),*)]}];
@@ -100,7 +127,7 @@ impl OrgaSubStruct {
         let version = self.version;
 
         let maybe_prev = if self.version > 0 {
-            let prev_name = format!("{}V{}", self.base_ident, version - 1);
+            let prev_name = format!("{}V{}", self.ident_with_channel(), version - 1);
             quote! {previous = #prev_name,}
         } else {
             quote! {}
@@ -120,7 +147,7 @@ impl OrgaSubStruct {
         let version = self.version;
 
         let maybe_prev = if self.version > 0 {
-            let prev_name = format!("{}V{}", self.base_ident, version - 1);
+            let prev_name = format!("{}V{}", self.ident_with_channel(), version - 1);
             quote! {previous = #prev_name,}
         } else {
             quote! {}
@@ -144,7 +171,6 @@ impl OrgaSubStruct {
 impl ToTokens for OrgaSubStruct {
     fn to_tokens(&self, tokens: &mut TokenStream2) {
         let Self {
-            base_ident,
             generics,
             data,
             is_last,
@@ -208,8 +234,9 @@ impl ToTokens for OrgaSubStruct {
         });
 
         if *is_last {
+            let versioned_ident = format_ident!("{}V{}", ident, self.version);
             tokens.extend(quote! {
-               #vis type #base_ident #decl_generics = #ident #decl_generics;
+               #vis type #versioned_ident #decl_generics = #ident #decl_generics;
             });
         }
     }
@@ -229,11 +256,26 @@ impl OrgaMetaStruct {
         Self { item, attrs }
     }
 
-    fn versioned_structs(&self) -> impl Iterator<Item = OrgaSubStruct> + '_ {
-        (0..=self.attrs.version).map(move |v| self.substruct_for_version(v))
+    fn channels_iter(&self) -> impl Iterator<Item = Option<Ident>> + '_ {
+        self.attrs
+            .channels
+            .iter()
+            .map(|(ident, _)| Some(ident.clone()))
     }
 
-    fn substruct_for_version(&self, version: u8) -> OrgaSubStruct {
+    fn all_substructs(&self) -> impl Iterator<Item = OrgaSubStruct> + '_ {
+        let channels: Vec<_> = if self.attrs.channels.is_empty() {
+            vec![None]
+        } else {
+            self.channels_iter().collect()
+        };
+
+        (0..=self.attrs.version)
+            .cartesian_product(channels)
+            .map(move |(v, channel)| self.substruct_for_version_channel(v, channel))
+    }
+
+    fn substruct_for_version_channel(&self, version: u8, channel: Option<Ident>) -> OrgaSubStruct {
         let is_last = version == self.attrs.version;
         let item = self.item.clone();
         let style = item.clone().data.take_struct().unwrap().style;
@@ -251,6 +293,13 @@ impl OrgaMetaStruct {
                         .unwrap()
                         .contains_key(&format_ident!("V{}", version))
             })
+            .filter(|f| {
+                f.channel.is_none()
+                    || f.channel
+                        .as_ref()
+                        .unwrap()
+                        .contains_key(&channel.as_ref().unwrap())
+            })
             .collect();
         let data = ast::Data::Struct(ast::Fields::new(style, fields));
 
@@ -264,13 +313,14 @@ impl OrgaMetaStruct {
             vis: item.vis,
             skip: self.attrs.skip.clone(),
             simple: self.attrs.simple,
+            channel,
         }
     }
 }
 
 impl ToTokens for OrgaMetaStruct {
     fn to_tokens(&self, tokens: &mut TokenStream2) {
-        let substructs = self.versioned_structs();
+        let substructs = self.all_substructs();
 
         tokens.extend(quote! {
             #(#substructs)*
@@ -278,8 +328,70 @@ impl ToTokens for OrgaMetaStruct {
     }
 }
 
+#[derive(Debug, Clone, FromAttributes)]
+#[darling(attributes(orga))]
+struct OrgaMethodAttr {
+    channel: Option<HashMap<Ident, ()>>,
+}
+
+fn expand_item_impl(attr_args: Vec<NestedMeta>, item: ItemImpl) -> TokenStream {
+    let attrs = OrgaImplAttrReceiver::from_list(&attr_args).unwrap();
+    let channels = attrs
+        .channels
+        .iter()
+        .map(|(ident, _)| ident.clone())
+        .collect_vec();
+
+    let mut tokens = TokenStream2::new();
+    if channels.is_empty() {
+        return quote! {
+            #[::orga::call::call_block]
+            #[::orga::query::query_block]
+            #item
+        }
+        .into();
+    }
+    for channel in channels {
+        let mut item = item.clone();
+        if let box Type::Path(TypePath { path, .. }) = &mut item.self_ty {
+            let generic_args = path.segments.last().unwrap().arguments.clone();
+            let ident = path_to_ident(&path);
+            let ident = format_ident!("{}{}", ident, channel);
+
+            *path = parse_quote! {#ident #generic_args};
+        }
+
+        item.items = item
+            .items
+            .into_iter()
+            .filter(|impl_item| {
+                let attrs = impl_item_attrs(impl_item);
+                let orga_method_attr = OrgaMethodAttr::from_attributes(&attrs)
+                    .expect("Failed to parse orga method attribute");
+                if let Some(channels) = &orga_method_attr.channel {
+                    return channels.contains_key(&channel);
+                }
+
+                true
+            })
+            .collect();
+
+        tokens.extend(quote! {
+            #[::orga::orga]
+            #item
+        });
+    }
+    return tokens.into();
+}
+
 pub fn orga(args: TokenStream, input: TokenStream) -> TokenStream {
-    let attr_args = parse_macro_input!(args as AttributeArgs);
+    let attr_args = NestedMeta::parse_meta_list(args.into()).unwrap();
+    if let Ok(item_impl) = syn::parse::<ItemImpl>(input.clone()) {
+        return expand_item_impl(attr_args, item_impl);
+    }
+    if let Ok(_impl_item) = syn::parse::<ImplItem>(input.clone()) {
+        return input;
+    }
     let item = parse_macro_input!(input as DeriveInput);
     let metastruct = OrgaMetaStruct::new(attr_args, item);
 

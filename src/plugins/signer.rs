@@ -2,50 +2,24 @@ use super::{
     sdk_compat::{self, sdk::Tx as SdkTx, ConvertSdkTx},
     ChainId, GetNonce,
 };
-use crate::client::{AsyncCall, AsyncQuery, Client};
 use crate::coins::{Address, Symbol};
 use crate::context::{Context, GetContext};
+
 use crate::encoding::{Decode, Encode};
 use crate::migrate::MigrateFrom;
-use crate::query::Query;
+use crate::orga;
+
+use crate::call::Call;
 use crate::state::State;
-use crate::{call::Call, migrate::MigrateInto};
 use crate::{Error, Result};
-#[cfg(not(target_arch = "wasm32"))]
-use secp256k1::SecretKey;
-use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1};
+
+use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
 use serde::Serialize;
-use std::ops::{Deref, DerefMut};
+use std::ops::Deref;
 
-#[derive(Default, Encode, Decode, State, Serialize)]
-#[state(transparent)]
+#[orga(skip(Call))]
 pub struct SignerPlugin<T> {
-    pub(crate) inner: T,
-}
-
-impl<T1, T2> MigrateFrom<SignerPlugin<T1>> for SignerPlugin<T2>
-where
-    T1: MigrateInto<T2>,
-{
-    fn migrate_from(other: SignerPlugin<T1>) -> Result<Self> {
-        Ok(Self {
-            inner: other.inner.migrate_into()?,
-        })
-    }
-}
-
-impl<T: State> Deref for SignerPlugin<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl<T: State> DerefMut for SignerPlugin<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
+    pub inner: T,
 }
 
 pub struct Signer {
@@ -118,7 +92,8 @@ struct Value {
 }
 
 fn adr36_bytes(call_bytes: &[u8], address: Address) -> Result<Vec<u8>> {
-    let data_b64 = base64::encode(call_bytes);
+    use base64::Engine;
+    let data_b64 = base64::prelude::BASE64_STANDARD.encode(call_bytes);
     let msg = Adr36Msg {
         chain_id: "".to_string(),
         account_number: "0".to_string(),
@@ -139,10 +114,9 @@ fn adr36_bytes(call_bytes: &[u8], address: Address) -> Result<Vec<u8>> {
     serde_json::to_vec(&msg).map_err(|e| Error::App(format!("{}", e)))
 }
 
-impl<T: State, U> SignerPlugin<T>
+impl<T: State> SignerPlugin<T>
 where
-    T: Deref<Target = U>,
-    U: GetNonce,
+    T: GetNonce,
 {
     fn sdk_sign_bytes(&mut self, tx: &SdkTx, address: Address) -> Result<Vec<u8>> {
         let nonce = self.inner.nonce(address)? + 1;
@@ -216,10 +190,9 @@ where
     }
 }
 
-impl<T: Call + State, U> Call for SignerPlugin<T>
+impl<T: Call + State> Call for SignerPlugin<T>
 where
-    T: Deref<Target = U>,
-    U: GetNonce,
+    T: GetNonce,
 {
     type Call = SignerCall;
 
@@ -232,14 +205,6 @@ where
 
         let inner_call = Decode::decode(call.call_bytes.as_slice())?;
         self.inner.call(inner_call)
-    }
-}
-
-impl<T: Query> Query for SignerPlugin<T> {
-    type Query = T::Query;
-
-    fn query(&self, query: Self::Query) -> Result<()> {
-        self.inner.query(query)
     }
 }
 
@@ -275,150 +240,6 @@ where
         Ok(signer_call)
     }
 }
-
-pub struct SignerClient<T, U: Clone> {
-    parent: U,
-    marker: std::marker::PhantomData<fn() -> T>,
-    #[cfg(not(target_arch = "wasm32"))]
-    #[cfg(feature = "abci")]
-    privkey: SecretKey,
-    #[cfg(target_arch = "wasm32")]
-    signer: keplr::Signer,
-}
-
-impl<T, U: Clone> Clone for SignerClient<T, U> {
-    fn clone(&self) -> Self {
-        SignerClient {
-            parent: self.parent.clone(),
-            marker: std::marker::PhantomData,
-            #[cfg(not(target_arch = "wasm32"))]
-            #[cfg(feature = "abci")]
-            privkey: SecretKey::from_slice(&self.privkey.secret_bytes()).unwrap(),
-            #[cfg(target_arch = "wasm32")]
-            signer: keplr::Signer,
-        }
-    }
-}
-
-unsafe impl<T, U: Clone + Send> Send for SignerClient<T, U> {}
-
-#[async_trait::async_trait(?Send)]
-impl<T: Call, U: AsyncCall<Call = SignerCall> + Clone> AsyncCall for SignerClient<T, U>
-where
-    T::Call: Send,
-    U: Send,
-{
-    type Call = T::Call;
-
-    #[cfg(not(target_arch = "wasm32"))]
-    #[cfg(not(feature = "abci"))]
-    async fn call(&self, _call: Self::Call) -> Result<()> {
-        unimplemented!()
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    #[cfg(feature = "abci")]
-    async fn call(&self, call: Self::Call) -> Result<()> {
-        use secp256k1::hashes::sha256;
-        let secp = Secp256k1::signing_only();
-        let call_bytes = Encode::encode(&call)?;
-        let msg = Message::from_hashed_data::<sha256::Hash>(&call_bytes);
-        let signature = secp.sign_ecdsa(&msg, &self.privkey).serialize_compact();
-        let pubkey = PublicKey::from_secret_key(&secp, &self.privkey);
-        let pubkey = pubkey.serialize();
-
-        self.parent
-            .call(SignerCall {
-                call_bytes,
-                pubkey: Some(pubkey),
-                signature: Some(signature),
-                sigtype: SigType::Native,
-            })
-            .await
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    async fn call(&self, call: Self::Call) -> Result<()> {
-        let call_bytes = Encode::encode(&call)?;
-        let call_hex = hex::encode(call_bytes.as_slice());
-        web_sys::console::log_1(&format!("call: {}", call_hex).into());
-
-        let signature = self.signer.sign(call_bytes.as_slice()).await;
-        let pubkey = self.signer.pubkey().await;
-
-        self.parent
-            .call(SignerCall {
-                call_bytes,
-                pubkey: Some(pubkey),
-                signature: Some(signature),
-                sigtype: SigType::Adr36,
-            })
-            .await
-    }
-}
-
-#[async_trait::async_trait(?Send)]
-impl<
-        T: Query,
-        U: for<'a> AsyncQuery<Query = T::Query, Response<'a> = std::rc::Rc<SignerPlugin<T>>> + Clone,
-    > AsyncQuery for SignerClient<T, U>
-{
-    type Query = T::Query;
-    type Response<'a> = std::rc::Rc<T>;
-
-    async fn query<F, R>(&self, query: Self::Query, mut check: F) -> Result<R>
-    where
-        F: FnMut(Self::Response<'_>) -> Result<R>,
-    {
-        self.parent
-            .query(query, |plugin| {
-                check(std::rc::Rc::new(
-                    std::rc::Rc::try_unwrap(plugin)
-                        .map_err(|_| ())
-                        .unwrap()
-                        .inner,
-                ))
-            })
-            .await
-    }
-}
-
-impl<T: Client<SignerClient<T, U>>, U: Clone> Client<U> for SignerPlugin<T> {
-    type Client = T::Client;
-
-    fn create_client(parent: U) -> Self::Client {
-        T::create_client(SignerClient {
-            parent,
-            marker: std::marker::PhantomData,
-            #[cfg(not(target_arch = "wasm32"))]
-            #[cfg(feature = "abci")]
-            privkey: load_privkey().expect("Failed to load private key"),
-            #[cfg(target_arch = "wasm32")]
-            signer: keplr::Signer,
-        })
-    }
-}
-
-// impl<T> State for SignerPlugin<T>
-// where
-//     T: State,
-// {
-//     fn attach(&mut self, store: Store) -> Result<()> {
-//         self.inner.attach(store)
-//     }
-
-//     fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
-//         self.inner.flush(out)
-//     }
-
-//     fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
-//         let inner = T::load(store, bytes)?;
-//         Ok(Self {
-//             inner,
-//             // ..Default::default()
-//         })
-//     }
-// }
 
 // impl<T> Describe for SignerPlugin<T>
 // where
@@ -661,20 +482,20 @@ mod abci {
     {
         fn abci_query(
             &self,
-            request: &tendermint_proto::abci::RequestQuery,
-        ) -> Result<tendermint_proto::abci::ResponseQuery> {
+            request: &tendermint_proto::v0_34::abci::RequestQuery,
+        ) -> Result<tendermint_proto::v0_34::abci::ResponseQuery> {
             self.inner.abci_query(request)
         }
     }
 }
 
-#[derive(State, Call, Query, Client, Clone, Encode, Decode)]
-pub struct Counter {
+#[orga]
+struct Counter {
     pub count: u64,
     pub last_signer: Address,
-    nonce: NonceNoop,
 }
 
+#[orga]
 impl Counter {
     #[call]
     pub fn increment(&mut self) -> Result<()> {
@@ -686,18 +507,8 @@ impl Counter {
     }
 }
 
-impl Deref for Counter {
-    type Target = NonceNoop;
-
-    fn deref(&self) -> &Self::Target {
-        &self.nonce
-    }
-}
-
-#[derive(State, Clone, Debug, Encode, Decode)]
-pub struct NonceNoop(());
-impl GetNonce for NonceNoop {
-    fn nonce(&self, _: Address) -> Result<u64> {
+impl GetNonce for Counter {
+    fn nonce(&self, _address: Address) -> Result<u64> {
         Ok(0)
     }
 }
@@ -718,7 +529,9 @@ mod tests {
         type Output = <Counter as Call>::Call;
 
         fn convert(&self, _msg: &sdk_compat::sdk::Tx) -> Result<Self::Output> {
-            Ok(<Counter as Call>::Call::MethodIncrement(vec![]))
+            Ok(<Counter as Call>::Call::Method(
+                CounterMethodCall::Increment(),
+            ))
         }
     }
 
@@ -730,23 +543,21 @@ mod tests {
                 inner: Counter {
                     count: 0,
                     last_signer: Address::NULL,
-                    nonce: NonceNoop(()),
                 },
             },
         };
 
-        Context::add(ChainId("testchain"));
+        Context::add(ChainId("testchain".to_string()));
 
         // sign bytes: {"account_number":"0","chain_id":"testchain","fee":{"amount":[{"amount":"0","denom":"unom"}],"gas":"10000"},"memo":"","msgs":[{"type":"x","value":{}}],"sequence":"1"}
         // signature and pubkey taken from metamask
         let call_bytes = br#"{"msg":[{"type":"x","value":{}}],"fee":{"amount":[{"amount":"0","denom":"unom"}],"gas":"10000"},"memo":"","signatures":[{"pub_key":{"type":"tendermint/PubKeySecp256k1","value":"AgixpAV7cl5HPnmZC5qmJekVd5E8VZUioqrJoaj36p90"},"signature":"w+ZKyFdmhDOoqLIlhZq+yj8Z+eMOZnyjYKQ5rXr/fS4Imt4n5rTbwgHR1TmF6mGdFvZrmeJFedUjyMjnRYV4bA==","type":"eth"}]}"#;
         let call = Decode::decode(call_bytes.as_slice()).unwrap();
-
         SdkCompatPlugin::<_, _>::call(&mut state, call).unwrap();
 
-        assert_eq!(state.count, 1);
+        assert_eq!(state.inner.inner.count, 1);
         assert_eq!(
-            state.last_signer,
+            state.inner.inner.last_signer,
             [
                 147, 54, 126, 195, 164, 236, 108, 70, 107, 218, 16, 43, 121, 200, 38, 174, 234,
                 199, 157, 75

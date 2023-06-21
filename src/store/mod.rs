@@ -1,20 +1,33 @@
-use crate::error::{Error, Result};
-use std::ops::{Bound, Deref, DerefMut, RangeBounds};
+use crate::error::Result;
+use std::{
+    any::Any,
+    ops::{Bound, Deref, DerefMut, RangeBounds},
+};
+use thiserror::Error;
 
+pub mod backingstore;
 pub mod bufstore;
 pub mod iter;
-pub mod nullstore;
+pub mod log;
+pub mod null;
 pub mod share;
 #[allow(clippy::module_inception)]
 pub mod store;
 
+pub use backingstore::BackingStore;
 pub use bufstore::{BufStore, Map as BufStoreMap, MapStore};
 pub use iter::Iter;
-pub use nullstore::NullStore;
+pub use null::Empty;
 pub use share::Shared;
 pub use store::{DefaultBackingStore, Store};
 
 // TODO: Key type (for cheaper concat, enum over ref or owned slice, etc)
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Tried to read unknown store data with key {0:?}")]
+    ReadUnknown(Vec<u8>),
+}
 
 /// A key/value entry - the first element is the key and the second element is
 /// the value.
@@ -130,5 +143,15 @@ impl<S: Write, T: DerefMut<Target = S>> Write for T {
     #[inline]
     fn delete(&mut self, key: &[u8]) -> Result<()> {
         self.deref_mut().delete(key)
+    }
+}
+
+pub trait ReadWrite: Read + Write + Any + 'static {
+    fn into_any(self: Box<Self>) -> Box<dyn Any>;
+}
+
+impl<T: Read + Write + 'static> ReadWrite for T {
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
     }
 }

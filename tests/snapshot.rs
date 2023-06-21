@@ -5,7 +5,7 @@ fn drop_used_snapshot() {
     use orga::merk::{store::SNAPSHOT_INTERVAL, MerkStore};
     use orga::store::Write;
     use tempdir::TempDir;
-    use tendermint_proto::abci::RequestLoadSnapshotChunk;
+    use tendermint_proto::v0_34::abci::RequestLoadSnapshotChunk;
 
     let dir = TempDir::new("test").unwrap().into_path();
     println!("snapshot test dir: {}", dir.display());

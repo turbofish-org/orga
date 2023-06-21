@@ -1,9 +1,7 @@
-#[cfg(feature = "abci")]
-use log::info;
-
 use crate::call::Call;
 use crate::query::Query;
 use crate::state::State;
+
 use crate::Result;
 #[cfg(feature = "abci")]
 mod node;
@@ -12,13 +10,8 @@ pub use node::*;
 
 pub mod prost;
 
-#[cfg(feature = "abci")]
-pub mod tendermint_client;
-#[cfg(feature = "abci")]
-pub use tendermint_client::TendermintClient;
-
 use messages::*;
-pub use tendermint_proto::abci as messages;
+pub use tendermint_proto::v0_34::abci as messages;
 
 #[cfg(feature = "abci")]
 mod server {
@@ -26,12 +19,13 @@ mod server {
     use crate::merk::MerkStore;
     use crate::store::{BufStore, BufStoreMap, MapStore, Read, Shared, Write, KV};
     use crate::Error;
-    use std::clone::Clone;
+    use log::info;
     use std::env;
     use std::net::ToSocketAddrs;
     use std::sync::mpsc::{self, Receiver, Sender, SyncSender};
-    use tendermint_proto::abci::request::Value as Req;
-    use tendermint_proto::abci::response::Value as Res;
+    use tendermint_proto::v0_34::abci::request::Value as Req;
+    use tendermint_proto::v0_34::abci::response::Value as Res;
+    use tendermint_proto::v0_34::types::Header;
 
     /// Top-level struct for running an ABCI application. Maintains an ABCI server,
     /// mempool, and handles committing data to the store.
@@ -44,6 +38,7 @@ mod server {
         consensus_state: Option<BufStoreMap>,
         height: u64,
         skip_init_chain: bool,
+        header: Option<Header>,
     }
 
     impl<A: Application> ABCIStateMachine<A> {
@@ -61,6 +56,7 @@ mod server {
                 consensus_state: Some(Default::default()),
                 height: 0,
                 skip_init_chain,
+                header: None,
             }
         }
 
@@ -95,7 +91,7 @@ mod server {
                         version: "X".into(),
                         app_version: 0,
                         last_block_height: start_height as i64,
-                        last_block_app_hash: app_hash,
+                        last_block_app_hash: app_hash.into(),
                     };
 
                     self.store = Some(Shared::new(self_store));
@@ -117,9 +113,9 @@ mod server {
                             codespace: "".to_string(),
                             height: self.height as i64,
                             index: 0,
-                            key: vec![],
+                            key: vec![].into(),
                             proof_ops: None,
-                            value: vec![],
+                            value: vec![].into(),
                         });
 
                     self.store.replace(store);
@@ -162,6 +158,7 @@ mod server {
                     let app = self.app.take().unwrap();
                     let self_store = self.store.take().unwrap().into_inner();
                     let self_store_shared = Shared::new(self_store);
+                    self.header = req.header.clone();
 
                     let mut store = Some(Shared::new(BufStore::wrap_with_map(
                         self_store_shared.clone(),
@@ -256,7 +253,9 @@ mod server {
                         store.flush()?;
                     }
 
-                    self_store_shared.borrow_mut().commit(self.height)?;
+                    self_store_shared
+                        .borrow_mut()
+                        .commit(self.header.clone().unwrap())?;
 
                     if let Some(stop_height_str) = env::var_os("STOP_HEIGHT") {
                         let stop_height: u64 = stop_height_str
@@ -277,7 +276,7 @@ mod server {
                     let mut res_commit = ResponseCommit::default();
                     let self_store = self_store_shared.into_inner();
 
-                    res_commit.data = self_store.root_hash()?;
+                    res_commit.data = self_store.root_hash()?.into();
                     self.store = Some(Shared::new(self_store));
                     Ok(Res::Commit(res_commit))
                 }
@@ -322,7 +321,7 @@ mod server {
                 }
                 Req::LoadSnapshotChunk(req) => {
                     let self_store = self.store.as_mut().unwrap();
-                    let chunk = self_store.borrow_mut().load_snapshot_chunk(req)?;
+                    let chunk = self_store.borrow_mut().load_snapshot_chunk(req)?.into();
                     let res = ResponseLoadSnapshotChunk { chunk };
 
                     Ok(Res::LoadSnapshotChunk(res))
@@ -472,7 +471,7 @@ mod server {
 
         fn root_hash(&self) -> Result<Vec<u8>>;
 
-        fn commit(&mut self, height: u64) -> Result<()>;
+        fn commit(&mut self, header: Header) -> Result<()>;
 
         fn list_snapshots(&self) -> Result<Vec<Snapshot>>;
 
@@ -539,8 +538,8 @@ mod server {
             Ok(vec![])
         }
 
-        fn commit(&mut self, height: u64) -> Result<()> {
-            self.height = height;
+        fn commit(&mut self, header: Header) -> Result<()> {
+            self.height = header.height as u64;
             Ok(())
         }
 
@@ -609,5 +608,8 @@ impl<S: State> AbciQuery for S {
     }
 }
 
-pub trait App: BeginBlock + EndBlock + InitChain + State + Call + Query + Default {}
-impl<T: Default + BeginBlock + EndBlock + InitChain + State + Call + Query> App for T {}
+pub trait App:
+    BeginBlock + EndBlock + InitChain + State + Call + Query + Default + AbciQuery
+{
+}
+impl<T: Default + BeginBlock + EndBlock + InitChain + State + Call + Query + AbciQuery> App for T {}

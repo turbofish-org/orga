@@ -1,5 +1,4 @@
 #![feature(bound_map)]
-#![feature(once_cell)]
 #![feature(associated_type_defaults)]
 #![feature(trivial_bounds)]
 #![allow(incomplete_features)]
@@ -10,6 +9,11 @@
 #![feature(fn_traits)]
 #![feature(async_closure)]
 #![feature(local_key_cell_methods)]
+#![feature(auto_traits)]
+#![feature(negative_impls)]
+#![feature(lazy_cell)]
+#![feature(async_fn_in_trait)]
+#![feature(trait_upcasting)]
 
 extern crate self as orga;
 pub use orga_macros::orga;
@@ -60,12 +64,12 @@ pub mod coins;
 
 pub mod context;
 
-#[cfg(feature = "feat-ibc")]
-pub mod ibc;
-
 pub mod upgrade;
 
 mod error;
+
+#[cfg(feature = "ibc")]
+pub mod ibc;
 
 pub use cosmrs;
 
@@ -74,6 +78,7 @@ pub use compat::{compat_mode, set_compat_mode};
 
 // re-exports
 pub use async_trait::async_trait;
+pub use educe::Educe;
 pub use error::*;
 pub use futures_lite::future::Boxed as BoxFuture;
 pub use orga_macros as macros;
@@ -81,20 +86,10 @@ pub use serde;
 pub use serde_json::Value as JsonValue;
 
 pub mod prelude {
-    pub use secp256k1;
-
-    pub use crate::abci::*;
-    pub use crate::call::*;
-    pub use crate::client::{AsyncCall, Client};
-    pub use crate::coins::*;
-    pub use crate::collections::*;
-    pub use crate::context::*;
-    pub use crate::encoding::*;
-    #[cfg(merk)]
-    pub use crate::merk;
-    pub use crate::plugins::*;
-    pub use crate::query::*;
-    pub use crate::state::*;
-    pub use crate::store::*;
-    pub use crate::Result;
+    pub use crate::call::{Call, FieldCall, MethodCall};
+    pub use crate::encoding::{Decode, Encode, Terminated};
+    pub use crate::query::{FieldQuery, MethodQuery, Query};
+    pub use crate::state::State;
+    pub use crate::store::{Read, Store, Write};
+    pub use crate::{Error, Result};
 }

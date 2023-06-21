@@ -1,13 +1,17 @@
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
+use super::null::Unknown;
 use super::*;
+use crate::Error;
 
 /// An in-memory map containing values modified by writes to a `BufStore`.
 pub type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
 /// A simple `Store` implementation which persists data in an in-memory map.
-pub type MapStore = BufStore<NullStore>;
+pub type MapStore = BufStore<Empty>;
+
+pub type PartialMapStore = BufStore<Unknown>;
 
 /// Wraps a `Store` and records mutations in an in-memory map, so that
 /// modifications do not affect the underlying `Store` until `flush` is called.
@@ -91,7 +95,7 @@ impl<S> BufStore<S> {
 impl<S: Read> Read for BufStore<S> {
     #[inline]
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        match self.map.get(key.as_ref()) {
+        match self.map.get(key) {
             Some(Some(value)) => Ok(Some(value.clone())),
             Some(None) => Ok(None),
             None => self.store.get(key),
@@ -216,7 +220,7 @@ impl<S: Read> Write for BufStore<S> {
 
     #[inline]
     fn delete(&mut self, key: &[u8]) -> Result<()> {
-        self.map.insert(key.as_ref().to_vec(), None);
+        self.map.insert(key.to_vec(), None);
         Ok(())
     }
 }

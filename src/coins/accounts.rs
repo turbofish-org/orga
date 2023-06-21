@@ -14,13 +14,12 @@ pub struct Accounts<S: Symbol> {
     accounts: Map<Address, Coin<S>>,
 }
 
+#[orga]
 impl<S: Symbol> Accounts<S> {
     pub fn iter(&self) -> Result<MapIter<Address, Coin<S>>> {
         self.accounts.iter()
     }
-}
 
-impl<S: Symbol> Accounts<S> {
     #[call]
     pub fn transfer(&mut self, to: Address, amount: Amount) -> Result<()> {
         let signer = self.signer()?;
