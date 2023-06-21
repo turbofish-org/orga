@@ -921,7 +921,7 @@ fn tm_pubkey_hash(consensus_key: [u8; 32]) -> Result<[u8; 20]> {
         .map_err(|_| Error::Coins("Invalid consensus key".into()))
 }
 
-#[derive(Debug, Encode, Decode)]
+#[derive(Debug, Encode, Decode, Clone)]
 pub struct Declaration {
     pub consensus_key: [u8; 32],
     pub commission: Commission,
