@@ -156,7 +156,7 @@ impl<T: State> Deque<T> {
 
     pub fn retain<F>(&mut self, mut f: F) -> Result<()>
     where
-        F: FnMut(Ref<T>) -> bool,
+        F: FnMut(ChildMut<u64, T>) -> Result<bool>,
     {
         let len = self.len();
         let mut retained_index = 0;
@@ -167,7 +167,7 @@ impl<T: State> Deque<T> {
             // and given that there is no remove by index operation on Deque and pop_front
             // and pop_back update the head and tail indices respectively, there will be
             // no removed, None values in the Deque between flushes
-            if !f(self.get(curr_index)?.unwrap()) {
+            if !f(self.get_mut(curr_index)?.unwrap())? {
                 curr_index += 1;
                 break;
             }
@@ -176,7 +176,7 @@ impl<T: State> Deque<T> {
         }
 
         while curr_index < len {
-            if !f(self.get(curr_index)?.unwrap()) {
+            if !f(self.get_mut(curr_index)?.unwrap())? {
                 curr_index += 1;
                 continue;
             }
