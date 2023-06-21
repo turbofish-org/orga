@@ -98,14 +98,18 @@ impl Ibc {
     pub fn deliver(&mut self, messages: RawIbcTx) -> crate::Result<()> {
         let messages: IbcTx = messages.try_into()?;
         for message in messages.0 {
-            use IbcMessage::*;
-            match message {
-                Ics26(msg) => dispatch(self, msg).map_err(|e| Error::Ibc(e.to_string()))?,
-                Ics20(msg) => send_transfer(self, msg).map_err(|e| Error::Ibc(e.to_string()))?,
-            }
+            self.deliver_message(message)?;
         }
 
         Ok(())
+    }
+
+    pub fn deliver_message(&mut self, message: IbcMessage) -> crate::Result<()> {
+        use IbcMessage::*;
+        match message {
+            Ics26(msg) => dispatch(self, msg).map_err(|e| Error::Ibc(e.to_string())),
+            Ics20(msg) => send_transfer(self, msg).map_err(|e| Error::Ibc(e.to_string())),
+        }
     }
 }
 
