@@ -18,19 +18,23 @@ use ibc::core::ics24_host::path::{
 };
 use ibc::Signer as IbcSigner;
 use ibc_proto::google::protobuf::Any;
+use ibc_proto::ibc::applications::transfer::v1::MsgTransfer as RawMsgTransfer;
 use ibc_proto::ibc::core::{
     channel::v1::Channel as RawChannelEnd, connection::v1::ConnectionEnd as RawConnectionEnd,
 };
 use ibc_proto::protobuf::Protobuf;
+use ibc_rs::applications::transfer::msgs::transfer::MsgTransfer;
 use serde::Serialize;
 
 use crate::coins::Address;
 use crate::collections::{Deque, Map};
+use crate::context::GetContext;
 use crate::describe::{Describe, Descriptor};
 use crate::encoding::{
     Adapter, ByteTerminatedString, Decode, Encode, EofTerminatedString, FixedString,
 };
 use crate::migrate::MigrateFrom;
+use crate::plugins::Signer;
 use crate::state::State;
 use crate::store::Store;
 use crate::{orga, Error};
@@ -104,12 +108,33 @@ impl Ibc {
         Ok(())
     }
 
+    #[call]
+    pub fn raw_transfer(&mut self, message: TransferMessage) -> crate::Result<()> {
+        let message: MsgTransfer = message.inner;
+        let sender_addr: Address = message.packet_data.sender.clone().try_into()?;
+
+        if self.signer()? != sender_addr {
+            return Err(crate::Error::Ibc(
+                "Transfers must be signed by the sender".into(),
+            ));
+        }
+
+        self.deliver_message(IbcMessage::Ics20(message))
+    }
+
     pub fn deliver_message(&mut self, message: IbcMessage) -> crate::Result<()> {
         use IbcMessage::*;
         match message {
             Ics26(msg) => dispatch(self, msg).map_err(|e| Error::Ibc(e.to_string())),
             Ics20(msg) => send_transfer(self, msg).map_err(|e| Error::Ibc(e.to_string())),
         }
+    }
+
+    fn signer(&mut self) -> crate::Result<Address> {
+        self.context::<Signer>()
+            .ok_or_else(|| Error::Coins("No Signer context available".into()))?
+            .signer
+            .ok_or_else(|| Error::Coins("Call must be signed".into()))
     }
 }
 
@@ -532,6 +557,44 @@ protobuf_newtype!(ClientState, TmClientState, Any);
 protobuf_newtype!(ConsensusState, TmConsensusState, Any);
 protobuf_newtype!(ConnectionEnd, IbcConnectionEnd, RawConnectionEnd);
 protobuf_newtype!(ChannelEnd, IbcChannelEnd, RawChannelEnd);
+
+#[derive(Debug, Clone)]
+pub struct TransferMessage {
+    inner: MsgTransfer,
+}
+
+impl From<MsgTransfer> for TransferMessage {
+    fn from(inner: MsgTransfer) -> Self {
+        Self { inner }
+    }
+}
+
+impl Encode for TransferMessage {
+    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+        let mut buf = vec![];
+        Protobuf::<RawMsgTransfer>::encode(&self.inner, &mut buf)
+            .map_err(|_| ed::Error::UnexpectedByte(10))?;
+        dest.write_all(&buf)?;
+        Ok(())
+    }
+
+    fn encoding_length(&self) -> ed::Result<usize> {
+        let mut buf = vec![];
+        Protobuf::<RawMsgTransfer>::encode(&self.inner, &mut buf)
+            .map_err(|_| ed::Error::UnexpectedByte(10))?;
+        Ok(buf.len())
+    }
+}
+
+impl Decode for TransferMessage {
+    fn decode<R: std::io::Read>(mut input: R) -> ed::Result<Self> {
+        let mut buf = vec![];
+        input.read_to_end(&mut buf)?;
+        let inner = Protobuf::<RawMsgTransfer>::decode(buf.as_slice())
+            .map_err(|_| ed::Error::UnexpectedByte(10))?;
+        Ok(Self { inner })
+    }
+}
 
 impl TryFrom<IbcSigner> for Address {
     type Error = crate::Error;
