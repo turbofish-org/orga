@@ -17,6 +17,7 @@ use tendermint_rpc::{self as tm, Client as _};
 pub struct HttpClient {
     client: tm::HttpClient,
     height: RefCell<Option<u32>>,
+    rt: tokio::runtime::Runtime,
 }
 
 impl HttpClient {
@@ -24,26 +25,31 @@ impl HttpClient {
         Ok(Self {
             client: tm::HttpClient::new(url)?,
             height: RefCell::new(None),
+            rt: tokio::runtime::Builder::new_current_thread()
+                .enable_time()
+                .enable_io()
+                .build()?,
         })
     }
 
     pub fn with_height(url: &str, height: u32) -> Result<Self> {
-        Ok(Self {
-            client: tm::HttpClient::new(url)?,
-            height: RefCell::new(Some(height)),
-        })
+        let client = Self::new(url)?;
+        client.height.replace(Some(height));
+        Ok(client)
     }
 }
 
 impl<T: App + Call + Query + State + Default> Transport<ABCIPlugin<T>> for HttpClient {
-    async fn call(&self, call: <ABCIPlugin<T> as Call>::Call) -> Result<()> {
+    fn call(&self, call: <ABCIPlugin<T> as Call>::Call) -> Result<()> {
         // TODO: shouldn't need to deal with ABCIPlugin at this level
         let call = match call {
             ABCICall::DeliverTx(call) => call,
             _ => return Err(Error::Client("Unexpected call type".into())),
         };
         let call_bytes = call.encode()?;
-        let res = self.client.broadcast_tx_commit(call_bytes).await?;
+        let res = self
+            .rt
+            .block_on(self.client.broadcast_tx_commit(call_bytes))?;
 
         if let tendermint::abci::Code::Err(code) = res.check_tx.code {
             let msg = format!("code {}: {}", code, res.check_tx.log);
@@ -53,13 +59,14 @@ impl<T: App + Call + Query + State + Default> Transport<ABCIPlugin<T>> for HttpC
         Ok(())
     }
 
-    async fn query(&self, query: T::Query) -> Result<Store> {
+    fn query(&self, query: T::Query) -> Result<Store> {
         let query_bytes = query.encode()?;
         let maybe_height = self.height.borrow().map(Into::into);
-        let res = self
-            .client
-            .abci_query(None, query_bytes, maybe_height, true)
-            .await?;
+        let res =
+            self.rt.block_on(
+                self.client
+                    .abci_query(None, query_bytes, maybe_height, true),
+            )?;
 
         if let tendermint::abci::Code::Err(code) = res.code {
             let msg = format!("code {}: {}", code, res.log);
@@ -176,19 +183,19 @@ mod tests {
     }
 
     #[ignore]
-    #[tokio::test]
+    #[test]
     #[serial_test::serial]
-    async fn basic() -> Result<()> {
+    fn basic() -> Result<()> {
         spawn_node();
 
-        // TODO: node spawn should return future which waits for node to be ready
-        tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+        // TODO: node spawn should wait for node to be ready
+        std::thread::sleep(std::time::Duration::from_secs(15));
 
         let client = HttpClient::new("http://localhost:26657").unwrap();
         let client =
             AppClient::<App, App, _, FooCoin, _>::new(client, DerivedKey::new(b"alice").unwrap());
 
-        let res = client.query(|app| Ok(app.bar)).await.unwrap();
+        let res = client.query(|app| Ok(app.bar)).unwrap();
         assert_eq!(res, 0);
 
         let res = client
@@ -196,7 +203,6 @@ mod tests {
                 app.accounts
                     .balance(DerivedKey::address_for(b"alice").unwrap())
             })
-            .await
             .unwrap();
         assert_eq!(res.value, 100_000);
 
@@ -205,7 +211,6 @@ mod tests {
                 |app| build_call!(app.accounts.take_as_funding(50_000.into())),
                 |app| build_call!(app.increment_foo()),
             )
-            .await
             .unwrap();
 
         let old_height = 2; // TODO: get from call response
@@ -218,7 +223,6 @@ mod tests {
                 app.accounts
                     .balance(DerivedKey::address_for(b"alice").unwrap())
             })
-            .await
             .unwrap();
         assert_eq!(res.value, 100_000, "should still query past height");
 
@@ -231,7 +235,6 @@ mod tests {
                 app.accounts
                     .balance(DerivedKey::address_for(b"alice").unwrap())
             })
-            .await
             .unwrap();
         assert_eq!(res.value, 50_000);
 

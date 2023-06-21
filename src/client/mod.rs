@@ -23,9 +23,9 @@ pub use exec::Transport;
 pub use wallet::Wallet;
 
 pub trait Client<T: Query + Call> {
-    async fn query<U, F: FnMut(T) -> Result<U>>(&self, f: F) -> Result<U>;
+    fn query<U, F: FnMut(T) -> Result<U>>(&self, f: F) -> Result<U>;
 
-    async fn call(
+    fn call(
         &self,
         payer: impl FnOnce(&T) -> T::Call,
         payee: impl FnOnce(&T) -> T::Call,
@@ -50,17 +50,17 @@ where
     Wallet: wallet::Wallet + Clone,
     Symbol: crate::coins::Symbol,
 {
-    async fn query<R, F: FnMut(U) -> Result<R>>(&self, f: F) -> Result<R> {
-        self.query(f).await
+    fn query<R, F: FnMut(U) -> Result<R>>(&self, f: F) -> Result<R> {
+        self.query(f)
     }
 
-    async fn call(
+    fn call(
         &self,
         _payer: impl FnOnce(&U) -> U::Call,
         _payee: impl FnOnce(&U) -> U::Call,
     ) -> Result<()> {
-        // self.call(payer, payee).await
         todo!()
+        // self.call(payer, payee)
     }
 }
 
@@ -99,23 +99,21 @@ where
 
     // TODO: support subclients
     // TODO: return object with result data (e.g. txid)
-    pub async fn call(
+    pub fn call(
         &self,
         payer: impl FnOnce(&U) -> T::Call,
         payee: impl FnOnce(&U) -> T::Call,
     ) -> Result<()> {
-        let chain_id = self
-            .query_root(|app| Ok(app.inner.inner.borrow().inner.inner.chain_id.to_vec()))
-            .await?;
+        let chain_id =
+            self.query_root(|app| Ok(app.inner.inner.borrow().inner.inner.chain_id.to_vec()))?;
         let nonce = match self.wallet.address()? {
             None => None,
             Some(addr) => Some(
-                self.query_root(|app| app.inner.inner.borrow_mut().inner.inner.inner.nonce(addr))
-                    .await?
+                self.query_root(|app| app.inner.inner.borrow_mut().inner.inner.inner.nonce(addr))?
                     + 1,
             ),
         };
-        let app = self.query(Ok).await?;
+        let app = self.query(Ok)?;
 
         let payer_call = payer(&app);
         let payer_call_bytes = payer_call.encode()?;
@@ -130,25 +128,25 @@ where
         let call = [chain_id, call.encode()?].concat();
         let call = self.wallet.sign(&call)?;
         let call = ABCICall::DeliverTx(sdk_compat::Call::Native(call));
-        self.transport.call(call).await?;
+        self.transport.call(call)?;
 
         Ok(())
     }
 
-    pub async fn query_root<U2, F2: FnMut(ABCIPlugin<DefaultPlugins<Symbol, T>>) -> Result<U2>>(
+    pub fn query_root<U2, F2: FnMut(ABCIPlugin<DefaultPlugins<Symbol, T>>) -> Result<U2>>(
         &self,
         op: F2,
     ) -> Result<U2> {
         let store = self.store.take().unwrap_or_default();
 
-        let (res, store) = exec::execute(store, &self.transport, op).await?;
+        let (res, store) = exec::execute(store, &self.transport, op)?;
 
         self.store.replace(Some(store));
 
         Ok(res)
     }
 
-    pub async fn query<U2, F2: FnMut(U) -> Result<U2>>(&self, mut op: F2) -> Result<U2> {
+    pub fn query<U2, F2: FnMut(U) -> Result<U2>>(&self, mut op: F2) -> Result<U2> {
         let store = self.store.take().unwrap_or_default();
 
         let (res, store) = exec::execute(store, &self.transport, |app| {
@@ -163,8 +161,7 @@ where
                 .inner
                 .inner;
             op((self.sub)(inner))
-        })
-        .await?;
+        })?;
 
         self.store.replace(Some(store));
 
@@ -326,8 +323,8 @@ mod tests {
     }
 
     #[serial_test::serial]
-    #[tokio::test]
-    async fn appclient() -> Result<()> {
+    #[test]
+    fn appclient() -> Result<()> {
         let mut mock_client = setup()?;
 
         {
@@ -336,7 +333,7 @@ mod tests {
                 DerivedKey::new(b"alice").unwrap(),
             );
 
-            let bar_b = client.query(|app| Ok(app.bar.b)).await?;
+            let bar_b = client.query(|app| Ok(app.bar.b))?;
             assert_eq!(bar_b, 8);
 
             {
@@ -345,41 +342,33 @@ mod tests {
                 // be locked at a different level so we can do concurrent
                 // queries with the same client, and either join the values
                 // separately or e.g. wait for equivalent queries to finish
-                let bar = client.query(|app| Ok(app.bar)).await?;
+                let bar = client.query(|app| Ok(app.bar))?;
                 assert_eq!(bar.b, 8);
             }
 
-            let value = client
-                .query(|app| app.e.get(12)?.unwrap().get_from_map(14, 2))
-                .await?;
+            let value = client.query(|app| app.e.get(12)?.unwrap().get_from_map(14, 2))?;
             assert_eq!(value, Some(32));
 
-            let value = client
-                .query(|app| {
-                    let x = app.e.get(12)?.unwrap();
-                    let _ = app.e.get(13)?.unwrap();
-                    x.get_from_map(14, 2)
-                })
-                .await?;
+            let value = client.query(|app| {
+                let x = app.e.get(12)?.unwrap();
+                let _ = app.e.get(13)?.unwrap();
+                x.get_from_map(14, 2)
+            })?;
             assert_eq!(value, Some(32));
 
             let key = 13;
-            let value = client
-                .query(|app| Ok(app.deque.get(0)?.unwrap().get(key)?.unwrap().a))
-                .await?;
+            let value = client.query(|app| Ok(app.deque.get(0)?.unwrap().get(key)?.unwrap().a))?;
             assert_eq!(value, 3);
 
-            client
-                .call(
-                    |app| build_call!(app.bar.inc_b(4)),
-                    |app| build_call!(app.signed_method(DerivedKey::address_for(b"alice").unwrap())),
-                )
-                .await?;
+            client.call(
+                |app| build_call!(app.bar.inc_b(4)),
+                |app| build_call!(app.signed_method(DerivedKey::address_for(b"alice").unwrap())),
+            )?;
         }
 
         {
             let client = AppClient::<Foo, Foo, _, _, _>::new(&mut mock_client, Unsigned);
-            let bar_b = client.query(|app| Ok(app.bar.b)).await?;
+            let bar_b = client.query(|app| Ok(app.bar.b))?;
             assert_eq!(bar_b, 12);
         }
 
@@ -387,8 +376,8 @@ mod tests {
     }
 
     #[serial_test::serial]
-    #[tokio::test]
-    async fn sub() -> Result<()> {
+    #[test]
+    fn sub() -> Result<()> {
         let mut mock_client = setup()?;
         let client = AppClient::<Foo, Foo, _, _, _>::new(
             &mut mock_client,
@@ -397,7 +386,7 @@ mod tests {
 
         let bar_client = client.sub(|app| app.bar);
 
-        let bar_b = bar_client.query(|bar| Ok(bar.b)).await?;
+        let bar_b = bar_client.query(|bar| Ok(bar.b))?;
         assert_eq!(bar_b, 8);
 
         // TODO
@@ -411,20 +400,20 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
+    #[test]
     #[serial_test::serial]
-    async fn generic() {
+    fn generic() {
         let mut mock_client = setup().unwrap();
         let client = AppClient::<Foo, Foo, _, _, _>::new(
             &mut mock_client,
             DerivedKey::new(b"alice").unwrap(),
         );
 
-        async fn do_query(client: impl Client<Foo>) {
-            let bar_b = client.query(|app| Ok(app.bar.b)).await.unwrap();
+        fn do_query(client: impl Client<Foo>) {
+            let bar_b = client.query(|app| Ok(app.bar.b)).unwrap();
             assert_eq!(bar_b, 8);
         }
 
-        do_query(client).await;
+        do_query(client);
     }
 }
