@@ -145,6 +145,7 @@ where
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct Adapter<T>(pub T);
 
 impl<T> State for Adapter<T>

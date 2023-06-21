@@ -16,7 +16,7 @@ use ibc::core::ics24_host::path::{
     AckPath, ChannelEndPath, ClientConnectionPath, CommitmentPath, ConnectionPath, ReceiptPath,
     SeqAckPath, SeqRecvPath, SeqSendPath,
 };
-use ibc::Signer;
+use ibc::Signer as IbcSigner;
 use ibc_proto::google::protobuf::Any;
 use ibc_proto::ibc::core::{
     channel::v1::Channel as RawChannelEnd, connection::v1::ConnectionEnd as RawConnectionEnd,
@@ -185,6 +185,30 @@ impl From<IbcTimestamp> for Timestamp {
         Self { inner: timestamp }
     }
 }
+
+impl Encode for Adapter<IbcSigner> {
+    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+        borsh::BorshSerialize::serialize(&self.0, dest).map_err(|_| ed::Error::UnexpectedByte(40))
+    }
+
+    fn encoding_length(&self) -> ed::Result<usize> {
+        let mut buf = vec![];
+        borsh::BorshSerialize::serialize(&self.0, &mut buf)
+            .map_err(|_| ed::Error::UnexpectedByte(40))?;
+        Ok(buf.len())
+    }
+}
+
+impl Decode for Adapter<IbcSigner> {
+    fn decode<R: std::io::Read>(mut input: R) -> ed::Result<Self> {
+        Ok(Self(
+            borsh::BorshDeserialize::deserialize_reader(&mut input)
+                .map_err(|_| ed::Error::UnexpectedByte(40))?,
+        ))
+    }
+}
+
+impl Terminated for Adapter<IbcSigner> {}
 
 #[orga]
 #[derive(Clone, Debug)]
@@ -505,10 +529,10 @@ protobuf_newtype!(ConsensusState, TmConsensusState, Any);
 protobuf_newtype!(ConnectionEnd, IbcConnectionEnd, RawConnectionEnd);
 protobuf_newtype!(ChannelEnd, IbcChannelEnd, RawChannelEnd);
 
-impl TryFrom<Signer> for Address {
+impl TryFrom<IbcSigner> for Address {
     type Error = crate::Error;
 
-    fn try_from(signer: Signer) -> crate::Result<Self> {
+    fn try_from(signer: IbcSigner) -> crate::Result<Self> {
         signer
             .as_ref()
             .parse()

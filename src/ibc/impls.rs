@@ -25,7 +25,7 @@ use ibc::{
         timestamp::Timestamp,
         ContextError, ExecutionContext, ValidationContext,
     },
-    Height,
+    Height, Signer,
 };
 
 use crate::abci::BeginBlock;
