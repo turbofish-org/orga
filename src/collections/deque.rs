@@ -540,7 +540,7 @@ mod test {
         deque.push_back(43).unwrap();
         deque.push_back(1).unwrap();
 
-        deque.retain(|x| *x != 43).unwrap();
+        deque.retain(|x| Ok(*x != 43)).unwrap();
 
         let mut iter = deque.iter().unwrap();
 
@@ -560,7 +560,7 @@ mod test {
         deque.push_back(5).unwrap();
         deque.push_back(6).unwrap();
 
-        deque.retain(|x| *x != 3 && *x != 4).unwrap();
+        deque.retain(|x| Ok(*x != 3 && *x != 4)).unwrap();
 
         let mut iter = deque.iter().unwrap();
 
@@ -584,7 +584,7 @@ mod test {
 
         deque.pop_front().unwrap().unwrap();
 
-        deque.retain(|x| *x != 1).unwrap();
+        deque.retain(|x| Ok(*x != 1)).unwrap();
 
         let mut iter = deque.iter().unwrap();
 
@@ -599,7 +599,7 @@ mod test {
     #[test]
     fn deque_retain_empty() {
         let mut deque: Deque<u32> = Deque::new();
-        deque.retain(|_| true).unwrap();
+        deque.retain(|_| Ok(true)).unwrap();
 
         let mut iter = deque.iter().unwrap();
         assert!(iter.next().is_none());
