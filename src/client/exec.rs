@@ -24,24 +24,24 @@ pub enum StepResult<T: Query, U> {
 }
 
 pub trait Transport<T: Query + Call> {
-    async fn query(&self, query: T::Query) -> Result<Store>;
+    fn query(&self, query: T::Query) -> Result<Store>;
 
-    async fn call(&self, call: T::Call) -> Result<()>;
+    fn call(&self, call: T::Call) -> Result<()>;
 }
 
 impl<T: Transport<U>, U: Query + Call> Transport<U> for &mut T {
-    async fn query(&self, query: <U as Query>::Query) -> Result<Store> {
-        (**self).query(query).await
+    fn query(&self, query: <U as Query>::Query) -> Result<Store> {
+        (**self).query(query)
     }
 
-    async fn call(&self, call: <U as Call>::Call) -> Result<()> {
-        (**self).call(call).await
+    fn call(&self, call: <U as Call>::Call) -> Result<()> {
+        (**self).call(call)
     }
 }
 
 // TODO: remove need for ABCIPlugin wrapping at this level, and App bound
 
-pub async fn execute<T, U>(
+pub fn execute<T, U>(
     store: Store,
     client: &impl Transport<ABCIPlugin<QueryPlugin<T>>>,
     mut query_fn: impl FnMut(ABCIPlugin<QueryPlugin<T>>) -> Result<U>,
@@ -69,11 +69,11 @@ where
             StepResult::Done(value) => return Ok((value, store)),
             StepResult::FetchKey(key, n) => {
                 check_n(n)?;
-                client.query(QueryPluginQuery::RawKey(key)).await?
+                client.query(QueryPluginQuery::RawKey(key))?
             }
             StepResult::FetchQuery(query, n) => {
                 check_n(n)?;
-                client.query(QueryPluginQuery::Query(query)).await?
+                client.query(QueryPluginQuery::Query(query))?
             }
         };
 
@@ -263,33 +263,25 @@ mod tests {
         client
     }
 
-    #[tokio::test]
-    async fn execute_simple() {
+    #[test]
+    fn execute_simple() {
         let client = setup();
 
-        let (res, _store) = execute(
-            Store::default(),
-            &client,
-            |app: ABCIPlugin<QueryPlugin<Foo>>| Ok(app.inner.inner.borrow().bar),
-        )
-        .await
+        let (res, _store) = execute(Store::default(), &client, |app| {
+            Ok(app.inner.inner.borrow().bar)
+        })
         .unwrap();
         assert_eq!(res, 123);
         assert_eq!(client.queries.take(), vec![vec![2]]);
     }
 
-    #[tokio::test]
-    async fn execute_deque_access_none() {
+    #[test]
+    fn execute_deque_access_none() {
         let client = setup();
 
-        let (res, _store) = execute(
-            Store::default(),
-            &client,
-            |app: ABCIPlugin<QueryPlugin<Foo>>| {
-                Ok(app.inner.inner.borrow().baz.get(123)?.is_none())
-            },
-        )
-        .await
+        let (res, _store) = execute(Store::default(), &client, |app| {
+            Ok(app.inner.inner.borrow().baz.get(123)?.is_none())
+        })
         .unwrap();
         assert!(res);
         assert_eq!(
@@ -298,26 +290,21 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn execute_deque_access_some() {
+    #[test]
+    fn execute_deque_access_some() {
         let client = setup();
 
-        let (res, _store) = execute(
-            Store::default(),
-            &client,
-            |app: ABCIPlugin<QueryPlugin<Foo>>| {
-                Ok(*app
-                    .inner
-                    .inner
-                    .borrow()
-                    .baz
-                    .get(0)?
-                    .unwrap()
-                    .get(2)?
-                    .unwrap())
-            },
-        )
-        .await
+        let (res, _store) = execute(Store::default(), &client, |app| {
+            Ok(*app
+                .inner
+                .inner
+                .borrow()
+                .baz
+                .get(0)?
+                .unwrap()
+                .get(2)?
+                .unwrap())
+        })
         .unwrap();
 
         assert_eq!(res, 3);
