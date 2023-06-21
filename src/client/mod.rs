@@ -51,8 +51,7 @@ where
     Symbol: crate::coins::Symbol,
 {
     fn query<R, F: FnMut(U) -> Result<R>>(&self, f: F) -> Result<R> {
-        // self.query(f).await
-        todo!()
+        self.query(f)
     }
 
     fn call(
@@ -60,8 +59,8 @@ where
         _payer: impl FnOnce(&U) -> U::Call,
         _payee: impl FnOnce(&U) -> U::Call,
     ) -> Result<()> {
-        // self.call(payer, payee).await
         todo!()
+        // self.call(payer, payee)
     }
 }
 
@@ -410,7 +409,7 @@ mod tests {
             DerivedKey::new(b"alice").unwrap(),
         );
 
-        async fn do_query(client: impl Client<Foo>) {
+        fn do_query(client: impl Client<Foo>) {
             let bar_b = client.query(|app| Ok(app.bar.b)).unwrap();
             assert_eq!(bar_b, 8);
         }
