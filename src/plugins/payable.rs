@@ -7,6 +7,7 @@ use crate::context::{Context, GetContext};
 
 use crate::encoding::{Decode, Encode};
 
+use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::state::State;
 use crate::{Error, Result};
 use std::collections::HashMap;
@@ -14,9 +15,20 @@ use std::convert::TryInto;
 
 const MAX_SUBCALL_LEN: u32 = 200_000;
 
-#[orga(skip(Call))]
+#[orga(skip(Call, MigrateFrom))]
 pub struct PayablePlugin<T> {
     pub inner: T,
+}
+
+impl<T1, T2> MigrateFrom<PayablePlugin<T1>> for PayablePlugin<T2>
+where
+    T2: MigrateFrom<T1>,
+{
+    fn migrate_from(other: PayablePlugin<T1>) -> Result<Self> {
+        Ok(Self {
+            inner: other.inner.migrate_into()?,
+        })
+    }
 }
 
 #[derive(Default)]

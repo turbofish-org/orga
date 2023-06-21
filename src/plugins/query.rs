@@ -1,5 +1,6 @@
 use crate::call::Call;
 use crate::encoding::{Decode, Encode};
+use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::orga;
 use crate::query::Query as QueryTrait;
 use crate::store::{Read, Store};
@@ -7,7 +8,7 @@ use crate::Result;
 use educe::Educe;
 use std::cell::RefCell;
 
-#[orga(skip(Query, Call))]
+#[orga(skip(Query, Call, MigrateFrom))]
 // TODO: #[call(transparent)]
 pub struct QueryPlugin<T> {
     store: Store,
@@ -44,6 +45,18 @@ where
                 .get(&key)
                 .map(|_| ()),
         }
+    }
+}
+
+impl<T1, T2> MigrateFrom<QueryPlugin<T1>> for QueryPlugin<T2>
+where
+    T2: MigrateFrom<T1>,
+{
+    fn migrate_from(other: QueryPlugin<T1>) -> Result<Self> {
+        Ok(Self {
+            store: other.store,
+            inner: other.inner.migrate_into()?,
+        })
     }
 }
 

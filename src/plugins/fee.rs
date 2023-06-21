@@ -6,6 +6,7 @@ use crate::call::Call;
 use crate::coins::{Coin, Symbol};
 use crate::context::{Context, GetContext};
 
+use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::state::State;
 use crate::{Error, Result};
 use std::marker::PhantomData;
@@ -13,7 +14,7 @@ use std::ops::{Deref, DerefMut};
 
 pub const MIN_FEE: u64 = 10_000;
 
-#[orga(skip(Call))]
+#[orga(skip(Call, MigrateFrom))]
 pub struct FeePlugin<S, T> {
     _symbol: PhantomData<S>,
     pub inner: T,
@@ -61,6 +62,18 @@ impl<S, T> Deref for FeePlugin<S, T> {
 impl<S, T> DerefMut for FeePlugin<S, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
+    }
+}
+
+impl<S, T1, T2> MigrateFrom<FeePlugin<S, T1>> for FeePlugin<S, T2>
+where
+    T2: MigrateFrom<T1>,
+{
+    fn migrate_from(other: FeePlugin<S, T1>) -> Result<Self> {
+        Ok(Self {
+            _symbol: PhantomData,
+            inner: other.inner.migrate_into()?,
+        })
     }
 }
 
