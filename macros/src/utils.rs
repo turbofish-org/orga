@@ -282,3 +282,44 @@ pub fn impl_item_attrs(item: &ImplItem) -> Vec<Attribute> {
 pub fn path_to_ident(path: &Path) -> Ident {
     format_ident!("{}", path_to_string(path))
 }
+
+pub fn generics_union(gen_a: &Generics, gen_b: &Generics) -> Generics {
+    let mut generics = gen_a.clone();
+    let params = gen_b.params.clone();
+    for param in params.iter() {
+        generics.params.push(param.clone());
+    }
+    if let Some(wc) = gen_b.where_clause.as_ref() {
+        let wher = generics.make_where_clause();
+
+        for pred in wc.predicates.iter() {
+            wher.predicates.push(pred.clone());
+        }
+    }
+    generics
+}
+
+pub fn replace_type_segment(ty: &mut Type, target: &Ident, replacement: &Ident) {
+    use syn::{visit_mut::VisitMut, *};
+
+    struct TypeReplacer {
+        target: Ident,
+        replacement: Ident,
+    }
+
+    impl VisitMut for TypeReplacer {
+        fn visit_path_segment_mut(&mut self, segment: &mut PathSegment) {
+            if segment.ident == self.target {
+                segment.ident = self.replacement.clone()
+            }
+
+            self.visit_path_arguments_mut(&mut segment.arguments);
+        }
+    }
+
+    let mut replacer = TypeReplacer {
+        target: target.clone(),
+        replacement: replacement.clone(),
+    };
+    replacer.visit_type_mut(ty);
+}
