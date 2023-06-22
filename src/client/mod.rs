@@ -86,6 +86,19 @@ where
         }
     }
 
+    pub fn with_wallet<W2: wallet::Wallet>(
+        self,
+        wallet: W2,
+    ) -> AppClient<T, U, Transport, Symbol, W2> {
+        AppClient {
+            _pd: PhantomData,
+            transport: self.transport,
+            wallet,
+            store: self.store,
+            sub: self.sub,
+        }
+    }
+
     #[allow(clippy::should_implement_trait)]
     pub fn sub<U2>(self, sub: fn(T) -> U2) -> AppClient<T, U2, Transport, Symbol, Wallet> {
         AppClient {
