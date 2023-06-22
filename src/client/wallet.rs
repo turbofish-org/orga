@@ -111,8 +111,10 @@ impl SimpleWallet {
             SecretKey::from_slice(bytes.as_slice())?
         } else {
             // create and save a new key
-            let mut rng = secp256k1::rand::thread_rng();
-            let privkey = SecretKey::new(&mut rng);
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+            let random: [u8; 32] = rng.gen();
+            let privkey = SecretKey::from_slice(&random)?;
             std::fs::write(&keypair_path, privkey.secret_bytes())?;
             privkey
         };
