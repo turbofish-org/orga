@@ -38,7 +38,7 @@ impl<T> MockClient<T> {
 impl<T: App + State + Query + Call> Transport<ABCIPlugin<QueryPlugin<T>>>
     for MockClient<ABCIPlugin<QueryPlugin<T>>>
 {
-    async fn query(&self, query: <ABCIPlugin<QueryPlugin<T>> as Query>::Query) -> Result<Store> {
+    fn query(&self, query: <ABCIPlugin<QueryPlugin<T>> as Query>::Query) -> Result<Store> {
         let query_bytes = query.encode()?;
         self.queries.borrow_mut().push(query_bytes);
 
@@ -70,7 +70,7 @@ impl<T: App + State + Query + Call> Transport<ABCIPlugin<QueryPlugin<T>>>
         ))))
     }
 
-    async fn call(&self, call: <ABCIPlugin<QueryPlugin<T>> as Call>::Call) -> Result<()> {
+    fn call(&self, call: <ABCIPlugin<QueryPlugin<T>> as Call>::Call) -> Result<()> {
         self.calls.borrow_mut().push(call.encode()?);
 
         let root_bytes = self.store.get(&[])?.unwrap_or_default();

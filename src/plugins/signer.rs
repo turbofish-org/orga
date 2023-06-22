@@ -6,7 +6,7 @@ use crate::coins::{Address, Symbol};
 use crate::context::{Context, GetContext};
 
 use crate::encoding::{Decode, Encode};
-use crate::migrate::MigrateFrom;
+use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::orga;
 
 use crate::call::Call;
@@ -17,9 +17,20 @@ use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
 use serde::Serialize;
 use std::ops::Deref;
 
-#[orga(skip(Call))]
+#[orga(skip(Call, MigrateFrom))]
 pub struct SignerPlugin<T> {
     pub inner: T,
+}
+
+impl<T1, T2> MigrateFrom<SignerPlugin<T1>> for SignerPlugin<T2>
+where
+    T2: MigrateFrom<T1>,
+{
+    fn migrate_from(other: SignerPlugin<T1>) -> Result<Self> {
+        Ok(Self {
+            inner: other.inner.migrate_into()?,
+        })
+    }
 }
 
 pub struct Signer {

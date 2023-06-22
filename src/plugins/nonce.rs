@@ -8,12 +8,13 @@ use crate::context::GetContext;
 
 use crate::encoding::{Decode, Encode};
 
+use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::state::State;
 use crate::{Error, Result};
 
 const NONCE_INCREASE_LIMIT: u64 = 1000;
 
-#[orga(skip(Call))]
+#[orga(skip(Call, MigrateFrom))]
 pub struct NoncePlugin<T> {
     pub map: Map<Address, u64>,
     pub inner: T,
@@ -49,6 +50,18 @@ where
         Ok(NonceCall {
             inner_call,
             nonce: Some(nonce),
+        })
+    }
+}
+
+impl<T1, T2> MigrateFrom<NoncePlugin<T1>> for NoncePlugin<T2>
+where
+    T2: MigrateFrom<T1>,
+{
+    fn migrate_from(other: NoncePlugin<T1>) -> Result<Self> {
+        Ok(Self {
+            map: other.map.migrate_into()?,
+            inner: other.inner.migrate_into()?,
         })
     }
 }
