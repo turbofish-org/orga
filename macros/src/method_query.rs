@@ -172,7 +172,7 @@ fn method_query_impl(tokens: &mut TokenStream2, item: &ItemImpl) {
             param_names.push(quote! { subquery });
             quote! {
                 #ident(#( #param_names ),*) => {
-                    let result = self.#method_ident(#( #arg_names ),*)?;
+                    let result = self.#method_ident(#( #arg_names ),*);
                     if !subquery.is_empty() {
                         #query_trait::query(&result, #decode_trait::decode(subquery.as_slice())?)?;
                     }
@@ -269,14 +269,14 @@ fn add_tracing(item_impl: &mut ItemImpl) {
                 let encoded_args = if arg_names.is_empty() {
                     quote! { vec![] }
                 } else {
-                    quote! { vec![ #(#encode_trait::encode(&#arg_names)?,)*].concat() }
+                    quote! { vec![ #(#encode_trait::encode(&#arg_names).unwrap(),)*].concat() }
                 };
                 let mut stmts = vec![parse_quote! {
                     #trace_fn::<Self>(
                         #trace_method_type_enum::Query,
                         vec![#query_index],
                         #encoded_args,
-                    )?;
+                    );
                 }];
                 query_index += 1;
                 stmts.append(&mut method.block.stmts);

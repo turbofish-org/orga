@@ -1,5 +1,6 @@
 use super::{ABCIStateMachine, ABCIStore, AbciQuery, App, Application, WrappedMerk};
 use crate::call::Call;
+use crate::context::Context;
 use crate::encoding::Decode;
 use crate::merk::{MerkStore, ProofBuilder};
 use crate::migrate::MigrateInto;
@@ -169,6 +170,13 @@ impl<A: App> Node<A> {
         }
 
         tm_process = tm_process.start();
+
+        let genesis: serde_json::Value =
+            std::fs::read_to_string(self.tm_home.join("config/genesis.json"))?
+                .parse()
+                .unwrap();
+        let chain_id = genesis["chain_id"].as_str().unwrap();
+        Context::add(crate::plugins::ChainId(chain_id.to_string()));
 
         let app = InternalApp::<ABCIPlugin<A>>::new();
         let store = MerkStore::new(self.merk_home.clone());
@@ -595,18 +603,18 @@ mod tests {
     }
 
     #[ignore]
-    #[tokio::test]
+    #[test]
     #[serial_test::serial]
-    async fn historical_queries() -> Result<()> {
+    fn historical_queries() -> Result<()> {
         spawn_node();
 
-        // TODO: node spawn should return future which waits for node to be ready
-        tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+        // TODO: node spawn should wait for node to be ready
+        std::thread::sleep(std::time::Duration::from_secs(15));
 
         for i in 1..5 {
             let client = HttpClient::with_height("http://localhost:26657", i).unwrap();
             let client = AppClient::<App, App, _, FooCoin, _>::new(client, Unsigned);
-            assert_eq!(client.query(|app| Ok(app.count)).await.unwrap(), i);
+            assert_eq!(client.query(|app| Ok(app.count)).unwrap(), i);
         }
 
         Ok(())

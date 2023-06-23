@@ -1,4 +1,4 @@
-use crate::{Error, Result};
+use crate::Error;
 use std::any::TypeId;
 use std::cell::RefCell;
 
@@ -39,13 +39,14 @@ pub fn push_trace<T: 'static>(
     method_type: MethodType,
     method_prefix: Vec<u8>,
     method_args: Vec<u8>,
-) -> Result<()> {
+) {
     let type_id = TypeId::of::<T>();
 
     TRACE.with(|traces| {
         let mut traces = traces
             .try_borrow_mut()
-            .map_err(|_| Error::Call("Call tracer is already borrowed".to_string()))?;
+            .map_err(|_| Error::Call("Call tracer is already borrowed".to_string()))
+            .unwrap();
 
         let trace = Trace {
             type_id,
@@ -59,21 +60,15 @@ pub fn push_trace<T: 'static>(
         }
 
         traces.stack.push(trace);
-
-        Result::Ok(())
     })
 }
 
-pub fn maybe_pop_trace<F: FnOnce() -> std::result::Result<T, E>, T, E>(
-    op: F,
-) -> std::result::Result<T, E> {
+pub fn maybe_pop_trace<T, F: FnOnce() -> T>(op: F) -> T {
     let res = op();
-    if res.is_ok() {
-        TRACE.with(|traces| {
-            let mut traces = traces.try_borrow_mut().unwrap(); // TODO
-            traces.stack.pop();
-        })
-    }
+    TRACE.with(|traces| {
+        let mut traces = traces.try_borrow_mut().unwrap(); // TODO
+        traces.stack.pop();
+    });
     res
 }
 

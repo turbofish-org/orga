@@ -222,7 +222,7 @@ fn _method_arg_generics(item: &ItemImpl) -> Vec<Ident> {
         .collect()
 }
 
-fn add_tracing(item_impl: &mut ItemImpl) {
+fn _add_tracing(item_impl: &mut ItemImpl) {
     let Types {
         trace_fn,
         maybe_pop_trace_fn,
@@ -292,22 +292,14 @@ fn call_builder(tokens: &mut TokenStream2, item: &ItemImpl) {
     let Types {
         call_trait,
         build_call_trait,
-        field_call_trait,
         method_call_trait,
         ..
     } = Types::default();
 
     let ident = self_ty_ident(&item);
-    let enum_ident = enum_ident(&item);
 
     let (imp, ty, wher) = item.generics.split_for_impl();
-    let bound = quote! {
-        #ident #ty: #field_call_trait + #method_call_trait<MethodCall = #enum_ident #ty>,
-    };
-    let wher = match wher {
-        Some(w) => quote! { #w #bound },
-        None => quote! { where #bound },
-    };
+
     let call_methods = call_methods(&item);
     for call_method in call_methods.into_iter() {
         let method_ident = &call_method.sig.ident;
@@ -334,7 +326,7 @@ fn call_builder(tokens: &mut TokenStream2, item: &ItemImpl) {
 
 pub fn call_block(_args: TokenStream, input: TokenStream) -> TokenStream {
     let mut item = syn::parse::<ItemImpl>(input.clone()).unwrap();
-    add_tracing(&mut item);
+    // add_tracing(&mut item);
     let call_methods = call_methods(&item);
     if call_methods.is_empty() {
         return input;

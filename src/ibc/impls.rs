@@ -25,7 +25,7 @@ use ibc::{
         timestamp::Timestamp,
         ContextError, ExecutionContext, ValidationContext,
     },
-    Height,
+    Height, Signer,
 };
 
 use crate::abci::BeginBlock;
@@ -63,7 +63,7 @@ impl BeginBlock for Ibc {
             .into(),
         )?;
 
-        while self.host_consensus_states.len()? > MAX_HOST_CONSENSUS_STATES {
+        while self.host_consensus_states.len() > MAX_HOST_CONSENSUS_STATES {
             self.host_consensus_states.pop_front()?;
         }
 
@@ -225,12 +225,7 @@ impl ValidationContext for Ibc {
         &self,
         height: &Height,
     ) -> Result<Box<dyn ConsensusState>, ContextError> {
-        let index = self
-            .host_consensus_states
-            .len()
-            .map_err(|_| ClientError::ImplementationSpecific)?
-            - 1
-            - (self.height - height.revision_height());
+        let index = self.host_consensus_states.len() - 1 - (self.height - height.revision_height());
         Ok(Box::<TmConsensusState>::new(
             self.host_consensus_states
                 .get(index)

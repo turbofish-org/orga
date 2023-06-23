@@ -39,7 +39,6 @@ pub struct Transfer {
     pub accounts: Map<Denom, Map<Address, Amount>>,
 }
 
-#[orga]
 impl Transfer {
     pub fn balance(&self, address: Address, denom: Denom) -> crate::Result<Amount> {
         Ok(*self
@@ -48,6 +47,13 @@ impl Transfer {
             .unwrap_or_default()
             .get(address)?
             .unwrap_or_default())
+    }
+
+    pub fn symbol_balance<S: Symbol>(&self, address: Address) -> crate::Result<Amount> {
+        let denom = Denom {
+            inner: vec![S::INDEX].try_into().unwrap(),
+        };
+        self.balance(address, denom)
     }
 }
 
