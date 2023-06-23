@@ -7,15 +7,12 @@ use crate::call::Call as CallTrait;
 use crate::context::Context;
 
 use crate::encoding::LengthVec;
-use crate::{
-    encoding::{Decode, Encode},
-    migrate::{MigrateFrom, MigrateInto},
-};
+use crate::encoding::{Decode, Encode};
 
 use crate::{Error, Result};
 use std::ops::Deref;
 
-#[orga(skip(Call, MigrateFrom))]
+#[orga(skip(Call))]
 pub struct ChainCommitmentPlugin<T> {
     pub chain_id: LengthVec<u8, u8>,
     pub inner: T,
@@ -27,19 +24,6 @@ where
 {
     fn nonce(&self, address: crate::coins::Address) -> Result<u64> {
         self.inner.nonce(address)
-    }
-}
-
-impl<T1, T2> MigrateFrom<ChainCommitmentPlugin<T1>> for ChainCommitmentPlugin<T2>
-where
-    T1: MigrateInto<T2>,
-{
-    fn migrate_from(other: ChainCommitmentPlugin<T1>) -> Result<Self> {
-        // TODO: will have to migrate from old versions which don't store a chain id
-        Ok(Self {
-            chain_id: other.chain_id,
-            inner: other.inner.migrate_into()?,
-        })
     }
 }
 
