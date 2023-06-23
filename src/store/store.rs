@@ -44,6 +44,13 @@ impl Store {
             PartialMapStore::new(),
         )))
     }
+
+    pub fn remove_range<B: RangeBounds<Vec<u8>>>(&mut self, bounds: B) -> Result<()> {
+        self.range(bounds).try_for_each(|entry| {
+            let (k, _) = entry?;
+            self.delete(&k)
+        })
+    }
 }
 
 impl MigrateFrom for Store {
@@ -322,5 +329,28 @@ mod test {
             store.get_prev(None).unwrap().unwrap(),
             (vec![0, 0], vec![0])
         );
+    }
+
+    #[test]
+    fn remove_range() -> Result<()> {
+        let mut store = Store::with_map_store();
+        store.put(vec![1, 1, 1], vec![1])?;
+        store.put(vec![1, 2, 3], vec![1])?;
+        store.put(vec![1, 2, 0], vec![1])?;
+        store.put(vec![1, 3, 2], vec![1])?;
+
+        let mut sub = store.sub(&[1, 2]);
+        sub.remove_range(..)?;
+
+        assert!(store.get(&[1, 1, 1])?.is_some());
+        assert!(store.get(&[1, 2, 3])?.is_none());
+        assert!(store.get(&[1, 2, 0])?.is_none());
+        assert!(store.get(&[1, 3, 2])?.is_some());
+
+        store.remove_range(vec![1, 2]..)?;
+        assert!(store.get(&[1, 1, 1])?.is_some());
+        assert!(store.get(&[1, 3, 2])?.is_none());
+
+        Ok(())
     }
 }
