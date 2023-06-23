@@ -49,49 +49,81 @@ pub use service::{start_grpc, GrpcOpts};
 
 pub use self::messages::{IbcMessage, IbcTx, RawIbcTx};
 mod messages;
+mod migration;
 mod query;
 mod router;
 // #[cfg(test)]
 // mod tests2;
 pub const IBC_QUERY_PATH: &str = "store/ibc/key";
 
-#[orga]
+#[orga(version = 1)]
 pub struct Ibc {
+    #[orga(version(V0))]
+    _bytes: [u64; 10],
+
+    #[orga(version(V0))]
+    #[state(prefix(b""))]
+    local_store: Store,
+
+    #[orga(version(V0))]
+    #[state(absolute_prefix(b""))]
+    root_store: Store,
+
+    #[orga(version(V1))]
     height: u64,
+
+    #[orga(version(V1))]
     host_consensus_states: Deque<ConsensusState>,
 
+    #[orga(version(V1))]
     channel_counter: u64,
+
+    #[orga(version(V1))]
     connection_counter: u64,
+
+    #[orga(version(V1))]
     client_counter: u64,
+
+    #[orga(version(V1))]
     pub transfer: Transfer,
 
+    #[orga(version(V1))]
     #[state(absolute_prefix(b"clients/"))]
     clients: Map<ClientId, Client>,
 
+    #[orga(version(V1))]
     #[state(absolute_prefix(b"connections/"))]
     connections: Map<ConnectionId, ConnectionEnd>,
 
+    #[orga(version(V1))]
     #[state(absolute_prefix(b"channelEnds/"))]
     channel_ends: Map<PortChannel, ChannelEnd>,
 
+    #[orga(version(V1))]
     #[state(absolute_prefix(b"nextSequenceSend/"))]
     next_sequence_send: Map<PortChannel, Number>,
 
+    #[orga(version(V1))]
     #[state(absolute_prefix(b"nextSequenceRecv/"))]
     next_sequence_recv: Map<PortChannel, Number>,
 
+    #[orga(version(V1))]
     #[state(absolute_prefix(b"nextSequenceAck/"))]
     next_sequence_ack: Map<PortChannel, Number>,
 
+    #[orga(version(V1))]
     #[state(absolute_prefix(b"commitments/"))]
     commitments: Map<PortChannelSequence, Vec<u8>>,
 
+    #[orga(version(V1))]
     #[state(absolute_prefix(b"receipts/"))]
     receipts: Map<PortChannelSequence, ()>,
 
+    #[orga(version(V1))]
     #[state(absolute_prefix(b"acks/"))]
     acks: Map<PortChannelSequence, Vec<u8>>,
 
+    #[orga(version(V1))]
     #[state(absolute_prefix(b""))]
     store: Store,
 }
@@ -764,7 +796,7 @@ mod tests {
         assert_eq!(
             bytes,
             vec![
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 127, 255, 255, 255, 255, 255, 255, 255, 127, 255,
+                0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 127, 255, 255, 255, 255, 255, 255, 255, 127, 255,
                 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 123, 0, 0, 0, 0, 0, 0, 1, 200,
                 0, 0, 0, 0, 0, 0, 3, 21, 0
             ]
