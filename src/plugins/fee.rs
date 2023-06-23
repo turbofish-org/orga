@@ -1,4 +1,4 @@
-use orga_macros::orga;
+use orga_macros::{orga, Describe, FieldQuery, MigrateFrom};
 
 use super::sdk_compat::{sdk::Tx as SdkTx, ConvertSdkTx};
 use super::Paid;

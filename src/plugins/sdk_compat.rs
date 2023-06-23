@@ -13,9 +13,10 @@ use std::marker::PhantomData;
 pub const MAX_CALL_SIZE: usize = 65_535;
 pub const NATIVE_CALL_FLAG: u8 = 0xff;
 
-#[orga(skip(Call, FieldCall))]
+#[orga(skip(Call))]
 pub struct SdkCompatPlugin<S, T> {
     pub(crate) symbol: PhantomData<S>,
+    #[state(transparent)]
     pub inner: T,
 }
 

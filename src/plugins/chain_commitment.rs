@@ -1,20 +1,21 @@
-use orga_macros::orga;
+use orga_macros::{orga, Describe, FieldQuery};
 
 use super::GetNonce;
-
 use super::{sdk_compat::sdk::Tx as SdkTx, ConvertSdkTx};
 use crate::call::Call as CallTrait;
 use crate::context::Context;
-
 use crate::encoding::LengthVec;
 use crate::encoding::{Decode, Encode};
 
+use crate::state::State;
 use crate::{Error, Result};
 use std::ops::Deref;
 
 #[orga(skip(Call))]
 pub struct ChainCommitmentPlugin<T> {
+    #[state(absolute_prefix(b"chain_id"))]
     pub chain_id: LengthVec<u8, u8>,
+    #[state(transparent)]
     pub inner: T,
 }
 
@@ -106,7 +107,6 @@ mod abci {
     use super::super::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
     use super::*;
     use crate::abci::{BeginBlock, EndBlock, InitChain};
-    use crate::state::State;
 
     impl<T> BeginBlock for ChainCommitmentPlugin<T>
     where

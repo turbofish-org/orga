@@ -13,11 +13,12 @@ use crate::call::Call;
 use crate::state::State;
 use crate::{Error, Result};
 
+use orga_macros::{Describe, FieldQuery};
 use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
 use serde::Serialize;
 use std::ops::Deref;
 
-#[orga(skip(Call))]
+#[derive(State, FieldQuery, Describe, Default, Debug)]
 pub struct SignerPlugin<T> {
     pub inner: T,
 }
