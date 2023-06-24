@@ -1,5 +1,6 @@
 use super::{ABCIStateMachine, ABCIStore, AbciQuery, App, Application, WrappedMerk};
 use crate::call::Call;
+use crate::context::Context;
 use crate::encoding::Decode;
 use crate::merk::{MerkStore, ProofBuilder};
 use crate::migrate::MigrateInto;
@@ -172,6 +173,13 @@ impl<A: App> Node<A> {
         }
 
         tm_process = tm_process.start();
+
+        let genesis: serde_json::Value =
+            std::fs::read_to_string(self.tm_home.join("config/genesis.json"))?
+                .parse()
+                .unwrap();
+        let chain_id = genesis["chain_id"].as_str().unwrap();
+        Context::add(crate::plugins::ChainId(chain_id.to_string()));
 
         let app = InternalApp::<ABCIPlugin<A>>::new();
         let store = MerkStore::new(self.merk_home.clone());

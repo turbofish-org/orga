@@ -60,6 +60,7 @@ chrono = "0.4.24"
 paste = "1.0.12"
 borsh = "0.10.3"
 educe = "0.4.20"
+rand = "0.8.5"
 
 [dev-dependencies]
 tempdir = "0.3.7"

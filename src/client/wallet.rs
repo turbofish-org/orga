@@ -1,3 +1,7 @@
+use std::path::Path;
+
+use secp256k1::SecretKey;
+
 use crate::{
     coins::Address,
     plugins::{SigType, SignerCall},
@@ -90,4 +94,53 @@ impl Wallet for DerivedKey {
     }
 }
 
-// TODO: implement file wallet
+#[derive(Clone, Debug)]
+pub struct SimpleWallet {
+    privkey: secp256k1::SecretKey,
+    pubkey: secp256k1::PublicKey,
+}
+
+impl SimpleWallet {
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
+        std::fs::create_dir_all(&path)?;
+        let keypair_path = path.as_ref().join("privkey");
+
+        let privkey = if keypair_path.exists() {
+            // load existing key
+            let bytes = std::fs::read(&keypair_path)?;
+            SecretKey::from_slice(bytes.as_slice())?
+        } else {
+            // create and save a new key
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+            let random: [u8; 32] = rng.gen();
+            let privkey = SecretKey::from_slice(&random)?;
+            std::fs::write(&keypair_path, privkey.secret_bytes())?;
+            privkey
+        };
+
+        let pubkey = secp256k1::PublicKey::from_secret_key(&secp256k1::Secp256k1::new(), &privkey);
+
+        Ok(Self { privkey, pubkey })
+    }
+}
+
+impl Wallet for SimpleWallet {
+    fn address(&self) -> Result<Option<Address>> {
+        Ok(Some(Address::from_pubkey(self.pubkey.serialize())))
+    }
+
+    fn sign(&self, call_bytes: &[u8]) -> Result<SignerCall> {
+        use secp256k1::hashes::sha256;
+        let secp = secp256k1::Secp256k1::new();
+        let msg = secp256k1::Message::from_hashed_data::<sha256::Hash>(call_bytes);
+        let sig = secp.sign_ecdsa(&msg, &self.privkey).serialize_compact();
+
+        Ok(SignerCall {
+            call_bytes: call_bytes.to_vec(),
+            signature: Some(sig),
+            pubkey: Some(self.pubkey.serialize()),
+            sigtype: SigType::Native,
+        })
+    }
+}
