@@ -290,10 +290,21 @@ mod tests {
     fn setup() -> Result<MockClient<App>> {
         let mut store = Store::with_map_store();
         let mut app = App::default();
+        app.attach(store.clone())?;
 
         {
             app.inner.inner.borrow_mut().inner.inner.chain_id = b"foo".to_vec().try_into()?;
-            let inner_app = &mut app.inner.inner.borrow_mut().inner.inner.inner.inner.inner;
+
+            let inner_app = &mut app
+                .inner
+                .inner
+                .borrow_mut()
+                .inner
+                .inner
+                .inner
+                .inner
+                .inner
+                .inner;
 
             let mut inner_map = Map::<u32, u64>::default();
             let mut deque_inner_map = Map::<u32, Bar>::default();
@@ -325,8 +336,7 @@ mod tests {
                 },
             )?;
             inner_app.bar.b = 8;
-        }
-        app.attach(store.clone())?;
+        };
 
         let mut bytes = vec![];
         app.flush(&mut bytes)?;
