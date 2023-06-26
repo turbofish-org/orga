@@ -1,3 +1,5 @@
+use serde::Serialize;
+
 use super::map::Iter as MapIter;
 use super::map::Map;
 use super::map::ReadOnly;
@@ -14,7 +16,8 @@ use crate::state::*;
 use crate::store::*;
 use crate::Result;
 
-#[derive(FieldQuery, FieldCall, Encode, Decode, Describe)]
+#[derive(FieldQuery, FieldCall, Encode, Decode, Describe, Serialize)]
+#[serde(bound = "T::Key: Serialize + Terminated + Clone, T::Value: Serialize")]
 pub struct EntryMap<T: Entry> {
     map: Map<T::Key, T::Value>,
 }

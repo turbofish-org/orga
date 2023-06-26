@@ -19,6 +19,7 @@ use std::ops::Deref;
 
 #[orga(skip(Call))]
 pub struct SignerPlugin<T> {
+    #[state(transparent)]
     pub inner: T,
 }
 

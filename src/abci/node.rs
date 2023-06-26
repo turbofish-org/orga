@@ -61,7 +61,11 @@ pub struct DefaultConfig {
 }
 
 impl<A: App> Node<A> {
-    pub fn new<P: AsRef<Path>>(home: P, chain_id: &str, cfg_defaults: DefaultConfig) -> Self {
+    pub fn new<P: AsRef<Path>>(
+        home: P,
+        chain_id: Option<&str>,
+        cfg_defaults: DefaultConfig,
+    ) -> Self {
         let home = home.as_ref().to_path_buf();
         let merk_home = home.join("merk");
         let tm_home = home.join("tendermint");
@@ -108,7 +112,9 @@ impl<A: App> Node<A> {
                     .expect("Failed to read genesis.json")
                     .parse()
                     .unwrap();
-            genesis_json["chain_id"] = serde_json::Value::String(chain_id.to_string());
+            if let Some(chain_id) = chain_id {
+                genesis_json["chain_id"] = serde_json::Value::String(chain_id.to_string());
+            }
             std::fs::write(
                 tm_home.join("config/genesis.json"),
                 serde_json::to_string_pretty(&genesis_json).unwrap(),
@@ -578,7 +584,7 @@ mod tests {
             let home = tempdir::TempDir::new("orga-node").unwrap();
             let node = Node::<DefaultPlugins<FooCoin, App>>::new(
                 home.path(),
-                "foo",
+                Some("foo"),
                 orga::abci::DefaultConfig {
                     seeds: None,
                     timeout_commit: None,

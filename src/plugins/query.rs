@@ -1,25 +1,54 @@
 use crate::call::Call;
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::orga;
 use crate::query::Query as QueryTrait;
+use crate::state::State;
 use crate::store::{Read, Store};
 use crate::Result;
 use educe::Educe;
+use serde::Serialize;
 use std::cell::RefCell;
 
-#[orga(skip(Query, Call, MigrateFrom))]
-// TODO: #[call(transparent)]
+#[derive(Default, Serialize)]
 pub struct QueryPlugin<T> {
     store: Store,
     pub inner: RefCell<T>,
+}
+
+impl<T: State> State for QueryPlugin<T> {
+    fn attach(&mut self, store: Store) -> Result<()> {
+        self.store = store.clone();
+        self.inner.attach(store)
+    }
+
+    fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()> {
+        self.inner.flush(out)
+    }
+
+    fn load(store: Store, bytes: &mut &[u8]) -> Result<Self> {
+        let inner = T::load(store.clone(), bytes)?;
+        Ok(Self {
+            store,
+            inner: RefCell::new(inner),
+        })
+    }
+
+    fn field_keyop(field_name: &str) -> Option<orga::describe::KeyOp> {
+        match field_name {
+            "store" => Some(orga::describe::KeyOp::Append(vec![])),
+            "inner" => Some(orga::describe::KeyOp::Append(vec![])),
+            _ => None,
+        }
+    }
 }
 
 impl<T: Call> Call for QueryPlugin<T> {
     type Call = T::Call;
 
     fn call(&mut self, call: Self::Call) -> Result<()> {
-        self.inner.borrow_mut().call(call)
+        self.inner.call(call)
     }
 }
 
@@ -57,6 +86,15 @@ where
             store: other.store,
             inner: other.inner.migrate_into()?,
         })
+    }
+}
+
+impl<T: State + Describe> Describe for QueryPlugin<T> {
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>()
+            .meta::<u8>()
+            .named_child::<RefCell<T>>("inner", &[])
+            .build()
     }
 }
 

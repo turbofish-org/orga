@@ -27,7 +27,7 @@ pub struct StateInputReceiver {
 
     #[darling(default)]
     pub version: u8,
-    pub previous: Option<Ident>,
+    pub previous: Option<Path>,
     pub as_type: Option<Path>,
     #[darling(default)]
     transparent: bool,
@@ -288,7 +288,13 @@ impl StateInputReceiver {
             })
             .collect();
 
-        quote! { Self: 'static, #field_bounds }
+        let maybe_migrate_from_prev_bound = self
+            .previous
+            .as_ref()
+            .map(|prev| quote! { #prev: ::orga::migrate::MigrateInto<Self>,})
+            .unwrap_or(quote! {});
+
+        quote! { Self: 'static, #maybe_migrate_from_prev_bound #field_bounds }
     }
 
     fn state_fields(&self) -> Vec<(TokenStream2, StateFieldReceiver)> {

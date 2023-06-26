@@ -3,6 +3,7 @@ use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 
 use crate::abci::App;
+use crate::migrate::MigrateInto;
 use crate::plugins::{sdk_compat, ABCICall, ABCIPlugin, ConvertSdkTx};
 use crate::plugins::{PaidCall, PayableCall};
 use crate::query::Query;
@@ -45,8 +46,22 @@ pub struct AppClient<T, U, Transport, Symbol, Wallet> {
 impl<T, U, Transport, Symbol, Wallet> Client<U> for AppClient<T, U, Transport, Symbol, Wallet>
 where
     Transport: exec::Transport<ABCIPlugin<DefaultPlugins<Symbol, T>>>,
-    T: App + Call + State + Query + Default + Describe + ConvertSdkTx<Output = PaidCall<T::Call>>,
-    U: App + Call + State + Query + Default + Describe + ConvertSdkTx<Output = PaidCall<T::Call>>,
+    T: App
+        + Call
+        + State
+        + Query
+        + Default
+        + Describe
+        + ConvertSdkTx<Output = PaidCall<T::Call>>
+        + MigrateInto<T>,
+    U: App
+        + Call
+        + State
+        + Query
+        + Default
+        + Describe
+        + ConvertSdkTx<Output = PaidCall<T::Call>>
+        + MigrateInto<U>,
     Wallet: wallet::Wallet + Clone,
     Symbol: crate::coins::Symbol,
 {
@@ -69,7 +84,14 @@ use crate::plugins::DefaultPlugins;
 impl<T, U, Transport, Symbol, Wallet> AppClient<T, U, Transport, Symbol, Wallet>
 where
     Transport: exec::Transport<ABCIPlugin<DefaultPlugins<Symbol, T>>>,
-    T: App + Call + State + Query + Default + Describe + ConvertSdkTx<Output = PaidCall<T::Call>>,
+    T: App
+        + Call
+        + State
+        + Query
+        + Default
+        + Describe
+        + ConvertSdkTx<Output = PaidCall<T::Call>>
+        + MigrateInto<T>,
     Wallet: wallet::Wallet + Clone,
     Symbol: crate::coins::Symbol,
 {
@@ -290,10 +312,21 @@ mod tests {
     fn setup() -> Result<MockClient<App>> {
         let mut store = Store::with_map_store();
         let mut app = App::default();
+        app.attach(store.clone())?;
 
         {
             app.inner.inner.borrow_mut().inner.inner.chain_id = b"foo".to_vec().try_into()?;
-            let inner_app = &mut app.inner.inner.borrow_mut().inner.inner.inner.inner.inner;
+
+            let inner_app = &mut app
+                .inner
+                .inner
+                .borrow_mut()
+                .inner
+                .inner
+                .inner
+                .inner
+                .inner
+                .inner;
 
             let mut inner_map = Map::<u32, u64>::default();
             let mut deque_inner_map = Map::<u32, Bar>::default();
@@ -325,8 +358,7 @@ mod tests {
                 },
             )?;
             inner_app.bar.b = 8;
-        }
-        app.attach(store.clone())?;
+        };
 
         let mut bytes = vec![];
         app.flush(&mut bytes)?;

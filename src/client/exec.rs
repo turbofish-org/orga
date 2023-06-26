@@ -121,8 +121,8 @@ where
             Err(_) => return Ok(StepResult::FetchKey(key, traces.history.len() as u64)),
         };
         let query_bytes = [
-            // TODO: shouldn't have to cut off ABCIPlugin, QueryPlugin prefixes here
-            receiver_pfx[2..].to_vec(),
+            // TODO: shouldn't have to cut off ABCIPlugin prefixes here
+            receiver_pfx[1..].to_vec(),
             trace.bytes(),
         ]
         .concat();
