@@ -38,7 +38,7 @@ pub mod describe;
 pub mod encoding;
 
 /// Integration with [merk](https://docs.rs/merk) (gated by `merk` feature).
-#[cfg(feature = "merk")]
+#[cfg(feature = "merk-verify")]
 pub mod merk;
 
 pub mod query;

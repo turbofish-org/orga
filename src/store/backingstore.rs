@@ -1,10 +1,10 @@
 #[cfg(feature = "merk-full")]
 use crate::merk::snapshot::Snapshot;
-#[cfg(feature = "merk")]
+#[cfg(feature = "merk-verify")]
 use crate::merk::ProofStore;
 #[cfg(feature = "merk-full")]
 use crate::merk::{MerkStore, ProofBuilder};
-#[cfg(feature = "merk")]
+#[cfg(feature = "merk-verify")]
 use crate::store::BufStore;
 use crate::store::ReadWrite;
 use crate::store::{bufstore::PartialMapStore, Empty, MapStore, Read, Shared, Write, KV};
@@ -30,7 +30,7 @@ pub enum BackingStore {
     Merk(Shared<MerkStore>),
     #[cfg(feature = "merk-full")]
     Snapshot(Shared<Snapshot>),
-    #[cfg(feature = "merk")]
+    #[cfg(feature = "merk-verify")]
     ProofMap(Shared<ProofStore>),
 }
 
@@ -58,7 +58,7 @@ impl Read for BackingStore {
             BackingStore::Merk(ref store) => store.get(key),
             #[cfg(feature = "merk-full")]
             BackingStore::Snapshot(ref store) => store.get(key),
-            #[cfg(feature = "merk")]
+            #[cfg(feature = "merk-verify")]
             BackingStore::ProofMap(ref map) => map.get(key),
         }
     }
@@ -80,7 +80,7 @@ impl Read for BackingStore {
             BackingStore::Merk(ref store) => store.get_next(key),
             #[cfg(feature = "merk-full")]
             BackingStore::Snapshot(ref store) => store.get_next(key),
-            #[cfg(feature = "merk")]
+            #[cfg(feature = "merk-verify")]
             BackingStore::ProofMap(ref map) => map.get_next(key),
         }
     }
@@ -102,7 +102,7 @@ impl Read for BackingStore {
             BackingStore::Merk(ref store) => store.get_prev(key),
             #[cfg(feature = "merk-full")]
             BackingStore::Snapshot(ref store) => store.get_prev(key),
-            #[cfg(feature = "merk")]
+            #[cfg(feature = "merk-verify")]
             BackingStore::ProofMap(ref map) => map.get_prev(key),
         }
     }
@@ -132,7 +132,7 @@ impl Write for BackingStore {
             BackingStore::ProofBuilderSnapshot(_) => {
                 panic!("put() is not implemented for ProofBuilderSnapshot")
             }
-            #[cfg(feature = "merk")]
+            #[cfg(feature = "merk-verify")]
             BackingStore::ProofMap(_) => {
                 panic!("put() is not implemented for ProofMap")
             }
@@ -162,7 +162,7 @@ impl Write for BackingStore {
             BackingStore::Snapshot(_) => {
                 panic!("delete() is not implemented for Snapshot")
             }
-            #[cfg(feature = "merk")]
+            #[cfg(feature = "merk-verify")]
             BackingStore::ProofMap(_) => {
                 panic!("delete() is not implemented for ProofMap")
             }

@@ -13,7 +13,7 @@ use crate::{
     Error, Result,
 };
 
-#[cfg(feature = "merk")]
+#[cfg(feature = "merk-verify")]
 use crate::merk::ProofStore;
 
 #[derive(Debug, Clone)]
@@ -149,7 +149,7 @@ pub fn join_store(dst: Store, src: Store) -> Result<Store> {
             }
             Ok(Store::new(BackingStore::PartialMapStore(Shared::new(dst))))
         }
-        #[cfg(feature = "merk")]
+        #[cfg(feature = "merk-verify")]
         (BackingStore::ProofMap(dst), BackingStore::ProofMap(src)) => {
             let dst = dst.into_inner();
             let src = src.into_inner();
