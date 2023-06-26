@@ -62,9 +62,7 @@ impl Default for Upgrade {
 impl MigrateFrom<UpgradeV0> for UpgradeV1 {
     fn migrate_from(other: UpgradeV0) -> Result<Self> {
         let mut current_version = Map::new();
-        current_version
-            .insert((), other.current_version.into())
-            .unwrap();
+        current_version.insert((), other.current_version).unwrap();
         Ok(Self {
             signals: other.signals.migrate_into()?,
             threshold: other.threshold,
@@ -105,22 +103,16 @@ impl Upgrade {
 
     pub fn step(&mut self, bin_version: &Version) -> Result<()> {
         let bin_version = bin_version.clone();
-        let net_version = self
-            .current_version
-            .get(())?
-            .unwrap()
-            .clone()
-            .try_into()
-            .unwrap();
+        let net_version = self.current_version.get(())?.unwrap().clone();
         if bin_version != net_version {
             return Err(Error::Version {
-                expected: net_version.clone(),
+                expected: net_version,
                 actual: bin_version,
             }
             .into());
         }
         if let Some(new_version) = self.upgrade_ready()? {
-            self.current_version.insert((), new_version.into())?;
+            self.current_version.insert((), new_version)?;
         }
         Ok(())
     }
@@ -257,7 +249,7 @@ mod tests {
         assert!(upgrade.upgrade_ready()?.unwrap() == next_version);
         assert_eq!(&*upgrade.current_version.get(())?.unwrap(), &version);
         upgrade.step(&version)?;
-        assert_eq!(&*upgrade.current_version.get(())?.unwrap(), &version);
+        assert_eq!(&*upgrade.current_version.get(())?.unwrap(), &next_version);
         assert!(upgrade.step(&version).is_err());
         upgrade.step(&next_version)?;
 
