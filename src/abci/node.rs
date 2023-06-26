@@ -109,9 +109,9 @@ impl<A: App> Node<A> {
                     .expect("Failed to read genesis.json")
                     .parse()
                     .unwrap();
-            chain_id.map(|chain_id| {
+            if let Some(chain_id) = chain_id {
                 genesis_json["chain_id"] = serde_json::Value::String(chain_id.to_string());
-            });
+            }
             std::fs::write(
                 tm_home.join("config/genesis.json"),
                 serde_json::to_string_pretty(&genesis_json).unwrap(),

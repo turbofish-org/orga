@@ -3,7 +3,6 @@ use orga_macros::orga;
 use super::GetNonce;
 use super::{sdk_compat::sdk::Tx as SdkTx, ConvertSdkTx};
 use crate::call::Call as CallTrait;
-use crate::collections::Map;
 use crate::context::Context;
 use crate::encoding::LengthVec;
 use crate::encoding::{Decode, Encode};
