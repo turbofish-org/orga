@@ -1,12 +1,9 @@
 use crate::abci::ABCIStore;
 use crate::error::{Error, Result};
 use crate::store::*;
-use merk::{proofs::query::Map as ProofMap, restore::Restorer, tree::Tree, BatchEntry, Merk, Op};
+use merk::{restore::Restorer, tree::Tree, BatchEntry, Merk, Op};
+use std::path::{Path, PathBuf};
 use std::{collections::BTreeMap, convert::TryInto};
-use std::{
-    ops::Bound,
-    path::{Path, PathBuf},
-};
 use tendermint_proto::v0_34::abci::{self, *};
 
 use super::snapshot;
