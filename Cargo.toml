@@ -18,7 +18,7 @@ log = "0.4.17"
 hex-literal = "0.4.1"
 sha2 = "0.10.6"
 is_executable = { version = "1.0.1", optional = true }
-reqwest = {version = "0.11.16", features = ["blocking"]}
+reqwest = {version = "0.11.16", features = ["blocking"], optional = true }
 flate2 = "1.0.25"
 tar = "0.4.38"
 ed = { git = "https://github.com/nomic-io/ed", rev = "9c0e206ffdb59dacb90f083e004e8080713e6ad8" }
@@ -73,8 +73,8 @@ tracing-subscriber = "0.3.17"
 features = ["abci", "merk/full"]
 
 [features]
-default = ["tokio/full"]
-abci = ["abci2", "tendermint", "tendermint-rpc", "is_executable", "home", "secp256k1/rand-std", "tokio", "tonic", "ibc-proto/server"]
+default = []
+abci = ["abci2", "tendermint", "tendermint-rpc", "is_executable", "home", "secp256k1/rand-std", "tokio/full", "tonic", "ibc-proto/server", "reqwest"]
 merk-verify = ["merk/verify"]
 merk-full = ["merk/full", "ics23"]
 state-sync = []

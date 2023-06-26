@@ -44,7 +44,9 @@ use ibc::core::timestamp::Timestamp as IbcTimestamp;
 mod impls;
 pub mod transfer;
 use transfer::Transfer;
+#[cfg(feature = "abci")]
 mod service;
+#[cfg(feature = "abci")]
 pub use service::{start_grpc, GrpcOpts};
 
 pub use self::messages::{IbcMessage, IbcTx, RawIbcTx};
