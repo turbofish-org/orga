@@ -1,4 +1,5 @@
 use crate::call::Call;
+use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::orga;
@@ -7,10 +8,10 @@ use crate::state::State;
 use crate::store::{Read, Store};
 use crate::Result;
 use educe::Educe;
-use orga_macros::Describe;
+use serde::Serialize;
 use std::cell::RefCell;
 
-#[derive(Default, Describe)]
+#[derive(Default, Serialize)]
 pub struct QueryPlugin<T> {
     store: Store,
     pub inner: RefCell<T>,
@@ -47,7 +48,7 @@ impl<T: Call> Call for QueryPlugin<T> {
     type Call = T::Call;
 
     fn call(&mut self, call: Self::Call) -> Result<()> {
-        self.inner.borrow_mut().call(call)
+        self.inner.call(call)
     }
 }
 
@@ -85,6 +86,15 @@ where
             store: other.store,
             inner: other.inner.migrate_into()?,
         })
+    }
+}
+
+impl<T: State + Describe> Describe for QueryPlugin<T> {
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>()
+            .meta::<u8>()
+            .named_child::<RefCell<T>>("inner", &[])
+            .build()
     }
 }
 

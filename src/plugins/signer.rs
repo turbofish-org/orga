@@ -18,8 +18,9 @@ use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
 use serde::Serialize;
 use std::ops::Deref;
 
-#[derive(State, FieldQuery, Describe, Default, Debug)]
+#[orga(skip(Call))]
 pub struct SignerPlugin<T> {
+    #[state(transparent)]
     pub inner: T,
 }
 
