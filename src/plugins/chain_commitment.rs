@@ -8,7 +8,6 @@ use crate::encoding::LengthVec;
 use crate::encoding::{Decode, Encode};
 
 use crate::migrate::{MigrateFrom, MigrateInto};
-use crate::state::State;
 use crate::{Error, Result};
 use std::ops::Deref;
 
@@ -115,6 +114,7 @@ mod abci {
     use super::super::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
     use super::*;
     use crate::abci::{BeginBlock, EndBlock, InitChain};
+    use crate::state::State;
 
     impl<T> BeginBlock for ChainCommitmentPlugin<T>
     where
