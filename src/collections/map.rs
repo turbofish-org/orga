@@ -372,6 +372,34 @@ where
             }))
         }
     }
+
+    fn remove_raw(&mut self, k: K) -> Result<Option<V>> {
+        let map_key = MapKey::<K>::new(k)?;
+        if self.children.contains_key(&map_key) {
+            let result = self.children.remove(&map_key).unwrap();
+            self.children.insert(map_key, None);
+            Ok(result)
+        } else {
+            Ok(self.get_from_store(&map_key.inner)?.map(|val| {
+                self.children.insert(map_key, None);
+                val
+            }))
+        }
+    }
+
+    /// Swaps the values at the given keys.
+    pub fn swap(&mut self, i: K, j: K) -> Result<()> {
+        if !(self.contains_key(i.clone())? && self.contains_key(j.clone())?) {
+            return Err(Error::App("Swap failed. Key not found.".into()));
+        }
+
+        let a = self.remove_raw(i.clone())?;
+        let b = self.remove_raw(j.clone())?;
+
+        self.children.insert(MapKey::<K>::new(i)?, b);
+        self.children.insert(MapKey::<K>::new(j)?, a);
+        Ok(())
+    }
 }
 
 impl<'a, K, V> Map<K, V>
@@ -2153,5 +2181,105 @@ mod tests {
 
         assert_eq!(map1.get(12).unwrap().unwrap().bar, 0);
         assert_eq!(map1.get(12).unwrap().unwrap().baz, 123);
+    }
+
+    #[test]
+    fn swap_in_memory() {
+        let (_store, mut map) = setup();
+
+        map.entry(12).unwrap().or_insert(24).unwrap();
+        map.entry(13).unwrap().or_insert(26).unwrap();
+        map.entry(14).unwrap().or_insert(28).unwrap();
+
+        map.swap(13, 14).unwrap();
+        let mut actual: Vec<(u32, u32)> = Vec::with_capacity(3);
+
+        map.iter()
+            .unwrap()
+            .map(|result| result.unwrap())
+            .for_each(|(k, v)| actual.push((*k, *v)));
+
+        let expected: Vec<(u32, u32)> = vec![(12, 24), (13, 28), (14, 26)];
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn swap_in_store() {
+        let store = mapstore();
+        let mut edit_map: Map<u32, u32> = Default::default();
+        edit_map.attach(store.clone()).unwrap();
+
+        edit_map.insert(12, 24).unwrap();
+        edit_map.insert(13, 26).unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
+
+        let mut read_map: Map<u32, u32> = Default::default();
+        read_map.attach(store).unwrap();
+        read_map.swap(12, 13).unwrap();
+
+        let mut actual = vec![];
+        read_map
+            .iter()
+            .unwrap()
+            .map(|result| result.unwrap())
+            .for_each(|(k, v)| actual.push((*k, *v)));
+
+        let expected: Vec<(u32, u32)> = vec![(12, 26), (13, 24)];
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn swap_mem_store() {
+        let store = mapstore();
+        let mut edit_map: Map<u32, u32> = Default::default();
+        edit_map.attach(store.clone()).unwrap();
+
+        edit_map.insert(12, 24).unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
+
+        let mut read_map: Map<u32, u32> = Default::default();
+        read_map.attach(store).unwrap();
+        read_map.insert(13, 26).unwrap();
+        read_map.swap(12, 13).unwrap();
+
+        let mut actual = vec![];
+        read_map
+            .iter()
+            .unwrap()
+            .map(|result| result.unwrap())
+            .for_each(|(k, v)| actual.push((*k, *v)));
+
+        let expected: Vec<(u32, u32)> = vec![(12, 26), (13, 24)];
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    #[should_panic]
+    fn swap_none() {
+        let store = mapstore();
+        let mut edit_map: Map<u32, u32> = Default::default();
+        edit_map.attach(store.clone()).unwrap();
+
+        edit_map.insert(12, 24).unwrap();
+        let mut buf = vec![];
+        edit_map.flush(&mut buf).unwrap();
+
+        let mut read_map: Map<u32, u32> = Default::default();
+        read_map.attach(store).unwrap();
+        read_map.insert(13, 26).unwrap();
+        read_map.swap(13, 26).unwrap();
+
+        let mut actual = vec![];
+        read_map
+            .iter()
+            .unwrap()
+            .map(|result| result.unwrap())
+            .for_each(|(k, v)| actual.push((*k, *v)));
+
+        let expected: Vec<(u32, u32)> = vec![(12, 26), (13, 24)];
+        assert_eq!(actual, expected);
     }
 }

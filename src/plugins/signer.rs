@@ -257,7 +257,6 @@ where
 
 #[cfg(target_arch = "wasm32")]
 pub mod keplr {
-    use super::Error;
     use crate::plugins::sdk_compat::sdk;
     use js_sys::{
         Array, Function, Object, Promise,
@@ -277,36 +276,33 @@ pub mod keplr {
 
     impl KeplrHandle {
         pub fn new() -> Self {
-            unsafe {
-                let window = web_sys::window().expect("no global `window` exists");
-                let keplr = window.get("keplr").expect("no `keplr` in global `window`");
+            let window = web_sys::window().expect("no global `window` exists");
+            let keplr = window.get("keplr").expect("no `keplr` in global `window`");
 
-                let storage = window
-                    .local_storage()
-                    .expect("no `localStorage` in global `window`")
-                    .expect("no `localStorage` in global `window`");
-                let res = storage
-                    .get("orga/chainid")
-                    .expect("Could not load from local storage");
-                let chain_id = match res {
-                    Some(chain_id) => chain_id,
-                    None => panic!("localStorage['orga/chainid'] is not set"),
-                };
+            let storage = window
+                .local_storage()
+                .expect("no `localStorage` in global `window`")
+                .expect("no `localStorage` in global `window`");
+            let res = storage
+                .get("orga/chainid")
+                .expect("Could not load from local storage");
+            let chain_id = match res {
+                Some(chain_id) => chain_id,
+                None => panic!("localStorage['orga/chainid'] is not set"),
+            };
 
-                let args = Array::new();
+            let args = Array::new();
 
-                Array::push(&args, &chain_id.clone().into());
-                let get_offline_signer: Function =
-                    get(&keplr, &"getOfflineSigner".to_string().into())
-                        .unwrap()
-                        .into();
-                let signer = apply(&get_offline_signer, &keplr, &args).unwrap();
+            Array::push(&args, &chain_id.clone().into());
+            let get_offline_signer: Function = get(&keplr, &"getOfflineSigner".to_string().into())
+                .unwrap()
+                .into();
+            let signer = apply(&get_offline_signer, &keplr, &args).unwrap();
 
-                Self {
-                    keplr,
-                    signer,
-                    chain_id,
-                }
+            Self {
+                keplr,
+                signer,
+                chain_id,
             }
         }
     }
@@ -317,96 +313,84 @@ pub mod keplr {
         }
 
         pub async fn pubkey(&self) -> [u8; 33] {
-            unsafe {
-                let signer = self.handle().signer;
-                let get_accounts: Function = get(&signer, &"getAccounts".to_string().into())
-                    .unwrap()
-                    .into();
-                let accounts_promise: Promise =
-                    apply(&get_accounts, &signer, &Array::new()).unwrap().into();
-                let accounts = JsFuture::from(accounts_promise).await.unwrap();
-                let account = get(&accounts, &0i32.into()).unwrap();
-                let pubkey: Uint8Array =
-                    get(&account, &"pubkey".to_string().into()).unwrap().into();
-                let pubkey_vec = pubkey.to_vec();
-                let mut pubkey_arr = [0u8; 33];
-                pubkey_arr.copy_from_slice(&pubkey_vec);
-                pubkey_arr
-            }
+            let signer = self.handle().signer;
+            let get_accounts: Function = get(&signer, &"getAccounts".to_string().into())
+                .unwrap()
+                .into();
+            let accounts_promise: Promise =
+                apply(&get_accounts, &signer, &Array::new()).unwrap().into();
+            let accounts = JsFuture::from(accounts_promise).await.unwrap();
+            let account = get(&accounts, &0i32.into()).unwrap();
+            let pubkey: Uint8Array = get(&account, &"pubkey".to_string().into()).unwrap().into();
+            let pubkey_vec = pubkey.to_vec();
+            let mut pubkey_arr = [0u8; 33];
+            pubkey_arr.copy_from_slice(&pubkey_vec);
+            pubkey_arr
         }
 
         pub async fn address(&self) -> String {
-            unsafe {
-                let signer = self.handle().signer;
-                let get_accounts: Function = get(&signer, &"getAccounts".to_string().into())
-                    .unwrap()
-                    .into();
-                let accounts_promise: Promise =
-                    apply(&get_accounts, &signer, &Array::new()).unwrap().into();
-                let accounts = JsFuture::from(accounts_promise).await.unwrap();
-                let account = get(&accounts, &0i32.into()).unwrap();
-                get(&account, &"address".to_string().into())
-                    .unwrap()
-                    .as_string()
-                    .unwrap()
-            }
+            let signer = self.handle().signer;
+            let get_accounts: Function = get(&signer, &"getAccounts".to_string().into())
+                .unwrap()
+                .into();
+            let accounts_promise: Promise =
+                apply(&get_accounts, &signer, &Array::new()).unwrap().into();
+            let accounts = JsFuture::from(accounts_promise).await.unwrap();
+            let account = get(&accounts, &0i32.into()).unwrap();
+            get(&account, &"address".to_string().into())
+                .unwrap()
+                .as_string()
+                .unwrap()
         }
 
         pub async fn sign(&self, call_bytes: &[u8]) -> [u8; 64] {
-            unsafe {
-                let msg = Array::new();
-                for byte in call_bytes {
-                    Array::push(&msg, &(*byte as i32).into());
-                }
-
-                let handle = self.handle();
-
-                let args = Array::new();
-                Array::push(&args, &handle.chain_id.clone().into());
-                Array::push(&args, &self.address().await.into());
-                Array::push(&args, &msg.into());
-
-                let sign_arbitrary: Function =
-                    get(&handle.keplr, &"signArbitrary".to_string().into())
-                        .unwrap()
-                        .into();
-                let sign_promise: Promise =
-                    apply(&sign_arbitrary, &handle.keplr, &args).unwrap().into();
-                let res = JsFuture::from(sign_promise).await.unwrap();
-
-                let signature_b64: String = get(&res, &"signature".to_string().into())
-                    .unwrap()
-                    .as_string()
-                    .unwrap();
-                let signature_vec = base64::decode(&signature_b64).unwrap();
-                let mut signature_arr = [0u8; 64];
-                signature_arr.copy_from_slice(&signature_vec);
-                signature_arr
+            let msg = Array::new();
+            for byte in call_bytes {
+                Array::push(&msg, &(*byte as i32).into());
             }
+
+            let handle = self.handle();
+
+            let args = Array::new();
+            Array::push(&args, &handle.chain_id.clone().into());
+            Array::push(&args, &self.address().await.into());
+            Array::push(&args, &msg.into());
+
+            let sign_arbitrary: Function = get(&handle.keplr, &"signArbitrary".to_string().into())
+                .unwrap()
+                .into();
+            let sign_promise: Promise =
+                apply(&sign_arbitrary, &handle.keplr, &args).unwrap().into();
+            let res = JsFuture::from(sign_promise).await.unwrap();
+
+            let signature_b64: String = get(&res, &"signature".to_string().into())
+                .unwrap()
+                .as_string()
+                .unwrap();
+            let signature_vec = base64::decode(&signature_b64).unwrap();
+            let mut signature_arr = [0u8; 64];
+            signature_arr.copy_from_slice(&signature_vec);
+            signature_arr
         }
 
         pub async fn sign_sdk(&self, sign_doc: sdk::SignDoc) -> Result<sdk::Signature, JsValue> {
-            unsafe {
-                let doc_json = serde_json::to_string(&sign_doc).unwrap();
-                let doc_obj = js_sys::JSON::parse(&doc_json).unwrap();
+            let doc_json = serde_json::to_string(&sign_doc).unwrap();
+            let doc_obj = js_sys::JSON::parse(&doc_json).unwrap();
 
-                let args = Array::new();
-                Array::push(&args, &sign_doc.chain_id.clone().into());
-                Array::push(&args, &self.address().await.into());
-                Array::push(&args, &doc_obj);
+            let args = Array::new();
+            Array::push(&args, &sign_doc.chain_id.clone().into());
+            Array::push(&args, &self.address().await.into());
+            Array::push(&args, &doc_obj);
 
-                let handle = self.handle();
+            let handle = self.handle();
 
-                let sign_amino: Function =
-                    get(&handle.keplr, &"signAmino".to_string().into())?.into();
-                let sign_promise: Promise =
-                    apply(&sign_amino, &handle.keplr, &args).unwrap().into();
-                let res = JsFuture::from(sign_promise).await.unwrap();
+            let sign_amino: Function = get(&handle.keplr, &"signAmino".to_string().into())?.into();
+            let sign_promise: Promise = apply(&sign_amino, &handle.keplr, &args).unwrap().into();
+            let res = JsFuture::from(sign_promise).await.unwrap();
 
-                let signature = get(&res, &"signature".to_string().into()).unwrap();
-                let signature_json: String = js_sys::JSON::stringify(&signature).unwrap().into();
-                Ok(serde_json::from_str(&signature_json).unwrap())
-            }
+            let signature = get(&res, &"signature".to_string().into()).unwrap();
+            let signature_json: String = js_sys::JSON::stringify(&signature).unwrap().into();
+            Ok(serde_json::from_str(&signature_json).unwrap())
         }
     }
 }

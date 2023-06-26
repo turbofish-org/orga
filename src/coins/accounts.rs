@@ -1,4 +1,5 @@
 use crate::coins::{Address, Amount, Coin, Give, Symbol, Take};
+use crate::collections::map::Iter as MapIter;
 use crate::collections::Map;
 use crate::context::GetContext;
 use crate::orga;
@@ -15,6 +16,10 @@ pub struct Accounts<S: Symbol> {
 
 #[orga]
 impl<S: Symbol> Accounts<S> {
+    pub fn iter(&self) -> Result<MapIter<Address, Coin<S>>> {
+        self.accounts.iter()
+    }
+
     #[call]
     pub fn transfer(&mut self, to: Address, amount: Amount) -> Result<()> {
         let signer = self.signer()?;
