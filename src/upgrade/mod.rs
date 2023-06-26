@@ -39,7 +39,7 @@ pub struct Upgrade {
     pub current_version: Version,
     #[orga(version(V1))]
     #[state(absolute_prefix(b"/version"))]
-    // TODO: use Value/Box instead of Map<(), T>
+    // TODO: use Value/Box instead of Map<(), _>
     pub current_version: Map<(), Version>,
 }
 
@@ -62,7 +62,7 @@ impl Default for Upgrade {
 impl MigrateFrom<UpgradeV0> for UpgradeV1 {
     fn migrate_from(other: UpgradeV0) -> Result<Self> {
         let mut current_version = Map::new();
-        current_version.insert((), other.current_version).unwrap();
+        current_version.insert((), other.current_version)?;
         Ok(Self {
             signals: other.signals.migrate_into()?,
             threshold: other.threshold,
