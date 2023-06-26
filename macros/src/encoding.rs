@@ -13,7 +13,7 @@ pub struct EncodingInputReceiver {
 
     #[darling(default)]
     pub version: u8,
-    pub previous: Option<Ident>,
+    pub previous: Option<Path>,
     pub as_type: Option<Path>,
 }
 
@@ -173,7 +173,7 @@ impl ToTokens for EncodingInputReceiver {
         let decode_where = {
             let maybe_prev_decode = previous
                 .as_ref()
-                .map(|prev| quote! { #prev: #decode_trait, })
+                .map(|prev| quote! { #prev: #decode_trait + ::orga::migrate::MigrateInto<Self>, })
                 .unwrap_or_default();
 
             let field_decode_bounds = if let Some(ref as_type) = self.as_type {

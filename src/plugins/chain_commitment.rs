@@ -1,20 +1,26 @@
 use orga_macros::orga;
 
 use super::GetNonce;
-
 use super::{sdk_compat::sdk::Tx as SdkTx, ConvertSdkTx};
 use crate::call::Call as CallTrait;
 use crate::context::Context;
-
 use crate::encoding::LengthVec;
 use crate::encoding::{Decode, Encode};
 
+use crate::migrate::{MigrateFrom, MigrateInto};
+use crate::state::State;
 use crate::{Error, Result};
 use std::ops::Deref;
 
-#[orga(skip(Call))]
+#[orga(skip(Call), version = 1)]
 pub struct ChainCommitmentPlugin<T> {
+    #[orga(version(V0))]
+    #[state(transparent)]
+    pub inner: T,
+
+    #[orga(version(V1))]
     pub chain_id: LengthVec<u8, u8>,
+    #[orga(version(V1))]
     pub inner: T,
 }
 
@@ -49,12 +55,12 @@ impl<T: CallTrait> CallTrait for ChainCommitmentPlugin<T> {
             return Err(Error::App("Invalid chain ID length".into()));
         }
 
-        let chain_id = &call[..self.chain_id.len()];
-        if chain_id != self.chain_id.as_slice() {
+        let call_chain_id = &call[..self.chain_id.len()];
+        if call_chain_id != self.chain_id.as_slice() {
             return Err(Error::App(format!(
                 "Invalid chain ID (expected {}, got {})",
                 String::from_utf8(self.chain_id.to_vec()).unwrap(),
-                String::from_utf8(chain_id.to_vec()).unwrap_or_default()
+                String::from_utf8(call_chain_id.to_vec()).unwrap_or_default()
             )));
         }
 
@@ -84,18 +90,21 @@ where
     }
 }
 
-// impl<T> Describe for ChainCommitmentPlugin<T>
-// where
-//     T: State + Describe + 'static,
-// {
-//     fn describe() -> crate::describe::Descriptor {
-//         crate::describe::Builder::new::<Self>()
-//             .named_child::<T>("inner", &[], |v| {
-//                 crate::describe::Builder::access(v, |v: Self| v.inner)
-//             })
-//             .build()
-//     }
-// }
+impl<T1: MigrateInto<T2>, T2> MigrateFrom<ChainCommitmentPluginV0<T1>>
+    for ChainCommitmentPlugin<T2>
+{
+    fn migrate_from(other: ChainCommitmentPluginV0<T1>) -> Result<Self> {
+        let chain_id = Context::resolve::<ChainId>()
+            .ok_or_else(|| Error::App("Chain ID context not set".into()))?
+            .0
+            .as_bytes()
+            .to_vec();
+        Ok(Self {
+            chain_id: chain_id.try_into()?,
+            inner: other.inner.migrate_into()?,
+        })
+    }
+}
 
 // TODO: In the future, this plugin shouldn't need to know about ABCI, but
 // implementing passthrough of ABCI lifecycle methods as below seems preferable
@@ -106,7 +115,6 @@ mod abci {
     use super::super::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
     use super::*;
     use crate::abci::{BeginBlock, EndBlock, InitChain};
-    use crate::state::State;
 
     impl<T> BeginBlock for ChainCommitmentPlugin<T>
     where

@@ -200,6 +200,24 @@ mod tests {
         beep: Map<NumberV1, Deque<EntryMap<NumberEntryV1>>>,
     }
 
+    #[orga(version = 1)]
+    struct WithGeneric<T> {
+        a: u32,
+        b: T,
+    }
+
+    impl<T> MigrateFrom<WithGenericV0<T>> for WithGenericV1<T>
+    where
+        T: MigrateInto<T>,
+    {
+        fn migrate_from(other: WithGenericV0<T>) -> Result<Self> {
+            Ok(Self {
+                a: other.a.migrate_into()?,
+                b: other.b.migrate_into()?,
+            })
+        }
+    }
+
     impl MigrateFrom<FooV0> for FooV1 {
         fn migrate_from(other: FooV0) -> Result<Self> {
             Ok(Self {

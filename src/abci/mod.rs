@@ -569,7 +569,7 @@ pub trait BeginBlock {
     fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()>;
 }
 
-impl<S: State> BeginBlock for S {
+impl<S> BeginBlock for S {
     default fn begin_block(&mut self, _req: &BeginBlockCtx) -> Result<()> {
         Ok(())
     }
@@ -578,7 +578,7 @@ pub trait EndBlock {
     fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()>;
 }
 
-impl<S: State> EndBlock for S {
+impl<S> EndBlock for S {
     default fn end_block(&mut self, _ctx: &EndBlockCtx) -> Result<()> {
         Ok(())
     }
@@ -587,7 +587,7 @@ pub trait InitChain {
     fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()>;
 }
 
-impl<S: State> InitChain for S {
+impl<S> InitChain for S {
     default fn init_chain(&mut self, _ctx: &InitChainCtx) -> Result<()> {
         Ok(())
     }
@@ -597,7 +597,7 @@ pub trait AbciQuery {
     fn abci_query(&self, request: &RequestQuery) -> Result<ResponseQuery>;
 }
 
-impl<S: State> AbciQuery for S {
+impl<S> AbciQuery for S {
     default fn abci_query(&self, request: &RequestQuery) -> Result<ResponseQuery> {
         Ok(ResponseQuery {
             code: 1,

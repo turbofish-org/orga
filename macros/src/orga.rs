@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use syn::*;
 
 /// Arguments to the top-level orga macro invocation.
-#[derive(Debug, FromMeta)]
+#[derive(Debug, FromMeta, Clone)]
 struct OrgaAttrReceiver {
     #[darling(default)]
     version: u8,
@@ -58,6 +58,7 @@ struct OrgaInputReceiver {
 
 /// A sub struct that is generated for each version, containing only the fields
 /// that should be present in that version.
+#[derive(Clone)]
 struct OrgaSubStruct {
     base_ident: Ident,
     generics: Generics,
@@ -69,6 +70,7 @@ struct OrgaSubStruct {
     skip: HashMap<Ident, ()>,
     simple: bool,
     channel: Option<Ident>,
+    prev_generics: Option<Generics>,
 }
 
 impl OrgaSubStruct {
@@ -102,6 +104,7 @@ impl OrgaSubStruct {
             quote! { ::orga::encoding::VersionedEncoding },
         );
         maybe_add("State", quote! { ::orga::state::State });
+        maybe_add("Serialize", quote! { ::orga::serde::Serialize });
 
         if self.is_last {
             // maybe_add("Call", quote! { ::orga::call::Call });
@@ -127,7 +130,17 @@ impl OrgaSubStruct {
         let version = self.version;
 
         let maybe_prev = if self.version > 0 {
-            let prev_name = format!("{}V{}", self.ident_with_channel(), version - 1);
+            let prev_ty_generics = self
+                .prev_generics
+                .as_ref()
+                .map(|g| g.split_for_impl().1.to_token_stream())
+                .unwrap_or_default();
+            let prev_name = format!(
+                "{}V{}{}",
+                self.ident_with_channel(),
+                version - 1,
+                prev_ty_generics.to_string(),
+            );
             quote! {previous = #prev_name,}
         } else {
             quote! {}
@@ -147,7 +160,17 @@ impl OrgaSubStruct {
         let version = self.version;
 
         let maybe_prev = if self.version > 0 {
-            let prev_name = format!("{}V{}", self.ident_with_channel(), version - 1);
+            let prev_ty_generics = self
+                .prev_generics
+                .as_ref()
+                .map(|g| g.split_for_impl().1.to_token_stream())
+                .unwrap_or_default();
+            let prev_name = format!(
+                "{}V{}{}",
+                self.ident_with_channel(),
+                version - 1,
+                prev_ty_generics.to_string(),
+            );
             quote! {previous = #prev_name,}
         } else {
             quote! {}
@@ -270,12 +293,27 @@ impl OrgaMetaStruct {
             self.channels_iter().collect()
         };
 
-        (0..=self.attrs.version)
-            .cartesian_product(channels)
-            .map(move |(v, channel)| self.substruct_for_version_channel(v, channel))
+        let mut substructs = vec![];
+        for channel in channels.iter() {
+            let mut prev = None;
+            for version in 0..=self.attrs.version {
+                let substruct = self.substruct_for_version_channel(version, channel.clone(), &prev);
+                substructs.push(substruct.clone());
+                if version < self.attrs.version {
+                    prev.replace(substruct);
+                }
+            }
+        }
+
+        substructs.into_iter()
     }
 
-    fn substruct_for_version_channel(&self, version: u8, channel: Option<Ident>) -> OrgaSubStruct {
+    fn substruct_for_version_channel(
+        &self,
+        version: u8,
+        channel: Option<Ident>,
+        maybe_prev: &Option<OrgaSubStruct>,
+    ) -> OrgaSubStruct {
         let is_last = version == self.attrs.version;
         let item = self.item.clone();
         let style = item.clone().data.take_struct().unwrap().style;
@@ -314,6 +352,7 @@ impl OrgaMetaStruct {
             skip: self.attrs.skip.clone(),
             simple: self.attrs.simple,
             channel,
+            prev_generics: maybe_prev.as_ref().map(|prev| prev.generics.clone()),
         }
     }
 }

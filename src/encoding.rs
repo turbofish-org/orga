@@ -32,11 +32,13 @@ use std::{
     Serialize,
     Deserialize,
 )]
+#[serde(transparent)]
 pub struct LengthVec<P, T>
 where
     P: Encode + Decode + TryInto<usize> + Terminated + Clone,
     T: Encode + Decode + Terminated,
 {
+    #[serde(skip)]
     len: P,
 
     #[deref]
