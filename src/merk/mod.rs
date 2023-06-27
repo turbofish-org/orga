@@ -18,6 +18,3 @@ pub use proofbuilder::ProofBuilder;
 pub use proofstore::ProofStore;
 #[cfg(feature = "merk-full")]
 pub use store::MerkStore;
-
-mod proofstore;
-pub use proofstore::ProofStore;

@@ -19,7 +19,7 @@ hex-literal = "0.4.1"
 sha2 = "0.10.6"
 is_executable = { version = "1.0.1", optional = true }
 reqwest = {version = "0.11.16", features = ["blocking"], optional = true }
-flate2 = "1.0.25"
+flate2 = "1.0.22"
 tar = "0.4.38"
 ed = { git = "https://github.com/nomic-io/ed", rev = "9c0e206ffdb59dacb90f083e004e8080713e6ad8" }
 toml_edit = "0.19.8"

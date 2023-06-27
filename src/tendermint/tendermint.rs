@@ -16,8 +16,6 @@ use std::str::FromStr;
 use tar::Archive;
 use toml_edit::{value, Document};
 
-pub mod client;
-
 #[cfg(target_os = "macos")]
 static TENDERMINT_BINARY_URL: &str = "https://github.com/informalsystems/tendermint/releases/download/v0.34.26/tendermint_0.34.26_darwin_amd64.tar.gz";
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]

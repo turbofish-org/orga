@@ -1,4 +1,4 @@
 pub mod client;
 
 pub mod tendermint;
-pub use tendermint::Tendermint;
+pub use self::tendermint::Tendermint;
