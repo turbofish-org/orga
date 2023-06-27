@@ -101,6 +101,8 @@ impl<T: State + Describe> Describe for QueryPlugin<T> {
 // TODO: Remove dependency on ABCI for this otherwise-pure plugin.
 #[cfg(feature = "abci")]
 mod abci {
+    use std::ops::DerefMut;
+
     use super::super::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
     use super::*;
     use crate::abci::{BeginBlock, EndBlock, InitChain};
@@ -111,7 +113,7 @@ mod abci {
         T: BeginBlock + State,
     {
         fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()> {
-            self.inner.borrow_mut().begin_block(ctx)
+            self.inner.borrow_mut().deref_mut().begin_block(ctx)
         }
     }
 

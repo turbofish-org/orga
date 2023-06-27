@@ -35,8 +35,35 @@ impl MerkStore {
         // TODO: return result instead of panicking
         maybe_remove_restore(&home).expect("Failed to remove incomplete state sync restore");
 
-        let snapshot_path = home.join("snapshots");
-        let snapshots = snapshot::Snapshots::load(snapshot_path.as_path())
+        MerkStore {
+            map: Some(Default::default()),
+            merk: Some(merk),
+            snapshots: Self::load_snapshots(home.join("snapshots")),
+            home,
+            target_snapshot: None,
+            restorer: None,
+        }
+    }
+
+    pub fn open_readonly<P: AsRef<Path>>(home: P) -> Self {
+        let home = home.as_ref().to_path_buf();
+        let merk = Merk::open_readonly(home.join("db")).unwrap();
+
+        // TODO: populate snapshots, if we can do it safely concurrently with
+        // other processes
+
+        MerkStore {
+            map: Some(Default::default()),
+            merk: Some(merk),
+            snapshots: Self::load_snapshots(home.join("snapshots")),
+            home,
+            target_snapshot: None,
+            restorer: None,
+        }
+    }
+
+    fn load_snapshots<P: AsRef<Path>>(path: P) -> snapshot::Snapshots {
+        snapshot::Snapshots::load(path.as_ref())
             .expect("Failed to load snapshots")
             // TODO: make configurable
             .with_filters(vec![
@@ -45,16 +72,7 @@ impl MerkStore {
                 #[cfg(feature = "state-sync")]
                 snapshot::SnapshotFilter::interval(1000, 4),
                 snapshot::SnapshotFilter::interval(1, 20),
-            ]);
-
-        MerkStore {
-            map: Some(Default::default()),
-            merk: Some(merk),
-            home,
-            snapshots,
-            target_snapshot: None,
-            restorer: None,
-        }
+            ])
     }
 
     pub fn init_from(

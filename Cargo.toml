@@ -11,7 +11,7 @@ abci2 = { git = "https://github.com/nomic-io/abci2", rev = "cba210e7ac6c9006d81c
 tendermint-rpc = { version = "=0.30.0", features = ["http-client"], optional = true }
 tendermint = { version = "=0.30.0", optional = true }
 tendermint-proto = { version = "=0.30.0" }
-merk = { git = "https://github.com/nomic-io/merk", rev = "cf2fe85e735d6ac908b53ca0dc8ff5f50ef721e8", optional = true, default-features = false }
+merk = { git = "https://github.com/nomic-io/merk", rev = "aaa870e603b0cbe8437aee5c9538926ed078a082", optional = true, default-features = false }
 orga-macros = { path = "macros", version = "0.3.1" }
 seq-macro = "0.3.3"
 log = "0.4.17"

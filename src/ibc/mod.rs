@@ -61,7 +61,11 @@ pub const IBC_QUERY_PATH: &str = "store/ibc/key";
 #[orga(version = 1)]
 pub struct Ibc {
     #[orga(version(V0))]
-    _bytes: [u64; 10],
+    _bytes0: [u8; 32],
+    #[orga(version(V0))]
+    _bytes1: [u8; 32],
+    #[orga(version(V0))]
+    _bytes2: [u8; 23],
 
     #[orga(version(V0))]
     #[state(prefix(b""))]

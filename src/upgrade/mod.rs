@@ -2,11 +2,15 @@ use crate::coins::{Address, Amount, Decimal};
 use crate::collections::Map;
 use crate::context::GetContext;
 use crate::encoding::LengthVec;
+use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::orga;
 use crate::plugins::{Signer, Time, ValidatorEntry, Validators};
+use crate::prelude::{Read, Store};
 use crate::{Error as OrgaError, Result};
 use std::collections::HashMap;
 use thiserror::Error;
+
+pub const VERSION_KEY: &[u8] = b"/version";
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -25,24 +29,47 @@ pub struct Signal {
     pub time: i64,
 }
 
-#[orga(skip(Default))]
+#[orga(skip(Default), version = 1)]
 pub struct Upgrade {
     signals: Map<PubKey, Signal>,
     pub threshold: Decimal,
     pub activation_delay_seconds: i64,
     pub rate_limit_seconds: i64,
+    #[orga(version(V0))]
     pub current_version: Version,
+    #[orga(version(V1))]
+    #[state(absolute_prefix(b"/version"))]
+    // TODO: use Value/Box instead of Map<(), _>
+    pub current_version: Map<(), Version>,
 }
 
 impl Default for Upgrade {
     fn default() -> Self {
+        let mut current_version = Map::new();
+        current_version
+            .insert((), vec![0].try_into().unwrap())
+            .unwrap();
         Self {
             signals: Default::default(),
             threshold: (Amount::new(2) / Amount::new(3)).result().unwrap(),
             activation_delay_seconds: 60 * 60 * 24,
             rate_limit_seconds: 60,
-            current_version: vec![0].try_into().unwrap(),
+            current_version,
         }
+    }
+}
+
+impl MigrateFrom<UpgradeV0> for UpgradeV1 {
+    fn migrate_from(other: UpgradeV0) -> Result<Self> {
+        let mut current_version = Map::new();
+        current_version.insert((), other.current_version)?;
+        Ok(Self {
+            signals: other.signals.migrate_into()?,
+            threshold: other.threshold,
+            activation_delay_seconds: other.activation_delay_seconds,
+            rate_limit_seconds: other.rate_limit_seconds,
+            current_version,
+        })
     }
 }
 
@@ -74,17 +101,18 @@ impl Upgrade {
         self.signals.insert(cons_key, signal)
     }
 
-    pub fn step(&mut self, version: &Version) -> Result<()> {
-        let version = version.clone();
-        if self.current_version != version {
+    pub fn step(&mut self, bin_version: &Version) -> Result<()> {
+        let bin_version = bin_version.clone();
+        let net_version = self.current_version.get(())?.unwrap().clone();
+        if bin_version != net_version {
             return Err(Error::Version {
-                expected: self.current_version.clone(),
-                actual: version,
+                expected: net_version,
+                actual: bin_version,
             }
             .into());
         }
         if let Some(new_version) = self.upgrade_ready()? {
-            self.current_version = new_version;
+            self.current_version.insert((), new_version)?;
         }
         Ok(())
     }
@@ -98,7 +126,9 @@ impl Upgrade {
             total_vp += validator.power;
             if let Some(signal) = self.signals.get(validator.pubkey)? {
                 if signal.time <= latest_counted_time
-                    && signal.version != self.current_version
+                    // TODO: implement comparison between LengthVec and Vec
+                    && signal.version.clone()
+                        != *self.current_version.get(())?.unwrap()
                     && validator.power > 0
                 {
                     *signal_vps.entry(signal.version.clone()).or_default() += validator.power;
@@ -147,6 +177,11 @@ impl Upgrade {
     }
 }
 
+pub fn load_version(store: Store) -> Result<Option<Vec<u8>>> {
+    let store = unsafe { store.with_prefix(vec![]) };
+    store.get(VERSION_KEY)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -193,13 +228,13 @@ mod tests {
         let mut upgrade = Upgrade {
             activation_delay_seconds: 10,
             rate_limit_seconds: 5,
-            current_version: version.clone(),
             ..Default::default()
         };
+        upgrade.current_version.insert((), version.clone())?;
 
         assert!(upgrade.upgrade_ready()?.is_none());
         upgrade.step(&version)?;
-        assert_eq!(upgrade.current_version, version);
+        assert_eq!(&*upgrade.current_version.get(())?.unwrap(), &version);
         set_signer([0; 20]);
         upgrade.signal(next_version.clone())?;
         set_time(1);
@@ -209,12 +244,12 @@ mod tests {
         assert!(upgrade.upgrade_ready()?.is_none());
         upgrade.step(&version)?;
         assert!(upgrade.step(&next_version).is_err());
-        assert_eq!(upgrade.current_version, version);
+        assert_eq!(&*upgrade.current_version.get(())?.unwrap(), &version);
         set_time(12);
         assert!(upgrade.upgrade_ready()?.unwrap() == next_version);
-        assert_eq!(upgrade.current_version, version);
+        assert_eq!(&*upgrade.current_version.get(())?.unwrap(), &version);
         upgrade.step(&version)?;
-        assert_eq!(upgrade.current_version, next_version);
+        assert_eq!(&*upgrade.current_version.get(())?.unwrap(), &next_version);
         assert!(upgrade.step(&version).is_err());
         upgrade.step(&next_version)?;
 
