@@ -831,63 +831,67 @@ pub async fn start_grpc<C: Client<Ibc> + 'static>(client: fn() -> C, opts: &Grpc
     let staking_service = StakingQueryServer::new(StakingService {});
     let ibc_client_service = ClientQueryServer::new(IbcClientService {
         client_states: Actor::new(async move |_| {
-            client().query(|ibc| ibc.query_client_states()).unwrap()
+            client()
+                .query_sync(|ibc| ibc.query_client_states())
+                .unwrap()
         }),
         consensus_states: Actor::new(async move |client_id: ClientId| {
             client()
-                .query(|ibc| ibc.query_consensus_states(client_id.clone().into()))
+                .query_sync(|ibc| ibc.query_consensus_states(client_id.clone().into()))
                 .unwrap()
         }),
     });
     let ibc_connection_service = ConnectionQueryServer::new(IbcConnectionService {
         connection: Actor::new(async move |conn_id: ConnectionId| {
             client()
-                .query(|ibc| ibc.query_connection(conn_id.clone().into()))
+                .query_sync(|ibc| ibc.query_connection(conn_id.clone().into()))
                 .unwrap()
         }),
         connections: Actor::new(async move |_| {
-            client().query(|ibc| ibc.query_all_connections()).unwrap()
+            client()
+                .query_sync(|ibc| ibc.query_all_connections())
+                .unwrap()
         }),
         client_connections: Actor::new(async move |client_id: ClientId| {
             client()
-                .query(|ibc| ibc.query_client_connections(client_id.clone().into()))
+                .query_sync(|ibc| ibc.query_client_connections(client_id.clone().into()))
                 .unwrap()
         }),
     });
     let ibc_channel_service = ChannelQueryServer::new(IbcChannelService {
         channel: Actor::new(async move |path: ChannelEndPath| {
             client()
-                .query(|ibc| ibc.query_channel(path.clone().into()))
+                .query_sync(|ibc| ibc.query_channel(path.clone().into()))
                 .unwrap()
         }),
         channels: Actor::new(async move |_| {
-            client().query(|ibc| ibc.query_all_channels()).unwrap()
+            client().query_sync(|ibc| ibc.query_all_channels()).unwrap()
         }),
         connection_channels: Actor::new(async move |conn_id: ConnectionId| {
             client()
-                .query(|ibc| ibc.query_connection_channels(conn_id.clone().into()))
+                .query_sync(|ibc| ibc.query_connection_channels(conn_id.clone().into()))
                 .unwrap()
         }),
         packet_commitments: Actor::new(async move |path: PortChannel| {
             client()
-                .query(|ibc| ibc.query_packet_commitments(path.clone()))
+                .query_sync(|ibc| ibc.query_packet_commitments(path.clone()))
                 .unwrap()
         }),
         packet_acks: Actor::new(async move |path: PortChannel| {
             client()
-                .query(|ibc| ibc.query_packet_acks(path.clone()))
+                .query_sync(|ibc| ibc.query_packet_acks(path.clone()))
                 .unwrap()
         }),
         unreceived_packets: Actor::new(async move |(path, seqs): (PortChannel, Vec<u64>)| {
             client()
-                .query(|ibc| {
+                .query_sync(|ibc| {
                     ibc.query_unreceived_packets(path.clone(), seqs.clone().try_into().unwrap())
                 })
                 .unwrap()
         }),
         unreceived_acks: Actor::new(async move |(path, seqs): (PortChannel, Vec<u64>)| {
             client()
-                .query(|ibc| {
+                .query_sync(|ibc| {
                     ibc.query_unreceived_acks(path.clone(), seqs.clone().try_into().unwrap())
                 })
                 .unwrap()

@@ -101,7 +101,7 @@ impl<T: State + Describe> Describe for QueryPlugin<T> {
 // TODO: Remove dependency on ABCI for this otherwise-pure plugin.
 #[cfg(feature = "abci")]
 mod abci {
-    use std::ops::DerefMut;
+    use std::ops::{Deref, DerefMut};
 
     use super::super::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
     use super::*;
@@ -122,7 +122,7 @@ mod abci {
         T: EndBlock + State,
     {
         fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()> {
-            self.inner.borrow_mut().end_block(ctx)
+            self.inner.borrow_mut().deref_mut().end_block(ctx)
         }
     }
 
@@ -131,7 +131,7 @@ mod abci {
         T: InitChain + State + Call,
     {
         fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()> {
-            self.inner.borrow_mut().init_chain(ctx)
+            self.inner.borrow_mut().deref_mut().init_chain(ctx)
         }
     }
 
@@ -143,7 +143,7 @@ mod abci {
             &self,
             request: &tendermint_proto::v0_34::abci::RequestQuery,
         ) -> Result<tendermint_proto::v0_34::abci::ResponseQuery> {
-            self.inner.borrow().abci_query(request)
+            self.inner.borrow().deref().abci_query(request)
         }
     }
 }

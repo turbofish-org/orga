@@ -1,6 +1,6 @@
 use std::any::TypeId;
 
-use super::trace::take_trace;
+use super::trace::{take_trace, tracing_guard};
 use crate::{
     abci::App,
     call::Call,
@@ -23,25 +23,26 @@ pub enum StepResult<T: Query, U> {
     FetchQuery(T::Query, u64),
 }
 
-pub trait Transport<T: Query + Call> {
-    fn query(&self, query: T::Query) -> Result<Store>;
+// TODO: dedupe sync/async versions
 
-    fn call(&self, call: T::Call) -> Result<()>;
+pub trait Transport<T: Query + Call> {
+    async fn query(&self, query: T::Query) -> Result<Store>;
+
+    async fn call(&self, call: T::Call) -> Result<()>;
 }
 
 impl<T: Transport<U>, U: Query + Call> Transport<U> for &mut T {
-    fn query(&self, query: <U as Query>::Query) -> Result<Store> {
-        (**self).query(query)
+    async fn query(&self, query: <U as Query>::Query) -> Result<Store> {
+        (**self).query(query).await
     }
 
-    fn call(&self, call: <U as Call>::Call) -> Result<()> {
-        (**self).call(call)
+    async fn call(&self, call: <U as Call>::Call) -> Result<()> {
+        (**self).call(call).await
     }
 }
 
 // TODO: remove need for ABCIPlugin wrapping at this level, and App bound
-
-pub fn execute<T, U>(
+pub async fn execute<T, U>(
     store: Store,
     client: &impl Transport<ABCIPlugin<QueryPlugin<T>>>,
     mut query_fn: impl FnMut(ABCIPlugin<QueryPlugin<T>>) -> Result<U>,
@@ -69,15 +70,76 @@ where
             StepResult::Done(value) => return Ok((value, store)),
             StepResult::FetchKey(key, n) => {
                 check_n(n)?;
-                client.query(QueryPluginQuery::RawKey(key))?
+                client.query(QueryPluginQuery::RawKey(key)).await?
             }
             StepResult::FetchQuery(query, n) => {
                 check_n(n)?;
-                client.query(QueryPluginQuery::Query(query))?
+                client.query(QueryPluginQuery::Query(query)).await?
             }
         };
 
         store = join_store(store, res)?;
+    }
+}
+
+pub mod sync {
+    use super::*;
+
+    pub trait Transport<T: Query + Call> {
+        fn query_sync(&self, query: T::Query) -> Result<Store>;
+
+        fn call_sync(&self, call: T::Call) -> Result<()>;
+    }
+
+    impl<T: Transport<U>, U: Query + Call> Transport<U> for &mut T {
+        fn query_sync(&self, query: <U as Query>::Query) -> Result<Store> {
+            (**self).query_sync(query)
+        }
+
+        fn call_sync(&self, call: <U as Call>::Call) -> Result<()> {
+            (**self).call_sync(call)
+        }
+    }
+
+    // TODO: remove need for ABCIPlugin wrapping at this level, and App bound
+    pub fn execute<T, U>(
+        store: Store,
+        client: &impl Transport<ABCIPlugin<QueryPlugin<T>>>,
+        mut query_fn: impl FnMut(ABCIPlugin<QueryPlugin<T>>) -> Result<U>,
+    ) -> Result<(U, Store)>
+    where
+        T: App + State + Query + Call + Describe,
+    {
+        let mut store = store;
+        let mut last_n = None;
+
+        let mut check_n = |n| {
+            if let Some(last_n) = last_n {
+                if n <= last_n {
+                    return Err(Error::Client("Execution did not advance".into()));
+                }
+            }
+
+            last_n = Some(n);
+
+            Ok(())
+        };
+
+        loop {
+            let res = match step(store.clone(), &mut query_fn)? {
+                StepResult::Done(value) => return Ok((value, store)),
+                StepResult::FetchKey(key, n) => {
+                    check_n(n)?;
+                    client.query_sync(QueryPluginQuery::RawKey(key))?
+                }
+                StepResult::FetchQuery(query, n) => {
+                    check_n(n)?;
+                    client.query_sync(QueryPluginQuery::Query(query))?
+                }
+            };
+
+            store = join_store(store, res)?;
+        }
     }
 }
 
@@ -90,6 +152,7 @@ pub fn step<T, U>(
 where
     T: App + State + Query + Describe,
 {
+    let _guard = tracing_guard();
     take_trace();
 
     let root_bytes = match store.get(&[]) {
@@ -225,6 +288,7 @@ impl Descriptor {
 }
 
 #[cfg(test)]
+#[cfg(feature = "tokio")]
 mod tests {
     use super::*;
     use crate::client::mock::MockClient;
@@ -263,11 +327,71 @@ mod tests {
         client
     }
 
-    #[test]
-    fn execute_simple() {
+    #[tokio::test]
+    async fn execute_simple() {
         let client = setup();
 
         let (res, _store) = execute(Store::default(), &client, |app| {
+            Ok(app.inner.inner.borrow().bar)
+        })
+        .await
+        .unwrap();
+        assert_eq!(res, 123);
+        assert_eq!(client.queries.take(), vec![vec![2]]);
+    }
+
+    #[tokio::test]
+    async fn execute_deque_access_none() {
+        let client = setup();
+
+        let (res, _store) = execute(Store::default(), &client, |app| {
+            Ok(app.inner.inner.borrow().baz.get(123)?.is_none())
+        })
+        .await
+        .unwrap();
+        assert!(res);
+        assert_eq!(
+            client.queries.take(),
+            vec![vec![2], vec![0, 1, 131, 0, 0, 0, 0, 0, 0, 0, 123]]
+        );
+    }
+
+    #[tokio::test]
+    async fn execute_deque_access_some() {
+        let client = setup();
+
+        let (res, _store) = execute(Store::default(), &client, |app| {
+            Ok(*app
+                .inner
+                .inner
+                .borrow()
+                .baz
+                .get(0)?
+                .unwrap()
+                .get(2)?
+                .unwrap())
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(res, 3);
+        assert_eq!(
+            client.queries.take(),
+            vec![
+                vec![2],
+                vec![0, 1, 131, 0, 0, 0, 0, 0, 0, 0, 0],
+                vec![
+                    0, 1, 129, 127, 255, 255, 255, 255, 255, 255, 255, 131, 0, 0, 0, 0, 0, 0, 0, 2
+                ]
+            ]
+        );
+    }
+
+    #[test]
+    fn execute_simple_sync() {
+        let client = setup();
+
+        let (res, _store) = sync::execute(Store::default(), &client, |app| {
             Ok(app.inner.inner.borrow().bar)
         })
         .unwrap();
@@ -276,10 +400,10 @@ mod tests {
     }
 
     #[test]
-    fn execute_deque_access_none() {
+    fn execute_deque_access_none_sync() {
         let client = setup();
 
-        let (res, _store) = execute(Store::default(), &client, |app| {
+        let (res, _store) = sync::execute(Store::default(), &client, |app| {
             Ok(app.inner.inner.borrow().baz.get(123)?.is_none())
         })
         .unwrap();
@@ -291,10 +415,10 @@ mod tests {
     }
 
     #[test]
-    fn execute_deque_access_some() {
+    fn execute_deque_access_some_sync() {
         let client = setup();
 
-        let (res, _store) = execute(Store::default(), &client, |app| {
+        let (res, _store) = sync::execute(Store::default(), &client, |app| {
             Ok(*app
                 .inner
                 .inner

@@ -612,18 +612,18 @@ mod tests {
     }
 
     #[ignore]
-    #[test]
+    #[tokio::test]
     #[serial_test::serial]
-    fn historical_queries() -> Result<()> {
+    async fn historical_queries() -> Result<()> {
         spawn_node();
 
         // TODO: node spawn should wait for node to be ready
-        std::thread::sleep(std::time::Duration::from_secs(15));
+        tokio::time::sleep(std::time::Duration::from_secs(15)).await;
 
         for i in 1..5 {
             let client = HttpClient::with_height("http://localhost:26657", i).unwrap();
             let client = AppClient::<App, App, _, FooCoin, _>::new(client, Unsigned);
-            assert_eq!(client.query(|app| Ok(app.count)).unwrap(), i);
+            assert_eq!(client.query(|app| Ok(app.count)).await.unwrap(), i);
         }
 
         Ok(())
