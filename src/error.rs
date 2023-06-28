@@ -36,7 +36,7 @@ pub enum Error {
     InvalidID,
     #[error(transparent)]
     IO(#[from] std::io::Error),
-    #[cfg(feature = "merk")]
+    #[cfg(feature = "merk-verify")]
     #[error(transparent)]
     Merk(#[from] merk::Error),
     #[error("Migration Error: {0}")]

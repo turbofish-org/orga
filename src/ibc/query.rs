@@ -16,6 +16,7 @@ use crate::encoding::LengthVec;
 use crate::store::Read;
 use crate::{Error, Result};
 
+#[cfg(feature = "abci")]
 impl AbciQuery for Ibc {
     fn abci_query(&self, req: &RequestQuery) -> Result<ResponseQuery> {
         if req.path != IBC_QUERY_PATH {
