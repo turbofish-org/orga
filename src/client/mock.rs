@@ -1,4 +1,4 @@
-use std::{any::Any, cell::RefCell, marker::PhantomData};
+use std::{any::Any, marker::PhantomData, sync::Mutex};
 
 use crate::{
     abci::App,
@@ -16,10 +16,10 @@ use crate::{
 
 use super::exec::{sync::Transport as SyncTransport, Transport};
 
-#[derive(Clone, Default)]
+#[derive(Default)]
 pub struct MockClient<T> {
-    pub queries: RefCell<Vec<Vec<u8>>>,
-    pub calls: RefCell<Vec<Vec<u8>>>,
+    pub queries: Mutex<Vec<Vec<u8>>>,
+    pub calls: Mutex<Vec<Vec<u8>>>,
     pub store: Store,
     _marker: PhantomData<fn(T)>,
 }
@@ -27,8 +27,8 @@ pub struct MockClient<T> {
 impl<T> MockClient<T> {
     pub fn with_store(store: Store) -> Self {
         Self {
-            queries: RefCell::new(vec![]),
-            calls: RefCell::new(vec![]),
+            queries: Mutex::new(vec![]),
+            calls: Mutex::new(vec![]),
             store,
             _marker: PhantomData,
         }
@@ -40,7 +40,7 @@ impl<T: App + State + Query + Call> SyncTransport<ABCIPlugin<QueryPlugin<T>>>
 {
     fn query_sync(&self, query: <ABCIPlugin<QueryPlugin<T>> as Query>::Query) -> Result<Store> {
         let query_bytes = query.encode()?;
-        self.queries.borrow_mut().push(query_bytes);
+        self.queries.lock().unwrap().push(query_bytes);
 
         let store = Store::new(BackingStore::Other(Shared::new(Box::new(ReadLog::new(
             self.store.clone(),
@@ -71,7 +71,7 @@ impl<T: App + State + Query + Call> SyncTransport<ABCIPlugin<QueryPlugin<T>>>
     }
 
     fn call_sync(&self, call: <ABCIPlugin<QueryPlugin<T>> as Call>::Call) -> Result<()> {
-        self.calls.borrow_mut().push(call.encode()?);
+        self.calls.lock().unwrap().push(call.encode()?);
 
         let root_bytes = self.store.get(&[])?.unwrap_or_default();
         let mut app =
