@@ -1,5 +1,3 @@
-use std::cell::RefCell;
-
 use crate::{
     abci::App,
     call::Call,
@@ -14,24 +12,26 @@ use crate::{
 };
 use futures_lite::future::block_on;
 use tendermint_rpc::{self as tm, Client as _};
+use tokio::sync::Mutex;
 
 pub struct HttpClient {
     client: tm::HttpClient,
-    height: RefCell<Option<u32>>,
+    height: Mutex<Option<u32>>,
 }
 
 impl HttpClient {
     pub fn new(url: &str) -> Result<Self> {
         Ok(Self {
             client: tm::HttpClient::new(url)?,
-            height: RefCell::new(None),
+            height: Mutex::new(None),
         })
     }
 
     pub fn with_height(url: &str, height: u32) -> Result<Self> {
-        let client = Self::new(url)?;
-        client.height.replace(Some(height));
-        Ok(client)
+        Ok(Self {
+            client: tm::HttpClient::new(url)?,
+            height: Mutex::new(Some(height)),
+        })
     }
 }
 
@@ -55,7 +55,7 @@ impl<T: App + Call + Query + State + Default> Transport<ABCIPlugin<T>> for HttpC
 
     async fn query(&self, query: T::Query) -> Result<Store> {
         let query_bytes = query.encode()?;
-        let maybe_height = self.height.borrow().map(Into::into);
+        let maybe_height = self.height.lock().await.map(Into::into);
         let res = self
             .client
             .abci_query(None, query_bytes, maybe_height, true)
@@ -66,7 +66,7 @@ impl<T: App + Call + Query + State + Default> Transport<ABCIPlugin<T>> for HttpC
             return Err(Error::Query(msg));
         }
 
-        self.height.replace(Some(res.height.value() as u32));
+        self.height.lock().await.replace(res.height.value() as u32);
 
         // TODO: we shouldn't need to include the root hash in the result, it
         // should come from a trusted source

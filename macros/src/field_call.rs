@@ -399,7 +399,7 @@ impl ToTokens for FieldCallEnum {
 
         tokens.extend(quote! {
             #vis enum #ident #imp #wher {
-                Noop(::std::marker::PhantomData<#unused_generics>),
+                Noop(::std::marker::PhantomData<fn(#unused_generics)>),
                 #(#variants),*
             }
 

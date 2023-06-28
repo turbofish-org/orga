@@ -8,7 +8,7 @@ pub use orga_macros::{query_block, FieldQuery};
 
 pub const PREFIX_OFFSET: u8 = 0x80;
 pub trait Query {
-    type Query: Encode + Decode + std::fmt::Debug;
+    type Query: Encode + Decode + std::fmt::Debug + Send + Sync;
 
     fn query(&self, query: Self::Query) -> Result<()>;
 }
@@ -243,13 +243,13 @@ impl<T: Decode + std::fmt::Debug, U: Decode + std::fmt::Debug> Decode for Item<T
     }
 }
 pub trait FieldQuery {
-    type FieldQuery: Encode + Decode + std::fmt::Debug = ();
+    type FieldQuery: Encode + Decode + std::fmt::Debug + Send + Sync = ();
 
     fn field_query(&self, query: Self::FieldQuery) -> Result<()>;
 }
 
 pub trait MethodQuery {
-    type MethodQuery: Encode + Decode + std::fmt::Debug = ();
+    type MethodQuery: Encode + Decode + std::fmt::Debug + Send + Sync = ();
 
     fn method_query(&self, query: Self::MethodQuery) -> Result<()>;
 }

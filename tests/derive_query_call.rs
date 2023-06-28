@@ -33,7 +33,7 @@
 // {
 //     #[call]
 //     deque: Deque<u32>,
-//     _marker: std::marker::PhantomData<T>,
+//     _marker: std::marker::PhantomData<fn(T)>,
 // }
 
 // #[derive(Query, Call)]

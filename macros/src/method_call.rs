@@ -85,7 +85,7 @@ fn method_call_enum(tokens: &mut TokenStream2, item: &ItemImpl) {
             quote! { #ident }
         })
         .collect_vec();
-    variants.push(quote! { Noop(::std::marker::PhantomData<(#( #tp ),*)>) });
+    variants.push(quote! { Noop(::std::marker::PhantomData<fn((#( #tp ),*))>) });
 
     let enum_debug = {
         let child_debugs = call_methods(&item).into_iter().map(|field| {
