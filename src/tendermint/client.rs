@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use crate::{
     abci::App,
     call::Call,
-    client::Transport,
+    client::{sync::Transport as SyncTransport, Transport},
     encoding::Encode,
     merk::ProofStore,
     plugins::{ABCICall, ABCIPlugin},
@@ -36,14 +36,14 @@ impl HttpClient {
 }
 
 impl<T: App + Call + Query + State + Default> Transport<ABCIPlugin<T>> for HttpClient {
-    fn call(&self, call: <ABCIPlugin<T> as Call>::Call) -> Result<()> {
+    async fn call(&self, call: <ABCIPlugin<T> as Call>::Call) -> Result<()> {
         // TODO: shouldn't need to deal with ABCIPlugin at this level
         let call = match call {
             ABCICall::DeliverTx(call) => call,
             _ => return Err(Error::Client("Unexpected call type".into())),
         };
         let call_bytes = call.encode()?;
-        let res = block_on(self.client.broadcast_tx_commit(call_bytes))?;
+        let res = self.client.broadcast_tx_commit(call_bytes).await?;
 
         if let tendermint::abci::Code::Err(code) = res.check_tx.code {
             let msg = format!("code {}: {}", code, res.check_tx.log);
@@ -53,13 +53,13 @@ impl<T: App + Call + Query + State + Default> Transport<ABCIPlugin<T>> for HttpC
         Ok(())
     }
 
-    fn query(&self, query: T::Query) -> Result<Store> {
+    async fn query(&self, query: T::Query) -> Result<Store> {
         let query_bytes = query.encode()?;
         let maybe_height = self.height.borrow().map(Into::into);
-        let res = block_on(
-            self.client
-                .abci_query(None, query_bytes, maybe_height, true),
-        )?;
+        let res = self
+            .client
+            .abci_query(None, query_bytes, maybe_height, true)
+            .await?;
 
         if let tendermint::abci::Code::Err(code) = res.code {
             let msg = format!("code {}: {}", code, res.log);
@@ -86,6 +86,16 @@ impl<T: App + Call + Query + State + Default> Transport<ABCIPlugin<T>> for HttpC
         let store = Store::new(BackingStore::ProofMap(store));
 
         Ok(store)
+    }
+}
+
+impl<T: App + Call + Query + State + Default> SyncTransport<ABCIPlugin<T>> for HttpClient {
+    fn call_sync(&self, call: <ABCIPlugin<T> as Call>::Call) -> Result<()> {
+        block_on(Transport::<ABCIPlugin<T>>::call(self, call))
+    }
+
+    fn query_sync(&self, query: T::Query) -> Result<Store> {
+        block_on(Transport::<ABCIPlugin<T>>::query(self, query))
     }
 }
 
@@ -176,19 +186,18 @@ mod tests {
     }
 
     #[ignore]
-    #[test]
+    #[tokio::test]
     #[serial_test::serial]
-    fn basic() -> Result<()> {
+    async fn basic_async() -> Result<()> {
         spawn_node();
-
         // TODO: node spawn should wait for node to be ready
-        std::thread::sleep(std::time::Duration::from_secs(15));
+        tokio::time::sleep(std::time::Duration::from_secs(15)).await;
 
         let client = HttpClient::new("http://localhost:26657").unwrap();
         let client =
             AppClient::<App, App, _, FooCoin, _>::new(client, DerivedKey::new(b"alice").unwrap());
 
-        let res = client.query(|app| Ok(app.bar)).unwrap();
+        let res = client.query(|app| Ok(app.bar)).await.unwrap();
         assert_eq!(res, 0);
 
         let res = client
@@ -196,6 +205,7 @@ mod tests {
                 app.accounts
                     .balance(DerivedKey::address_for(b"alice").unwrap())
             })
+            .await
             .unwrap();
         assert_eq!(res.value, 100_000);
 
@@ -204,6 +214,7 @@ mod tests {
                 |app| build_call!(app.accounts.take_as_funding(50_000.into())),
                 |app| build_call!(app.increment_foo()),
             )
+            .await
             .unwrap();
 
         let old_height = 2; // TODO: get from call response
@@ -216,6 +227,7 @@ mod tests {
                 app.accounts
                     .balance(DerivedKey::address_for(b"alice").unwrap())
             })
+            .await
             .unwrap();
         assert_eq!(res.value, 100_000, "should still query past height");
 
@@ -228,9 +240,79 @@ mod tests {
                 app.accounts
                     .balance(DerivedKey::address_for(b"alice").unwrap())
             })
+            .await
             .unwrap();
         assert_eq!(res.value, 50_000);
 
         Ok(())
+    }
+
+    #[ignore]
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn basic_sync() -> Result<()> {
+        tokio::task::spawn_blocking(|| {
+            spawn_node();
+
+            // TODO: node spawn should wait for node to be ready
+            std::thread::sleep(std::time::Duration::from_secs(15));
+
+            let client = HttpClient::new("http://localhost:26657").unwrap();
+            let client = AppClient::<App, App, _, FooCoin, _>::new(
+                client,
+                DerivedKey::new(b"alice").unwrap(),
+            );
+
+            let res = client.query_sync(|app| Ok(app.bar)).unwrap();
+            assert_eq!(res, 0);
+
+            let res = client
+                .query_sync(|app| {
+                    app.accounts
+                        .balance(DerivedKey::address_for(b"alice").unwrap())
+                })
+                .unwrap();
+            assert_eq!(res.value, 100_000);
+
+            client
+                .call_sync(
+                    |app| build_call!(app.accounts.take_as_funding(50_000.into())),
+                    |app| build_call!(app.increment_foo()),
+                )
+                .unwrap();
+
+            let old_height = 2; // TODO: get from call response
+            let client = HttpClient::with_height("http://localhost:26657", old_height).unwrap();
+            let client = AppClient::<App, App, _, FooCoin, _>::new(
+                client,
+                DerivedKey::new(b"alice").unwrap(),
+            );
+
+            let res = client
+                .query_sync(|app| {
+                    app.accounts
+                        .balance(DerivedKey::address_for(b"alice").unwrap())
+                })
+                .unwrap();
+            assert_eq!(res.value, 100_000, "should still query past height");
+
+            let client = HttpClient::new("http://localhost:26657").unwrap();
+            let client = AppClient::<App, App, _, FooCoin, _>::new(
+                client,
+                DerivedKey::new(b"alice").unwrap(),
+            );
+
+            let res = client
+                .query_sync(|app| {
+                    app.accounts
+                        .balance(DerivedKey::address_for(b"alice").unwrap())
+                })
+                .unwrap();
+            assert_eq!(res.value, 50_000);
+
+            Ok(())
+        })
+        .await
+        .unwrap()
     }
 }
