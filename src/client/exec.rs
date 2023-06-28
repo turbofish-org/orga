@@ -288,6 +288,7 @@ impl Descriptor {
 }
 
 #[cfg(test)]
+#[cfg(feature = "tokio")]
 mod tests {
     use super::*;
     use crate::client::mock::MockClient;

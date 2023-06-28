@@ -463,6 +463,7 @@ mod tests {
         Ok(MockClient::<App>::with_store(store))
     }
 
+    #[cfg(feature = "tokio")]
     #[tokio::test]
     #[serial_test::serial]
     async fn appclient() -> Result<()> {
@@ -523,6 +524,7 @@ mod tests {
     }
 
     #[serial_test::serial]
+    #[cfg(feature = "tokio")]
     #[tokio::test]
     async fn sub() -> Result<()> {
         let mut mock_client = setup()?;

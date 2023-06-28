@@ -60,12 +60,7 @@ thread_local! {
     });
 }
 
-pub fn maybe_push_trace<T: 'static, F: FnOnce() -> (MethodType, Vec<u8>, Vec<u8>)>(
-    op: F,
-    // method_type: MethodType,
-    // method_prefix: Vec<u8>,
-    // method_args: Vec<u8>,
-) {
+pub fn maybe_push_trace<T: 'static, F: FnOnce() -> (MethodType, Vec<u8>, Vec<u8>)>(op: F) {
     if !tracing() {
         return;
     }
@@ -92,12 +87,6 @@ pub fn maybe_push_trace<T: 'static, F: FnOnce() -> (MethodType, Vec<u8>, Vec<u8>
         traces.stack.push(trace);
     })
 }
-
-// pub fn maybe_push_trace<F: FnOnce()>(op: F) {
-//     if tracing() {
-//         op()
-//     }
-// }
 
 pub fn maybe_pop_trace<T, F: FnOnce() -> T>(op: F) -> T {
     if !tracing() {

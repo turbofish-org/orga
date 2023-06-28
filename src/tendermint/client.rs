@@ -186,6 +186,7 @@ mod tests {
     }
 
     #[ignore]
+    #[cfg(feature = "tokio")]
     #[tokio::test]
     #[serial_test::serial]
     async fn basic_async() -> Result<()> {
@@ -248,6 +249,7 @@ mod tests {
     }
 
     #[ignore]
+    #[cfg(feature = "tokio")]
     #[tokio::test]
     #[serial_test::serial]
     async fn basic_sync() -> Result<()> {
