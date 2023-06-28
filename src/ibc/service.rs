@@ -1,7 +1,5 @@
-use std::fmt::Debug;
 use std::str::FromStr;
 
-use futures_lite::Future;
 use ibc::core::ics24_host::identifier::{ClientId, ConnectionId, PortId};
 use ibc::core::ics24_host::{identifier::ChannelId, path::ChannelEndPath};
 
@@ -24,9 +22,6 @@ use ibc_proto::cosmos::bank::v1beta1::{
     QuerySpendableBalancesResponse, QuerySupplyOfRequest, QuerySupplyOfResponse,
     QueryTotalSupplyRequest, QueryTotalSupplyResponse,
 };
-use ibc_proto::ibc::core::channel::v1::{Channel, IdentifiedChannel, PacketState};
-use ibc_proto::ibc::core::client::v1::{ConsensusStateWithHeight, IdentifiedClientState};
-use ibc_proto::ibc::core::connection::v1::IdentifiedConnection;
 use ibc_proto::ibc::core::{
     channel::v1::{
         query_server::{Query as ChannelQuery, QueryServer as ChannelQueryServer},
@@ -100,7 +95,6 @@ use ibc_proto::{
 };
 use prost::Message;
 use tendermint_proto::p2p::DefaultNodeInfo;
-use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
 
 use crate::client::Client;
