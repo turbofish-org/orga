@@ -235,8 +235,8 @@ fn _method_arg_generics(item: &ItemImpl) -> Vec<Ident> {
 
 fn add_tracing(item_impl: &mut ItemImpl) {
     let Types {
-        trace_fn,
         maybe_pop_trace_fn,
+        maybe_push_trace_fn,
         trace_method_type_enum,
         encode_trait,
         ..
@@ -272,11 +272,11 @@ fn add_tracing(item_impl: &mut ItemImpl) {
                     quote! { vec![ #(#encode_trait::encode(&#arg_names).unwrap(),)*].concat() }
                 };
                 let mut stmts = vec![parse_quote! {
-                    #trace_fn::<Self>(
+                    #maybe_push_trace_fn::<Self, _>( || (
                         #trace_method_type_enum::Query,
                         vec![#query_index],
                         #encoded_args,
-                    );
+                    ));
                 }];
                 query_index += 1;
                 stmts.append(&mut method.block.stmts);

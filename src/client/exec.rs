@@ -1,6 +1,6 @@
 use std::any::TypeId;
 
-use super::trace::take_trace;
+use super::trace::{take_trace, tracing_guard};
 use crate::{
     abci::App,
     call::Call,
@@ -152,6 +152,7 @@ pub fn step<T, U>(
 where
     T: App + State + Query + Describe,
 {
+    let _guard = tracing_guard();
     take_trace();
 
     let root_bytes = match store.get(&[]) {
