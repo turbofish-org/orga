@@ -645,15 +645,6 @@ impl TryFrom<IbcSigner> for Address {
     }
 }
 
-// #[cfg(test)]
-// impl crate::plugins::ConvertSdkTx for Ibc {
-//     type Output = crate::plugins::PaidCall<<tests2::IbcApp as crate::call::Call>::Call>;
-
-//     fn convert(&self, _msg: &crate::plugins::sdk_compat::sdk::Tx) -> crate::Result<Self::Output> {
-//         todo!()
-//     }
-// }
-
 #[cfg(test)]
 mod tests {
     use std::time::Duration;

@@ -22,7 +22,7 @@ pub mod wallet;
 pub use exec::Transport;
 pub use wallet::Wallet;
 
-pub trait Client<T: Query + Call> {
+pub trait Client<T: Query + Call>: Send + Sync {
     fn query_sync<U, F: FnMut(T) -> Result<U>>(&self, f: F) -> Result<U>;
 
     fn call_sync(
@@ -55,14 +55,7 @@ pub mod sync {
             + Describe
             + ConvertSdkTx<Output = PaidCall<T::Call>>
             + MigrateInto<T>,
-        U: App
-            + Call
-            + State
-            + Query
-            + Default
-            + Describe
-            + ConvertSdkTx<Output = PaidCall<T::Call>>
-            + MigrateInto<U>,
+        U: App + Call + State + Query + Default + Describe + MigrateInto<U>,
         Wallet: wallet::Wallet + Clone,
         Symbol: crate::coins::Symbol,
     {

@@ -25,7 +25,7 @@ pub enum StepResult<T: Query, U> {
 
 // TODO: dedupe sync/async versions
 
-pub trait Transport<T: Query + Call> {
+pub trait Transport<T: Query + Call>: Send + Sync {
     async fn query(&self, query: T::Query) -> Result<Store>;
 
     async fn call(&self, call: T::Call) -> Result<()>;
@@ -87,7 +87,7 @@ where
 pub mod sync {
     use super::*;
 
-    pub trait Transport<T: Query + Call> {
+    pub trait Transport<T: Query + Call>: Send + Sync {
         fn query_sync(&self, query: T::Query) -> Result<Store>;
 
         fn call_sync(&self, call: T::Call) -> Result<()>;
@@ -339,7 +339,7 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(res, 123);
-        assert_eq!(client.queries.take(), vec![vec![2]]);
+        assert_eq!(client.queries.into_inner().unwrap(), vec![vec![2]]);
     }
 
     #[tokio::test]
@@ -353,7 +353,7 @@ mod tests {
         .unwrap();
         assert!(res);
         assert_eq!(
-            client.queries.take(),
+            client.queries.into_inner().unwrap(),
             vec![vec![2], vec![0, 1, 131, 0, 0, 0, 0, 0, 0, 0, 123]]
         );
     }
@@ -378,7 +378,7 @@ mod tests {
 
         assert_eq!(res, 3);
         assert_eq!(
-            client.queries.take(),
+            client.queries.into_inner().unwrap(),
             vec![
                 vec![2],
                 vec![0, 1, 131, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -398,7 +398,7 @@ mod tests {
         })
         .unwrap();
         assert_eq!(res, 123);
-        assert_eq!(client.queries.take(), vec![vec![2]]);
+        assert_eq!(client.queries.into_inner().unwrap(), vec![vec![2]]);
     }
 
     #[test]
@@ -411,7 +411,7 @@ mod tests {
         .unwrap();
         assert!(res);
         assert_eq!(
-            client.queries.take(),
+            client.queries.into_inner().unwrap(),
             vec![vec![2], vec![0, 1, 131, 0, 0, 0, 0, 0, 0, 0, 123]]
         );
     }
@@ -435,7 +435,7 @@ mod tests {
 
         assert_eq!(res, 3);
         assert_eq!(
-            client.queries.take(),
+            client.queries.into_inner().unwrap(),
             vec![
                 vec![2],
                 vec![0, 1, 131, 0, 0, 0, 0, 0, 0, 0, 0],

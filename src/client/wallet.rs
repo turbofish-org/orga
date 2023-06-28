@@ -8,7 +8,7 @@ use crate::{
     Result,
 };
 
-pub trait Wallet: Clone {
+pub trait Wallet: Clone + Send + Sync {
     fn sign(&self, call_bytes: &[u8]) -> Result<SignerCall>;
 
     fn address(&self) -> Result<Option<Address>>;
