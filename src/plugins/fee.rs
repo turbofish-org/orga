@@ -14,10 +14,10 @@ use std::ops::{Deref, DerefMut};
 pub const MIN_FEE: u64 = 10_000;
 
 #[orga(skip(Call))]
-#[state(transparent)]
 pub struct FeePlugin<S, T> {
     #[state(skip)]
     _symbol: PhantomData<S>,
+    #[state(transparent)]
     pub inner: T,
 }
 
