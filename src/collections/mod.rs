@@ -19,10 +19,10 @@ pub use map::{ChildMut, Ref};
 /// singular structs while storing them in a map as a key/value pair.
 pub trait Entry: 'static {
     /// Represents the key type for the key/value pair.
-    type Key: Encode + Decode;
+    type Key: Encode + Decode + Send + Sync;
 
     /// Represents the value type for the key/value pair.
-    type Value: State;
+    type Value: State + Send + Sync;
 
     /// Converts the entry type into its corresponding key and value types.
     fn into_entry(self) -> (Self::Key, Self::Value);

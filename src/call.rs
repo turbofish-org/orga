@@ -10,7 +10,7 @@ pub use orga_macros::{build_call, call_block, FieldCall};
 pub const PREFIX_OFFSET: u8 = 0x40;
 
 pub trait Call {
-    type Call: Encode + Decode + std::fmt::Debug;
+    type Call: Encode + Decode + std::fmt::Debug + Send + Sync;
 
     fn call(&mut self, call: Self::Call) -> Result<()>;
 }
@@ -285,13 +285,13 @@ impl<T: Decode + std::fmt::Debug, U: Decode + std::fmt::Debug> Decode for Item<T
 }
 
 pub trait FieldCall {
-    type FieldCall: Encode + Decode + std::fmt::Debug = ();
+    type FieldCall: Encode + Decode + std::fmt::Debug + Send + Sync = ();
 
     fn field_call(&mut self, call: Self::FieldCall) -> Result<()>;
 }
 
 pub trait MethodCall {
-    type MethodCall: Encode + Decode + std::fmt::Debug = ();
+    type MethodCall: Encode + Decode + std::fmt::Debug + Send + Sync = ();
 
     fn method_call(&mut self, call: Self::MethodCall) -> Result<()>;
 }
@@ -327,7 +327,7 @@ pub trait BuildCall<const ID: &'static str>: Call + Sized {
 }
 
 pub struct CallBuilder<T> {
-    _phantom: std::marker::PhantomData<T>,
+    _phantom: std::marker::PhantomData<fn(T)>,
 }
 
 impl<T> CallBuilder<T> {

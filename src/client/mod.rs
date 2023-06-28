@@ -12,7 +12,6 @@ use crate::store::Store;
 
 use crate::Result;
 
-use std::cell::Cell;
 use std::marker::PhantomData;
 
 pub mod exec;
@@ -37,9 +36,6 @@ pub struct AppClient<T, U, Transport, Symbol, Wallet> {
     _pd: PhantomData<Symbol>,
     transport: Transport,
     wallet: Wallet,
-    // TODO: don't keep store here, and let something in the Transport layer
-    // handle persistence/joining/etc for composibility
-    store: Cell<Option<Store>>,
     sub: fn(T) -> U,
 }
 
@@ -87,6 +83,39 @@ pub mod sync {
 
 use crate::plugins::DefaultPlugins;
 
+impl<T, U, Transport, Symbol, Wallet> AppClient<T, U, Transport, Symbol, Wallet> {
+    pub fn new(client: Transport, wallet: Wallet) -> Self
+    where
+        T: Into<U>,
+    {
+        Self {
+            _pd: PhantomData,
+            transport: client,
+            wallet,
+            sub: Into::into,
+        }
+    }
+
+    pub fn with_wallet<W2>(self, wallet: W2) -> AppClient<T, U, Transport, Symbol, W2> {
+        AppClient {
+            _pd: PhantomData,
+            transport: self.transport,
+            wallet,
+            sub: self.sub,
+        }
+    }
+
+    #[allow(clippy::should_implement_trait)]
+    pub fn sub<U2>(self, sub: fn(T) -> U2) -> AppClient<T, U2, Transport, Symbol, Wallet> {
+        AppClient {
+            _pd: PhantomData,
+            transport: self.transport,
+            wallet: self.wallet,
+            sub,
+        }
+    }
+}
+
 impl<T, U, Transport, Symbol, Wallet> AppClient<T, U, Transport, Symbol, Wallet>
 where
     Transport: exec::Transport<ABCIPlugin<DefaultPlugins<Symbol, T>>>,
@@ -101,43 +130,6 @@ where
     Wallet: wallet::Wallet + Clone,
     Symbol: crate::coins::Symbol,
 {
-    pub fn new(client: Transport, wallet: Wallet) -> Self
-    where
-        T: Into<U>,
-    {
-        Self {
-            _pd: PhantomData,
-            transport: client,
-            wallet,
-            store: Cell::new(None),
-            sub: Into::into,
-        }
-    }
-
-    pub fn with_wallet<W2: wallet::Wallet>(
-        self,
-        wallet: W2,
-    ) -> AppClient<T, U, Transport, Symbol, W2> {
-        AppClient {
-            _pd: PhantomData,
-            transport: self.transport,
-            wallet,
-            store: self.store,
-            sub: self.sub,
-        }
-    }
-
-    #[allow(clippy::should_implement_trait)]
-    pub fn sub<U2>(self, sub: fn(T) -> U2) -> AppClient<T, U2, Transport, Symbol, Wallet> {
-        AppClient {
-            _pd: PhantomData,
-            transport: self.transport,
-            wallet: self.wallet,
-            store: self.store,
-            sub,
-        }
-    }
-
     // TODO: support subclients
     // TODO: return object with result data (e.g. txid)
     pub async fn call(
@@ -145,18 +137,23 @@ where
         payer: impl FnOnce(&U) -> T::Call,
         payee: impl FnOnce(&U) -> T::Call,
     ) -> Result<()> {
-        let chain_id = self
-            .query_root(|app| Ok(app.inner.inner.borrow().inner.inner.chain_id.to_vec()))
-            .await?;
-        let nonce = match self.wallet.address()? {
-            None => None,
-            Some(addr) => Some(
-                self.query_root(|app| app.inner.inner.borrow_mut().inner.inner.inner.nonce(addr))
-                    .await?
-                    + 1,
-            ),
+        let (chain_id, store) = exec::execute(Store::default(), &self.transport, |app| {
+            Ok(app.inner.inner.borrow().inner.inner.chain_id.to_vec())
+        })
+        .await?;
+        let (nonce, store) = match self.wallet.address()? {
+            None => (None, store),
+            Some(addr) => {
+                exec::execute(store, &self.transport, |app| {
+                    Ok(Some(
+                        app.inner.inner.borrow_mut().inner.inner.inner.nonce(addr)? + 1,
+                    ))
+                })
+                .await?
+            }
         };
-        let app = self.query(Ok).await?;
+
+        let app = self.query_with_store(store, Ok).await?;
 
         let payer_call = payer(&app);
         let payer_call_bytes = payer_call.encode()?;
@@ -180,19 +177,20 @@ where
         &self,
         op: F2,
     ) -> Result<U2> {
-        let store = self.store.take().unwrap_or_default();
-
-        let (res, store) = exec::execute(store, &self.transport, op).await?;
-
-        self.store.replace(Some(store));
-
+        let (res, _) = exec::execute(Store::default(), &self.transport, op).await?;
         Ok(res)
     }
 
-    pub async fn query<U2, F2: FnMut(U) -> Result<U2>>(&self, mut op: F2) -> Result<U2> {
-        let store = self.store.take().unwrap_or_default();
+    pub async fn query<U2, F2: FnMut(U) -> Result<U2>>(&self, op: F2) -> Result<U2> {
+        self.query_with_store(Store::default(), op).await
+    }
 
-        let (res, store) = exec::execute(store, &self.transport, |app| {
+    async fn query_with_store<U2, F2: FnMut(U) -> Result<U2>>(
+        &self,
+        store: Store,
+        mut op: F2,
+    ) -> Result<U2> {
+        let (res, _) = exec::execute(store, &self.transport, |app| {
             let inner = app
                 .inner
                 .inner
@@ -206,9 +204,6 @@ where
             op((self.sub)(inner))
         })
         .await?;
-
-        self.store.replace(Some(store));
-
         Ok(res)
     }
 }
@@ -234,17 +229,19 @@ where
         payer: impl FnOnce(&U) -> T::Call,
         payee: impl FnOnce(&U) -> T::Call,
     ) -> Result<()> {
-        let chain_id =
-            self.query_root_sync(|app| Ok(app.inner.inner.borrow().inner.inner.chain_id.to_vec()))?;
-        let nonce = match self.wallet.address()? {
-            None => None,
-            Some(addr) => Some(
-                self.query_root_sync(|app| {
-                    app.inner.inner.borrow_mut().inner.inner.inner.nonce(addr)
-                })? + 1,
-            ),
+        let (chain_id, store) = exec::sync::execute(Store::default(), &self.transport, |app| {
+            Ok(app.inner.inner.borrow().inner.inner.chain_id.to_vec())
+        })?;
+        let (nonce, store) = match self.wallet.address()? {
+            None => (None, store),
+            Some(addr) => exec::sync::execute(store, &self.transport, |app| {
+                Ok(Some(
+                    app.inner.inner.borrow_mut().inner.inner.inner.nonce(addr)? + 1,
+                ))
+            })?,
         };
-        let app = self.query_sync(Ok)?;
+
+        let app = self.query_with_store_sync(store, Ok)?;
 
         let payer_call = payer(&app);
         let payer_call_bytes = payer_call.encode()?;
@@ -259,7 +256,7 @@ where
         let call = [chain_id, call.encode()?].concat();
         let call = self.wallet.sign(&call)?;
         let call = ABCICall::DeliverTx(sdk_compat::Call::Native(call));
-        exec::sync::Transport::call_sync(&self.transport, call)?;
+        self.transport.call_sync(call)?;
 
         Ok(())
     }
@@ -268,19 +265,20 @@ where
         &self,
         op: F2,
     ) -> Result<U2> {
-        let store = self.store.take().unwrap_or_default();
-
-        let (res, store) = exec::sync::execute(store, &self.transport, op)?;
-
-        self.store.replace(Some(store));
-
+        let (res, _) = exec::sync::execute(Store::default(), &self.transport, op)?;
         Ok(res)
     }
 
-    pub fn query_sync<U2, F2: FnMut(U) -> Result<U2>>(&self, mut op: F2) -> Result<U2> {
-        let store = self.store.take().unwrap_or_default();
+    pub fn query_sync<U2, F2: FnMut(U) -> Result<U2>>(&self, op: F2) -> Result<U2> {
+        self.query_with_store_sync(Store::default(), op)
+    }
 
-        let (res, store) = exec::sync::execute(store, &self.transport, |app| {
+    pub fn query_with_store_sync<U2, F2: FnMut(U) -> Result<U2>>(
+        &self,
+        store: Store,
+        mut op: F2,
+    ) -> Result<U2> {
+        let (res, _) = exec::sync::execute(store, &self.transport, |app| {
             let inner = app
                 .inner
                 .inner
@@ -293,9 +291,6 @@ where
                 .inner;
             op((self.sub)(inner))
         })?;
-
-        self.store.replace(Some(store));
-
         Ok(res)
     }
 }

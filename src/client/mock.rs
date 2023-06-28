@@ -21,7 +21,7 @@ pub struct MockClient<T> {
     pub queries: RefCell<Vec<Vec<u8>>>,
     pub calls: RefCell<Vec<Vec<u8>>>,
     pub store: Store,
-    _marker: PhantomData<T>,
+    _marker: PhantomData<fn(T)>,
 }
 
 impl<T> MockClient<T> {

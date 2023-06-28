@@ -49,6 +49,8 @@ pub async fn execute<T, U>(
 ) -> Result<(U, Store)>
 where
     T: App + State + Query + Call + Describe,
+    T::Query: Send + Sync,
+    T::Call: Send + Sync,
 {
     let mut store = store;
     let mut last_n = None;

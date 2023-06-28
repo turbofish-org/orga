@@ -92,7 +92,7 @@ fn method_query_enum(tokens: &mut TokenStream2, item: &ItemImpl) {
             quote! { #ident }
         })
         .collect_vec();
-    variants.push(quote! { Noop(::std::marker::PhantomData<(#( #tp ),*)>) });
+    variants.push(quote! { Noop(::std::marker::PhantomData<fn((#( #tp ),*))>) });
 
     let _enum_debug = {
         let child_debugs = query_methods(&item).into_iter().map(|field| {
