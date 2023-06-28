@@ -12,7 +12,6 @@ use crate::store::Store;
 
 use crate::Result;
 
-use std::cell::Cell;
 use std::marker::PhantomData;
 
 pub mod exec;

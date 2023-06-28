@@ -1,7 +1,5 @@
 use super::{Read, Write, KV};
 use crate::Result;
-use std::cell::{Ref, RefCell, RefMut};
-use std::rc::Rc;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 // TODO: we can probably use UnsafeCell instead of RefCell since operations are
