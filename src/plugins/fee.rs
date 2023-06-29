@@ -6,6 +6,7 @@ use crate::call::Call;
 use crate::coins::{Coin, Symbol};
 use crate::context::{Context, GetContext};
 
+use crate::query::Query;
 use crate::state::State;
 use crate::{Error, Result};
 use std::marker::PhantomData;
@@ -13,12 +14,20 @@ use std::ops::{Deref, DerefMut};
 
 pub const MIN_FEE: u64 = 10_000;
 
-#[orga(skip(Call))]
+#[orga(skip(Call, Query))]
 pub struct FeePlugin<S, T> {
     #[state(skip)]
     _symbol: PhantomData<S>,
     #[state(transparent)]
     pub inner: T,
+}
+
+impl<S, T: Query> Query for FeePlugin<S, T> {
+    type Query = T::Query;
+
+    fn query(&self, query: Self::Query) -> Result<()> {
+        self.inner.query(query)
+    }
 }
 
 impl<S: Symbol, T: Call + State> Call for FeePlugin<S, T> {
