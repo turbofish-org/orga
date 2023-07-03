@@ -8,6 +8,8 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use tendermint_proto::v0_34::abci::{RequestLoadSnapshotChunk, Snapshot as AbciSnapshot};
 
+use super::store::{FIRST_SNAPSHOT_HEIGHT, SNAPSHOT_INTERVAL};
+
 #[derive(Clone)]
 pub struct Snapshot {
     pub(crate) checkpoint: Rc<RefCell<Merk>>,
@@ -201,6 +203,9 @@ impl Snapshots {
     pub fn abci_snapshots(&self) -> Result<Vec<AbciSnapshot>> {
         self.snapshots
             .iter()
+            .filter(|(height, _)| {
+                *height % SNAPSHOT_INTERVAL == 0 || **height == FIRST_SNAPSHOT_HEIGHT
+            })
             .map(|(height, snapshot)| {
                 Ok(AbciSnapshot {
                     chunks: snapshot.length,
