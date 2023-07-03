@@ -7,11 +7,12 @@ use crate::context::Context;
 use crate::encoding::LengthVec;
 use crate::encoding::{Decode, Encode};
 
-use crate::migrate::{MigrateFrom, MigrateInto};
+use crate::migrate::MigrateFrom;
+use crate::query::Query;
 use crate::{Error, Result};
 use std::ops::Deref;
 
-#[orga(skip(Call), version = 1)]
+#[orga(skip(Call, Query), version = 1)]
 pub struct ChainCommitmentPlugin<T> {
     #[orga(version(V0))]
     #[state(transparent)]
@@ -19,8 +20,18 @@ pub struct ChainCommitmentPlugin<T> {
 
     #[orga(version(V1))]
     pub chain_id: LengthVec<u8, u8>,
+
     #[orga(version(V1))]
+    #[state(prefix(b""))]
     pub inner: T,
+}
+
+impl<T: Query> Query for ChainCommitmentPlugin<T> {
+    type Query = T::Query;
+
+    fn query(&self, query: Self::Query) -> Result<()> {
+        self.inner.query(query)
+    }
 }
 
 impl<T> GetNonce for ChainCommitmentPlugin<T>
@@ -89,10 +100,8 @@ where
     }
 }
 
-impl<T1: MigrateInto<T2>, T2> MigrateFrom<ChainCommitmentPluginV0<T1>>
-    for ChainCommitmentPlugin<T2>
-{
-    fn migrate_from(other: ChainCommitmentPluginV0<T1>) -> Result<Self> {
+impl<T> MigrateFrom<ChainCommitmentPluginV0<T>> for ChainCommitmentPlugin<T> {
+    fn migrate_from(other: ChainCommitmentPluginV0<T>) -> Result<Self> {
         let chain_id = Context::resolve::<ChainId>()
             .ok_or_else(|| Error::App("Chain ID context not set".into()))?
             .0
@@ -100,7 +109,7 @@ impl<T1: MigrateInto<T2>, T2> MigrateFrom<ChainCommitmentPluginV0<T1>>
             .to_vec();
         Ok(Self {
             chain_id: chain_id.try_into()?,
-            inner: other.inner.migrate_into()?,
+            inner: other.inner,
         })
     }
 }
