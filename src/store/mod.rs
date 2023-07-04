@@ -28,7 +28,10 @@ pub use store::{DefaultBackingStore, Store};
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Tried to read unknown store data with key {0:?}")]
-    ReadUnknown(Vec<u8>),
+    GetUnknown(Vec<u8>),
+    #[error("Tried to read unknown store data after key {0:?}")]
+    GetNextUnknown(Vec<u8>),
+    // TODO: GetPrevUnknown
 }
 
 /// A key/value entry - the first element is the key and the second element is

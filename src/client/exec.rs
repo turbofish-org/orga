@@ -1,11 +1,11 @@
-use std::any::TypeId;
+use std::{any::TypeId, collections::HashSet};
 
 use super::trace::{take_trace, tracing_guard};
 use crate::{
     abci::App,
     call::Call,
     describe::{Children, Describe, Descriptor, KeyOp},
-    encoding::Decode,
+    encoding::{Decode, Encode},
     plugins::{query::QueryPlugin, ABCIPlugin},
     query::Query,
     state::State,
@@ -19,8 +19,10 @@ use crate::merk::ProofStore;
 #[derive(Debug, Clone)]
 pub enum StepResult<T: Query, U> {
     Done(U),
-    FetchKey(Vec<u8>, u64),
-    FetchQuery(T::Query, u64),
+    FetchKey(Vec<u8>),
+    FetchNext(Vec<u8>),
+    // TODO: FetchPrev
+    FetchQuery(T::Query),
 }
 
 // TODO: dedupe sync/async versions
@@ -53,38 +55,32 @@ where
     T::Call: Send + Sync,
 {
     let mut store = store;
-    let mut last_n = None;
 
-    let mut check_n = |n| {
-        if let Some(last_n) = last_n {
-            if n <= last_n {
-                return Err(Error::Client("Execution did not advance".into()));
-            }
-        }
-
-        last_n = Some(n);
-
-        Ok(())
-    };
+    let mut queries = HashSet::new();
 
     loop {
-        let res = match step(store.clone(), &mut query_fn)? {
+        let query = match step(store.clone(), &mut query_fn)? {
             StepResult::Done(value) => return Ok((value, store)),
-            StepResult::FetchKey(key, n) => {
-                check_n(n)?;
-                client.query(QueryPluginQuery::RawKey(key)).await?
-            }
-            StepResult::FetchQuery(query, n) => {
-                check_n(n)?;
-                client.query(QueryPluginQuery::Query(query)).await?
-            }
+            StepResult::FetchKey(key) => QueryPluginQuery::RawKey(key),
+            StepResult::FetchNext(key) => QueryPluginQuery::RawNext(key),
+            StepResult::FetchQuery(query) => QueryPluginQuery::Query(query),
         };
+
+        let query_bytes = query.encode()?;
+        if queries.contains(&query_bytes) {
+            return Err(Error::Client("Execution did not advance".into()));
+        }
+        queries.insert(query_bytes);
+
+        let res = client.query(query).await?;
 
         store = join_store(store, res)?;
     }
 }
 
 pub mod sync {
+    use std::collections::{HashMap, HashSet};
+
     use super::*;
 
     pub trait Transport<T: Query + Call>: Send + Sync {
@@ -113,32 +109,24 @@ pub mod sync {
         T: App + State + Query + Call + Describe,
     {
         let mut store = store;
-        let mut last_n = None;
 
-        let mut check_n = |n| {
-            if let Some(last_n) = last_n {
-                if n <= last_n {
-                    return Err(Error::Client("Execution did not advance".into()));
-                }
-            }
-
-            last_n = Some(n);
-
-            Ok(())
-        };
+        let mut queries = HashSet::new();
 
         loop {
-            let res = match step(store.clone(), &mut query_fn)? {
+            let query = match step(store.clone(), &mut query_fn)? {
                 StepResult::Done(value) => return Ok((value, store)),
-                StepResult::FetchKey(key, n) => {
-                    check_n(n)?;
-                    client.query_sync(QueryPluginQuery::RawKey(key))?
-                }
-                StepResult::FetchQuery(query, n) => {
-                    check_n(n)?;
-                    client.query_sync(QueryPluginQuery::Query(query))?
-                }
+                StepResult::FetchKey(key) => QueryPluginQuery::RawKey(key),
+                StepResult::FetchNext(key) => QueryPluginQuery::RawNext(key),
+                StepResult::FetchQuery(query) => QueryPluginQuery::Query(query),
             };
+
+            let query_bytes = query.encode()?;
+            if queries.contains(&query_bytes) {
+                return Err(Error::Client("Execution did not advance".into()));
+            }
+            queries.insert(query_bytes);
+
+            let res = client.query_sync(query)?;
 
             store = join_store(store, res)?;
         }
@@ -158,8 +146,8 @@ where
     take_trace();
 
     let root_bytes = match store.get(&[]) {
-        Err(Error::StoreErr(store::Error::ReadUnknown(_))) | Ok(None) => {
-            return Ok(StepResult::FetchKey(vec![], 0))
+        Err(Error::StoreErr(store::Error::GetUnknown(_))) | Ok(None) => {
+            return Ok(StepResult::FetchKey(vec![]))
         }
         Err(err) => return Err(err),
         Ok(Some(bytes)) => bytes,
@@ -167,8 +155,9 @@ where
 
     let app = ABCIPlugin::<QueryPlugin<T>>::load(store, &mut &root_bytes[..])?;
 
-    let key = match query_fn(app) {
-        Err(Error::StoreErr(store::Error::ReadUnknown(key))) => key,
+    let (key, get_next) = match query_fn(app) {
+        Err(Error::StoreErr(store::Error::GetUnknown(key))) => (key, false),
+        Err(Error::StoreErr(store::Error::GetNextUnknown(key))) => (key, true),
         Err(other_err) => return Err(other_err),
         Ok(value) => return Ok(StepResult::Done(value)),
     };
@@ -183,7 +172,8 @@ where
         );
         let receiver_pfx = match res {
             Ok(pfx) => pfx,
-            Err(_) => return Ok(StepResult::FetchKey(key, traces.history.len() as u64)),
+            Err(_) if get_next => return Ok(StepResult::FetchNext(key)),
+            Err(_) => return Ok(StepResult::FetchKey(key)),
         };
         let query_bytes = [
             // TODO: shouldn't have to cut off ABCIPlugin prefixes here
@@ -192,10 +182,10 @@ where
         ]
         .concat();
         let query = T::Query::decode(query_bytes.as_slice())?;
-        return Ok(StepResult::FetchQuery(query, traces.history.len() as u64));
+        return Ok(StepResult::FetchQuery(query));
     }
 
-    Ok(StepResult::FetchKey(key, 0))
+    Ok(StepResult::FetchKey(key))
 }
 
 pub fn join_store(dst: Store, src: Store) -> Result<Store> {
@@ -205,14 +195,12 @@ pub fn join_store(dst: Store, src: Store) -> Result<Store> {
     match (dst, src) {
         (store, BackingStore::Null(_)) | (BackingStore::Null(_), store) => Ok(Store::new(store)),
         (BackingStore::PartialMapStore(dst), BackingStore::PartialMapStore(src)) => {
-            let mut dst = dst.into_inner();
-            for (k, v) in src.into_inner().into_map() {
-                match v {
-                    Some(v) => dst.put(k, v)?,
-                    None => dst.delete(&k)?,
-                }
-            }
-            Ok(Store::new(BackingStore::PartialMapStore(Shared::new(dst))))
+            let dst = dst.into_inner();
+            let src = src.into_inner();
+            let joined = dst.join(src);
+            Ok(Store::new(BackingStore::PartialMapStore(Shared::new(
+                joined,
+            ))))
         }
         #[cfg(feature = "merk-verify")]
         (BackingStore::ProofMap(dst), BackingStore::ProofMap(src)) => {
