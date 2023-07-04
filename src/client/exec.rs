@@ -185,7 +185,11 @@ where
         return Ok(StepResult::FetchQuery(query));
     }
 
-    Ok(StepResult::FetchKey(key))
+    if get_next {
+        Ok(StepResult::FetchNext(key))
+    } else {
+        Ok(StepResult::FetchKey(key))
+    }
 }
 
 pub fn join_store(dst: Store, src: Store) -> Result<Store> {
@@ -407,7 +411,7 @@ mod tests {
             client.queries.into_inner().unwrap(),
             vec![
                 vec![2],
-                vec![2, 0, 1],
+                vec![3, 0, 1],
                 vec![2, 0, 1, 128, 0, 0, 0, 0, 0, 0, 0],
                 vec![2, 0, 1, 128, 0, 0, 0, 0, 0, 0, 1]
             ]
