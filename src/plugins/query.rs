@@ -58,6 +58,7 @@ pub enum Query<T: QueryTrait + Call> {
     Query(T::Query),
     Call(T::Call),
     RawKey(Vec<u8>),
+    RawNext(Vec<u8>),
 }
 
 impl<T> QueryTrait for QueryPlugin<T>
@@ -72,6 +73,9 @@ where
             Query::Call(call) => self.inner.borrow_mut().call(call),
             Query::RawKey(key) => unsafe { self.store.with_prefix(vec![]) }
                 .get(&key)
+                .map(|_| ()),
+            Query::RawNext(key) => unsafe { self.store.with_prefix(vec![]) }
+                .get_next(&key)
                 .map(|_| ()),
         }
     }
