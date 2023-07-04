@@ -6,23 +6,23 @@ use ics23::{
 };
 use merk::{
     tree::{RefWalker, Tree},
-    MerkSource,
+    Merk, MerkSource,
 };
 
+pub fn create_ics23_proof(store: &Merk, key: &[u8]) -> Result<CommitmentProof> {
+    store.walk(|maybe_root| {
+        let root = maybe_root.ok_or_else(|| {
+            Error::Merk(merk::Error::Proof(
+                "Cannot create ICS 23 proof for empty tree".to_string(),
+            ))
+        })?;
+
+        let proof = create_proof(root, key, vec![], None, None)?;
+        Ok(CommitmentProof { proof: Some(proof) })
+    })
+}
+
 impl MerkStore {
-    pub fn create_ics23_proof(&self, key: &[u8]) -> Result<CommitmentProof> {
-        self.merk().walk(|maybe_root| {
-            let root = maybe_root.ok_or_else(|| {
-                Error::Merk(merk::Error::Proof(
-                    "Cannot create ICS 23 proof for empty tree".to_string(),
-                ))
-            })?;
-
-            let proof = create_proof(root, key, vec![], None, None)?;
-            Ok(CommitmentProof { proof: Some(proof) })
-        })
-    }
-
     pub fn ics23_spec() -> ProofSpec {
         ProofSpec {
             leaf_spec: Some(leaf_op()),
@@ -135,6 +135,7 @@ fn leaf_op() -> LeafOp {
 mod tests {
     use ics23::HostFunctionsManager;
 
+    use crate::merk::ics23::create_ics23_proof;
     use crate::merk::MerkStore;
     use crate::store::Write;
 
@@ -152,7 +153,7 @@ mod tests {
         store.put(b"baz4".to_vec(), b"7".to_vec()).unwrap();
         store.write(vec![]).unwrap();
 
-        let proof = store.create_ics23_proof(b"foo").unwrap();
+        let proof = create_ics23_proof(store.merk(), b"foo").unwrap();
         let root_hash = store.merk().root_hash().to_vec();
 
         drop(store);
@@ -182,7 +183,7 @@ mod tests {
         store.put(b"baz4".to_vec(), b"7".to_vec()).unwrap();
         store.write(vec![]).unwrap();
 
-        let proof = store.create_ics23_proof(b"foo2").unwrap();
+        let proof = create_ics23_proof(store.merk(), b"foo2").unwrap();
         dbg!(&proof);
         let root_hash = store.merk().root_hash().to_vec();
 
