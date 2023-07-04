@@ -223,16 +223,20 @@ impl BackingStore {
     }
 
     #[cfg(feature = "merk-full")]
-    pub fn use_merkstore<F: FnOnce(&MerkStore) -> T, T>(&self, f: F) -> T {
-        let wrapped_store = match self {
+    pub fn use_merk<F: FnOnce(&merk::Merk) -> T, T>(&self, f: F) -> T {
+        match self {
             BackingStore::WrappedMerk(_store) => todo!(),
-            BackingStore::Merk(store) => store,
+            BackingStore::Merk(store) => {
+                let borrow = store.borrow();
+                f(borrow.merk())
+            }
+            BackingStore::Snapshot(store) => {
+                let borrow = store.borrow();
+                let borrow = borrow.checkpoint.borrow();
+                f(&borrow)
+            }
             _ => panic!("Cannot get MerkStore from BackingStore variant"),
-        };
-
-        let store = wrapped_store.borrow();
-
-        f(&store)
+        }
     }
 }
 

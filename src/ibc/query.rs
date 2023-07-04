@@ -13,6 +13,7 @@ use tendermint_proto::v0_34::crypto::{ProofOp, ProofOps};
 use super::{ClientId, ConnectionEnd, ConnectionId, Ibc, PortChannel, IBC_QUERY_PATH};
 use crate::abci::AbciQuery;
 use crate::encoding::LengthVec;
+use crate::merk::ics23::create_ics23_proof;
 use crate::store::Read;
 use crate::{Error, Result};
 
@@ -39,7 +40,7 @@ impl AbciQuery for Ibc {
             .store
             .backing_store()
             .borrow()
-            .use_merkstore(|store| store.merk().root_hash());
+            .use_merk(|store| store.root_hash());
 
         let outer_proof = ics23::CommitmentProof {
             proof: Some(ics23::commitment_proof::Proof::Exist(
@@ -66,7 +67,7 @@ impl AbciQuery for Ibc {
             .store
             .backing_store()
             .borrow()
-            .use_merkstore(|store| store.create_ics23_proof(key.as_slice()))?;
+            .use_merk(|store| create_ics23_proof(store, key.as_slice()))?;
 
         proof
             .encode(&mut proof_bytes)
