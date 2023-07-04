@@ -44,7 +44,7 @@ impl Store {
     }
 
     pub fn with_partial_map_store() -> Self {
-        use super::bufstore::PartialMapStore;
+        use super::PartialMapStore;
         Self::new(BackingStore::PartialMapStore(Shared::new(
             PartialMapStore::new(),
         )))

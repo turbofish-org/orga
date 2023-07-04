@@ -1,4 +1,4 @@
-use std::{any::Any, marker::PhantomData, sync::Mutex};
+use std::{any::Any, collections::BTreeMap, marker::PhantomData, sync::Mutex};
 
 use crate::{
     abci::App,
@@ -8,8 +8,8 @@ use crate::{
     query::Query,
     state::State,
     store::{
-        bufstore::PartialMapStore, log::ReadLog, BackingStore, Error as StoreError, Read, Shared,
-        Store, Write, KV,
+        log::ReadLog, BackingStore, Error as StoreError, PartialMapStore, Read, Shared, Store,
+        Write, KV,
     },
     Error, Result,
 };
@@ -57,13 +57,41 @@ impl<T: App + State + Query + Call> SyncTransport<ABCIPlugin<QueryPlugin<T>>>
         } else {
             unreachable!()
         };
-        let mut out_store = PartialMapStore::new();
+
+        // TODO: move to PartialMapStore associated function
+        let mut out = BTreeMap::new();
+        let mut insert = |key: Vec<u8>, value| {
+            let prev = self.store.get_prev(Some(key.as_slice()))?;
+            let contiguous = if let Some((pk, _)) = prev {
+                out.contains_key(pk.as_slice())
+            } else {
+                true
+            };
+
+            out.insert(key, (contiguous, value));
+
+            Ok::<_, Error>(())
+        };
+        let mut right_edge = false;
         for key in log {
             match self.store.get(&key)? {
-                Some(value) => out_store.put(key, value)?,
-                None => out_store.delete(&key)?,
+                Some(value) => insert(key, value)?,
+                None => {
+                    let prev = self.store.get_prev(Some(key.as_slice()))?;
+                    if let Some((pk, pv)) = prev {
+                        insert(pk, pv)?;
+                    }
+
+                    let next = self.store.get_next(&key)?;
+                    if let Some((nk, nv)) = next {
+                        insert(nk, nv)?;
+                    } else {
+                        right_edge = true;
+                    }
+                }
             }
         }
+        let out_store = PartialMapStore::from_map(out, right_edge);
 
         Ok(Store::new(BackingStore::PartialMapStore(Shared::new(
             out_store,
@@ -96,37 +124,5 @@ impl<T: App + State + Query + Call> Transport<ABCIPlugin<QueryPlugin<T>>>
 
     async fn call(&self, call: <ABCIPlugin<QueryPlugin<T>> as Call>::Call) -> Result<()> {
         self.call_sync(call)
-    }
-}
-
-#[derive(Default, Clone)]
-struct UnknownStore;
-
-impl Read for UnknownStore {
-    #[inline]
-    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        Err(Error::StoreErr(StoreError::ReadUnknown(key.to_vec())))
-    }
-
-    #[inline]
-    fn get_next(&self, _key: &[u8]) -> Result<Option<KV>> {
-        Ok(None)
-    }
-
-    #[inline]
-    fn get_prev(&self, _key: Option<&[u8]>) -> Result<Option<KV>> {
-        Ok(None)
-    }
-}
-
-impl Write for UnknownStore {
-    fn put(&mut self, _key: Vec<u8>, _value: Vec<u8>) -> Result<()> {
-        // TODO: WriteUnknown error
-        unimplemented!()
-    }
-
-    fn delete(&mut self, _key: &[u8]) -> Result<()> {
-        // TODO: WriteUnknown error
-        unimplemented!()
     }
 }
