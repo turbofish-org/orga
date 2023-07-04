@@ -304,6 +304,14 @@ mod tests {
         pub baz: Deque<Deque<u32>>,
     }
 
+    #[orga]
+    impl Foo {
+        #[query]
+        fn iter_query(&self) -> Result<u64> {
+            Ok(self.baz.iter()?.collect::<Result<Vec<_>>>()?.len() as u64)
+        }
+    }
+
     fn setup() -> MockClient<ABCIPlugin<QueryPlugin<Foo>>> {
         let mut client = MockClient::default();
         client.store = Store::with_map_store();
@@ -386,6 +394,52 @@ mod tests {
                     0, 1, 129, 127, 255, 255, 255, 255, 255, 255, 255, 131, 0, 0, 0, 0, 0, 0, 0, 2
                 ]
             ]
+        );
+    }
+
+    #[tokio::test]
+    async fn execute_iter_raw() {
+        let client = setup();
+
+        let (res, _store) = execute(Store::default(), &client, |app| {
+            Ok(app
+                .inner
+                .inner
+                .borrow()
+                .baz
+                .iter()?
+                .collect::<Result<Vec<_>>>()?
+                .len())
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(res, 2);
+        assert_eq!(
+            client.queries.into_inner().unwrap(),
+            vec![
+                vec![2],
+                vec![2, 0, 1],
+                vec![2, 0, 1, 128, 0, 0, 0, 0, 0, 0, 0],
+                vec![2, 0, 1, 128, 0, 0, 0, 0, 0, 0, 1]
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn execute_iter_query() {
+        let client = setup();
+
+        let (res, _store) = execute(Store::default(), &client, |app| {
+            app.inner.inner.borrow().iter_query()
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(res, 2);
+        assert_eq!(
+            client.queries.into_inner().unwrap(),
+            vec![vec![2], vec![0, 128],]
         );
     }
 
