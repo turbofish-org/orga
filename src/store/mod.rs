@@ -10,6 +10,7 @@ pub mod bufstore;
 pub mod iter;
 pub mod log;
 pub mod null;
+pub mod partialmap;
 pub mod share;
 #[allow(clippy::module_inception)]
 pub mod store;
@@ -18,6 +19,7 @@ pub use backingstore::BackingStore;
 pub use bufstore::{BufStore, Map as BufStoreMap, MapStore};
 pub use iter::Iter;
 pub use null::Empty;
+pub use partialmap::PartialMapStore;
 pub use share::Shared;
 pub use store::{DefaultBackingStore, Store};
 

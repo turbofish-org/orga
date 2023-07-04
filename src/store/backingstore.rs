@@ -7,7 +7,7 @@ use crate::merk::{MerkStore, ProofBuilder};
 #[cfg(feature = "merk-verify")]
 use crate::store::BufStore;
 use crate::store::ReadWrite;
-use crate::store::{bufstore::PartialMapStore, Empty, MapStore, Read, Shared, Write, KV};
+use crate::store::{Empty, MapStore, PartialMapStore, Read, Shared, Write, KV};
 use crate::{Error, Result};
 
 #[cfg(feature = "merk-full")]
@@ -112,7 +112,9 @@ impl Write for BackingStore {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         match self {
             BackingStore::MapStore(ref mut store) => store.put(key, value),
-            BackingStore::PartialMapStore(ref mut store) => store.put(key, value),
+            BackingStore::PartialMapStore(_) => {
+                panic!("put() is not implemented for PartialMapStore")
+            }
             BackingStore::Null(ref mut store) => store.put(key, value),
             BackingStore::Other(ref mut store) => store.borrow_mut().put(key, value),
 
@@ -142,7 +144,9 @@ impl Write for BackingStore {
     fn delete(&mut self, key: &[u8]) -> Result<()> {
         match self {
             BackingStore::MapStore(ref mut store) => store.delete(key),
-            BackingStore::PartialMapStore(ref mut store) => store.delete(key),
+            BackingStore::PartialMapStore(_) => {
+                panic!("delete() is not implemented for PartialMapStore")
+            }
             BackingStore::Null(ref mut store) => store.delete(key),
             BackingStore::Other(ref mut store) => store.borrow_mut().delete(key),
 
