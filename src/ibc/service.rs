@@ -39,13 +39,14 @@ use ibc_proto::ibc::core::{
     },
     client::v1::{
         query_server::{Query as ClientQuery, QueryServer as ClientQueryServer},
-        QueryClientParamsRequest, QueryClientParamsResponse, QueryClientStateRequest,
-        QueryClientStateResponse, QueryClientStatesRequest, QueryClientStatesResponse,
-        QueryClientStatusRequest, QueryClientStatusResponse, QueryConsensusStateHeightsRequest,
-        QueryConsensusStateHeightsResponse, QueryConsensusStateRequest,
-        QueryConsensusStateResponse, QueryConsensusStatesRequest, QueryConsensusStatesResponse,
-        QueryUpgradedClientStateRequest, QueryUpgradedClientStateResponse,
-        QueryUpgradedConsensusStateRequest, QueryUpgradedConsensusStateResponse,
+        Height as RawHeight, QueryClientParamsRequest, QueryClientParamsResponse,
+        QueryClientStateRequest, QueryClientStateResponse, QueryClientStatesRequest,
+        QueryClientStatesResponse, QueryClientStatusRequest, QueryClientStatusResponse,
+        QueryConsensusStateHeightsRequest, QueryConsensusStateHeightsResponse,
+        QueryConsensusStateRequest, QueryConsensusStateResponse, QueryConsensusStatesRequest,
+        QueryConsensusStatesResponse, QueryUpgradedClientStateRequest,
+        QueryUpgradedClientStateResponse, QueryUpgradedConsensusStateRequest,
+        QueryUpgradedConsensusStateResponse,
     },
     connection::v1::{
         query_server::{Query as ConnectionQuery, QueryServer as ConnectionQueryServer},
@@ -316,8 +317,15 @@ impl<C: Client<Ibc> + 'static> ChannelQuery for IbcChannelService<C> {
     ) -> Result<Response<QueryChannelsResponse>, Status> {
         let ibc = (self.ibc)();
         tokio::task::spawn_blocking(move || {
+            let (channels, height) =
+                ibc.query_sync(|ibc| Ok((ibc.query_all_channels()?, ibc.height)))?;
+
             Ok(Response::new(QueryChannelsResponse {
-                channels: ibc.query_sync(|ibc| ibc.query_all_channels())?,
+                channels,
+                height: Some(RawHeight {
+                    revision_number: 0,
+                    revision_height: height,
+                }),
                 ..Default::default()
             }))
         })
@@ -334,9 +342,18 @@ impl<C: Client<Ibc> + 'static> ChannelQuery for IbcChannelService<C> {
             let conn_id = ConnectionId::from_str(&request.get_ref().connection)
                 .map_err(|_| Status::invalid_argument("invalid connection id"))?;
 
+            let (channels, height) = ibc.query_sync(|ibc| {
+                Ok((
+                    ibc.query_connection_channels(conn_id.clone().into())?,
+                    ibc.height,
+                ))
+            })?;
             Ok(Response::new(QueryConnectionChannelsResponse {
-                channels: ibc
-                    .query_sync(|ibc| ibc.query_connection_channels(conn_id.clone().into()))?,
+                channels,
+                height: Some(RawHeight {
+                    revision_number: 0,
+                    revision_height: height,
+                }),
                 ..Default::default()
             }))
         })
@@ -379,8 +396,15 @@ impl<C: Client<Ibc> + 'static> ChannelQuery for IbcChannelService<C> {
 
             let path = PortChannel::new(port_id, channel_id);
 
+            let (commitments, height) = ibc
+                .query_sync(|ibc| Ok((ibc.query_packet_commitments(path.clone())?, ibc.height)))?;
+
             Ok(Response::new(QueryPacketCommitmentsResponse {
-                commitments: ibc.query_sync(|ibc| ibc.query_packet_commitments(path.clone()))?,
+                commitments,
+                height: Some(RawHeight {
+                    revision_number: 0,
+                    revision_height: height,
+                }),
                 ..Default::default()
             }))
         })
@@ -415,9 +439,15 @@ impl<C: Client<Ibc> + 'static> ChannelQuery for IbcChannelService<C> {
                 .map_err(|_| Status::invalid_argument("invalid channel id"))?;
 
             let path = PortChannel::new(port_id, channel_id);
+            let (acknowledgements, height) =
+                ibc.query_sync(|ibc| Ok((ibc.query_packet_acks(path.clone())?, ibc.height)))?;
 
             Ok(Response::new(QueryPacketAcknowledgementsResponse {
-                acknowledgements: ibc.query_sync(|ibc| ibc.query_packet_acks(path.clone()))?,
+                acknowledgements,
+                height: Some(RawHeight {
+                    revision_number: 0,
+                    revision_height: height,
+                }),
                 ..Default::default()
             }))
         })
@@ -439,14 +469,22 @@ impl<C: Client<Ibc> + 'static> ChannelQuery for IbcChannelService<C> {
             let sequences_to_check: Vec<u64> = request.packet_commitment_sequences;
             let path = PortChannel::new(port_id, channel_id);
 
-            Ok(Response::new(QueryUnreceivedPacketsResponse {
-                sequences: ibc.query_sync(|ibc| {
+            let (sequences, height) = ibc.query_sync(|ibc| {
+                Ok((
                     ibc.query_unreceived_packets(
                         path.clone(),
                         sequences_to_check.clone().try_into().unwrap(),
-                    )
-                })?,
-                ..Default::default()
+                    )?,
+                    ibc.height,
+                ))
+            })?;
+
+            Ok(Response::new(QueryUnreceivedPacketsResponse {
+                sequences,
+                height: Some(RawHeight {
+                    revision_number: 0,
+                    revision_height: height,
+                }),
             }))
         })
         .await
@@ -467,11 +505,22 @@ impl<C: Client<Ibc> + 'static> ChannelQuery for IbcChannelService<C> {
             let sequences_to_check: Vec<u64> = request.packet_ack_sequences;
             let path = PortChannel::new(port_id, channel_id);
 
+            let (sequences, height) = ibc.query_sync(|ibc| {
+                Ok((
+                    ibc.query_unreceived_acks(
+                        path.clone(),
+                        sequences_to_check.clone().try_into().unwrap(),
+                    )?,
+                    ibc.height,
+                ))
+            })?;
+
             Ok(Response::new(QueryUnreceivedAcksResponse {
-                sequences: ibc.query_sync(|ibc| {
-                    ibc.query_unreceived_acks(path.clone(), sequences_to_check.clone().try_into()?)
-                })?,
-                ..Default::default()
+                sequences,
+                height: Some(RawHeight {
+                    revision_number: 0,
+                    revision_height: height,
+                }),
             }))
         })
         .await
@@ -592,7 +641,7 @@ impl StakingQuery for StakingService {
                     seconds: 2 * 7 * 24 * 60 * 60,
                     nanos: 0,
                 }),
-                historical_entries: 1,
+                historical_entries: 20,
                 ..Params::default()
             }),
         }))
