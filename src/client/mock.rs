@@ -51,7 +51,7 @@ impl<T: App + State + Query + Call> SyncTransport<ABCIPlugin<QueryPlugin<T>>>
         app.query(query)?;
         drop(app);
 
-        let log = if let BackingStore::Other(b) = store.into_backing_store().into_inner() {
+        let mut log = if let BackingStore::Other(b) = store.into_backing_store().into_inner() {
             let b = b.into_inner() as Box<dyn Any>;
             b.downcast::<ReadLog<Store>>().unwrap().reads().clone()
         } else {
@@ -68,11 +68,13 @@ impl<T: App + State + Query + Call> SyncTransport<ABCIPlugin<QueryPlugin<T>>>
                 true
             };
 
+            out.remove(&key);
             out.insert(key, (contiguous, value));
 
             Ok::<_, Error>(())
         };
         let mut right_edge = false;
+        log.sort();
         for key in log {
             match self.store.get(&key)? {
                 Some(value) => insert(key, value)?,
