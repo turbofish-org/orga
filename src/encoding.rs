@@ -121,6 +121,39 @@ where
     }
 }
 
+impl<P> TryFrom<String> for LengthVec<P, u8>
+where
+    P: State + Encode + Decode + TryInto<usize> + TryFrom<usize> + Terminated + Clone,
+{
+    type Error = crate::Error;
+
+    fn try_from(value: String) -> crate::Result<Self> {
+        value.into_bytes().try_into()
+    }
+}
+
+impl<P> TryFrom<LengthVec<P, u8>> for String
+where
+    P: State + Encode + Decode + TryInto<usize> + TryFrom<usize> + Terminated + Clone,
+{
+    type Error = crate::Error;
+
+    fn try_from(value: LengthVec<P, u8>) -> crate::Result<Self> {
+        String::from_utf8(value.values).map_err(|_| crate::Error::Overflow)
+    }
+}
+
+impl<P> TryFrom<&str> for LengthVec<P, u8>
+where
+    P: State + Encode + Decode + TryInto<usize> + TryFrom<usize> + Terminated + Clone,
+{
+    type Error = crate::Error;
+
+    fn try_from(value: &str) -> crate::Result<Self> {
+        value.to_string().try_into()
+    }
+}
+
 // impl<P, T> Describe for LengthVec<P, T>
 // where
 //     P: State + Encode + Decode + TryInto<usize> + Terminated + Clone + 'static,
@@ -422,5 +455,17 @@ mod tests {
 
         let decoded = EofTerminatedString::<u64>::load(Store::default(), &mut &bytes[..]).unwrap();
         assert_eq!(*decoded, *value);
+    }
+
+    #[test]
+    fn string_roundtrip() -> crate::Result<()> {
+        let value = "hello";
+        let lv: LengthVec<u8, u8> = value.try_into()?;
+        assert_eq!(lv.len, 5);
+        assert_eq!(lv.values, vec![b'h', b'e', b'l', b'l', b'o']);
+        let value: String = lv.try_into()?;
+        assert_eq!(value, "hello");
+
+        Ok(())
     }
 }
