@@ -21,7 +21,7 @@ pub enum StepResult<T: Query, U> {
     Done(U),
     FetchKey(Vec<u8>),
     FetchNext(Vec<u8>),
-    // TODO: FetchPrev
+    FetchPrev(Option<Vec<u8>>),
     FetchQuery(T::Query),
 }
 
@@ -63,6 +63,7 @@ where
             StepResult::Done(value) => return Ok((value, store)),
             StepResult::FetchKey(key) => QueryPluginQuery::RawKey(key),
             StepResult::FetchNext(key) => QueryPluginQuery::RawNext(key),
+            StepResult::FetchPrev(key) => QueryPluginQuery::RawPrev(key),
             StepResult::FetchQuery(query) => QueryPluginQuery::Query(query),
         };
 
@@ -117,6 +118,7 @@ pub mod sync {
                 StepResult::Done(value) => return Ok((value, store)),
                 StepResult::FetchKey(key) => QueryPluginQuery::RawKey(key),
                 StepResult::FetchNext(key) => QueryPluginQuery::RawNext(key),
+                StepResult::FetchPrev(key) => QueryPluginQuery::RawPrev(key),
                 StepResult::FetchQuery(query) => QueryPluginQuery::Query(query),
             };
 
@@ -155,9 +157,20 @@ where
 
     let app = ABCIPlugin::<QueryPlugin<T>>::load(store, &mut &root_bytes[..])?;
 
-    let (key, get_next) = match query_fn(app) {
-        Err(Error::StoreErr(store::Error::GetUnknown(key))) => (key, false),
-        Err(Error::StoreErr(store::Error::GetNextUnknown(key))) => (key, true),
+    let (key, fallback_res) = match query_fn(app) {
+        Err(Error::StoreErr(store::Error::GetUnknown(key))) => {
+            (key.clone(), StepResult::FetchKey(key))
+        }
+        Err(Error::StoreErr(store::Error::GetNextUnknown(key))) => {
+            (key.clone(), StepResult::FetchNext(key))
+        }
+        Err(Error::StoreErr(store::Error::GetPrevUnknown(maybe_key))) => {
+            if let Some(key) = maybe_key {
+                (key.clone(), StepResult::FetchPrev(Some(key)))
+            } else {
+                return Err(Error::StoreErr(store::Error::GetPrevUnknown(None)));
+            }
+        }
         Err(other_err) => return Err(other_err),
         Ok(value) => return Ok(StepResult::Done(value)),
     };
@@ -172,8 +185,7 @@ where
         );
         let receiver_pfx = match res {
             Ok(pfx) => pfx,
-            Err(_) if get_next => return Ok(StepResult::FetchNext(key)),
-            Err(_) => return Ok(StepResult::FetchKey(key)),
+            Err(_) => return Ok(fallback_res),
         };
         let query_bytes = [
             // TODO: shouldn't have to cut off ABCIPlugin prefixes here
@@ -185,11 +197,7 @@ where
         return Ok(StepResult::FetchQuery(query));
     }
 
-    if get_next {
-        Ok(StepResult::FetchNext(key))
-    } else {
-        Ok(StepResult::FetchKey(key))
-    }
+    Ok(fallback_res)
 }
 
 pub fn join_store(dst: Store, src: Store) -> Result<Store> {
@@ -302,6 +310,11 @@ mod tests {
         fn iter_query(&self) -> Result<u64> {
             Ok(self.baz.iter()?.collect::<Result<Vec<_>>>()?.len() as u64)
         }
+
+        #[query]
+        fn iter_query_rev(&self) -> Result<u64> {
+            Ok(self.baz.iter()?.rev().collect::<Result<Vec<_>>>()?.len() as u64)
+        }
     }
 
     fn setup() -> MockClient<ABCIPlugin<QueryPlugin<Foo>>> {
@@ -320,6 +333,10 @@ mod tests {
         foo.inner.inner.borrow_mut().baz.push_back(d).unwrap();
 
         let d = Deque::new();
+        foo.inner.inner.borrow_mut().baz.push_back(d).unwrap();
+
+        let mut d = Deque::new();
+        d.push_back(10).unwrap();
         foo.inner.inner.borrow_mut().baz.push_back(d).unwrap();
 
         let mut bytes = vec![];
@@ -406,14 +423,15 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(res, 2);
+        assert_eq!(res, 3);
         assert_eq!(
             client.queries.into_inner().unwrap(),
             vec![
                 vec![2],
                 vec![3, 0, 1],
                 vec![2, 0, 1, 128, 0, 0, 0, 0, 0, 0, 0],
-                vec![2, 0, 1, 128, 0, 0, 0, 0, 0, 0, 1]
+                vec![2, 0, 1, 128, 0, 0, 0, 0, 0, 0, 1],
+                vec![2, 0, 1, 128, 0, 0, 0, 0, 0, 0, 2],
             ]
         );
     }
@@ -428,10 +446,58 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(res, 2);
+        assert_eq!(res, 3);
         assert_eq!(
             client.queries.into_inner().unwrap(),
-            vec![vec![2], vec![0, 128],]
+            vec![vec![2], vec![0, 128]]
+        );
+    }
+
+    #[tokio::test]
+    async fn execute_iter_rev_raw() {
+        let client = setup();
+
+        let (res, _store) = execute(Store::default(), &client, |app| {
+            Ok(app
+                .inner
+                .inner
+                .borrow()
+                .baz
+                .iter()?
+                .rev()
+                .collect::<Result<Vec<_>>>()?
+                .len())
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(res, 3);
+        assert_eq!(
+            client.queries.into_inner().unwrap(),
+            vec![
+                vec![2],
+                vec![4, 1, 0, 2],
+                vec![2, 0, 1, 128, 0, 0, 0, 0, 0, 0, 1],
+                vec![2, 0, 1, 128, 0, 0, 0, 0, 0, 0, 0],
+                vec![2, 0, 1, 127, 255, 255, 255, 255, 255, 255, 255]
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn execute_iter_rev_query() {
+        let client = setup();
+
+        let (res, _store) = execute(Store::default(), &client, |app| {
+            app.inner.inner.borrow().iter_query_rev()
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(res, 3);
+        assert_eq!(
+            client.queries.into_inner().unwrap(),
+            vec![vec![2], vec![0, 129]]
         );
     }
 
