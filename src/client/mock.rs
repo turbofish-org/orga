@@ -7,10 +7,7 @@ use crate::{
     plugins::{ABCIPlugin, QueryPlugin},
     query::Query,
     state::State,
-    store::{
-        log::ReadLog, BackingStore, Error as StoreError, PartialMapStore, Read, Shared, Store,
-        Write, KV,
-    },
+    store::{log::ReadLog, BackingStore, PartialMapStore, Read, Shared, Store, Write},
     Error, Result,
 };
 

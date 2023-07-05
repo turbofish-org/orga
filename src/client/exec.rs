@@ -9,7 +9,7 @@ use crate::{
     plugins::{query::QueryPlugin, ABCIPlugin},
     query::Query,
     state::State,
-    store::{self, BackingStore, Read, Shared, Store, Write},
+    store::{self, BackingStore, Read, Shared, Store},
     Error, Result,
 };
 
@@ -80,7 +80,7 @@ where
 }
 
 pub mod sync {
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashSet;
 
     use super::*;
 
@@ -297,6 +297,7 @@ mod tests {
     use crate::collections::Deque;
     use crate::orga;
     use crate::plugins::query::QueryPlugin;
+    use crate::store::Write;
 
     #[orga]
     struct Foo {

@@ -123,8 +123,3 @@ fn exclusive_range_starting_from(start: &[u8]) -> (Bound<Vec<u8>>, Bound<Vec<u8>
 fn exclusive_range_ending_at(start: &[u8]) -> (Bound<Vec<u8>>, Bound<Vec<u8>>) {
     (Bound::Unbounded, Bound::Excluded(start.to_vec()))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-}

@@ -3,7 +3,6 @@ use crate::Result;
 use std::{
     cell::{Ref, RefCell, RefMut},
     rc::Rc,
-    sync::{Arc, Mutex, MutexGuard},
 };
 
 // TODO: we can probably use UnsafeCell instead of RefCell since operations are
