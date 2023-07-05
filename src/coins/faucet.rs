@@ -114,6 +114,7 @@ mod tests {
     struct Simp;
     impl Symbol for Simp {
         const INDEX: u8 = 0;
+        const NAME: &'static str = "SIMP";
     }
 
     #[test]

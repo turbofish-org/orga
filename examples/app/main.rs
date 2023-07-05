@@ -14,6 +14,7 @@ pub struct FooCoin();
 
 impl Symbol for FooCoin {
     const INDEX: u8 = 123;
+    const NAME: &'static str = "FOO";
 }
 
 #[orga]

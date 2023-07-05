@@ -518,6 +518,7 @@ impl GetNonce for Counter {
 pub struct X(());
 impl Symbol for X {
     const INDEX: u8 = 99;
+    const NAME: &'static str = "X";
 }
 
 #[cfg(test)]
