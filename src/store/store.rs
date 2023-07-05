@@ -32,8 +32,7 @@ pub struct Store<S = DefaultBackingStore> {
     store: Shared<S>,
 }
 
-// TODO: reevaluate the client usage of Store so we don't need these (and we
-// also don't want Shared to have to use Arc<Mutex<T>>)
+// TODO: reevaluate the client usage of Store so we don't need theses
 unsafe impl<S> Send for Store<S> {}
 unsafe impl<S> Sync for Store<S> {}
 
@@ -44,7 +43,7 @@ impl Store {
     }
 
     pub fn with_partial_map_store() -> Self {
-        use super::bufstore::PartialMapStore;
+        use super::PartialMapStore;
         Self::new(BackingStore::PartialMapStore(Shared::new(
             PartialMapStore::new(),
         )))

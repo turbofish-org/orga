@@ -40,17 +40,17 @@ pub struct Unknown;
 impl Read for Unknown {
     #[inline]
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        Err(OrgaError::StoreErr(Error::ReadUnknown(key.to_vec())))
+        Err(OrgaError::StoreErr(Error::GetUnknown(key.to_vec())))
     }
 
     #[inline]
     fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
-        Err(OrgaError::StoreErr(Error::ReadUnknown(key.to_vec())))
+        Err(OrgaError::StoreErr(Error::GetUnknown(key.to_vec())))
     }
 
     #[inline]
     fn get_prev(&self, key: Option<&[u8]>) -> Result<Option<KV>> {
-        Err(OrgaError::StoreErr(Error::ReadUnknown(
+        Err(OrgaError::StoreErr(Error::GetUnknown(
             key.unwrap().to_vec(),
         )))
     }

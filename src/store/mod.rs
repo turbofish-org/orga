@@ -10,6 +10,7 @@ pub mod bufstore;
 pub mod iter;
 pub mod log;
 pub mod null;
+pub mod partialmap;
 pub mod share;
 #[allow(clippy::module_inception)]
 pub mod store;
@@ -18,6 +19,7 @@ pub use backingstore::BackingStore;
 pub use bufstore::{BufStore, Map as BufStoreMap, MapStore};
 pub use iter::Iter;
 pub use null::Empty;
+pub use partialmap::PartialMapStore;
 pub use share::Shared;
 pub use store::{DefaultBackingStore, Store};
 
@@ -26,7 +28,11 @@ pub use store::{DefaultBackingStore, Store};
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Tried to read unknown store data with key {0:?}")]
-    ReadUnknown(Vec<u8>),
+    GetUnknown(Vec<u8>),
+    #[error("Tried to read unknown store data after key {0:?}")]
+    GetNextUnknown(Vec<u8>),
+    #[error("Tried to read unknown store data before key {0:?}")]
+    GetPrevUnknown(Option<Vec<u8>>),
 }
 
 /// A key/value entry - the first element is the key and the second element is

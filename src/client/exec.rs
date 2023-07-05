@@ -1,15 +1,15 @@
-use std::any::TypeId;
+use std::{any::TypeId, collections::HashSet};
 
 use super::trace::{take_trace, tracing_guard};
 use crate::{
     abci::App,
     call::Call,
     describe::{Children, Describe, Descriptor, KeyOp},
-    encoding::Decode,
+    encoding::{Decode, Encode},
     plugins::{query::QueryPlugin, ABCIPlugin},
     query::Query,
     state::State,
-    store::{self, BackingStore, Read, Shared, Store, Write},
+    store::{self, BackingStore, Read, Shared, Store},
     Error, Result,
 };
 
@@ -19,8 +19,10 @@ use crate::merk::ProofStore;
 #[derive(Debug, Clone)]
 pub enum StepResult<T: Query, U> {
     Done(U),
-    FetchKey(Vec<u8>, u64),
-    FetchQuery(T::Query, u64),
+    FetchKey(Vec<u8>),
+    FetchNext(Vec<u8>),
+    FetchPrev(Option<Vec<u8>>),
+    FetchQuery(T::Query),
 }
 
 // TODO: dedupe sync/async versions
@@ -53,38 +55,33 @@ where
     T::Call: Send + Sync,
 {
     let mut store = store;
-    let mut last_n = None;
 
-    let mut check_n = |n| {
-        if let Some(last_n) = last_n {
-            if n <= last_n {
-                return Err(Error::Client("Execution did not advance".into()));
-            }
-        }
-
-        last_n = Some(n);
-
-        Ok(())
-    };
+    let mut queries = HashSet::new();
 
     loop {
-        let res = match step(store.clone(), &mut query_fn)? {
+        let query = match step(store.clone(), &mut query_fn)? {
             StepResult::Done(value) => return Ok((value, store)),
-            StepResult::FetchKey(key, n) => {
-                check_n(n)?;
-                client.query(QueryPluginQuery::RawKey(key)).await?
-            }
-            StepResult::FetchQuery(query, n) => {
-                check_n(n)?;
-                client.query(QueryPluginQuery::Query(query)).await?
-            }
+            StepResult::FetchKey(key) => QueryPluginQuery::RawKey(key),
+            StepResult::FetchNext(key) => QueryPluginQuery::RawNext(key),
+            StepResult::FetchPrev(key) => QueryPluginQuery::RawPrev(key),
+            StepResult::FetchQuery(query) => QueryPluginQuery::Query(query),
         };
+
+        let query_bytes = query.encode()?;
+        if queries.contains(&query_bytes) {
+            return Err(Error::Client("Execution did not advance".into()));
+        }
+        queries.insert(query_bytes);
+
+        let res = client.query(query).await?;
 
         store = join_store(store, res)?;
     }
 }
 
 pub mod sync {
+    use std::collections::HashSet;
+
     use super::*;
 
     pub trait Transport<T: Query + Call>: Send + Sync {
@@ -113,32 +110,25 @@ pub mod sync {
         T: App + State + Query + Call + Describe,
     {
         let mut store = store;
-        let mut last_n = None;
 
-        let mut check_n = |n| {
-            if let Some(last_n) = last_n {
-                if n <= last_n {
-                    return Err(Error::Client("Execution did not advance".into()));
-                }
-            }
-
-            last_n = Some(n);
-
-            Ok(())
-        };
+        let mut queries = HashSet::new();
 
         loop {
-            let res = match step(store.clone(), &mut query_fn)? {
+            let query = match step(store.clone(), &mut query_fn)? {
                 StepResult::Done(value) => return Ok((value, store)),
-                StepResult::FetchKey(key, n) => {
-                    check_n(n)?;
-                    client.query_sync(QueryPluginQuery::RawKey(key))?
-                }
-                StepResult::FetchQuery(query, n) => {
-                    check_n(n)?;
-                    client.query_sync(QueryPluginQuery::Query(query))?
-                }
+                StepResult::FetchKey(key) => QueryPluginQuery::RawKey(key),
+                StepResult::FetchNext(key) => QueryPluginQuery::RawNext(key),
+                StepResult::FetchPrev(key) => QueryPluginQuery::RawPrev(key),
+                StepResult::FetchQuery(query) => QueryPluginQuery::Query(query),
             };
+
+            let query_bytes = query.encode()?;
+            if queries.contains(&query_bytes) {
+                return Err(Error::Client("Execution did not advance".into()));
+            }
+            queries.insert(query_bytes);
+
+            let res = client.query_sync(query)?;
 
             store = join_store(store, res)?;
         }
@@ -158,8 +148,8 @@ where
     take_trace();
 
     let root_bytes = match store.get(&[]) {
-        Err(Error::StoreErr(store::Error::ReadUnknown(_))) | Ok(None) => {
-            return Ok(StepResult::FetchKey(vec![], 0))
+        Err(Error::StoreErr(store::Error::GetUnknown(_))) | Ok(None) => {
+            return Ok(StepResult::FetchKey(vec![]))
         }
         Err(err) => return Err(err),
         Ok(Some(bytes)) => bytes,
@@ -167,8 +157,20 @@ where
 
     let app = ABCIPlugin::<QueryPlugin<T>>::load(store, &mut &root_bytes[..])?;
 
-    let key = match query_fn(app) {
-        Err(Error::StoreErr(store::Error::ReadUnknown(key))) => key,
+    let (key, fallback_res) = match query_fn(app) {
+        Err(Error::StoreErr(store::Error::GetUnknown(key))) => {
+            (key.clone(), StepResult::FetchKey(key))
+        }
+        Err(Error::StoreErr(store::Error::GetNextUnknown(key))) => {
+            (key.clone(), StepResult::FetchNext(key))
+        }
+        Err(Error::StoreErr(store::Error::GetPrevUnknown(maybe_key))) => {
+            if let Some(key) = maybe_key {
+                (key.clone(), StepResult::FetchPrev(Some(key)))
+            } else {
+                return Err(Error::StoreErr(store::Error::GetPrevUnknown(None)));
+            }
+        }
         Err(other_err) => return Err(other_err),
         Ok(value) => return Ok(StepResult::Done(value)),
     };
@@ -183,7 +185,7 @@ where
         );
         let receiver_pfx = match res {
             Ok(pfx) => pfx,
-            Err(_) => return Ok(StepResult::FetchKey(key, traces.history.len() as u64)),
+            Err(_) => return Ok(fallback_res),
         };
         let query_bytes = [
             // TODO: shouldn't have to cut off ABCIPlugin prefixes here
@@ -192,10 +194,10 @@ where
         ]
         .concat();
         let query = T::Query::decode(query_bytes.as_slice())?;
-        return Ok(StepResult::FetchQuery(query, traces.history.len() as u64));
+        return Ok(StepResult::FetchQuery(query));
     }
 
-    Ok(StepResult::FetchKey(key, 0))
+    Ok(fallback_res)
 }
 
 pub fn join_store(dst: Store, src: Store) -> Result<Store> {
@@ -205,14 +207,12 @@ pub fn join_store(dst: Store, src: Store) -> Result<Store> {
     match (dst, src) {
         (store, BackingStore::Null(_)) | (BackingStore::Null(_), store) => Ok(Store::new(store)),
         (BackingStore::PartialMapStore(dst), BackingStore::PartialMapStore(src)) => {
-            let mut dst = dst.into_inner();
-            for (k, v) in src.into_inner().into_map() {
-                match v {
-                    Some(v) => dst.put(k, v)?,
-                    None => dst.delete(&k)?,
-                }
-            }
-            Ok(Store::new(BackingStore::PartialMapStore(Shared::new(dst))))
+            let dst = dst.into_inner();
+            let src = src.into_inner();
+            let joined = dst.join(src);
+            Ok(Store::new(BackingStore::PartialMapStore(Shared::new(
+                joined,
+            ))))
         }
         #[cfg(feature = "merk-verify")]
         (BackingStore::ProofMap(dst), BackingStore::ProofMap(src)) => {
@@ -297,11 +297,25 @@ mod tests {
     use crate::collections::Deque;
     use crate::orga;
     use crate::plugins::query::QueryPlugin;
+    use crate::store::Write;
 
     #[orga]
     struct Foo {
         pub bar: u32,
         pub baz: Deque<Deque<u32>>,
+    }
+
+    #[orga]
+    impl Foo {
+        #[query]
+        fn iter_query(&self) -> Result<u64> {
+            Ok(self.baz.iter()?.collect::<Result<Vec<_>>>()?.len() as u64)
+        }
+
+        #[query]
+        fn iter_query_rev(&self) -> Result<u64> {
+            Ok(self.baz.iter()?.rev().collect::<Result<Vec<_>>>()?.len() as u64)
+        }
     }
 
     fn setup() -> MockClient<ABCIPlugin<QueryPlugin<Foo>>> {
@@ -320,6 +334,10 @@ mod tests {
         foo.inner.inner.borrow_mut().baz.push_back(d).unwrap();
 
         let d = Deque::new();
+        foo.inner.inner.borrow_mut().baz.push_back(d).unwrap();
+
+        let mut d = Deque::new();
+        d.push_back(10).unwrap();
         foo.inner.inner.borrow_mut().baz.push_back(d).unwrap();
 
         let mut bytes = vec![];
@@ -386,6 +404,101 @@ mod tests {
                     0, 1, 129, 127, 255, 255, 255, 255, 255, 255, 255, 131, 0, 0, 0, 0, 0, 0, 0, 2
                 ]
             ]
+        );
+    }
+
+    #[tokio::test]
+    async fn execute_iter_raw() {
+        let client = setup();
+
+        let (res, _store) = execute(Store::default(), &client, |app| {
+            Ok(app
+                .inner
+                .inner
+                .borrow()
+                .baz
+                .iter()?
+                .collect::<Result<Vec<_>>>()?
+                .len())
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(res, 3);
+        assert_eq!(
+            client.queries.into_inner().unwrap(),
+            vec![
+                vec![2],
+                vec![3, 0, 1],
+                vec![2, 0, 1, 128, 0, 0, 0, 0, 0, 0, 0],
+                vec![2, 0, 1, 128, 0, 0, 0, 0, 0, 0, 1],
+                vec![2, 0, 1, 128, 0, 0, 0, 0, 0, 0, 2],
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn execute_iter_query() {
+        let client = setup();
+
+        let (res, _store) = execute(Store::default(), &client, |app| {
+            app.inner.inner.borrow().iter_query()
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(res, 3);
+        assert_eq!(
+            client.queries.into_inner().unwrap(),
+            vec![vec![2], vec![0, 128]]
+        );
+    }
+
+    #[tokio::test]
+    async fn execute_iter_rev_raw() {
+        let client = setup();
+
+        let (res, _store) = execute(Store::default(), &client, |app| {
+            Ok(app
+                .inner
+                .inner
+                .borrow()
+                .baz
+                .iter()?
+                .rev()
+                .collect::<Result<Vec<_>>>()?
+                .len())
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(res, 3);
+        assert_eq!(
+            client.queries.into_inner().unwrap(),
+            vec![
+                vec![2],
+                vec![4, 1, 0, 2],
+                vec![2, 0, 1, 128, 0, 0, 0, 0, 0, 0, 1],
+                vec![2, 0, 1, 128, 0, 0, 0, 0, 0, 0, 0],
+                vec![2, 0, 1, 127, 255, 255, 255, 255, 255, 255, 255]
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn execute_iter_rev_query() {
+        let client = setup();
+
+        let (res, _store) = execute(Store::default(), &client, |app| {
+            app.inner.inner.borrow().iter_query_rev()
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(res, 3);
+        assert_eq!(
+            client.queries.into_inner().unwrap(),
+            vec![vec![2], vec![0, 129]]
         );
     }
 

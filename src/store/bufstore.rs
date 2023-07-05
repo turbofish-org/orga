@@ -1,7 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
-use super::null::Unknown;
 use super::*;
 use crate::Error;
 
@@ -10,8 +9,6 @@ pub type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
 /// A simple `Store` implementation which persists data in an in-memory map.
 pub type MapStore = BufStore<Empty>;
-
-pub type PartialMapStore = BufStore<Unknown>;
 
 /// Wraps a `Store` and records mutations in an in-memory map, so that
 /// modifications do not affect the underlying `Store` until `flush` is called.

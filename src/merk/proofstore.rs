@@ -9,7 +9,7 @@ impl Read for ProofStore {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         let maybe_value = self.0.get(key).map_err(|err| {
             if let merk::Error::MissingData = err {
-                Error::StoreErr(crate::store::Error::ReadUnknown(key.to_vec()))
+                Error::StoreErr(crate::store::Error::GetUnknown(key.to_vec()))
             } else {
                 Error::Merk(err)
             }
@@ -21,7 +21,7 @@ impl Read for ProofStore {
         let mut iter = self.0.range((Bound::Excluded(key), Bound::Unbounded));
         let item = iter.next().transpose().map_err(|err| {
             if let merk::Error::MissingData = err {
-                Error::StoreErr(crate::store::Error::ReadUnknown(key.to_vec()))
+                Error::StoreErr(crate::store::Error::GetNextUnknown(key.to_vec()))
             } else {
                 Error::Merk(err)
             }

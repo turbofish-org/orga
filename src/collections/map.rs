@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::collections::btree_map::Entry::{Occupied, Vacant};
 use std::collections::{btree_map, BTreeMap};
 use std::iter::Peekable;
+use std::marker::PhantomData;
 use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
 use crate::call::{Call, FieldCall};
@@ -503,7 +504,7 @@ where
 {
     parent: &'a Map<K, V>,
     map_iter: Peekable<btree_map::Range<'a, MapKey<K>, Option<V>>>,
-    store_iter: StoreNextIter<'a, Store>,
+    store_iter: StoreNextIter<'a, Store, K>,
 }
 
 impl<'a, K, V> Iter<'a, K, V>
@@ -592,7 +593,7 @@ where
                         hex::encode(key_bytes),
                     );
 
-                    //so compare backing_key with map_key.inner_bytes
+                    // so compare backing_key with map_key.inner_bytes
                     let key_cmp = map_key.inner_bytes.cmp(backing_key);
 
                     // map_key is past backing_key, emit the backing entry
@@ -672,10 +673,11 @@ where
     }
 }
 
-struct StoreNextIter<'a, S: Default + Read> {
+struct StoreNextIter<'a, S: Default + Read, K: Decode> {
     store: &'a S,
     next_key: Bound<Vec<u8>>,
     end_key: Bound<Vec<u8>>,
+    _phantom: PhantomData<K>,
 }
 
 // TODO: dedupe this with the same code in Store
@@ -715,12 +717,13 @@ fn decrement_bytes(mut bytes: Vec<u8>) -> Option<Vec<u8>> {
     }
 }
 
-impl<'a, S: Default + Read> StoreNextIter<'a, S> {
+impl<'a, S: Default + Read, K: Decode> StoreNextIter<'a, S, K> {
     pub fn new<B: RangeBounds<Vec<u8>>>(store: &'a S, range: B) -> Result<Self> {
         Ok(StoreNextIter {
             store,
             next_key: encode_bound(range.start_bound())?,
             end_key: encode_bound(range.end_bound())?,
+            _phantom: PhantomData,
         })
     }
 
@@ -765,11 +768,27 @@ impl<'a, S: Default + Read> StoreNextIter<'a, S> {
             _ => {}
         };
 
+        // if we seeked to a sub-entry of the map key, we need to trim the key
+        // to the top-level map key and get that entry
+        let mut key_slice = key.as_slice();
+        if let Err(err) = K::decode(&mut key_slice) {
+            return Some(Err(err.into()));
+        }
+        if !key_slice.is_empty() {
+            let trimmed_len = key.len() - key_slice.len();
+            let trimmed_key = key[..trimmed_len].to_vec();
+            match self.store.get(&trimmed_key) {
+                Err(e) => return Some(Err(e)),
+                Ok(None) => return Some(Err(Error::Store("Expected value".to_string()))),
+                Ok(Some(value)) => return Some(Ok((trimmed_key, value))),
+            }
+        }
+
         Some(Ok((key, value)))
     }
 }
 
-impl<'a, S: Default + Read> Iterator for StoreNextIter<'a, S> {
+impl<'a, S: Default + Read, K: Decode> Iterator for StoreNextIter<'a, S, K> {
     type Item = Result<(Vec<u8>, Vec<u8>)>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -780,7 +799,7 @@ impl<'a, S: Default + Read> Iterator for StoreNextIter<'a, S> {
     }
 }
 
-impl<'a, S: Default + Read> DoubleEndedIterator for StoreNextIter<'a, S> {
+impl<'a, S: Default + Read, K: Decode> DoubleEndedIterator for StoreNextIter<'a, S, K> {
     fn next_back(&mut self) -> Option<Self::Item> {
         Some(self.peek_back()?.map(|(key, value)| {
             self.end_key = decrement_bytes(key.clone())
@@ -1721,6 +1740,37 @@ mod tests {
         let expected: Vec<(u32, u32)> = vec![(13, 26)];
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn map_iter_complex_rev() {
+        let store = mapstore();
+        let mut map: Map<u32, Map<u32, u32>> = Default::default();
+        map.attach(store.clone()).unwrap();
+
+        let mut submap = Map::new();
+        submap.insert(1, 10).unwrap();
+        submap.insert(2, 20).unwrap();
+        submap.insert(3, 30).unwrap();
+        map.insert(1, submap).unwrap();
+
+        map.insert(2, Map::new()).unwrap();
+
+        let mut submap = Map::new();
+        submap.insert(4, 40).unwrap();
+        submap.insert(5, 50).unwrap();
+        map.insert(3, submap).unwrap();
+
+        let mut bytes = vec![];
+        map.flush(&mut bytes).unwrap();
+
+        let map: Map<u32, Map<u32, u32>> = Map::with_store(store).unwrap();
+
+        let mut iter = map.iter().unwrap().rev();
+        assert_eq!(*iter.next().unwrap().unwrap().0, 3);
+        assert_eq!(*iter.next().unwrap().unwrap().0, 2);
+        assert_eq!(*iter.next().unwrap().unwrap().0, 1);
+        assert!(iter.next().is_none());
     }
 
     #[test]
