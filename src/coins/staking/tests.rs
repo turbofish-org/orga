@@ -14,6 +14,7 @@ use std::rc::Rc;
 struct Simp;
 impl Symbol for Simp {
     const INDEX: u8 = 0;
+    const NAME: &'static str = "SIMP";
 }
 
 fn simp_balance(multishare: &MultiShare) -> Amount {
@@ -1515,6 +1516,7 @@ fn redelegate_from_to_two_stakers() {
 struct Alt;
 impl Symbol for Alt {
     const INDEX: u8 = 1;
+    const NAME: &'static str = "ALT";
 }
 
 #[cfg(feature = "abci")]

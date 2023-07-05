@@ -362,6 +362,7 @@ mod tests {
     pub struct Simp {}
     impl Symbol for Simp {
         const INDEX: u8 = 12;
+        const NAME: &'static str = "SIMP";
     }
 
     #[orga]
