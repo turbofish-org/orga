@@ -98,6 +98,10 @@ impl AbciQuery for Ibc {
 }
 
 impl Ibc {
+    pub fn query_height(&self) -> Result<u64> {
+        Ok(self.height)
+    }
+
     pub fn query_client_states(&self) -> Result<Vec<IdentifiedClientState>> {
         let mut states = vec![];
         for entry in self.clients.iter()? {
