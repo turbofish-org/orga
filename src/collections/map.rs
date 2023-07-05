@@ -1743,6 +1743,37 @@ mod tests {
     }
 
     #[test]
+    fn map_iter_complex_rev() {
+        let store = mapstore();
+        let mut map: Map<u32, Map<u32, u32>> = Default::default();
+        map.attach(store.clone()).unwrap();
+
+        let mut submap = Map::new();
+        submap.insert(1, 10).unwrap();
+        submap.insert(2, 20).unwrap();
+        submap.insert(3, 30).unwrap();
+        map.insert(1, submap).unwrap();
+
+        map.insert(2, Map::new()).unwrap();
+
+        let mut submap = Map::new();
+        submap.insert(4, 40).unwrap();
+        submap.insert(5, 50).unwrap();
+        map.insert(3, submap).unwrap();
+
+        let mut bytes = vec![];
+        map.flush(&mut bytes).unwrap();
+
+        let map: Map<u32, Map<u32, u32>> = Map::with_store(store).unwrap();
+
+        let mut iter = map.iter().unwrap().rev();
+        assert_eq!(*iter.next().unwrap().unwrap().0, 3);
+        assert_eq!(*iter.next().unwrap().unwrap().0, 2);
+        assert_eq!(*iter.next().unwrap().unwrap().0, 1);
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
     fn map_range_map_only_unbounded() {
         let (_store, mut map) = setup();
 
