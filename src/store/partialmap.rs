@@ -89,24 +89,28 @@ impl Read for PartialMapStore {
         let prev = self
             .map
             .range(range)
-            .rev()
             .map(|(k, v)| (k.clone(), v.clone()))
-            .next();
+            .next_back();
 
-        let key = if let Some((ref k, _)) = prev {
+        let prev_key = if let Some((ref k, _)) = prev {
             k.clone()
         } else {
             vec![]
         };
-        let next = self.map.range(exclusive_range_starting_from(&key)).next();
+
+        let next = self
+            .map
+            .range(exclusive_range_starting_from(&prev_key))
+            .next();
         if let Some((_, (c, _))) = next {
             if *c {
                 return Ok(prev.map(|(k, (_, v))| (k, v)));
             }
+        } else if self.right_edge {
+            return Ok(prev.map(|(k, (_, v))| (k, v)));
         }
 
-        todo!()
-        // Err(Error::GetPrevUnknown(key.to_vec()).into())
+        Err(Error::GetPrevUnknown(key.map(|k| k.to_vec())).into())
     }
 }
 

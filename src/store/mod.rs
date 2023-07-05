@@ -31,7 +31,8 @@ pub enum Error {
     GetUnknown(Vec<u8>),
     #[error("Tried to read unknown store data after key {0:?}")]
     GetNextUnknown(Vec<u8>),
-    // TODO: GetPrevUnknown
+    #[error("Tried to read unknown store data before key {0:?}")]
+    GetPrevUnknown(Option<Vec<u8>>),
 }
 
 /// A key/value entry - the first element is the key and the second element is
