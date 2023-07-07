@@ -50,9 +50,8 @@ impl Transfer {
     }
 
     pub fn symbol_balance<S: Symbol>(&self, address: Address) -> crate::Result<Amount> {
-        let denom = Denom {
-            inner: vec![S::INDEX].try_into().unwrap(),
-        };
+        let denom = S::NAME.try_into()?;
+
         self.balance(address, denom)
     }
 }
@@ -114,38 +113,13 @@ impl TokenTransferValidationContext for Ibc {
     }
 }
 
-#[orga]
-// TODO: transparent state, simple type, and/or no-version
-#[derive(Clone, Debug)]
-pub struct Denom {
-    pub inner: LengthVec<u8, u8>,
-}
+type Denom = LengthVec<u8, u8>;
 
 impl TryFrom<PrefixedDenom> for Denom {
     type Error = crate::Error;
 
     fn try_from(value: PrefixedDenom) -> crate::Result<Self> {
         value.to_string().try_into()
-    }
-}
-
-impl TryFrom<String> for Denom {
-    type Error = crate::Error;
-
-    fn try_from(value: String) -> crate::Result<Self> {
-        let bytes = value.as_bytes().to_vec();
-        Ok(Self {
-            inner: bytes.try_into()?,
-        })
-    }
-}
-
-impl From<&'static str> for Denom {
-    fn from(value: &'static str) -> Self {
-        let bytes = value.as_bytes().to_vec();
-        Self {
-            inner: bytes.try_into().unwrap(),
-        }
     }
 }
 
@@ -227,7 +201,7 @@ impl<S: Symbol> From<Coin<S>> for PrefixedCoin {
     fn from(value: Coin<S>) -> Self {
         Self {
             amount: value.amount.value.into(),
-            denom: S::INDEX.to_string().parse().unwrap(),
+            denom: S::NAME.parse().unwrap(),
         }
     }
 }
