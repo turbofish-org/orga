@@ -48,6 +48,10 @@ impl BeginBlock for Ibc {
             return Err(Error::Tendermint("Missing timestamp".to_string()));
         };
 
+        if ctx.header.app_hash.is_empty() {
+            return Ok(());
+        }
+
         self.host_consensus_states.push_back(
             TmConsensusState::new(
                 CommitmentRoot::from_bytes(ctx.header.app_hash.as_slice()),
