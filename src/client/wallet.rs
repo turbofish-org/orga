@@ -55,6 +55,10 @@ impl DerivedKey {
         Ok(Self { privkey })
     }
 
+    pub fn from_secret_key(privkey: SecretKey) -> Self {
+        Self { privkey }
+    }
+
     pub fn address_for(seed: &[u8]) -> Result<Address> {
         Ok(Self::new(seed)?.address())
     }
