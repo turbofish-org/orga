@@ -235,6 +235,7 @@ impl Ibc {
             let (path, data) = entry?;
             if path.port_id()? != port_chan.port_id()?
                 || path.channel_id()? != port_chan.channel_id()?
+                || data.is_empty()
             {
                 continue;
             }
@@ -273,9 +274,10 @@ impl Ibc {
     ) -> Result<Vec<u64>> {
         let mut unreceived = vec![];
         let sequences: Vec<_> = sequences.into();
+
         for sequence in sequences.into_iter() {
             let path = port_chan.clone().with_sequence(sequence.into())?;
-            if !self.commitments.contains_key(path)? {
+            if self.commitments.contains_key(path)? {
                 unreceived.push(sequence);
             }
         }
@@ -291,6 +293,7 @@ impl Ibc {
             let (path, data) = entry?;
             if path.port_id()? != port_chan.port_id()?
                 || path.channel_id()? != port_chan.channel_id()?
+                || data.is_empty()
             {
                 continue;
             }
