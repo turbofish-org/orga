@@ -340,7 +340,9 @@ impl ValidationContext for Ibc {
         self.receipts
             .get(receipt_path.clone().into())
             .map_err(|_| PacketError::ImplementationSpecific)?
-            .ok_or(PacketError::PacketReceiptNotFound { sequence: receipt_path.sequence})?;
+            .ok_or(PacketError::PacketReceiptNotFound {
+                sequence: receipt_path.sequence,
+            })?;
         Ok(Receipt::Ok)
     }
 
@@ -352,7 +354,9 @@ impl ValidationContext for Ibc {
             .acks
             .get(ack_path.clone().into())
             .map_err(|_| PacketError::ImplementationSpecific)?
-            .ok_or(PacketError::PacketAcknowledgementNotFound { sequence: ack_path.sequence})?
+            .ok_or(PacketError::PacketAcknowledgementNotFound {
+                sequence: ack_path.sequence,
+            })?
             .clone()
             .into())
     }
