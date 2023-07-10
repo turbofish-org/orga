@@ -150,6 +150,10 @@ impl Snapshots {
         self.snapshots.get(&height)
     }
 
+    pub fn get_latest(&self) -> Option<(u64, &Snapshot)> {
+        self.snapshots.iter().next_back().map(|(h, s)| (*h, s))
+    }
+
     pub fn should_create(&self, height: u64) -> bool {
         height > 0 && self.filters.iter().any(|f| f.should_create(height))
     }

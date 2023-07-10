@@ -485,14 +485,15 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
             ABCIPlugin::<A>::load(store, &mut state_bytes.as_slice())
         };
         let store = merk_store.borrow();
-        let height = if req.height == 0 {
-            store.height()?
+        let (height, snapshot) = if req.height == 0 {
+            store.snapshots().get_latest()
         } else {
-            req.height.try_into()?
-        };
-        let snapshot = store.snapshots().get(height).ok_or_else(|| {
-            crate::Error::Query(format!("Cannot query for height {}", req.height))
-        })?;
+            store
+                .snapshots()
+                .get(req.height.try_into()?)
+                .map(|s| (req.height as u64, s))
+        }
+        .ok_or_else(|| crate::Error::Query(format!("Cannot query for height {}", req.height)))?;
 
         if !req.path.is_empty() {
             let store = BackingStore::Snapshot(Shared::new(snapshot.clone()));
