@@ -292,7 +292,7 @@ impl ValidationContext for Ibc {
             .next_sequence_send
             .get(seq_send_path.clone().into())
             .map_err(|_| PacketError::ImplementationSpecific)?
-            .ok_or(PacketError::MissingPacket)?
+            .ok_or(PacketError::ImplementationSpecific)?
             .clone()
             .into_inner()
             .into())
@@ -306,7 +306,7 @@ impl ValidationContext for Ibc {
             .next_sequence_recv
             .get(seq_recv_path.clone().into())
             .map_err(|_| PacketError::ImplementationSpecific)?
-            .ok_or(PacketError::MissingPacket)?
+            .ok_or(PacketError::ImplementationSpecific)?
             .clone()
             .into_inner()
             .into())
@@ -317,7 +317,7 @@ impl ValidationContext for Ibc {
             .next_sequence_ack
             .get(seq_ack_path.clone().into())
             .map_err(|_| PacketError::ImplementationSpecific)?
-            .ok_or(PacketError::MissingPacket)?
+            .ok_or(PacketError::ImplementationSpecific)?
             .clone()
             .into_inner()
             .into())
@@ -331,7 +331,7 @@ impl ValidationContext for Ibc {
             .commitments
             .get(commitment_path.clone().into())
             .map_err(|_| PacketError::ImplementationSpecific)?
-            .ok_or(PacketError::MissingPacket)?
+            .ok_or(PacketError::ImplementationSpecific)?
             .clone()
             .into())
     }
@@ -340,7 +340,9 @@ impl ValidationContext for Ibc {
         self.receipts
             .get(receipt_path.clone().into())
             .map_err(|_| PacketError::ImplementationSpecific)?
-            .ok_or(PacketError::MissingPacket)?;
+            .ok_or(PacketError::PacketReceiptNotFound {
+                sequence: receipt_path.sequence,
+            })?;
         Ok(Receipt::Ok)
     }
 
@@ -352,7 +354,9 @@ impl ValidationContext for Ibc {
             .acks
             .get(ack_path.clone().into())
             .map_err(|_| PacketError::ImplementationSpecific)?
-            .ok_or(PacketError::MissingPacket)?
+            .ok_or(PacketError::PacketAcknowledgementNotFound {
+                sequence: ack_path.sequence,
+            })?
             .clone()
             .into())
     }
@@ -372,7 +376,10 @@ impl ValidationContext for Ibc {
             .updates
             .get((*height).into())
             .map_err(|_| ClientError::ImplementationSpecific)?
-            .ok_or(ClientError::ImplementationSpecific)?
+            .ok_or(ChannelError::ProcessedTimeNotFound {
+                client_id: client_id.clone(),
+                height: *height,
+            })?
             .0
             .clone()
             .into())
@@ -392,7 +399,10 @@ impl ValidationContext for Ibc {
             .updates
             .get((*height).into())
             .map_err(|_| ClientError::ImplementationSpecific)?
-            .ok_or(ClientError::ImplementationSpecific)?
+            .ok_or(ChannelError::ProcessedHeightNotFound {
+                client_id: client_id.clone(),
+                height: *height,
+            })?
             .1
             .clone()
             .try_into()
