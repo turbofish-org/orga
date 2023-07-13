@@ -1,7 +1,7 @@
 use std::any::type_name;
 
 use crate::compat_mode;
-use crate::migrate::MigrateInto;
+use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::store::Store;
 use crate::{Error, Result};
 

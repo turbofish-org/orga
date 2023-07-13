@@ -9,6 +9,7 @@ use crate::encoding::{Decode, Encode};
 
 use crate::migrate::MigrateFrom;
 use crate::query::Query;
+use crate::state::State;
 use crate::{Error, Result};
 use std::ops::Deref;
 
@@ -100,7 +101,7 @@ where
     }
 }
 
-impl<T> MigrateFrom<ChainCommitmentPluginV0<T>> for ChainCommitmentPlugin<T> {
+impl<T: State> MigrateFrom<ChainCommitmentPluginV0<T>> for ChainCommitmentPlugin<T> {
     fn migrate_from(other: ChainCommitmentPluginV0<T>) -> Result<Self> {
         let chain_id = Context::resolve::<ChainId>()
             .ok_or_else(|| Error::App("Chain ID context not set".into()))?

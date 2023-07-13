@@ -196,11 +196,11 @@ where
 impl<T1, T2> MigrateFrom<EntryMap<T1>> for EntryMap<T2>
 where
     T1: Entry,
-    T1::Key: Next + Decode + Encode + Terminated + Clone + 'static,
+    T1::Key: Next + Decode + Encode + Terminated + Clone + State,
     T1::Value: State + Clone,
-    T2: Entry + MigrateFrom<T1>,
-    T2::Key: Encode + Terminated + 'static,
-    T2::Value: State,
+    T2: Entry,
+    T2::Key: Encode + Terminated + MigrateFrom<T1::Key>,
+    T2::Value: State + MigrateFrom<T1::Value>,
 {
     fn migrate_from(mut other: EntryMap<T1>) -> Result<Self> {
         let mut map = Self::default();
@@ -212,9 +212,10 @@ where
 
         for key in old_keys {
             let value = other.map.remove(key.clone())?.unwrap().into_inner();
-            let entry = T1::from_entry((key, value));
-            let new_entry = entry.migrate_into()?;
-            map.insert(new_entry)?;
+            let new_key = key.clone().migrate_into()?;
+            let new_value = value.migrate_into()?;
+            let entry = T2::from_entry((new_key, new_value));
+            map.insert(entry)?;
         }
 
         let mut out = vec![];

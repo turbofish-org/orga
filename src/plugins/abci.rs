@@ -66,7 +66,7 @@ pub struct ABCIPlugin<T> {
 
 impl<T1, T2> MigrateFrom<ABCIPlugin<T1>> for ABCIPlugin<T2>
 where
-    T1: MigrateInto<T2>,
+    T2: MigrateFrom<T1>,
 {
     fn migrate_from(other: ABCIPlugin<T1>) -> Result<Self> {
         Ok(Self {

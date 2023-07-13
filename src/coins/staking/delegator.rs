@@ -266,7 +266,6 @@ pub struct UnbondInfo {
     pub amount: Amount,
 }
 
-#[orga]
 #[derive(Debug)]
 pub struct DelegationInfo {
     pub unbonding: Vec<UnbondInfo>,

@@ -245,7 +245,7 @@ impl<K1, V1, K2, V2> MigrateFrom<Map<K1, V1>> for Map<K2, V2>
 where
     K1: MigrateInto<K2> + Encode + Decode + Terminated + Clone + Send + Sync + 'static,
     V1: MigrateInto<V2> + State,
-    K2: Encode + Decode + Terminated + Clone + Send + Sync + 'static,
+    K2: Encode + Decode + State + Terminated + Clone + Send + Sync,
     V2: State,
 {
     fn migrate_from(mut other: Map<K1, V1>) -> Result<Self> {

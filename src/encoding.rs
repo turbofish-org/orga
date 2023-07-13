@@ -35,8 +35,8 @@ use std::{
 #[serde(transparent)]
 pub struct LengthVec<P, T>
 where
-    P: Encode + Decode + TryInto<usize> + Terminated + Clone,
-    T: Encode + Decode + Terminated,
+    P: Encode + Decode + TryInto<usize> + Terminated + Clone + 'static,
+    T: Encode + Decode + Terminated + 'static,
 {
     #[serde(skip)]
     len: P,
@@ -89,9 +89,8 @@ where
 
 impl<P, T> State for LengthVec<P, T>
 where
-    P: Encode + Decode + TryInto<usize> + Terminated + Clone,
-    T: Encode + Decode + Terminated,
-    Self: 'static,
+    P: Encode + Decode + TryInto<usize> + Terminated + Clone + 'static,
+    T: Encode + Decode + Terminated + 'static,
 {
     fn attach(&mut self, _store: Store) -> crate::Result<()> {
         Ok(())
@@ -205,7 +204,7 @@ where
 #[serde(transparent)]
 pub struct ByteTerminatedString<const B: u8, T: FromStr + ToString = String>(pub T);
 
-impl<const B: u8, T: FromStr + ToString> MigrateFrom for ByteTerminatedString<B, T> {
+impl<const B: u8, T: FromStr + ToString + 'static> MigrateFrom for ByteTerminatedString<B, T> {
     fn migrate_from(other: Self) -> crate::Result<Self> {
         Ok(other)
     }
@@ -289,7 +288,7 @@ impl<T: FromStr + ToString + 'static> Describe for EofTerminatedString<T> {
     }
 }
 
-impl<T: FromStr + ToString> MigrateFrom for EofTerminatedString<T> {
+impl<T: FromStr + ToString + 'static> MigrateFrom for EofTerminatedString<T> {
     fn migrate_from(other: Self) -> crate::Result<Self> {
         Ok(other)
     }

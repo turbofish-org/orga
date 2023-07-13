@@ -4,7 +4,6 @@ use crate::abci::{BeginBlock, EndBlock};
 use crate::collections::{Deque, Entry, EntryMap, Map};
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
-use crate::migrate::MigrateFrom;
 use crate::orga;
 use crate::plugins::{BeginBlockCtx, EndBlockCtx, Validators};
 use crate::plugins::{Paid, Signer, Time};
@@ -48,7 +47,7 @@ pub struct Staking<S: Symbol> {
     delegation_index: Map<Address, Map<Address, ()>>,
 }
 
-#[derive(Entry, Clone, Serialize, Deserialize, MigrateFrom)]
+#[derive(Entry, Clone, Serialize, Deserialize)]
 struct ValidatorQueueEntry {
     #[key]
     start_seconds: i64,
@@ -87,7 +86,7 @@ pub struct RedelegationEntry {
     start_seconds: i64,
 }
 
-#[derive(Entry, MigrateFrom)]
+#[derive(Entry)]
 struct ValidatorPowerEntry {
     #[key]
     inverted_power: u64,

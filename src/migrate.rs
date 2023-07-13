@@ -1,9 +1,9 @@
 pub use crate::macros::MigrateFrom;
-use crate::{Error, Result};
+use crate::{encoding::Terminated, state::State, Error, Result};
 use paste::paste;
 use std::{cell::RefCell, marker::PhantomData};
 
-pub trait MigrateFrom<T = Self>: Sized {
+pub trait MigrateFrom<T = Self>: State + Sized {
     fn migrate_from(other: T) -> Result<Self>;
 }
 
@@ -46,7 +46,7 @@ migrate_from_self_impl!(());
 
 impl<T1, T2, const N: usize> MigrateFrom<[T1; N]> for [T2; N]
 where
-    T2: MigrateFrom<T1>,
+    T2: MigrateFrom<T1> + Terminated,
 {
     fn migrate_from(other: [T1; N]) -> Result<Self> {
         other
@@ -60,7 +60,7 @@ where
 
 impl<T1, T2> MigrateFrom<Vec<T1>> for Vec<T2>
 where
-    T2: MigrateFrom<T1>,
+    T2: MigrateFrom<T1> + Terminated,
 {
     fn migrate_from(other: Vec<T1>) -> Result<Self> {
         other.into_iter().map(MigrateInto::migrate_into).collect()
@@ -79,7 +79,7 @@ where
     }
 }
 
-impl<T1, T2> MigrateFrom<PhantomData<T1>> for PhantomData<T2> {
+impl<T1, T2: 'static> MigrateFrom<PhantomData<T1>> for PhantomData<T2> {
     fn migrate_from(_other: PhantomData<T1>) -> Result<Self> {
         Ok(Default::default())
     }
@@ -99,7 +99,7 @@ macro_rules! migrate_tuple_impl {
             paste! {
                 impl<$([<$types 1>],)* $([<$types 2>],)*> MigrateFrom<($([<$types 1>],)*)> for ($([<$types 2>],)*)
                 where
-                    $([<$types 2>]: MigrateFrom<[<$types 1>]>,)*
+                    $([<$types 2>]: MigrateFrom<[<$types 1>]> + Terminated,)*
                 {
                     fn migrate_from(other: ($([<$types 1>],)*)) -> Result<($([<$types 2>],)*)> {
                         Ok(($(other.$indices.migrate_into()?,)*))

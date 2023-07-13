@@ -1,6 +1,5 @@
 use crate::compat_mode;
-use crate::encoding::{Decode, Error, Result};
-use crate::migrate::MigrateInto;
+use crate::encoding::{Decode, Result};
 use std::io::Read;
 
 pub struct Decoder<R> {
