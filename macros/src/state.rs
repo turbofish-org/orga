@@ -178,9 +178,7 @@ impl StateInputReceiver {
             ..
         } = Default::default();
 
-        let Self {
-            version, previous, ..
-        } = self;
+        let Self { version, .. } = self;
 
         let load_value = if let Some((inner_name, _field)) = self.transparent_inner() {
             let child_transparent_other_loads = named_fields!(self)
@@ -208,20 +206,6 @@ impl StateInputReceiver {
                 }
             });
             quote! { Self { #(#child_self_loads),* } }
-        };
-
-        let load_value = if let Some(previous) = previous {
-            quote! {
-                if let Some(prev) = loader.maybe_load_from_prev::<#previous, _>()? {
-                    prev
-                } else {
-                    #load_value
-                }
-            }
-        } else {
-            quote! {
-                #load_value
-            }
         };
 
         quote! {
@@ -288,13 +272,7 @@ impl StateInputReceiver {
             })
             .collect();
 
-        let maybe_migrate_from_prev_bound = self
-            .previous
-            .as_ref()
-            .map(|prev| quote! { #prev: ::orga::migrate::MigrateInto<Self>,})
-            .unwrap_or(quote! {});
-
-        quote! { Self: 'static, #maybe_migrate_from_prev_bound #field_bounds }
+        quote! { Self: 'static, #field_bounds }
     }
 
     fn state_fields(&self) -> Vec<(TokenStream2, StateFieldReceiver)> {

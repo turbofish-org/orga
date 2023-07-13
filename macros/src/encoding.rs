@@ -112,19 +112,6 @@ impl ToTokens for EncodingInputReceiver {
                     quote! { Self { #(#child_self_decodes),* } }
                 }
             };
-            let decode_value = if let Some(previous) = previous {
-                quote! {
-                    if let Some(prev) = decoder.maybe_decode_from_prev::<#previous, _>()? {
-                        prev
-                    } else {
-                        #decode_value
-                    }
-                }
-            } else {
-                quote! {
-                    #decode_value
-                }
-            };
 
             quote! {
                 fn decode<__R: ::std::io::Read>(mut input: __R) -> #result_ty<Self> {
@@ -137,11 +124,6 @@ impl ToTokens for EncodingInputReceiver {
         };
 
         let encode_where = {
-            let maybe_prev_encode = previous
-                .as_ref()
-                .map(|prev| quote! { #prev: #encode_trait, })
-                .unwrap_or_default();
-
             let field_encode_bounds = if let Some(ref as_type) = self.as_type {
                 vec![quote! { #as_type: #encode_trait }]
             } else {
@@ -163,7 +145,6 @@ impl ToTokens for EncodingInputReceiver {
             };
 
             let bounds = quote! {
-                #maybe_prev_encode
                 #(#field_encode_bounds),*
             };
 
@@ -171,11 +152,6 @@ impl ToTokens for EncodingInputReceiver {
         };
 
         let decode_where = {
-            let maybe_prev_decode = previous
-                .as_ref()
-                .map(|prev| quote! { #prev: #decode_trait + ::orga::migrate::MigrateInto<Self>, })
-                .unwrap_or_default();
-
             let field_decode_bounds = if let Some(ref as_type) = self.as_type {
                 vec![quote! { #as_type: #encode_trait }]
             } else {
@@ -197,7 +173,6 @@ impl ToTokens for EncodingInputReceiver {
             };
 
             let bounds = quote! {
-                #maybe_prev_decode
                 #(#field_decode_bounds),*
             };
 

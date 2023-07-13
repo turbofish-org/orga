@@ -100,7 +100,7 @@ impl ToTokens for MigrateFromInputReceiver {
             if usages.is_empty() {
                 None
             } else {
-                Some(quote! { #old_ty: ::orga::migrate::MigrateInto<#new_ty>, })
+                Some(quote! { #new_ty: ::orga::migrate::MigrateFrom<#old_ty>, })
             }
         });
         let wher = match wher_union {
