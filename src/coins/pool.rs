@@ -2,6 +2,7 @@ use super::{Amount, Balance, Coin, Decimal, Give, Symbol};
 use crate::collections::map::{ChildMut as MapChildMut, Ref as MapRef};
 use crate::collections::{Map, Next};
 use crate::encoding::{Decode, Encode, Terminated};
+use crate::migrate::{MigrateFrom, MigrateInto};
 use crate::orga;
 use crate::state::State;
 use crate::{Error, Result};
@@ -11,7 +12,7 @@ use std::collections::BTreeMap;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Drop, RangeBounds};
 
-#[orga]
+#[orga(version = 1)]
 pub struct Pool<K, V, S>
 where
     K: Terminated + Encode + Decode + Clone + Send + Sync + 'static,
@@ -20,13 +21,37 @@ where
 {
     contributions: Decimal,
     rewards: Map<u8, Decimal>,
+    #[orga(version(V1))]
+    symbol: PhantomData<S>,
     shares_issued: Decimal,
     map: Map<K, RefCell<Entry<V>>>,
     rewards_this_period: Map<u8, Decimal>,
     last_period_entry: Map<u8, Decimal>,
+    #[orga(version(V1))]
     #[state(skip)]
     drop_errored: bool,
+    #[orga(version(V0))]
     symbol: PhantomData<S>,
+}
+
+impl<K, V, S> MigrateFrom<PoolV0<K, V, S>> for PoolV1<K, V, S>
+where
+    K: Terminated + Encode + Decode + Clone + Send + Sync + MigrateFrom<K> + 'static,
+    V: State + MigrateFrom<V>,
+    S: Symbol,
+{
+    fn migrate_from(other: PoolV0<K, V, S>) -> Result<Self> {
+        Ok(PoolV1 {
+            contributions: other.contributions.migrate_into()?,
+            rewards: other.rewards.migrate_into()?,
+            shares_issued: other.shares_issued.migrate_into()?,
+            map: other.map.migrate_into()?,
+            rewards_this_period: other.rewards_this_period.migrate_into()?,
+            last_period_entry: other.last_period_entry.migrate_into()?,
+            drop_errored: false,
+            symbol: PhantomData,
+        })
+    }
 }
 
 impl<K, V, S> Balance<S, Decimal> for Pool<K, V, S>
