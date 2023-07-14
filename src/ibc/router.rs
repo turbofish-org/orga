@@ -15,10 +15,6 @@ impl Router for Ibc {
         (Borrow::<str>::borrow(module_id) == MODULE_ID_STR).then_some(self as _)
     }
 
-    fn has_route(&self, module_id: &ModuleId) -> bool {
-        self.get_route(module_id).is_some()
-    }
-
     fn lookup_module_by_port(&self, port_id: &PortId) -> Option<ModuleId> {
         let transfer_port = PortId::transfer();
         let transfer_module_id: ModuleId = ModuleId::new(MODULE_ID_STR.to_string());

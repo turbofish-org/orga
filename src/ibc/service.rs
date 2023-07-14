@@ -22,6 +22,9 @@ use ibc_proto::cosmos::bank::v1beta1::{
     QuerySpendableBalancesResponse, QuerySupplyOfRequest, QuerySupplyOfResponse,
     QueryTotalSupplyRequest, QueryTotalSupplyResponse,
 };
+use ibc_proto::ibc::core::connection::v1::{
+    QueryConnectionParamsRequest, QueryConnectionParamsResponse,
+};
 use ibc_proto::ibc::core::{
     channel::v1::{
         query_server::{Query as ChannelQuery, QueryServer as ChannelQueryServer},
@@ -278,6 +281,13 @@ impl<C: Client<Ibc> + 'static> ConnectionQuery for IbcConnectionService<C> {
         &self,
         _request: Request<QueryConnectionConsensusStateRequest>,
     ) -> Result<Response<QueryConnectionConsensusStateResponse>, Status> {
+        unimplemented!()
+    }
+
+    async fn connection_params(
+        &self,
+        _request: Request<QueryConnectionParamsRequest>,
+    ) -> Result<Response<QueryConnectionParamsResponse>, Status> {
         unimplemented!()
     }
 }

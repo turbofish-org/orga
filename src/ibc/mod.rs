@@ -5,6 +5,7 @@ use ibc::clients::ics07_tendermint::{
 };
 use ibc::core::dispatch;
 use ibc::core::ics02_client::client_type::ClientType;
+use ibc::core::ics02_client::consensus_state::ConsensusState as ConsensusStateTrait;
 use ibc::core::ics02_client::height::Height;
 use ibc::core::ics03_connection::connection::ConnectionEnd as IbcConnectionEnd;
 use ibc::core::ics04_channel::channel::ChannelEnd as IbcChannelEnd;
@@ -22,9 +23,13 @@ use ibc_proto::ibc::applications::transfer::v1::MsgTransfer as RawMsgTransfer;
 use ibc_proto::ibc::core::{
     channel::v1::Channel as RawChannelEnd, connection::v1::ConnectionEnd as RawConnectionEnd,
 };
+use ibc_proto::ibc::lightclients::tendermint::v1::{
+    ClientState as RawTmClientState, ConsensusState as RawTmConsensusState,
+};
 use ibc_proto::protobuf::Protobuf;
 use ibc_rs::applications::transfer::msgs::transfer::MsgTransfer;
 use serde::Serialize;
+use tendermint_proto::Protobuf as TmProtobuf;
 
 use crate::coins::Address;
 use crate::collections::{Deque, Map};
@@ -50,6 +55,7 @@ mod service;
 pub use service::{start_grpc, GrpcOpts};
 
 pub use self::messages::{IbcMessage, IbcTx, RawIbcTx};
+mod client_contexts;
 mod messages;
 mod migration;
 mod query;
@@ -58,7 +64,7 @@ mod router;
 // mod tests2;
 pub const IBC_QUERY_PATH: &str = "store/ibc/key";
 
-#[orga(version = 1)]
+#[orga(version = 2)]
 pub struct Ibc {
     #[orga(version(V0))]
     _bytes0: [u8; 32],
@@ -75,61 +81,64 @@ pub struct Ibc {
     #[state(absolute_prefix(b""))]
     root_store: Store,
 
-    #[orga(version(V1))]
+    #[orga(version(V1, V2))]
     height: u64,
 
     #[orga(version(V1))]
+    host_consensus_states: Deque<ConsensusStateV0>,
+
+    #[orga(version(V2))]
     host_consensus_states: Deque<ConsensusState>,
 
-    #[orga(version(V1))]
+    #[orga(version(V1, V2))]
     channel_counter: u64,
 
-    #[orga(version(V1))]
+    #[orga(version(V1, V2))]
     connection_counter: u64,
 
-    #[orga(version(V1))]
+    #[orga(version(V1, V2))]
     client_counter: u64,
 
-    #[orga(version(V1))]
+    #[orga(version(V1, V2))]
     pub transfer: Transfer,
 
-    #[orga(version(V1))]
+    #[orga(version(V1, V2))]
     #[state(absolute_prefix(b"clients/"))]
     clients: Map<ClientId, Client>,
 
-    #[orga(version(V1))]
+    #[orga(version(V1, V2))]
     #[state(absolute_prefix(b"connections/"))]
     connections: Map<ConnectionId, ConnectionEnd>,
 
-    #[orga(version(V1))]
+    #[orga(version(V1, V2))]
     #[state(absolute_prefix(b"channelEnds/"))]
     channel_ends: Map<PortChannel, ChannelEnd>,
 
-    #[orga(version(V1))]
+    #[orga(version(V1, V2))]
     #[state(absolute_prefix(b"nextSequenceSend/"))]
     next_sequence_send: Map<PortChannel, Number>,
 
-    #[orga(version(V1))]
+    #[orga(version(V1, V2))]
     #[state(absolute_prefix(b"nextSequenceRecv/"))]
     next_sequence_recv: Map<PortChannel, Number>,
 
-    #[orga(version(V1))]
+    #[orga(version(V1, V2))]
     #[state(absolute_prefix(b"nextSequenceAck/"))]
     next_sequence_ack: Map<PortChannel, Number>,
 
-    #[orga(version(V1))]
+    #[orga(version(V1, V2))]
     #[state(absolute_prefix(b"commitments/"))]
     commitments: Map<PortChannelSequence, Vec<u8>>,
 
-    #[orga(version(V1))]
+    #[orga(version(V1, V2))]
     #[state(absolute_prefix(b"receipts/"))]
     receipts: Map<PortChannelSequence, ()>,
 
-    #[orga(version(V1))]
+    #[orga(version(V1, V2))]
     #[state(absolute_prefix(b"acks/"))]
     acks: Map<PortChannelSequence, Vec<u8>>,
 
-    #[orga(version(V1))]
+    #[orga(version(V1, V2))]
     #[state(absolute_prefix(b""))]
     store: Store,
 }
@@ -182,14 +191,29 @@ impl std::fmt::Debug for Ibc {
     }
 }
 
-#[orga]
+#[orga(version = 1)]
 pub struct Client {
+    #[orga(version(V0))]
+    #[state(prefix(b"updates/"))]
+    updates: Map<EpochHeight, (i128, BinaryHeight)>,
+
+    #[orga(version(V1))]
     #[state(prefix(b"updates/"))]
     updates: Map<EpochHeight, (Timestamp, BinaryHeight)>,
 
+    #[orga(version(V0))]
+    #[state(prefix(b"clientState"))]
+    client_state: Map<(), ClientStateV0>,
+
+    #[orga(version(V1))]
     #[state(prefix(b"clientState"))]
     client_state: Map<(), ClientState>,
 
+    #[orga(version(V0))]
+    #[state(prefix(b"consensusStates/"))]
+    consensus_states: Map<EpochHeight, ConsensusStateV0>,
+
+    #[orga(version(V1))]
     #[state(prefix(b"consensusStates/"))]
     consensus_states: Map<EpochHeight, ConsensusState>,
 
@@ -220,22 +244,18 @@ impl Describe for Timestamp {
 
 impl Encode for Adapter<Timestamp> {
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
-        borsh::BorshSerialize::serialize(&self.0.inner, dest)
-            .map_err(|_| ed::Error::UnexpectedByte(40))
+        self.0.inner.nanoseconds().encode_into(dest)
     }
 
     fn encoding_length(&self) -> ed::Result<usize> {
-        let mut buf = vec![];
-        borsh::BorshSerialize::serialize(&self.0.inner, &mut buf)
-            .map_err(|_| ed::Error::UnexpectedByte(40))?;
-        Ok(buf.len())
+        self.0.inner.nanoseconds().encoding_length()
     }
 }
 
 impl Decode for Adapter<Timestamp> {
-    fn decode<R: std::io::Read>(mut input: R) -> ed::Result<Self> {
+    fn decode<R: std::io::Read>(input: R) -> ed::Result<Self> {
         Ok(Self(Timestamp {
-            inner: borsh::BorshDeserialize::deserialize_reader(&mut input)
+            inner: IbcTimestamp::from_nanoseconds(u64::decode(input)?)
                 .map_err(|_| ed::Error::UnexpectedByte(40))?,
         }))
     }
@@ -267,9 +287,13 @@ impl Encode for Adapter<IbcSigner> {
 }
 
 impl Decode for Adapter<IbcSigner> {
-    fn decode<R: std::io::Read>(mut input: R) -> ed::Result<Self> {
+    fn decode<R: std::io::Read>(input: R) -> ed::Result<Self> {
+        let bytes = input
+            .bytes()
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| ed::Error::UnexpectedByte(40))?;
         Ok(Self(
-            borsh::BorshDeserialize::deserialize_reader(&mut input)
+            borsh::BorshDeserialize::deserialize(&mut bytes.as_slice())
                 .map_err(|_| ed::Error::UnexpectedByte(40))?,
         ))
     }
@@ -359,7 +383,7 @@ impl From<ClientType> for EofTerminatedString {
 
 impl From<EofTerminatedString> for ClientType {
     fn from(client_type: EofTerminatedString) -> Self {
-        ClientType::new(client_type.0).unwrap()
+        ClientType::new(client_type.0.as_str()).unwrap()
     }
 }
 
@@ -507,7 +531,7 @@ port_channel_sequence_from_impl!(AckPath);
 port_channel_sequence_from_impl!(ReceiptPath);
 
 macro_rules! protobuf_newtype {
-    ($newtype:tt, $inner:ty, $raw:ty) => {
+    ($newtype:tt, $inner:ty, $raw:ty, $proto:tt) => {
         #[derive(Serialize, Clone, Debug)]
         pub struct $newtype {
             inner: $inner,
@@ -516,7 +540,7 @@ macro_rules! protobuf_newtype {
         impl Encode for $newtype {
             fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
                 let mut buf = vec![];
-                Protobuf::<$raw>::encode(&self.inner, &mut buf)
+                $proto::<$raw>::encode(&self.inner, &mut buf)
                     .map_err(|_| ed::Error::UnexpectedByte(10))?;
                 dest.write_all(&buf)?;
                 Ok(())
@@ -524,7 +548,7 @@ macro_rules! protobuf_newtype {
 
             fn encoding_length(&self) -> ed::Result<usize> {
                 let mut buf = vec![];
-                Protobuf::<$raw>::encode(&self.inner, &mut buf)
+                $proto::<$raw>::encode(&self.inner, &mut buf)
                     .map_err(|_| ed::Error::UnexpectedByte(10))?;
                 Ok(buf.len())
             }
@@ -534,7 +558,7 @@ macro_rules! protobuf_newtype {
             fn decode<R: std::io::Read>(mut input: R) -> ed::Result<Self> {
                 let mut buf = vec![];
                 input.read_to_end(&mut buf)?;
-                let inner = Protobuf::<$raw>::decode(buf.as_slice())
+                let inner = $proto::<$raw>::decode(buf.as_slice())
                     .map_err(|_| ed::Error::UnexpectedByte(10))?;
                 Ok(Self { inner })
             }
@@ -591,10 +615,31 @@ macro_rules! protobuf_newtype {
     };
 }
 
-protobuf_newtype!(ClientState, TmClientState, Any);
-protobuf_newtype!(ConsensusState, TmConsensusState, Any);
-protobuf_newtype!(ConnectionEnd, IbcConnectionEnd, RawConnectionEnd);
-protobuf_newtype!(ChannelEnd, IbcChannelEnd, RawChannelEnd);
+protobuf_newtype!(ClientState, TmClientState, RawTmClientState, Protobuf);
+protobuf_newtype!(ClientStateV0, TmClientState, Any, Protobuf);
+protobuf_newtype!(
+    ConsensusState,
+    TmConsensusState,
+    RawTmConsensusState,
+    TmProtobuf
+);
+protobuf_newtype!(ConsensusStateV0, TmConsensusState, Any, TmProtobuf);
+protobuf_newtype!(ConnectionEnd, IbcConnectionEnd, RawConnectionEnd, Protobuf);
+protobuf_newtype!(ChannelEnd, IbcChannelEnd, RawChannelEnd, Protobuf);
+
+impl ConsensusStateTrait for ConsensusState {
+    fn root(&self) -> &ibc_rs::core::ics23_commitment::commitment::CommitmentRoot {
+        self.inner.root()
+    }
+
+    fn timestamp(&self) -> IbcTimestamp {
+        self.inner.timestamp()
+    }
+
+    fn encode_vec(&self) -> Result<Vec<u8>, tendermint_proto::Error> {
+        ConsensusStateTrait::encode_vec(&self.inner)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct TransferMessage {
@@ -684,7 +729,7 @@ mod tests {
 
         let mut client = Client::default();
         let client_state = TmClientState::new(
-            ChainId::new("foo".to_string(), 0),
+            ChainId::new("foo", 0),
             TrustThreshold::default(),
             Duration::from_secs(60 * 60 * 24 * 7),
             Duration::from_secs(60 * 60 * 24 * 14),
@@ -710,11 +755,10 @@ mod tests {
             .consensus_states
             .insert("0-100".to_string().into(), consensus_state)
             .unwrap();
-        let client_id =
-            IbcClientId::new(ClientType::new("07-tendermint".to_string()).unwrap(), 123)
-                .unwrap()
-                .into();
-        client.client_type = ClientType::new("07-tendermint".to_string()).unwrap().into();
+        let client_id = IbcClientId::new(ClientType::new("07-tendermint").unwrap(), 123)
+            .unwrap()
+            .into();
+        client.client_type = ClientType::new("07-tendermint").unwrap().into();
         client
             .updates
             .insert(
@@ -793,7 +837,7 @@ mod tests {
         assert_eq!(
             bytes,
             vec![
-                0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 127, 255, 255, 255, 255, 255, 255, 255, 127, 255,
+                0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 127, 255, 255, 255, 255, 255, 255, 255, 127, 255,
                 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 123, 0, 0, 0, 0, 0, 0, 1, 200,
                 0, 0, 0, 0, 0, 0, 3, 21, 0
             ]
@@ -824,36 +868,29 @@ mod tests {
                 8, 3, 16, 1, 26, 13, 10, 11, 100, 101, 102, 97, 117, 108, 116, 80, 111, 114, 116,
             ],
         );
-        assert_next(b"clients/07-tendermint-123/", b"\x0007-tendermint");
+        assert_next(b"clients/07-tendermint-123/", b"\x0107-tendermint");
         assert_next(
             b"clients/07-tendermint-123/clientState",
             &[
-                10, 43, 47, 105, 98, 99, 46, 108, 105, 103, 104, 116, 99, 108, 105, 101, 110, 116,
-                115, 46, 116, 101, 110, 100, 101, 114, 109, 105, 110, 116, 46, 118, 49, 46, 67,
-                108, 105, 101, 110, 116, 83, 116, 97, 116, 101, 18, 90, 10, 5, 102, 111, 111, 45,
-                48, 18, 4, 8, 1, 16, 3, 26, 4, 8, 128, 245, 36, 34, 4, 8, 128, 234, 73, 42, 2, 8,
-                60, 50, 0, 58, 3, 16, 210, 9, 66, 25, 10, 9, 8, 1, 24, 1, 32, 1, 42, 1, 0, 18, 12,
-                10, 2, 0, 1, 16, 33, 24, 4, 32, 12, 48, 1, 66, 25, 10, 9, 8, 1, 24, 1, 32, 1, 42,
-                1, 0, 18, 12, 10, 2, 0, 1, 16, 32, 24, 1, 32, 1, 48, 1,
+                10, 5, 102, 111, 111, 45, 48, 18, 4, 8, 1, 16, 3, 26, 4, 8, 128, 245, 36, 34, 4, 8,
+                128, 234, 73, 42, 2, 8, 60, 50, 0, 58, 3, 16, 210, 9, 66, 25, 10, 9, 8, 1, 24, 1,
+                32, 1, 42, 1, 0, 18, 12, 10, 2, 0, 1, 16, 33, 24, 4, 32, 12, 48, 1, 66, 25, 10, 9,
+                8, 1, 24, 1, 32, 1, 42, 1, 0, 18, 12, 10, 2, 0, 1, 16, 32, 24, 1, 32, 1, 48, 1,
             ],
         );
         assert_next(b"clients/07-tendermint-123/connections/connection-123", &[]);
         assert_next(
             b"clients/07-tendermint-123/consensusStates/0-100",
             &[
-                10, 46, 47, 105, 98, 99, 46, 108, 105, 103, 104, 116, 99, 108, 105, 101, 110, 116,
-                115, 46, 116, 101, 110, 100, 101, 114, 109, 105, 110, 116, 46, 118, 49, 46, 67,
-                111, 110, 115, 101, 110, 115, 117, 115, 83, 116, 97, 116, 101, 18, 72, 10, 0, 18,
-                34, 10, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 26, 32, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
-                5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
+                10, 0, 18, 34, 10, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 32, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
+                5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
             ],
         );
         assert_next(
             b"clients/07-tendermint-123/updates/0-100",
             &[
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 123,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 123,
             ],
         );
         assert_next(
