@@ -4,7 +4,7 @@ use crate::collections::{Entry, EntryMap, Map};
 use crate::context::Context;
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
-use crate::migrate::{MigrateFrom, MigrateInto};
+use crate::migrate::Migrate;
 use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
@@ -64,20 +64,17 @@ pub struct ABCIPlugin<T> {
     pub(crate) logs: Option<Vec<String>>,
 }
 
-impl<T1, T2> MigrateFrom<ABCIPlugin<T1>> for ABCIPlugin<T2>
-where
-    T2: MigrateFrom<T1>,
-{
-    fn migrate_from(other: ABCIPlugin<T1>) -> Result<Self> {
+impl<T: Migrate> Migrate for ABCIPlugin<T> {
+    fn migrate(src: Store, dest: Store, bytes: &mut &[u8]) -> Result<Self> {
         Ok(Self {
-            inner: other.inner.migrate_into()?,
-            validator_updates: other.validator_updates,
-            updates: other.updates,
-            time: other.time,
-            events: other.events,
-            current_vp: other.current_vp,
-            cons_key_by_op_addr: other.cons_key_by_op_addr,
-            logs: other.logs,
+            inner: T::migrate(src.sub(&[0]), dest.sub(&[0]), bytes)?,
+            validator_updates: None,
+            updates: State::load(src.sub(&[1]), bytes)?,
+            current_vp: Rc::new(RefCell::new(Some(State::load(src.sub(&[2]), bytes)?))),
+            cons_key_by_op_addr: Rc::new(RefCell::new(Some(State::load(src.sub(&[3]), bytes)?))),
+            events: None,
+            time: None,
+            logs: None,
         })
     }
 }

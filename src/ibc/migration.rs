@@ -1,8 +1,10 @@
 use super::{IbcV0, IbcV1};
-use crate::{migrate::MigrateFrom, state::State};
+use crate::{migrate::Migrate, state::State, store::Store};
 
-impl MigrateFrom<IbcV0> for IbcV1 {
-    fn migrate_from(mut other: IbcV0) -> crate::Result<Self> {
+impl Migrate for IbcV1 {
+    fn migrate(src: Store, dest: Store, bytes: &mut &[u8]) -> crate::Result<Self> {
+        let mut other = IbcV0::migrate(src, dest, bytes)?;
+
         other
             .root_store
             .remove_range(b"a".to_vec()..b"z".to_vec())?;

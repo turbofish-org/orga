@@ -2,8 +2,8 @@ use crate::{Error, Result};
 use orga::orga;
 use std::convert::TryFrom;
 
-#[orga]
-#[derive(Debug, Clone, Copy)]
+#[orga(skip(Migrate))]
+#[derive(Debug, Clone, Copy, crate::migrate::Migrate)]
 #[serde(transparent)]
 pub struct Amount {
     pub(crate) value: u64,

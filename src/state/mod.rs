@@ -62,7 +62,7 @@ state_impl!(i128);
 state_impl!(bool);
 state_impl!(());
 
-fn varint(n: usize, max: usize) -> Vec<u8> {
+pub fn varint(n: usize, max: usize) -> Vec<u8> {
     if max < u8::MAX as usize {
         vec![n as u8]
     } else if max < u16::MAX as usize {

@@ -21,18 +21,20 @@ use syn::*;
     and_then = "StateInputReceiver::ensure_prefixes"
 )]
 pub struct StateInputReceiver {
-    ident: Ident,
-    generics: syn::Generics,
-    data: ast::Data<(), StateFieldReceiver>,
+    pub ident: Ident,
+    pub generics: syn::Generics,
+    pub data: ast::Data<(), StateFieldReceiver>,
 
     #[darling(default)]
     pub version: u8,
+    #[darling(default)]
     pub previous: Option<Path>,
+    #[darling(default)]
     pub as_type: Option<Path>,
     #[darling(default)]
-    transparent: bool,
+    pub transparent: bool,
     #[darling(default)]
-    allow_prefix_overlap: bool,
+    pub allow_prefix_overlap: bool,
 }
 
 impl StateInputReceiver {
@@ -350,17 +352,18 @@ impl ToTokens for StateInputReceiver {
 
 #[derive(Debug, FromField, Clone)]
 #[darling(attributes(state))]
-struct StateFieldReceiver {
-    ident: Option<Ident>,
-    ty: Type,
+pub struct StateFieldReceiver {
+    pub ident: Option<Ident>,
+    pub ty: Type,
 
-    as_type: Option<Ident>,
     #[darling(default)]
-    skip: bool,
+    pub as_type: Option<Ident>,
     #[darling(default)]
-    transparent: bool,
-    prefix: Option<PrefixBytes>,
-    absolute_prefix: Option<PrefixBytes>,
+    pub skip: bool,
+    #[darling(default)]
+    pub transparent: bool,
+    pub prefix: Option<PrefixBytes>,
+    pub absolute_prefix: Option<PrefixBytes>,
 }
 uses_type_params!(StateFieldReceiver, ty);
 
@@ -375,7 +378,7 @@ impl StateFieldReceiver {
     }
 }
 
-enum Prefix {
+pub enum Prefix {
     Relative(Vec<u8>),
     Absolute(Vec<u8>),
 }
@@ -404,7 +407,7 @@ impl ToTokens for Prefix {
 }
 
 #[derive(Debug, Clone)]
-struct PrefixBytes(Vec<u8>);
+pub struct PrefixBytes(Vec<u8>);
 
 impl FromMeta for PrefixBytes {
     fn from_list(items: &[NestedMeta]) -> darling::Result<Self> {

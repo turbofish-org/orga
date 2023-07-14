@@ -7,9 +7,9 @@ use crate::context::Context;
 use crate::encoding::LengthVec;
 use crate::encoding::{Decode, Encode};
 
-use crate::migrate::MigrateFrom;
+use crate::migrate::Migrate;
 use crate::query::Query;
-use crate::state::State;
+use crate::store::Store;
 use crate::{Error, Result};
 use std::ops::Deref;
 
@@ -101,8 +101,8 @@ where
     }
 }
 
-impl<T: State> MigrateFrom<ChainCommitmentPluginV0<T>> for ChainCommitmentPlugin<T> {
-    fn migrate_from(other: ChainCommitmentPluginV0<T>) -> Result<Self> {
+impl<T: Migrate> Migrate for ChainCommitmentPlugin<T> {
+    fn migrate(src: Store, dest: Store, bytes: &mut &[u8]) -> Result<Self> {
         let chain_id = Context::resolve::<ChainId>()
             .ok_or_else(|| Error::App("Chain ID context not set".into()))?
             .0
@@ -110,7 +110,7 @@ impl<T: State> MigrateFrom<ChainCommitmentPluginV0<T>> for ChainCommitmentPlugin
             .to_vec();
         Ok(Self {
             chain_id: chain_id.try_into()?,
-            inner: other.inner,
+            inner: T::migrate(src, dest, bytes)?,
         })
     }
 }

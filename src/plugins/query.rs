@@ -1,7 +1,7 @@
 use crate::call::Call;
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
-use crate::migrate::{MigrateFrom, MigrateInto};
+use crate::migrate::Migrate;
 use crate::orga;
 use crate::query::Query as QueryTrait;
 use crate::state::State;
@@ -85,14 +85,11 @@ where
     }
 }
 
-impl<T1, T2> MigrateFrom<QueryPlugin<T1>> for QueryPlugin<T2>
-where
-    T2: MigrateFrom<T1>,
-{
-    fn migrate_from(other: QueryPlugin<T1>) -> Result<Self> {
+impl<T: Migrate> Migrate for QueryPlugin<T> {
+    fn migrate(src: Store, dest: Store, bytes: &mut &[u8]) -> Result<Self> {
         Ok(Self {
-            store: other.store,
-            inner: other.inner.migrate_into()?,
+            store: dest.clone(),
+            inner: RefCell::new(T::migrate(src, dest, bytes)?),
         })
     }
 }

@@ -1,8 +1,8 @@
 use super::{Amount, Coin};
-use crate::{migrate::MigrateFrom, state::State};
+use crate::{migrate::Migrate, state::State};
 
 pub trait Symbol:
-    Sized + State + std::fmt::Debug + 'static + Clone + Send + Default + MigrateFrom + Send + Sync
+    Sized + State + std::fmt::Debug + 'static + Clone + Send + Default + Migrate + Send + Sync
 {
     const INDEX: u8;
     const NAME: &'static str;

@@ -33,7 +33,7 @@ use crate::describe::{Describe, Descriptor};
 use crate::encoding::{
     Adapter, ByteTerminatedString, Decode, Encode, EofTerminatedString, FixedString,
 };
-use crate::migrate::MigrateFrom;
+use crate::migrate::Migrate;
 use crate::plugins::Signer;
 use crate::state::State;
 use crate::store::Store;
@@ -206,11 +206,13 @@ pub type ConnectionId = EofTerminatedString<IbcConnectionId>;
 pub type Number = EofTerminatedString<u64>;
 pub type EpochHeight = EofTerminatedString;
 
-#[orga(simple)]
+#[orga(simple, skip(Migrate))]
 #[derive(Debug)]
 pub struct Timestamp {
     inner: IbcTimestamp,
 }
+
+impl Migrate for Timestamp {}
 
 impl Describe for Timestamp {
     fn describe() -> Descriptor {
@@ -363,7 +365,7 @@ impl From<EofTerminatedString> for ClientType {
     }
 }
 
-#[derive(State, Encode, Decode, Serialize, Clone, Debug, MigrateFrom)]
+#[derive(State, Encode, Decode, Serialize, Clone, Debug, Migrate)]
 pub struct PortChannel(
     #[serde(skip)] FixedString<"ports/">,
     SlashTerminatedString<PortId>,
@@ -432,7 +434,7 @@ port_channel_from_impl!(SeqSendPath);
 port_channel_from_impl!(SeqRecvPath);
 port_channel_from_impl!(SeqAckPath);
 
-#[derive(State, Encode, Decode, Serialize, Clone, Debug, MigrateFrom)]
+#[derive(State, Encode, Decode, Serialize, Clone, Debug, Migrate)]
 pub struct PortChannelSequence(
     #[serde(skip)] FixedString<"ports/">,
     SlashTerminatedString<PortId>,
@@ -577,11 +579,7 @@ macro_rules! protobuf_newtype {
             }
         }
 
-        impl MigrateFrom for $newtype {
-            fn migrate_from(other: Self) -> crate::Result<Self> {
-                Ok(other)
-            }
-        }
+        impl Migrate for $newtype {}
 
         impl Describe for $newtype {
             fn describe() -> Descriptor {

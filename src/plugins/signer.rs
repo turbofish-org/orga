@@ -6,7 +6,7 @@ use crate::coins::{Address, Symbol};
 use crate::context::{Context, GetContext};
 
 use crate::encoding::{Decode, Encode};
-use crate::migrate::MigrateFrom;
+use crate::migrate::Migrate;
 use crate::orga;
 
 use crate::call::Call;
@@ -514,7 +514,7 @@ impl GetNonce for Counter {
     }
 }
 
-#[derive(State, Clone, Debug, Encode, Decode, Default, MigrateFrom)]
+#[derive(State, Clone, Debug, Encode, Decode, Default, Migrate)]
 pub struct X(());
 impl Symbol for X {
     const INDEX: u8 = 99;

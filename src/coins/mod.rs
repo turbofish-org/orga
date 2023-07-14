@@ -57,7 +57,7 @@ use bech32::{self, encode_to_fmt, FromBase32, ToBase32, Variant};
 use crate::collections::Next;
 use crate::describe::Describe;
 use crate::macros::State;
-use crate::migrate::MigrateFrom;
+use crate::migrate::Migrate;
 use ed::{Decode, Encode};
 use ripemd::{Digest as _, Ripemd160};
 use serde::{Deserialize, Serialize};
@@ -79,7 +79,7 @@ use sha2::Sha256;
     Copy,
     Default,
     Describe,
-    MigrateFrom,
+    Migrate,
 )]
 pub struct Address {
     bytes: [u8; Address::LENGTH],

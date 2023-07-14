@@ -4,9 +4,11 @@ use crate::abci::{BeginBlock, EndBlock};
 use crate::collections::{Deque, Entry, EntryMap, Map};
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
+use crate::migrate::Migrate;
 use crate::orga;
 use crate::plugins::{BeginBlockCtx, EndBlockCtx, Validators};
 use crate::plugins::{Paid, Signer, Time};
+use crate::state::State;
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -47,7 +49,7 @@ pub struct Staking<S: Symbol> {
     delegation_index: Map<Address, Map<Address, ()>>,
 }
 
-#[derive(Entry, Clone, Serialize, Deserialize)]
+#[derive(Entry, Clone, Serialize, Deserialize, State, Migrate)]
 struct ValidatorQueueEntry {
     #[key]
     start_seconds: i64,
@@ -86,7 +88,7 @@ pub struct RedelegationEntry {
     start_seconds: i64,
 }
 
-#[derive(Entry)]
+#[derive(Entry, State, Migrate)]
 struct ValidatorPowerEntry {
     #[key]
     inverted_power: u64,

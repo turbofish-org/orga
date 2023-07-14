@@ -7,7 +7,7 @@ use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
 use crate::call::{Call, FieldCall};
 use crate::describe::Describe;
-use crate::migrate::{MigrateFrom, MigrateInto};
+use crate::migrate::Migrate;
 use crate::orga;
 use crate::query::{FieldQuery, Query};
 use crate::state::State;
@@ -241,30 +241,23 @@ where
     }
 }
 
-impl<K1, V1, K2, V2> MigrateFrom<Map<K1, V1>> for Map<K2, V2>
+impl<K, V> Migrate for Map<K, V>
 where
-    K1: MigrateInto<K2> + Encode + Decode + Terminated + Clone + Send + Sync + 'static,
-    V1: MigrateInto<V2> + State,
-    K2: Encode + Decode + State + Terminated + Clone + Send + Sync,
-    V2: State,
+    K: Encode + Decode + State + Terminated + Clone + Send + Sync + Migrate,
+    V: State + Migrate,
 {
-    fn migrate_from(mut other: Map<K1, V1>) -> Result<Self> {
-        let mut map = Self::default();
-        let mut old_keys = vec![];
-        for entry in other.iter()? {
-            let (key, _value) = entry?;
-            old_keys.push(key.clone());
-        }
+    fn migrate(mut src: Store, dest: Store, _bytes: &mut &[u8]) -> Result<Self> {
+        let mut map = Map::with_store(dest.clone())?;
 
-        for key in old_keys.iter() {
-            let value = other.remove(key.clone())?.unwrap().into_inner();
-            let new_key = key.clone().migrate_into()?;
-            let new_value = value.migrate_into()?;
-            map.insert(new_key, new_value)?;
+        for entry in StoreNextIter::<Store, K>::new(&src.clone(), ..)? {
+            let (k, v) = entry?;
+            let key = K::migrate(Store::default(), Store::default(), &mut k.as_slice())?;
+            let value = V::migrate(src.sub(&k), dest.sub(&k), &mut v.as_slice())?;
+            map.insert(key, value)?;
+            src.delete(&k)?;
+            // TODO: flush the changes to the dest as we go - we are caching changes in memory
+            // for now while we phase out old migration implementations that don't honor the contract
         }
-
-        let mut out = vec![];
-        other.flush(&mut out)?;
 
         Ok(map)
     }
@@ -2196,8 +2189,14 @@ mod tests {
         baz: u32,
     }
 
-    impl MigrateFrom<FooV0> for FooV1 {
-        fn migrate_from(from: FooV0) -> Result<Self> {
+    impl Migrate for FooV1 {
+        fn migrate(src: Store, dest: Store, bytes: &mut &[u8]) -> orga::Result<Self> {
+            if bytes[0] == 1 {
+                *bytes = &bytes[1..];
+                return Self::load(src, bytes);
+            }
+
+            let from = FooV0::load(src, bytes)?;
             Ok(Self {
                 bar: 0,
                 baz: from.baz,
@@ -2210,11 +2209,10 @@ mod tests {
         let mut store = mapstore();
         store.put(vec![0, 0, 0, 12], vec![0, 0, 0, 0, 123]).unwrap();
 
-        let map0: Map<u32, Foo> = Map::with_store(store).unwrap();
-        let map1: Map<u32, Foo> = map0.migrate_into().unwrap();
+        let map = Map::<u32, Foo>::migrate(store.clone(), store, &mut &[][..]).unwrap();
 
-        assert_eq!(map1.get(12).unwrap().unwrap().bar, 0);
-        assert_eq!(map1.get(12).unwrap().unwrap().baz, 123);
+        assert_eq!(map.get(12).unwrap().unwrap().bar, 0);
+        assert_eq!(map.get(12).unwrap().unwrap().baz, 123);
     }
 
     #[test]
@@ -2224,13 +2222,12 @@ mod tests {
         let mut store = mapstore();
         store.put(vec![0, 0, 0, 12], vec![0, 0, 0, 123]).unwrap();
 
-        let map0: Map<u32, Foo> = Map::with_store(store).unwrap();
-        let map1: Map<u32, Foo> = map0.migrate_into().unwrap();
+        let map = Map::<u32, Foo>::migrate(store.clone(), store, &mut &[][..]).unwrap();
 
         set_compat_mode(false);
 
-        assert_eq!(map1.get(12).unwrap().unwrap().bar, 0);
-        assert_eq!(map1.get(12).unwrap().unwrap().baz, 123);
+        assert_eq!(map.get(12).unwrap().unwrap().bar, 0);
+        assert_eq!(map.get(12).unwrap().unwrap().baz, 123);
     }
 
     #[test]

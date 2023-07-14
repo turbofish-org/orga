@@ -3,7 +3,7 @@ use crate::call::Call;
 use crate::context::Context;
 use crate::encoding::Decode;
 use crate::merk::{MerkStore, ProofBuilder};
-use crate::migrate::MigrateInto;
+use crate::migrate::Migrate;
 use crate::plugins::{ABCICall, ABCIPlugin};
 use crate::query::Query;
 use crate::state::State;
@@ -229,7 +229,7 @@ impl<A: App> Node<A> {
     // TODO: remove when we don't require compat migrations
     pub fn migrate<O: State>(self, version: Vec<u8>) -> Self
     where
-        ABCIPlugin<O>: MigrateInto<ABCIPlugin<A>>,
+        ABCIPlugin<O>: Migrate,
     {
         let merk_store = crate::merk::MerkStore::new(&self.merk_home);
         if merk_store
@@ -247,8 +247,8 @@ impl<A: App> Node<A> {
         let bytes = store.get(&[]).unwrap().unwrap();
 
         orga::set_compat_mode(true);
-        let app = ABCIPlugin::<O>::load(store.clone(), &mut bytes.as_slice()).unwrap();
-        let mut app = app.migrate_into().unwrap();
+        let mut app =
+            ABCIPlugin::<O>::migrate(store.clone(), store.clone(), &mut bytes.as_slice()).unwrap();
         orga::set_compat_mode(false);
 
         app.attach(store.clone()).unwrap();

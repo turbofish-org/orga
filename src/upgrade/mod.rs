@@ -2,10 +2,11 @@ use crate::coins::{Address, Amount, Decimal};
 use crate::collections::Map;
 use crate::context::GetContext;
 use crate::encoding::LengthVec;
-use crate::migrate::{MigrateFrom, MigrateInto};
+use crate::migrate::Migrate;
 use crate::orga;
 use crate::plugins::{Signer, Time, ValidatorEntry, Validators};
 use crate::prelude::{Read, Store};
+use crate::state::State;
 use crate::{Error as OrgaError, Result};
 use std::collections::HashMap;
 use thiserror::Error;
@@ -59,17 +60,23 @@ impl Default for Upgrade {
     }
 }
 
-impl MigrateFrom<UpgradeV0> for UpgradeV1 {
-    fn migrate_from(other: UpgradeV0) -> Result<Self> {
+impl Migrate for UpgradeV1 {
+    fn migrate(src: Store, dest: Store, bytes: &mut &[u8]) -> Result<Self> {
+        let other = UpgradeV0::migrate(src, dest.clone(), &mut bytes.clone())?;
+
         let mut current_version = Map::new();
         current_version.insert((), other.current_version)?;
-        Ok(Self {
-            signals: other.signals.migrate_into()?,
+
+        let mut value = Self {
+            signals: other.signals,
             threshold: other.threshold,
             activation_delay_seconds: other.activation_delay_seconds,
             rate_limit_seconds: other.rate_limit_seconds,
             current_version,
-        })
+        };
+        value.attach(dest)?;
+
+        Ok(value)
     }
 }
 

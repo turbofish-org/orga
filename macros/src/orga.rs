@@ -98,7 +98,6 @@ impl OrgaSubStruct {
             }
         };
         maybe_add("Default", quote! { Default});
-        maybe_add("MigrateFrom", quote! { ::orga::migrate::MigrateFrom });
         maybe_add(
             "VersionedEncoding",
             quote! { ::orga::encoding::VersionedEncoding },
@@ -107,20 +106,22 @@ impl OrgaSubStruct {
         maybe_add("Serialize", quote! { ::orga::serde::Serialize });
 
         if self.is_last {
-            // maybe_add("Call", quote! { ::orga::call::Call });
             maybe_add("Call", quote! { ::orga::call::FieldCall });
             maybe_add("Query", quote! { ::orga::query::FieldQuery });
-            // maybe_add("Client", quote! { ::orga::client::Client });
             maybe_add("Describe", quote! { ::orga::describe::Describe });
+        }
+
+        if self.version == 0 {
+            maybe_add("Migrate", quote! { ::orga::migrate::Migrate });
         }
 
         let mut attrs: Vec<Attribute> = vec![parse_quote! {#[derive(#(#derives),*)]}];
 
         attrs.push(self.state_attr());
         attrs.push(self.encoding_attr());
+
         if self.simple {
-            attrs.push(self.migrate_from_attr());
-            attrs.push(parse_quote! {#[derive(Clone)]})
+            attrs.push(parse_quote! {#[derive(Clone)]});
         }
 
         attrs.into_iter().chain(self.attrs.clone().into_iter())
@@ -184,10 +185,6 @@ impl OrgaSubStruct {
         };
 
         parse_quote!(#[encoding(version = #version, #maybe_prev #maybe_as_type)])
-    }
-
-    fn migrate_from_attr(&self) -> Attribute {
-        parse_quote!(#[migrate_from(identity)])
     }
 }
 

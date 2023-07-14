@@ -3,7 +3,6 @@ use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
 
 use crate::abci::App;
-use crate::migrate::MigrateInto;
 use crate::plugins::{sdk_compat, ABCICall, ABCIPlugin, ConvertSdkTx};
 use crate::plugins::{PaidCall, PayableCall};
 use crate::query::Query;
@@ -53,9 +52,8 @@ pub mod sync {
             + Query
             + Default
             + Describe
-            + ConvertSdkTx<Output = PaidCall<T::Call>>
-            + MigrateInto<T>,
-        U: App + Call + State + Query + Default + Describe + MigrateInto<U>,
+            + ConvertSdkTx<Output = PaidCall<T::Call>>,
+        U: App + Call + State + Query + Default + Describe,
         Wallet: wallet::Wallet + Clone,
         Symbol: crate::coins::Symbol,
     {
@@ -112,14 +110,7 @@ impl<T, U, Transport, Symbol, Wallet> AppClient<T, U, Transport, Symbol, Wallet>
 impl<T, U, Transport, Symbol, Wallet> AppClient<T, U, Transport, Symbol, Wallet>
 where
     Transport: exec::Transport<ABCIPlugin<DefaultPlugins<Symbol, T>>>,
-    T: App
-        + Call
-        + State
-        + Query
-        + Default
-        + Describe
-        + ConvertSdkTx<Output = PaidCall<T::Call>>
-        + MigrateInto<T>,
+    T: App + Call + State + Query + Default + Describe + ConvertSdkTx<Output = PaidCall<T::Call>>,
     Wallet: wallet::Wallet + Clone,
     Symbol: crate::coins::Symbol,
 {
@@ -204,14 +195,7 @@ where
 impl<T, U, Transport, Symbol, Wallet> AppClient<T, U, Transport, Symbol, Wallet>
 where
     Transport: exec::sync::Transport<ABCIPlugin<DefaultPlugins<Symbol, T>>>,
-    T: App
-        + Call
-        + State
-        + Query
-        + Default
-        + Describe
-        + ConvertSdkTx<Output = PaidCall<T::Call>>
-        + MigrateInto<T>,
+    T: App + Call + State + Query + Default + Describe + ConvertSdkTx<Output = PaidCall<T::Call>>,
     Wallet: wallet::Wallet + Clone,
     Symbol: crate::coins::Symbol,
 {
