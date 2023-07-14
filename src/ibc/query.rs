@@ -13,6 +13,7 @@ use tendermint_proto::v0_34::crypto::{ProofOp, ProofOps};
 use super::{ClientId, ConnectionEnd, ConnectionId, Ibc, PortChannel, IBC_QUERY_PATH};
 use crate::abci::AbciQuery;
 use crate::encoding::LengthVec;
+#[cfg(feature = "merk-full")]
 use crate::merk::ics23::create_ics23_proof;
 use crate::store::Read;
 use crate::{Error, Result};
