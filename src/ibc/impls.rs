@@ -1,5 +1,4 @@
 use std::time::Duration;
-use std::{iter::DoubleEndedIterator, ops::Bound};
 
 use ibc::core::events::IbcEvent;
 use ibc::core::ics23_commitment::commitment::CommitmentRoot;
@@ -10,7 +9,7 @@ use ibc::{
     },
     core::{
         ics02_client::{
-            client_state::ClientState, consensus_state::ConsensusState, error::ClientError,
+            consensus_state::ConsensusState as ConsensusStateTrait, error::ClientError,
         },
         ics03_connection::error::ConnectionError,
         ics04_channel::{
@@ -19,9 +18,7 @@ use ibc::{
             packet::Receipt,
         },
         ics23_commitment::commitment::CommitmentPrefix,
-        ics24_host::path::{
-            ClientConnectionPath, ClientConsensusStatePath, ClientStatePath, ConnectionPath,
-        },
+        ics24_host::path::{ClientConnectionPath, ClientConsensusStatePath, ConnectionPath},
         timestamp::Timestamp,
         ContextError, ExecutionContext, ValidationContext,
     },
@@ -76,6 +73,11 @@ impl BeginBlock for Ibc {
 }
 
 impl ValidationContext for Ibc {
+    type AnyConsensusState = ConsensusState;
+    type AnyClientState = TmClientState;
+    type ClientValidationContext = Self;
+    type E = Self;
+
     fn validate_message_signer(&self, signer: &Signer) -> Result<(), ContextError> {
         use crate::context::Context;
         use crate::plugins::Signer as SignerCtx;
@@ -105,26 +107,25 @@ impl ValidationContext for Ibc {
         Ok(())
     }
 
-    fn client_state(&self, client_id: &IbcClientId) -> Result<Box<dyn ClientState>, ContextError> {
-        Ok(Box::<TmClientState>::new(
-            self.clients
-                .get(client_id.clone().into())
-                .map_err(|_| ClientError::ImplementationSpecific)?
-                .ok_or_else(|| ClientError::ClientStateNotFound {
-                    client_id: client_id.clone(),
-                })?
-                .client_state
-                .get(())
-                .map_err(|_| ClientError::ImplementationSpecific)?
-                .ok_or(ClientError::ImplementationSpecific)?
-                .clone()
-                .into(),
-        ))
+    fn client_state(&self, client_id: &IbcClientId) -> Result<Self::AnyClientState, ContextError> {
+        Ok(self
+            .clients
+            .get(client_id.clone().into())
+            .map_err(|_| ClientError::ImplementationSpecific)?
+            .ok_or_else(|| ClientError::ClientStateNotFound {
+                client_id: client_id.clone(),
+            })?
+            .client_state
+            .get(())
+            .map_err(|_| ClientError::ImplementationSpecific)?
+            .ok_or(ClientError::ImplementationSpecific)?
+            .clone()
+            .into())
     }
 
-    fn decode_client_state(&self, client_state: Any) -> Result<Box<dyn ClientState>, ContextError> {
+    fn decode_client_state(&self, client_state: Any) -> Result<Self::AnyClientState, ContextError> {
         if let Ok(client_state) = TmClientState::try_from(client_state.clone()) {
-            Ok(client_state.into_box())
+            Ok(client_state)
         } else {
             Err(ClientError::UnknownClientStateType {
                 client_state_type: client_state.type_url,
@@ -136,83 +137,23 @@ impl ValidationContext for Ibc {
     fn consensus_state(
         &self,
         client_cons_state_path: &ClientConsensusStatePath,
-    ) -> Result<Box<dyn ConsensusState>, ContextError> {
-        Ok(Box::<TmConsensusState>::new(
-            self.clients
-                .get(client_cons_state_path.client_id.clone().into())
-                .map_err(|_| ClientError::ImplementationSpecific)?
-                .ok_or_else(|| ClientError::ClientStateNotFound {
-                    client_id: client_cons_state_path.client_id.clone(),
-                })?
-                .consensus_states
-                .get(
-                    Height::new(client_cons_state_path.epoch, client_cons_state_path.height)
-                        .map_err(|_| ClientError::ImplementationSpecific)?
-                        .into(),
-                )
-                .map_err(|_| ClientError::ImplementationSpecific)?
-                .ok_or(ClientError::ImplementationSpecific)?
-                .clone()
-                .into(),
-        ))
-    }
-
-    fn next_consensus_state(
-        &self,
-        client_id: &IbcClientId,
-        height: &Height,
-    ) -> Result<Option<Box<dyn ConsensusState>>, ContextError> {
-        let end_height = Height::new(height.revision_number() + 1, 1)
-            .map_err(|_| ClientError::ImplementationSpecific)?;
-        self.clients
-            .get(client_id.clone().into())
+    ) -> Result<Self::AnyConsensusState, ContextError> {
+        Ok(self
+            .clients
+            .get(client_cons_state_path.client_id.clone().into())
             .map_err(|_| ClientError::ImplementationSpecific)?
             .ok_or_else(|| ClientError::ClientStateNotFound {
-                client_id: client_id.clone(),
+                client_id: client_cons_state_path.client_id.clone(),
             })?
             .consensus_states
-            .range((
-                Bound::<EofTerminatedString>::Excluded((*height).into()),
-                Bound::Excluded(end_height.into()),
-            ))
+            .get(
+                Height::new(client_cons_state_path.epoch, client_cons_state_path.height)
+                    .map_err(|_| ClientError::ImplementationSpecific)?
+                    .into(),
+            )
             .map_err(|_| ClientError::ImplementationSpecific)?
-            .next()
-            .map(|res| {
-                res.map(|(_, v)| {
-                    Box::<TmConsensusState>::new(v.clone().into()) as Box<dyn ConsensusState>
-                })
-            })
-            .transpose()
-            .map_err(|_| ContextError::ClientError(ClientError::ImplementationSpecific))
-    }
-
-    fn prev_consensus_state(
-        &self,
-        client_id: &IbcClientId,
-        height: &Height,
-    ) -> Result<Option<Box<dyn ConsensusState>>, ContextError> {
-        let end_height = Height::new(height.revision_number(), 1)
-            .map_err(|_| ClientError::ImplementationSpecific)?;
-        self.clients
-            .get(client_id.clone().into())
-            .map_err(|_| ClientError::ImplementationSpecific)?
-            .ok_or_else(|| ClientError::ClientStateNotFound {
-                client_id: client_id.clone(),
-            })?
-            .consensus_states
-            .range((
-                Bound::<EofTerminatedString>::Included(end_height.into()),
-                Bound::Excluded((*height).into()),
-            ))
-            .map_err(|_| ClientError::ImplementationSpecific)?
-            .next_back()
-            .map(|res| {
-                res.map(|(_, v)| {
-                    Box::<TmConsensusState>::new(v.clone().into()) as Box<dyn ConsensusState>
-                })
-            })
-            .transpose()
-            .map_err(|_| ContextError::ClientError(ClientError::ImplementationSpecific))
+            .ok_or(ClientError::ImplementationSpecific)?
+            .clone())
     }
 
     fn host_height(&self) -> Result<Height, ContextError> {
@@ -228,16 +169,14 @@ impl ValidationContext for Ibc {
     fn host_consensus_state(
         &self,
         height: &Height,
-    ) -> Result<Box<dyn ConsensusState>, ContextError> {
+    ) -> Result<Self::AnyConsensusState, ContextError> {
         let index = self.host_consensus_states.len() - 1 - (self.height - height.revision_height());
-        Ok(Box::<TmConsensusState>::new(
-            self.host_consensus_states
-                .get(index)
-                .map_err(|_| ClientError::ImplementationSpecific)?
-                .unwrap()
-                .clone()
-                .into(),
-        ))
+        Ok(self
+            .host_consensus_states
+            .get(index)
+            .map_err(|_| ClientError::ImplementationSpecific)?
+            .unwrap()
+            .clone())
     }
 
     fn client_counter(&self) -> Result<u64, ContextError> {
@@ -416,51 +355,15 @@ impl ValidationContext for Ibc {
     fn max_expected_time_per_block(&self) -> Duration {
         Duration::from_secs(8)
     }
+
+    fn get_client_validation_context(&self) -> &Self::ClientValidationContext {
+        self
+    }
 }
 
 impl ExecutionContext for Ibc {
-    fn store_client_state(
-        &mut self,
-        client_state_path: ClientStatePath,
-        client_state: Box<dyn ClientState>,
-    ) -> Result<(), ContextError> {
-        let tm_client_state = client_state
-            .as_any()
-            .downcast_ref::<TmClientState>()
-            .ok_or(ClientError::ImplementationSpecific)?;
-        self.clients
-            .entry(client_state_path.0.into())
-            .map_err(|_| ClientError::ImplementationSpecific)?
-            .or_insert_default()
-            .map_err(|_| ClientError::ImplementationSpecific)?
-            .client_state
-            .insert((), tm_client_state.clone().into())
-            .map_err(|_| ClientError::ImplementationSpecific)?;
-        Ok(())
-    }
-
-    fn store_consensus_state(
-        &mut self,
-        consensus_state_path: ClientConsensusStatePath,
-        consensus_state: Box<dyn ConsensusState>,
-    ) -> Result<(), ContextError> {
-        let epoch_height = format!(
-            "{}-{}",
-            consensus_state_path.epoch, consensus_state_path.height
-        );
-        let tm_consensus_state = consensus_state
-            .as_any()
-            .downcast_ref::<TmConsensusState>()
-            .ok_or(ClientError::ImplementationSpecific)?;
-        self.clients
-            .entry(consensus_state_path.client_id.into())
-            .map_err(|_| ClientError::ImplementationSpecific)?
-            .or_insert_default()
-            .map_err(|_| ClientError::ImplementationSpecific)?
-            .consensus_states
-            .insert(epoch_height.into(), tm_consensus_state.clone().into())
-            .map_err(|_| ClientError::ImplementationSpecific)?;
-        Ok(())
+    fn get_client_execution_context(&mut self) -> &mut Self::E {
+        self
     }
 
     fn increase_client_counter(&mut self) {
@@ -664,6 +567,7 @@ impl ExecutionContext for Ibc {
 
 #[cfg(test)]
 mod tests {
+    use ibc_rs::clients::ics07_tendermint::ValidationContext;
     use tendermint::Time;
 
     use crate::Result;
@@ -671,7 +575,7 @@ mod tests {
     use super::*;
 
     fn tm_client_id(n: u64) -> ClientId {
-        IbcClientId::new(ClientType::new("07-tendermint".to_string()).unwrap(), n)
+        IbcClientId::new(ClientType::new("07-tendermint").unwrap(), n)
             .unwrap()
             .into()
     }
@@ -714,15 +618,17 @@ mod tests {
 
         assert_eq!(
             ibc.next_consensus_state(&tm_client_id(123), &height(1, 1))?
-                .unwrap(),
-            tm_consensus_state(10).into_box(),
+                .unwrap()
+                .inner,
+            tm_consensus_state(10),
             "next_consensus_state, skipped heights",
         );
 
         assert_eq!(
             ibc.next_consensus_state(&tm_client_id(123), &height(1, 10))?
-                .unwrap(),
-            tm_consensus_state(12).into_box(),
+                .unwrap()
+                .inner,
+            tm_consensus_state(12),
             "next_consensus_state, has value at height",
         );
 
@@ -740,15 +646,17 @@ mod tests {
 
         assert_eq!(
             ibc.prev_consensus_state(&tm_client_id(123), &height(1, 13))?
-                .unwrap(),
-            tm_consensus_state(12).into_box(),
+                .unwrap()
+                .inner,
+            tm_consensus_state(12),
             "prev_consensus_state, has value at height",
         );
 
         assert_eq!(
             ibc.prev_consensus_state(&tm_client_id(123), &height(1, 12))?
-                .unwrap(),
-            tm_consensus_state(10).into_box(),
+                .unwrap()
+                .inner,
+            tm_consensus_state(10),
             "prev_consensus_state, skipped heights",
         );
 
