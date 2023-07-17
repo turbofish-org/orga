@@ -1,5 +1,5 @@
-use crate::coins::{Address, MultiShare};
 use crate::coins::{Amount, Balance, Coin, Decimal, Give, Share, Symbol, Take};
+use crate::coins::{MultiShare, VersionedAddress as Address};
 use crate::collections::Deque;
 use crate::context::GetContext;
 use crate::orga;

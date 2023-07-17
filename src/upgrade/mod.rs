@@ -1,6 +1,7 @@
 use crate::coins::{Address, Amount, Decimal};
 use crate::collections::Map;
 use crate::context::GetContext;
+use crate::describe::KeyOp;
 use crate::encoding::LengthVec;
 use crate::migrate::Migrate;
 use crate::orga;
@@ -61,8 +62,59 @@ impl Default for Upgrade {
 }
 
 impl Migrate for UpgradeV1 {
-    fn migrate(src: Store, dest: Store, bytes: &mut &[u8]) -> Result<Self> {
-        let other = UpgradeV0::migrate(src, dest.clone(), &mut bytes.clone())?;
+    fn migrate(src: Store, dest: Store, mut bytes: &mut &[u8]) -> Result<Self> {
+        if bytes[0] == 1 {
+            *bytes = &bytes[1..];
+            return Ok(Self {
+                signals: Migrate::migrate(
+                    Self::field_keyop("signals")
+                        .unwrap_or(KeyOp::Append(vec![]))
+                        .apply(&src),
+                    Self::field_keyop("signals")
+                        .unwrap_or(KeyOp::Append(vec![]))
+                        .apply(&dest),
+                    bytes,
+                )?,
+                threshold: Migrate::migrate(
+                    Self::field_keyop("threshold")
+                        .unwrap_or(KeyOp::Append(vec![]))
+                        .apply(&src),
+                    Self::field_keyop("threshold")
+                        .unwrap_or(KeyOp::Append(vec![]))
+                        .apply(&dest),
+                    bytes,
+                )?,
+                activation_delay_seconds: Migrate::migrate(
+                    Self::field_keyop("activation_delay_seconds")
+                        .unwrap_or(KeyOp::Append(vec![]))
+                        .apply(&src),
+                    Self::field_keyop("activation_delay_seconds")
+                        .unwrap_or(KeyOp::Append(vec![]))
+                        .apply(&dest),
+                    bytes,
+                )?,
+                rate_limit_seconds: Migrate::migrate(
+                    Self::field_keyop("rate_limit_seconds")
+                        .unwrap_or(KeyOp::Append(vec![]))
+                        .apply(&src),
+                    Self::field_keyop("rate_limit_seconds")
+                        .unwrap_or(KeyOp::Append(vec![]))
+                        .apply(&dest),
+                    bytes,
+                )?,
+                current_version: Migrate::migrate(
+                    Self::field_keyop("current_version")
+                        .unwrap_or(KeyOp::Append(vec![]))
+                        .apply(&src),
+                    Self::field_keyop("current_version")
+                        .unwrap_or(KeyOp::Append(vec![]))
+                        .apply(&dest),
+                    bytes,
+                )?,
+            });
+        }
+
+        let other = UpgradeV0::migrate(src, dest.clone(), &mut bytes)?;
 
         let mut current_version = Map::new();
         current_version.insert((), other.current_version)?;

@@ -116,7 +116,7 @@ where
 
     fn flush<W: std::io::Write>(mut self, _out: &mut W) -> Result<()> {
         while let Some((key, maybe_value)) = self.children.pop_first() {
-            Self::apply_change(&mut self.store, &key.inner, maybe_value)?;
+            Self::apply_change(&mut self.store, key.inner.encode()?, maybe_value)?;
         }
 
         Ok(())
@@ -254,7 +254,7 @@ where
             let key = K::migrate(Store::default(), Store::default(), &mut k.as_slice())?;
             let value = V::migrate(src.sub(&k), dest.sub(&k), &mut v.as_slice())?;
             map.insert(key, value)?;
-            src.delete(&k)?;
+            Self::apply_change(&mut src, k, None)?;
             // TODO: flush the changes to the dest as we go - we are caching changes in memory
             // for now while we phase out old migration implementations that don't honor the contract
         }
@@ -470,9 +470,7 @@ where
     /// called then its binary encoding is written to `key`. If `maybe_value` is
     /// `None`, the value is removed by deleting all entries which start with
     /// `key`.
-    fn apply_change(store: &mut Store, key: &K, maybe_value: Option<V>) -> Result<()> {
-        let key_bytes = key.encode()?;
-
+    fn apply_change(store: &mut Store, key_bytes: Vec<u8>, maybe_value: Option<V>) -> Result<()> {
         match maybe_value {
             Some(value) => {
                 // insert/update

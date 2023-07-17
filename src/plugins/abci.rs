@@ -66,6 +66,7 @@ pub struct ABCIPlugin<T> {
 
 impl<T: Migrate> Migrate for ABCIPlugin<T> {
     fn migrate(src: Store, dest: Store, bytes: &mut &[u8]) -> Result<Self> {
+        *bytes = &bytes[1..];
         Ok(Self {
             inner: T::migrate(src.sub(&[0]), dest.sub(&[0]), bytes)?,
             validator_updates: None,

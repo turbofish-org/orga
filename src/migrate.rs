@@ -7,9 +7,6 @@ use crate::{
 };
 use std::{cell::RefCell, marker::PhantomData, rc::Rc};
 
-pub mod migration;
-pub use migration::Migration;
-
 pub trait Migrate: State {
     fn migrate(src: Store, dest: Store, bytes: &mut &[u8]) -> Result<Self> {
         let mut value = Self::load(src, bytes)?;

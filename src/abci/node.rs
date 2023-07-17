@@ -4,7 +4,7 @@ use crate::context::Context;
 use crate::encoding::Decode;
 use crate::merk::{MerkStore, ProofBuilder};
 use crate::migrate::Migrate;
-use crate::plugins::{ABCICall, ABCIPlugin};
+use crate::plugins::{ABCICall, ABCIPlugin, ChainId};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::{BackingStore, Read, Shared, Store, Write};
@@ -115,6 +115,10 @@ impl<A: App> Node<A> {
             if let Some(chain_id) = chain_id {
                 genesis_json["chain_id"] = serde_json::Value::String(chain_id.to_string());
             }
+
+            let chain_id = genesis_json["chain_id"].as_str().unwrap();
+            Context::add(crate::plugins::ChainId(chain_id.to_string()));
+
             std::fs::write(
                 tm_home.join("config/genesis.json"),
                 serde_json::to_string_pretty(&genesis_json).unwrap(),
@@ -227,9 +231,9 @@ impl<A: App> Node<A> {
     }
 
     // TODO: remove when we don't require compat migrations
-    pub fn migrate<O: State>(self, version: Vec<u8>) -> Self
+    pub fn migrate(self, version: Vec<u8>) -> Self
     where
-        ABCIPlugin<O>: Migrate,
+        ABCIPlugin<A>: Migrate,
     {
         let merk_store = crate::merk::MerkStore::new(&self.merk_home);
         if merk_store
@@ -241,15 +245,23 @@ impl<A: App> Node<A> {
             return self;
         }
 
+        let genesis: serde_json::Value =
+            std::fs::read_to_string(self.tm_home.join("config/genesis.json"))
+                .unwrap()
+                .parse()
+                .unwrap();
+        let chain_id = genesis["chain_id"].as_str().unwrap();
+        Context::add(crate::plugins::ChainId(chain_id.to_string()));
+
         log::info!("Migrating store data... (This might take a while)");
         let store = Shared::new(merk_store);
         let mut store = Store::new(BackingStore::Merk(store));
         let bytes = store.get(&[]).unwrap().unwrap();
 
-        orga::set_compat_mode(true);
+        // orga::set_compat_mode(true);
         let mut app =
-            ABCIPlugin::<O>::migrate(store.clone(), store.clone(), &mut bytes.as_slice()).unwrap();
-        orga::set_compat_mode(false);
+            ABCIPlugin::<A>::migrate(store.clone(), store.clone(), &mut bytes.as_slice()).unwrap();
+        // orga::set_compat_mode(false);
 
         app.attach(store.clone()).unwrap();
         let mut bytes = vec![];

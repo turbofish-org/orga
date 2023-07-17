@@ -45,6 +45,11 @@ macro_rules! state_impl {
             fn load(_store: Store, bytes: &mut &[u8]) -> Result<Self> {
                 Ok(Self::decode(bytes)?)
             }
+
+            #[inline]
+            fn field_keyop(_field_name: &str) -> Option<KeyOp> {
+                Some(KeyOp::Append(vec![]))
+            }
         }
     };
 }

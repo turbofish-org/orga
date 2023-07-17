@@ -365,13 +365,15 @@ impl From<EofTerminatedString> for ClientType {
     }
 }
 
-#[derive(State, Encode, Decode, Serialize, Clone, Debug, Migrate)]
+#[derive(State, Encode, Decode, Serialize, Clone, Debug)]
 pub struct PortChannel(
     #[serde(skip)] FixedString<"ports/">,
     SlashTerminatedString<PortId>,
     #[serde(skip)] FixedString<"channels/">,
     EofTerminatedString<ChannelId>,
 );
+
+impl Migrate for PortChannel {}
 
 impl Describe for PortChannel {
     fn describe() -> Descriptor {
@@ -434,7 +436,7 @@ port_channel_from_impl!(SeqSendPath);
 port_channel_from_impl!(SeqRecvPath);
 port_channel_from_impl!(SeqAckPath);
 
-#[derive(State, Encode, Decode, Serialize, Clone, Debug, Migrate)]
+#[derive(State, Encode, Decode, Serialize, Clone, Debug)]
 pub struct PortChannelSequence(
     #[serde(skip)] FixedString<"ports/">,
     SlashTerminatedString<PortId>,
@@ -443,6 +445,8 @@ pub struct PortChannelSequence(
     #[serde(skip)] FixedString<"sequences/">,
     EofTerminatedString<Sequence>,
 );
+
+impl Migrate for PortChannelSequence {}
 
 impl Describe for PortChannelSequence {
     fn describe() -> Descriptor {

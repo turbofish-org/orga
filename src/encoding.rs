@@ -24,7 +24,6 @@ use std::{
     Clone,
     Debug,
     FieldQuery,
-    Migrate,
     PartialEq,
     Hash,
     Eq,
@@ -45,6 +44,13 @@ where
     #[deref_mut]
     #[into]
     values: Vec<T>,
+}
+
+impl<P, T> Migrate for LengthVec<P, T>
+where
+    P: Encode + Decode + TryInto<usize> + Terminated + Clone + 'static,
+    T: Encode + Decode + Terminated + 'static,
+{
 }
 
 impl<P, T> LengthVec<P, T>

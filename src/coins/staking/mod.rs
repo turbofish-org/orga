@@ -293,7 +293,7 @@ impl<S: Symbol> Staking<S> {
         let mut validator = self.validators.get_mut(val_address)?;
         validator.commission = commission;
         validator.min_self_delegation = min_self_delegation;
-        validator.address = val_address;
+        validator.address = val_address.into();
         validator.info = validator_info;
         validator.last_edited_seconds = i32::MIN as i64;
         drop(validator);
@@ -375,8 +375,8 @@ impl<S: Symbol> Staking<S> {
         for entry in redelegations.iter() {
             let del_address = entry.delegator_address;
             for redelegation in entry.outbound_redelegations.iter() {
-                let mut validator = self.validators.get_mut(redelegation.address)?;
-                let mut delegator = validator.get_mut(del_address)?;
+                let mut validator = self.validators.get_mut(redelegation.address.into())?;
+                let mut delegator = validator.get_mut(del_address.into())?;
                 delegator.slash_redelegation((multiplier * redelegation.amount)?.amount()?)?;
             }
         }
@@ -463,7 +463,11 @@ impl<S: Symbol> Staking<S> {
             };
             let mut src_delegator = src_validator.get_mut(delegator_address)?;
             (
-                src_delegator.redelegate_out(dst_validator_address, amount, start_seconds)?,
+                src_delegator.redelegate_out(
+                    dst_validator_address.into(),
+                    amount,
+                    start_seconds,
+                )?,
                 start_seconds,
             )
         };
@@ -486,7 +490,7 @@ impl<S: Symbol> Staking<S> {
             }
 
             let mut dst_delegator = dst_validator.get_mut(delegator_address)?;
-            dst_delegator.redelegate_in(src_validator_address, coins, start_seconds)?;
+            dst_delegator.redelegate_in(src_validator_address.into(), coins, start_seconds)?;
         }
 
         if let Some(start_seconds) = start_seconds {

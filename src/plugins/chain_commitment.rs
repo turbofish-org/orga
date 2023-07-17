@@ -103,6 +103,14 @@ where
 
 impl<T: Migrate> Migrate for ChainCommitmentPlugin<T> {
     fn migrate(src: Store, dest: Store, bytes: &mut &[u8]) -> Result<Self> {
+        if bytes[0] == 1 {
+            *bytes = &bytes[1..];
+            return Ok(Self {
+                chain_id: LengthVec::migrate(Store::default(), Store::default(), bytes)?,
+                inner: T::migrate(src, dest, bytes)?,
+            });
+        }
+
         let chain_id = Context::resolve::<ChainId>()
             .ok_or_else(|| Error::App("Chain ID context not set".into()))?
             .0
