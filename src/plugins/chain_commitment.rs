@@ -9,7 +9,6 @@ use crate::encoding::{Decode, Encode};
 
 use crate::migrate::{Migrate, MigrateFrom};
 use crate::query::Query;
-use crate::store::Store;
 use crate::{Error, Result};
 use std::ops::Deref;
 

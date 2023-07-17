@@ -60,11 +60,11 @@ impl<S: Symbol + Default> Validator<S> {
         &mut self,
         address: Address,
     ) -> Result<PoolChildMut<Address, Delegator<S>, S>> {
-        self.delegators.get_mut(address.into())
+        self.delegators.get_mut(address)
     }
 
     pub fn get(&self, address: Address) -> Result<PoolChild<Delegator<S>, S>> {
-        self.delegators.get(address.into())
+        self.delegators.get(address)
     }
 
     pub fn potential_vp(&mut self) -> Result<Amount> {
@@ -146,7 +146,7 @@ impl<S: Symbol + Default> Validator<S> {
             let mut delegator = self.get_mut(*k)?;
             let slashable_redelegations = delegator.slash(slash_multiplier, liveness_fault)?;
             redelegations.push(SlashableRedelegation {
-                delegator_address: k.clone().into(),
+                delegator_address: (*k).into(),
                 outbound_redelegations: slashable_redelegations,
             });
             Ok(())
@@ -161,7 +161,7 @@ impl<S: Symbol + Default> Validator<S> {
             .iter()?
             .try_for_each(|entry| -> Result<()> {
                 let (k, _v) = entry?;
-                delegator_keys.push(k.clone().into());
+                delegator_keys.push(k);
 
                 Ok(())
             })?;
@@ -172,7 +172,7 @@ impl<S: Symbol + Default> Validator<S> {
     pub(super) fn query_info(&self) -> Result<ValidatorQueryInfo> {
         Ok(ValidatorQueryInfo {
             jailed_until: self.jailed_until,
-            address: self.address.clone(),
+            address: self.address,
             commission: self.commission,
             in_active_set: self.in_active_set,
             info: self.info.clone(),
@@ -195,10 +195,7 @@ impl<S: Symbol + Default> Validator<S> {
     }
 
     pub(super) fn self_delegation(&self) -> Result<Amount> {
-        self.delegators
-            .get(self.address.clone().into())?
-            .staked
-            .amount()
+        self.delegators.get(self.address.into())?.staked.amount()
     }
 
     fn below_required_self_delegation(&self) -> Result<bool> {
@@ -224,7 +221,7 @@ impl<S: Symbol, T: Symbol> Give<Coin<T>> for Validator<S> {
 
         self.delegators.give(T::mint(delegator_amount))?;
         self.delegators
-            .get_mut(self.address.clone().into())?
+            .get_mut(self.address.into())?
             .give((T::INDEX, validator_amount))?;
 
         Ok(())
@@ -239,7 +236,7 @@ impl<S: Symbol> Give<(u8, Amount)> for Validator<S> {
 
         self.delegators.give((coins.0, delegator_amount))?;
         self.delegators
-            .get_mut(self.address.clone().into())?
+            .get_mut(self.address.into())?
             .give((coins.0, validator_amount))?;
 
         Ok(())

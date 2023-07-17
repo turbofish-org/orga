@@ -4,7 +4,7 @@ use crate::context::Context;
 use crate::encoding::Decode;
 use crate::merk::{MerkStore, ProofBuilder};
 use crate::migrate::Migrate;
-use crate::plugins::{ABCICall, ABCIPlugin, ChainId};
+use crate::plugins::{ABCICall, ABCIPlugin};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::{BackingStore, Read, Shared, Store, Write};

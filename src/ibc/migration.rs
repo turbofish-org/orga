@@ -1,10 +1,5 @@
 use super::{IbcV0, IbcV1};
-use crate::{
-    describe::KeyOp,
-    migrate::{Migrate, MigrateFrom},
-    state::State,
-    store::Store,
-};
+use crate::{migrate::MigrateFrom, state::State};
 
 impl MigrateFrom<IbcV0> for IbcV1 {
     fn migrate_from(mut value: IbcV0) -> crate::Result<Self> {

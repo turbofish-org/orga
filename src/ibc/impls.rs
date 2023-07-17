@@ -2,7 +2,6 @@ use std::time::Duration;
 use std::{iter::DoubleEndedIterator, ops::Bound};
 
 use ibc::core::events::IbcEvent;
-use ibc::core::ics23_commitment::commitment::CommitmentRoot;
 use ibc::{
     clients::ics07_tendermint::{
         client_state::ClientState as TmClientState,
@@ -28,10 +27,14 @@ use ibc::{
     Height, Signer,
 };
 
-use crate::abci::BeginBlock;
+#[cfg(feature = "abci")]
+use ibc_rs::core::ics23_commitment::commitment::CommitmentRoot;
+
 use crate::context::GetContext;
-use crate::plugins::{BeginBlockCtx, Events, Logs};
+use crate::plugins::{Events, Logs};
 use crate::Error;
+#[cfg(feature = "abci")]
+use crate::{abci::BeginBlock, plugins::BeginBlockCtx};
 
 use super::*;
 

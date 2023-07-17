@@ -1,17 +1,14 @@
 use darling::{
     ast,
     usage::{GenericsExt, Options, Purpose, UsesTypeParams},
-    uses_lifetimes, uses_type_params, FromDeriveInput, FromField,
+    FromDeriveInput,
 };
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
-use quote::{format_ident, quote, ToTokens};
+use quote::{quote, ToTokens};
 use syn::*;
 
-use crate::{
-    state::StateFieldReceiver,
-    utils::{generics_union, replace_type_segment},
-};
+use crate::state::StateFieldReceiver;
 
 #[derive(FromDeriveInput)]
 #[darling(attributes(migrate), supports(struct_any))]
