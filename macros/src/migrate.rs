@@ -22,9 +22,9 @@ struct MigrateInputReceiver {
 
     #[darling(default)]
     identity: bool,
-    // TODO:
-    // #[darling(default)]
-    // version: u8,
+    #[darling(default)]
+    version: u8,
+    previous: Option<Path>,
 }
 
 impl ToTokens for MigrateInputReceiver {
@@ -34,6 +34,8 @@ impl ToTokens for MigrateInputReceiver {
             generics,
             data,
             identity,
+            version,
+            previous,
         } = self;
 
         let (imp, ty, wher) = generics.split_for_impl();
@@ -82,14 +84,30 @@ impl ToTokens for MigrateInputReceiver {
             None => quote! { where #(#bounds)* },
         };
 
+        let prev_migration = if let Some(prev) = previous {
+            quote! {
+                let prev = <#prev as ::orga::migrate::Migrate>::migrate(src, dest, bytes)?;
+                let value = <#prev as ::orga::migrate::MigrateInto::<Self>>::migrate_into(prev)?;
+                Ok(value)
+            }
+        } else {
+            quote! {
+                Err(::orga::Error::App(format!("Unknown version {}", bytes[0])))
+            }
+        };
+
         tokens.extend(quote! {
             impl #imp ::orga::migrate::Migrate for #ident #ty #wher
             {
                 fn migrate(src: ::orga::store::Store, dest: ::orga::store::Store, mut bytes: &mut &[u8]) -> ::orga::Result<Self> {
-                    *bytes = &bytes[1..];
-                    Ok(Self {
-                        #(#field_migrations)*
-                    })
+                    if bytes[0] == #version {
+                        *bytes = &bytes[1..];
+                        return Ok(Self {
+                            #(#field_migrations)*
+                        });
+                    }
+
+                    #prev_migration
                 }
             }
         })

@@ -104,10 +104,7 @@ impl OrgaSubStruct {
         );
         maybe_add("State", quote! { ::orga::state::State });
         maybe_add("Serialize", quote! { ::orga::serde::Serialize });
-
-        if self.version == 0 {
-            maybe_add("Migrate", quote! { ::orga::migrate::Migrate });
-        }
+        maybe_add("Migrate", quote! { ::orga::migrate::Migrate });
 
         if self.is_last {
             maybe_add("Call", quote! { ::orga::call::FieldCall });
@@ -119,6 +116,9 @@ impl OrgaSubStruct {
 
         attrs.push(self.state_attr());
         attrs.push(self.encoding_attr());
+        if !self.simple {
+            attrs.push(self.migrate_attr());
+        }
 
         if self.simple {
             attrs.push(parse_quote! {#[derive(Clone)]});
@@ -185,6 +185,37 @@ impl OrgaSubStruct {
         };
 
         parse_quote!(#[encoding(version = #version, #maybe_prev #maybe_as_type)])
+    }
+
+    fn migrate_attr(&self) -> Attribute {
+        let version = self.version;
+
+        let maybe_prev = if self.version > 0 {
+            let prev_ty_generics = self
+                .prev_generics
+                .as_ref()
+                .map(|g| g.split_for_impl().1.to_token_stream())
+                .unwrap_or_default();
+            let prev_name = format!(
+                "{}V{}{}",
+                self.ident_with_channel(),
+                version - 1,
+                prev_ty_generics.to_string(),
+            );
+            quote! {previous = #prev_name,}
+        } else {
+            quote! {}
+        };
+
+        // TODO
+        // let maybe_as_type = if self.simple {
+        //     let as_type_name = quote! { "::orga::encoding::Adapter<Self>" };
+        //     quote! {as_type = #as_type_name,}
+        // } else {
+        //     quote! {}
+        // };
+
+        parse_quote!(#[migrate(version = #version, #maybe_prev)])
     }
 }
 

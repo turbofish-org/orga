@@ -15,6 +15,26 @@ pub trait Migrate: State {
     }
 }
 
+pub trait MigrateFrom<T>: State {
+    fn migrate_from(value: T) -> Result<Self>;
+}
+
+pub trait MigrateInto<T> {
+    fn migrate_into(self) -> Result<T>;
+}
+
+impl<T: MigrateFrom<U>, U> MigrateInto<T> for U {
+    fn migrate_into(self) -> Result<T> {
+        T::migrate_from(self)
+    }
+}
+
+impl<T: From<U> + State, U> MigrateFrom<U> for T {
+    fn migrate_from(value: U) -> Result<Self> {
+        Ok(value.into())
+    }
+}
+
 macro_rules! migrate_impl {
     ($type:ty) => {
         impl Migrate for $type {}
