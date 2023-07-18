@@ -285,7 +285,7 @@ pub fn path_to_ident(path: &Path) -> Ident {
     format_ident!("{}", path_to_string(path))
 }
 
-pub fn generics_union(gen_a: &Generics, gen_b: &Generics) -> Generics {
+pub fn _generics_union(gen_a: &Generics, gen_b: &Generics) -> Generics {
     let mut generics = gen_a.clone();
     let params = gen_b.params.clone();
     for param in params.iter() {
@@ -301,7 +301,7 @@ pub fn generics_union(gen_a: &Generics, gen_b: &Generics) -> Generics {
     generics
 }
 
-pub fn replace_type_segment(ty: &mut Type, target: &Ident, replacement: &Ident) {
+pub fn _replace_type_segment(ty: &mut Type, target: &Ident, replacement: &Ident) {
     use syn::{visit_mut::VisitMut, *};
 
     struct TypeReplacer {

@@ -4,10 +4,11 @@ use crate::abci::{BeginBlock, EndBlock};
 use crate::collections::{Deque, Entry, EntryMap, Map};
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
-use crate::migrate::MigrateFrom;
+use crate::migrate::Migrate;
 use crate::orga;
 use crate::plugins::{BeginBlockCtx, EndBlockCtx, Validators};
 use crate::plugins::{Paid, Signer, Time};
+use crate::state::State;
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -48,7 +49,7 @@ pub struct Staking<S: Symbol> {
     delegation_index: Map<Address, Map<Address, ()>>,
 }
 
-#[derive(Entry, Clone, Serialize, Deserialize, MigrateFrom)]
+#[derive(Entry, Clone, Serialize, Deserialize, State, Migrate)]
 struct ValidatorQueueEntry {
     #[key]
     start_seconds: i64,
@@ -87,7 +88,7 @@ pub struct RedelegationEntry {
     start_seconds: i64,
 }
 
-#[derive(Entry, MigrateFrom)]
+#[derive(Entry, State, Migrate)]
 struct ValidatorPowerEntry {
     #[key]
     inverted_power: u64,
@@ -292,7 +293,7 @@ impl<S: Symbol> Staking<S> {
         let mut validator = self.validators.get_mut(val_address)?;
         validator.commission = commission;
         validator.min_self_delegation = min_self_delegation;
-        validator.address = val_address;
+        validator.address = val_address.into();
         validator.info = validator_info;
         validator.last_edited_seconds = i32::MIN as i64;
         drop(validator);
@@ -374,8 +375,8 @@ impl<S: Symbol> Staking<S> {
         for entry in redelegations.iter() {
             let del_address = entry.delegator_address;
             for redelegation in entry.outbound_redelegations.iter() {
-                let mut validator = self.validators.get_mut(redelegation.address)?;
-                let mut delegator = validator.get_mut(del_address)?;
+                let mut validator = self.validators.get_mut(redelegation.address.into())?;
+                let mut delegator = validator.get_mut(del_address.into())?;
                 delegator.slash_redelegation((multiplier * redelegation.amount)?.amount()?)?;
             }
         }
@@ -462,7 +463,11 @@ impl<S: Symbol> Staking<S> {
             };
             let mut src_delegator = src_validator.get_mut(delegator_address)?;
             (
-                src_delegator.redelegate_out(dst_validator_address, amount, start_seconds)?,
+                src_delegator.redelegate_out(
+                    dst_validator_address.into(),
+                    amount,
+                    start_seconds,
+                )?,
                 start_seconds,
             )
         };
@@ -485,7 +490,7 @@ impl<S: Symbol> Staking<S> {
             }
 
             let mut dst_delegator = dst_validator.get_mut(delegator_address)?;
-            dst_delegator.redelegate_in(src_validator_address, coins, start_seconds)?;
+            dst_delegator.redelegate_in(src_validator_address.into(), coins, start_seconds)?;
         }
 
         if let Some(start_seconds) = start_seconds {

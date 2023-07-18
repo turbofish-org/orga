@@ -1,12 +1,8 @@
 use std::time::Duration;
 
 use ibc::core::events::IbcEvent;
-use ibc::core::ics23_commitment::commitment::CommitmentRoot;
 use ibc::{
-    clients::ics07_tendermint::{
-        client_state::ClientState as TmClientState,
-        consensus_state::ConsensusState as TmConsensusState,
-    },
+    clients::ics07_tendermint::client_state::ClientState as TmClientState,
     core::{
         ics02_client::{
             consensus_state::ConsensusState as ConsensusStateTrait, error::ClientError,
@@ -25,13 +21,18 @@ use ibc::{
     Height, Signer,
 };
 
-use crate::abci::BeginBlock;
+#[cfg(feature = "abci")]
+use ibc_rs::core::ics23_commitment::commitment::CommitmentRoot;
+
 use crate::context::GetContext;
-use crate::plugins::{BeginBlockCtx, Events, Logs};
+use crate::plugins::{Events, Logs};
 use crate::Error;
+#[cfg(feature = "abci")]
+use crate::{abci::BeginBlock, plugins::BeginBlockCtx};
 
 use super::*;
 
+#[cfg(feature = "abci")]
 const MAX_HOST_CONSENSUS_STATES: u64 = 100_000;
 
 #[cfg(feature = "abci")]

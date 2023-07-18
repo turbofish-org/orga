@@ -2,7 +2,7 @@ use crate::coins::{Address, Amount, Decimal};
 use crate::collections::Map;
 use crate::context::GetContext;
 use crate::encoding::LengthVec;
-use crate::migrate::{MigrateFrom, MigrateInto};
+use crate::migrate::MigrateFrom;
 use crate::orga;
 use crate::plugins::{Signer, Time, ValidatorEntry, Validators};
 use crate::prelude::{Read, Store};
@@ -60,14 +60,15 @@ impl Default for Upgrade {
 }
 
 impl MigrateFrom<UpgradeV0> for UpgradeV1 {
-    fn migrate_from(other: UpgradeV0) -> Result<Self> {
+    fn migrate_from(prev: UpgradeV0) -> Result<Self> {
         let mut current_version = Map::new();
-        current_version.insert((), other.current_version)?;
+        current_version.insert((), prev.current_version)?;
+
         Ok(Self {
-            signals: other.signals.migrate_into()?,
-            threshold: other.threshold,
-            activation_delay_seconds: other.activation_delay_seconds,
-            rate_limit_seconds: other.rate_limit_seconds,
+            signals: prev.signals,
+            threshold: prev.threshold,
+            activation_delay_seconds: prev.activation_delay_seconds,
+            rate_limit_seconds: prev.rate_limit_seconds,
             current_version,
         })
     }

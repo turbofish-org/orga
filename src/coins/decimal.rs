@@ -2,6 +2,7 @@ use super::Amount;
 use crate::describe::{Builder, Describe};
 use crate::encoding::Adapter;
 use crate::encoding::{Decode, Encode};
+use crate::migrate::Migrate;
 use crate::orga;
 use crate::{Error, Result};
 use rust_decimal::{prelude::ToPrimitive, Decimal as NumDecimal};
@@ -9,12 +10,14 @@ use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::str::FromStr;
 
-#[orga(simple, skip(Describe))]
+#[orga(simple, skip(Describe, Migrate))]
 #[derive(Copy, Debug)]
 #[serde(transparent)]
 pub struct Decimal {
     pub(crate) value: NumDecimal,
 }
+
+impl Migrate for Decimal {}
 
 impl Describe for Decimal {
     fn describe() -> crate::describe::Descriptor {

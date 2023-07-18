@@ -12,7 +12,7 @@ mod field_call;
 mod field_query;
 mod method_call;
 mod method_query;
-mod migrate_from;
+mod migrate;
 mod next;
 mod orga;
 mod state;
@@ -38,9 +38,9 @@ pub fn derive_describe(item: TokenStream) -> TokenStream {
     describe::derive(item)
 }
 
-#[proc_macro_derive(MigrateFrom, attributes(migrate_from))]
-pub fn derive_migrate_from(item: TokenStream) -> TokenStream {
-    migrate_from::derive(item)
+#[proc_macro_derive(Migrate, attributes(migrate))]
+pub fn derive_migrate(item: TokenStream) -> TokenStream {
+    migrate::derive(item)
 }
 
 #[proc_macro_attribute]

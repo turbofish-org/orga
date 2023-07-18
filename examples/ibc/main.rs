@@ -34,7 +34,7 @@
 //     }
 // }
 
-// #[derive(State, Debug, Clone, Default, Encode, Decode, MigrateFrom)]
+// #[derive(State, Debug, Clone, Default, Encode, Decode, Migrate)]
 // pub struct Simp(());
 
 // impl Symbol for Simp {

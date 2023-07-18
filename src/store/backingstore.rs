@@ -4,7 +4,7 @@ use crate::merk::snapshot::Snapshot;
 use crate::merk::ProofStore;
 #[cfg(feature = "merk-full")]
 use crate::merk::{MerkStore, ProofBuilder};
-#[cfg(feature = "merk-verify")]
+#[cfg(feature = "merk-full")]
 use crate::store::BufStore;
 use crate::store::ReadWrite;
 use crate::store::{Empty, MapStore, PartialMapStore, Read, Shared, Write, KV};

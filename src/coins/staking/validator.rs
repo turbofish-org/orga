@@ -1,5 +1,5 @@
 use crate::coins::pool::{Child as PoolChild, ChildMut as PoolChildMut};
-use crate::coins::{Address, Amount, Balance, Coin, Decimal, Give, Pool, Symbol};
+use crate::coins::{Address, Amount, Balance, Coin, Decimal, Give, Pool, Symbol, VersionedAddress};
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode, LengthVec};
 use crate::orga;
@@ -14,7 +14,7 @@ type Delegators<S> = Pool<Address, Delegator<S>, S>;
 pub struct Validator<S: Symbol> {
     pub(super) jailed_until: Option<i64>,
     pub(super) tombstoned: bool,
-    pub(super) address: Address,
+    pub(super) address: VersionedAddress,
     pub(super) commission: Commission,
     pub(super) delegators: Delegators<S>,
     pub(super) info: ValidatorInfo,
@@ -29,7 +29,7 @@ pub struct Validator<S: Symbol> {
 pub struct ValidatorQueryInfo {
     pub jailed_until: Option<i64>,
     pub tombstoned: bool,
-    pub address: Address,
+    pub address: VersionedAddress,
     pub commission: Commission,
     pub info: ValidatorInfo,
     pub in_active_set: bool,
@@ -51,7 +51,7 @@ pub enum Status {
 }
 
 pub(super) struct SlashableRedelegation {
-    pub delegator_address: Address,
+    pub delegator_address: VersionedAddress,
     pub outbound_redelegations: Vec<Redelegation>,
 }
 
@@ -146,7 +146,7 @@ impl<S: Symbol + Default> Validator<S> {
             let mut delegator = self.get_mut(*k)?;
             let slashable_redelegations = delegator.slash(slash_multiplier, liveness_fault)?;
             redelegations.push(SlashableRedelegation {
-                delegator_address: *k,
+                delegator_address: (*k).into(),
                 outbound_redelegations: slashable_redelegations,
             });
             Ok(())
@@ -195,7 +195,7 @@ impl<S: Symbol + Default> Validator<S> {
     }
 
     pub(super) fn self_delegation(&self) -> Result<Amount> {
-        self.delegators.get(self.address)?.staked.amount()
+        self.delegators.get(self.address.into())?.staked.amount()
     }
 
     fn below_required_self_delegation(&self) -> Result<bool> {
@@ -221,7 +221,7 @@ impl<S: Symbol, T: Symbol> Give<Coin<T>> for Validator<S> {
 
         self.delegators.give(T::mint(delegator_amount))?;
         self.delegators
-            .get_mut(self.address)?
+            .get_mut(self.address.into())?
             .give((T::INDEX, validator_amount))?;
 
         Ok(())
@@ -236,7 +236,7 @@ impl<S: Symbol> Give<(u8, Amount)> for Validator<S> {
 
         self.delegators.give((coins.0, delegator_amount))?;
         self.delegators
-            .get_mut(self.address)?
+            .get_mut(self.address.into())?
             .give((coins.0, validator_amount))?;
 
         Ok(())

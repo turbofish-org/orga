@@ -1,7 +1,6 @@
 use std::any::type_name;
 
 use crate::compat_mode;
-use crate::migrate::MigrateInto;
 use crate::store::Store;
 use crate::{Error, Result};
 
@@ -24,23 +23,7 @@ impl<'a, 'b> Loader<'a, 'b> {
         }
     }
 
-    pub fn maybe_load_from_prev<T, U>(&mut self) -> Result<Option<U>>
-    where
-        T: MigrateInto<U> + State,
-    {
-        let value = if compat_mode() {
-            Some(T::load(self.store.clone(), self.bytes)?.migrate_into()?)
-        } else if !self.bytes.is_empty() && self.bytes[0] < self.version {
-            let value = T::load(self.store.clone(), self.bytes)?;
-            Some(value.migrate_into()?)
-        } else {
-            None
-        };
-
-        Ok(value)
-    }
-
-    // TODO: paramterize type with T so we don't have to pass it here
+    // TODO: parameterize type with T so we don't have to pass it here
     pub fn load_child<T, U>(&mut self) -> Result<U>
     where
         U: State,

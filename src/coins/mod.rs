@@ -4,7 +4,7 @@ use std::{fmt::Display, str::FromStr};
 pub use amount::*;
 
 pub mod symbol;
-use orga_macros::FieldQuery;
+use orga_macros::{orga, FieldQuery};
 pub use symbol::*;
 
 pub mod coin;
@@ -57,7 +57,7 @@ use bech32::{self, encode_to_fmt, FromBase32, ToBase32, Variant};
 use crate::collections::Next;
 use crate::describe::Describe;
 use crate::macros::State;
-use crate::migrate::MigrateFrom;
+use crate::migrate::Migrate;
 use ed::{Decode, Encode};
 use ripemd::{Digest as _, Ripemd160};
 use serde::{Deserialize, Serialize};
@@ -79,10 +79,19 @@ use sha2::Sha256;
     Copy,
     Default,
     Describe,
-    MigrateFrom,
 )]
 pub struct Address {
     bytes: [u8; Address::LENGTH],
+}
+
+impl Migrate for Address {
+    fn migrate(
+        _src: crate::store::Store,
+        _dest: crate::store::Store,
+        bytes: &mut &[u8],
+    ) -> crate::Result<Self> {
+        Ok(Self::decode(bytes)?)
+    }
 }
 
 impl Address {
@@ -206,5 +215,29 @@ impl From<[u8; Address::LENGTH]> for Address {
 impl From<Address> for [u8; Address::LENGTH] {
     fn from(addr: Address) -> Self {
         addr.bytes()
+    }
+}
+
+#[orga]
+#[derive(Clone, Debug, Next, Copy)]
+pub struct VersionedAddress {
+    bytes: [u8; Address::LENGTH],
+}
+
+impl Display for VersionedAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        encode_to_fmt(f, "nomic", self.bytes.to_base32(), Variant::Bech32).unwrap()
+    }
+}
+
+impl From<Address> for VersionedAddress {
+    fn from(addr: Address) -> Self {
+        VersionedAddress { bytes: addr.bytes }
+    }
+}
+
+impl From<VersionedAddress> for Address {
+    fn from(addr: VersionedAddress) -> Self {
+        Address { bytes: addr.bytes }
     }
 }

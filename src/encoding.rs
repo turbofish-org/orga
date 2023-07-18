@@ -1,5 +1,5 @@
 use crate::describe::Describe;
-use crate::migrate::MigrateFrom;
+use crate::migrate::Migrate;
 use crate::query::FieldQuery;
 use crate::state::State;
 use crate::store::Store;
@@ -24,7 +24,6 @@ use std::{
     Clone,
     Debug,
     FieldQuery,
-    MigrateFrom,
     PartialEq,
     Hash,
     Eq,
@@ -35,8 +34,8 @@ use std::{
 #[serde(transparent)]
 pub struct LengthVec<P, T>
 where
-    P: Encode + Decode + TryInto<usize> + Terminated + Clone,
-    T: Encode + Decode + Terminated,
+    P: Encode + Decode + TryInto<usize> + Terminated + Clone + 'static,
+    T: Encode + Decode + Terminated + 'static,
 {
     #[serde(skip)]
     len: P,
@@ -45,6 +44,13 @@ where
     #[deref_mut]
     #[into]
     values: Vec<T>,
+}
+
+impl<P, T> Migrate for LengthVec<P, T>
+where
+    P: Encode + Decode + TryInto<usize> + Terminated + Clone + 'static,
+    T: Encode + Decode + Terminated + 'static,
+{
 }
 
 impl<P, T> LengthVec<P, T>
@@ -89,9 +95,8 @@ where
 
 impl<P, T> State for LengthVec<P, T>
 where
-    P: Encode + Decode + TryInto<usize> + Terminated + Clone,
-    T: Encode + Decode + Terminated,
-    Self: 'static,
+    P: Encode + Decode + TryInto<usize> + Terminated + Clone + 'static,
+    T: Encode + Decode + Terminated + 'static,
 {
     fn attach(&mut self, _store: Store) -> crate::Result<()> {
         Ok(())
@@ -205,11 +210,7 @@ where
 #[serde(transparent)]
 pub struct ByteTerminatedString<const B: u8, T: FromStr + ToString = String>(pub T);
 
-impl<const B: u8, T: FromStr + ToString> MigrateFrom for ByteTerminatedString<B, T> {
-    fn migrate_from(other: Self) -> crate::Result<Self> {
-        Ok(other)
-    }
-}
+impl<const B: u8, T: FromStr + ToString + 'static> Migrate for ByteTerminatedString<B, T> {}
 
 impl<const B: u8, T: FromStr + ToString + 'static> Describe for ByteTerminatedString<B, T> {
     fn describe() -> crate::describe::Descriptor {
@@ -289,11 +290,7 @@ impl<T: FromStr + ToString + 'static> Describe for EofTerminatedString<T> {
     }
 }
 
-impl<T: FromStr + ToString> MigrateFrom for EofTerminatedString<T> {
-    fn migrate_from(other: Self) -> crate::Result<Self> {
-        Ok(other)
-    }
-}
+impl<T: FromStr + ToString + 'static> Migrate for EofTerminatedString<T> {}
 
 impl<T: FromStr + ToString> Encode for EofTerminatedString<T> {
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
@@ -352,11 +349,7 @@ impl<T: FromStr + ToString> EofTerminatedString<T> {
 #[derive(Clone, Debug, Serialize)]
 pub struct FixedString<const S: &'static str>;
 
-impl<const S: &'static str> MigrateFrom for FixedString<S> {
-    fn migrate_from(other: Self) -> crate::Result<Self> {
-        Ok(other)
-    }
-}
+impl<const S: &'static str> Migrate for FixedString<S> {}
 
 impl<const S: &'static str> Encode for FixedString<S> {
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {

@@ -4,7 +4,7 @@ use std::ops::{Bound, RangeBounds};
 use super::{BackingStore, Iter, Read, Shared, Write, KV};
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, LengthVec, Terminated};
-use crate::migrate::MigrateFrom;
+use crate::migrate::Migrate;
 use crate::query::FieldQuery;
 use crate::state::State;
 use crate::{orga, Error, Result};
@@ -57,11 +57,7 @@ impl Store {
     }
 }
 
-impl MigrateFrom for Store {
-    fn migrate_from(other: Self) -> Result<Self> {
-        Ok(other)
-    }
-}
+impl Migrate for Store {}
 
 impl<S> Describe for Store<S>
 where

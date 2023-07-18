@@ -7,7 +7,7 @@ use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
 use crate::call::{Call, FieldCall};
 use crate::describe::Describe;
-use crate::migrate::{MigrateFrom, MigrateInto};
+use crate::migrate::Migrate;
 use crate::orga;
 use crate::query::{FieldQuery, Query};
 use crate::state::State;
@@ -116,7 +116,7 @@ where
 
     fn flush<W: std::io::Write>(mut self, _out: &mut W) -> Result<()> {
         while let Some((key, maybe_value)) = self.children.pop_first() {
-            Self::apply_change(&mut self.store, &key.inner, maybe_value)?;
+            Self::apply_change(&mut self.store, key.inner.encode()?, maybe_value)?;
         }
 
         Ok(())
@@ -241,30 +241,23 @@ where
     }
 }
 
-impl<K1, V1, K2, V2> MigrateFrom<Map<K1, V1>> for Map<K2, V2>
+impl<K, V> Migrate for Map<K, V>
 where
-    K1: MigrateInto<K2> + Encode + Decode + Terminated + Clone + Send + Sync + 'static,
-    V1: MigrateInto<V2> + State,
-    K2: Encode + Decode + Terminated + Clone + Send + Sync + 'static,
-    V2: State,
+    K: Encode + Decode + State + Terminated + Clone + Send + Sync + Migrate,
+    V: State + Migrate,
 {
-    fn migrate_from(mut other: Map<K1, V1>) -> Result<Self> {
-        let mut map = Self::default();
-        let mut old_keys = vec![];
-        for entry in other.iter()? {
-            let (key, _value) = entry?;
-            old_keys.push(key.clone());
-        }
+    fn migrate(mut src: Store, dest: Store, _bytes: &mut &[u8]) -> Result<Self> {
+        let mut map = Map::with_store(dest.clone())?;
 
-        for key in old_keys.iter() {
-            let value = other.remove(key.clone())?.unwrap().into_inner();
-            let new_key = key.clone().migrate_into()?;
-            let new_value = value.migrate_into()?;
-            map.insert(new_key, new_value)?;
+        for entry in StoreNextIter::<Store, K>::new(&src.clone(), ..)? {
+            let (k, v) = entry?;
+            let key = K::migrate(Store::default(), Store::default(), &mut k.as_slice())?;
+            let value = V::migrate(src.sub(&k), dest.sub(&k), &mut v.as_slice())?;
+            map.insert(key, value)?;
+            Self::apply_change(&mut src, k, None)?;
+            // TODO: flush the changes to the dest as we go - we are caching changes in memory
+            // for now while we phase out old migration implementations that don't honor the contract
         }
-
-        let mut out = vec![];
-        other.flush(&mut out)?;
 
         Ok(map)
     }
@@ -477,9 +470,7 @@ where
     /// called then its binary encoding is written to `key`. If `maybe_value` is
     /// `None`, the value is removed by deleting all entries which start with
     /// `key`.
-    fn apply_change(store: &mut Store, key: &K, maybe_value: Option<V>) -> Result<()> {
-        let key_bytes = key.encode()?;
-
+    fn apply_change(store: &mut Store, key_bytes: Vec<u8>, maybe_value: Option<V>) -> Result<()> {
         match maybe_value {
             Some(value) => {
                 // insert/update
@@ -1102,6 +1093,7 @@ impl<'a, K: Encode, V> From<Entry<'a, K, V>> for Option<ChildMut<'a, K, V>> {
 mod tests {
     use super::super::deque::Deque;
     use super::{Map, *};
+    use crate::migrate::MigrateFrom;
     use crate::set_compat_mode;
     use crate::store::{MapStore, Store};
 
@@ -2188,19 +2180,53 @@ mod tests {
         assert_eq!(26, *actual);
     }
 
-    #[orga(version = 1)]
-    struct Foo {
-        #[orga(version(V1))]
-        bar: u32,
+    // #[orga(version = 1)]
+    // struct Foo {
+    //     #[orga(version(V1))]
+    //     bar: u32,
 
+    //     baz: u32,
+    // }
+    // Recursive expansion of orga macro
+    // ==================================
+
+    #[derive(
+        Default,
+        ::orga::encoding::VersionedEncoding,
+        ::orga::state::State,
+        ::orga::serde::Serialize,
+        ::orga::migrate::Migrate,
+    )]
+    #[state(version = 0u8)]
+    #[encoding(version = 0u8)]
+    #[migrate(version = 0u8)]
+    struct FooV0 {
         baz: u32,
     }
+    #[derive(
+        Default,
+        ::orga::encoding::VersionedEncoding,
+        ::orga::state::State,
+        ::orga::serde::Serialize,
+        ::orga::migrate::Migrate,
+        ::orga::call::FieldCall,
+        ::orga::query::FieldQuery,
+        ::orga::describe::Describe,
+    )]
+    #[state(version = 1u8, previous = "FooV0")]
+    #[encoding(version = 1u8, previous = "FooV0")]
+    #[migrate(version = 1u8, previous = "FooV0")]
+    struct Foo {
+        bar: u32,
+        baz: u32,
+    }
+    type FooV1 = Foo;
 
     impl MigrateFrom<FooV0> for FooV1 {
-        fn migrate_from(from: FooV0) -> Result<Self> {
+        fn migrate_from(prev: FooV0) -> orga::Result<Self> {
             Ok(Self {
                 bar: 0,
-                baz: from.baz,
+                baz: prev.baz,
             })
         }
     }
@@ -2210,11 +2236,10 @@ mod tests {
         let mut store = mapstore();
         store.put(vec![0, 0, 0, 12], vec![0, 0, 0, 0, 123]).unwrap();
 
-        let map0: Map<u32, Foo> = Map::with_store(store).unwrap();
-        let map1: Map<u32, Foo> = map0.migrate_into().unwrap();
+        let map = Map::<u32, Foo>::migrate(store.clone(), store, &mut &[][..]).unwrap();
 
-        assert_eq!(map1.get(12).unwrap().unwrap().bar, 0);
-        assert_eq!(map1.get(12).unwrap().unwrap().baz, 123);
+        assert_eq!(map.get(12).unwrap().unwrap().bar, 0);
+        assert_eq!(map.get(12).unwrap().unwrap().baz, 123);
     }
 
     #[test]
@@ -2224,13 +2249,12 @@ mod tests {
         let mut store = mapstore();
         store.put(vec![0, 0, 0, 12], vec![0, 0, 0, 123]).unwrap();
 
-        let map0: Map<u32, Foo> = Map::with_store(store).unwrap();
-        let map1: Map<u32, Foo> = map0.migrate_into().unwrap();
+        let map = Map::<u32, Foo>::migrate(store.clone(), store, &mut &[][..]).unwrap();
 
         set_compat_mode(false);
 
-        assert_eq!(map1.get(12).unwrap().unwrap().bar, 0);
-        assert_eq!(map1.get(12).unwrap().unwrap().baz, 123);
+        assert_eq!(map.get(12).unwrap().unwrap().bar, 0);
+        assert_eq!(map.get(12).unwrap().unwrap().baz, 123);
     }
 
     #[test]

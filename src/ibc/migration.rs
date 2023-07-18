@@ -1,70 +1,25 @@
 use super::{
-    ClientState, ClientStateV0, ClientV0, ClientV1, ConsensusState, ConsensusStateV0, IbcV0, IbcV1,
-    IbcV2, Timestamp,
+    ClientState, ClientStateV0, ConsensusState, ConsensusStateV0, IbcV0, IbcV1, Timestamp,
 };
-use crate::{
-    collections::Map,
-    migrate::{MigrateFrom, MigrateInto},
-    state::State,
-};
+use crate::{migrate::MigrateFrom, state::State};
 
 /// Upgrade from ibc-rs v0.15 -> v0.40.
 /// This migration resets all IBC state.
 impl MigrateFrom<IbcV0> for IbcV1 {
-    fn migrate_from(mut other: IbcV0) -> crate::Result<Self> {
-        other
+    fn migrate_from(mut value: IbcV0) -> crate::Result<Self> {
+        // TODO: implement actual IBC migration
+
+        value
             .root_store
             .remove_range(b"a".to_vec()..b"z".to_vec())?;
 
-        other.local_store.remove_range(..)?;
+        value.local_store.remove_range(..)?;
 
         let mut out = vec![];
-        other.root_store.flush(&mut out)?;
-        other.local_store.flush(&mut out)?;
+        value.root_store.flush(&mut out)?;
+        value.local_store.flush(&mut out)?;
 
         Ok(Self::default())
-    }
-}
-
-/// Upgrade from ibc-rs v0.40 -> v0.42.
-impl MigrateFrom<IbcV1> for IbcV2 {
-    fn migrate_from(other: IbcV1) -> crate::Result<Self> {
-        Ok(Self {
-            height: other.height,
-            host_consensus_states: other.host_consensus_states.migrate_into()?,
-            channel_counter: other.channel_counter,
-            connection_counter: other.connection_counter,
-            client_counter: other.client_counter,
-            transfer: other.transfer.migrate_into()?,
-            clients: other.clients.migrate_into()?,
-            connections: other.connections,
-            channel_ends: other.channel_ends,
-            next_sequence_send: other.next_sequence_send,
-            next_sequence_recv: other.next_sequence_recv,
-            next_sequence_ack: other.next_sequence_ack,
-            commitments: other.commitments,
-            receipts: other.receipts,
-            acks: other.acks,
-            store: other.store,
-        })
-    }
-}
-
-impl MigrateFrom<ClientV0> for ClientV1 {
-    fn migrate_from(other: ClientV0) -> crate::Result<Self> {
-        let other_client_state = other.client_state.get(())?;
-        let mut client_state: Map<(), ClientState> = Default::default();
-        if let Some(other_client_state) = other_client_state {
-            client_state.insert((), other_client_state.clone().migrate_into()?)?;
-        }
-
-        Ok(Self {
-            updates: other.updates.migrate_into()?,
-            client_state, // TODO: use map migration (currently doesn't support empty keys)
-            consensus_states: other.consensus_states.migrate_into()?,
-            connections: other.connections.migrate_into()?,
-            client_type: other.client_type,
-        })
     }
 }
 
@@ -98,6 +53,7 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
+    use crate::migrate::{Migrate, MigrateInto};
     use crate::store::Write;
     use crate::{state::State, store::Store, Result};
     use ibc::clients::ics07_tendermint::{
@@ -105,7 +61,7 @@ mod tests {
         consensus_state::ConsensusState as TmConsensusState,
     };
 
-    use crate::ibc::Client;
+    use crate::ibc::{Client, ClientV0};
     use ibc::{
         clients::ics07_tendermint::{client_state::AllowUpdate, trust_threshold::TrustThreshold},
         core::{
@@ -132,8 +88,8 @@ mod tests {
             5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
         ];
         let store = Store::with_map_store();
-        let consensus_state = ConsensusStateV0::load(store, &mut bytes_v0.as_slice())?;
-        let consensus_state: ConsensusState = consensus_state.migrate_into()?;
+        let consensus_state =
+            ConsensusState::migrate(store.clone(), store, &mut bytes_v0.as_slice())?;
 
         let mut out_bytes = vec![];
         consensus_state.flush(&mut out_bytes)?;
@@ -161,8 +117,7 @@ mod tests {
         ];
 
         let store = Store::with_map_store();
-        let client_state = ClientStateV0::load(store, &mut bytes_v0.as_slice())?;
-        let client_state: ClientState = client_state.migrate_into()?;
+        let client_state = ClientState::migrate(store.clone(), store, &mut bytes_v0.as_slice())?;
 
         let mut out_bytes = vec![];
         client_state.flush(&mut out_bytes)?;
@@ -210,7 +165,10 @@ mod tests {
             .updates
             .insert(
                 "0-100".to_string().into(),
-                (1_000_000, Height::new(0, 100).unwrap().into()),
+                (
+                    1_000_000i128.migrate_into()?,
+                    Height::new(0, 100).unwrap().into(),
+                ),
             )
             .unwrap();
 

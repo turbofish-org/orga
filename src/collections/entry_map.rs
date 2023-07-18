@@ -6,7 +6,7 @@ use super::map::ReadOnly;
 
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode, Terminated};
-use crate::migrate::{MigrateFrom, MigrateInto};
+use crate::migrate::Migrate;
 use std::ops::RangeBounds;
 
 use super::{Entry, Next};
@@ -193,34 +193,16 @@ where
     }
 }
 
-impl<T1, T2> MigrateFrom<EntryMap<T1>> for EntryMap<T2>
+impl<T> Migrate for EntryMap<T>
 where
-    T1: Entry,
-    T1::Key: Next + Decode + Encode + Terminated + Clone + 'static,
-    T1::Value: State + Clone,
-    T2: Entry + MigrateFrom<T1>,
-    T2::Key: Encode + Terminated + 'static,
-    T2::Value: State,
+    T: Entry,
+    T::Key: Encode + Terminated + Migrate + Clone,
+    T::Value: State + Migrate,
 {
-    fn migrate_from(mut other: EntryMap<T1>) -> Result<Self> {
-        let mut map = Self::default();
-        let mut old_keys = vec![];
-        for entry in other.map.iter()? {
-            let (key, _value) = entry?;
-            old_keys.push(key.clone());
-        }
-
-        for key in old_keys {
-            let value = other.map.remove(key.clone())?.unwrap().into_inner();
-            let entry = T1::from_entry((key, value));
-            let new_entry = entry.migrate_into()?;
-            map.insert(new_entry)?;
-        }
-
-        let mut out = vec![];
-        other.flush(&mut out)?;
-
-        Ok(map)
+    fn migrate(src: Store, dest: Store, bytes: &mut &[u8]) -> Result<Self> {
+        Ok(Self {
+            map: Map::migrate(src, dest, bytes)?,
+        })
     }
 }
 

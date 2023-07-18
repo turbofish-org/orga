@@ -5,7 +5,7 @@ use crate::call::Call;
 use crate::collections::map::Iter as MapIter;
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
-use crate::migrate::{MigrateFrom, MigrateInto};
+use crate::migrate::Migrate;
 use crate::orga;
 use crate::query::FieldQuery;
 use crate::state::State;
@@ -307,15 +307,11 @@ impl<T: State> Deque<T> {
     }
 }
 
-impl<T1, T2> MigrateFrom<Deque<T1>> for Deque<T2>
-where
-    T1: State,
-    T2: MigrateFrom<T1> + State,
-{
-    fn migrate_from(other: Deque<T1>) -> Result<Self> {
-        Ok(Deque {
-            meta: other.meta,
-            map: other.map.migrate_into()?,
+impl<T: Migrate> Migrate for Deque<T> {
+    fn migrate(src: Store, dest: Store, bytes: &mut &[u8]) -> Result<Self> {
+        Ok(Self {
+            meta: Meta::migrate(Store::default(), Store::default(), bytes)?,
+            map: Map::migrate(src, dest, bytes)?,
         })
     }
 }

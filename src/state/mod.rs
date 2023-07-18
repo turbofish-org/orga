@@ -45,6 +45,11 @@ macro_rules! state_impl {
             fn load(_store: Store, bytes: &mut &[u8]) -> Result<Self> {
                 Ok(Self::decode(bytes)?)
             }
+
+            #[inline]
+            fn field_keyop(_field_name: &str) -> Option<KeyOp> {
+                Some(KeyOp::Append(vec![]))
+            }
         }
     };
 }
@@ -62,7 +67,7 @@ state_impl!(i128);
 state_impl!(bool);
 state_impl!(());
 
-fn varint(n: usize, max: usize) -> Vec<u8> {
+pub fn varint(n: usize, max: usize) -> Vec<u8> {
     if max < u8::MAX as usize {
         vec![n as u8]
     } else if max < u16::MAX as usize {

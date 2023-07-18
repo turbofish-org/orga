@@ -21,18 +21,20 @@ use syn::*;
     and_then = "StateInputReceiver::ensure_prefixes"
 )]
 pub struct StateInputReceiver {
-    ident: Ident,
-    generics: syn::Generics,
-    data: ast::Data<(), StateFieldReceiver>,
+    pub ident: Ident,
+    pub generics: syn::Generics,
+    pub data: ast::Data<(), StateFieldReceiver>,
 
     #[darling(default)]
     pub version: u8,
+    #[darling(default)]
     pub previous: Option<Path>,
+    #[darling(default)]
     pub as_type: Option<Path>,
     #[darling(default)]
-    transparent: bool,
+    pub transparent: bool,
     #[darling(default)]
-    allow_prefix_overlap: bool,
+    pub allow_prefix_overlap: bool,
 }
 
 impl StateInputReceiver {
@@ -178,9 +180,7 @@ impl StateInputReceiver {
             ..
         } = Default::default();
 
-        let Self {
-            version, previous, ..
-        } = self;
+        let Self { version, .. } = self;
 
         let load_value = if let Some((inner_name, _field)) = self.transparent_inner() {
             let child_transparent_other_loads = named_fields!(self)
@@ -208,20 +208,6 @@ impl StateInputReceiver {
                 }
             });
             quote! { Self { #(#child_self_loads),* } }
-        };
-
-        let load_value = if let Some(previous) = previous {
-            quote! {
-                if let Some(prev) = loader.maybe_load_from_prev::<#previous, _>()? {
-                    prev
-                } else {
-                    #load_value
-                }
-            }
-        } else {
-            quote! {
-                #load_value
-            }
         };
 
         quote! {
@@ -288,13 +274,7 @@ impl StateInputReceiver {
             })
             .collect();
 
-        let maybe_migrate_from_prev_bound = self
-            .previous
-            .as_ref()
-            .map(|prev| quote! { #prev: ::orga::migrate::MigrateInto<Self>,})
-            .unwrap_or(quote! {});
-
-        quote! { Self: 'static, #maybe_migrate_from_prev_bound #field_bounds }
+        quote! { Self: 'static, #field_bounds }
     }
 
     fn state_fields(&self) -> Vec<(TokenStream2, StateFieldReceiver)> {
@@ -372,17 +352,18 @@ impl ToTokens for StateInputReceiver {
 
 #[derive(Debug, FromField, Clone)]
 #[darling(attributes(state))]
-struct StateFieldReceiver {
-    ident: Option<Ident>,
-    ty: Type,
+pub struct StateFieldReceiver {
+    pub ident: Option<Ident>,
+    pub ty: Type,
 
-    as_type: Option<Ident>,
     #[darling(default)]
-    skip: bool,
+    pub as_type: Option<Ident>,
     #[darling(default)]
-    transparent: bool,
-    prefix: Option<PrefixBytes>,
-    absolute_prefix: Option<PrefixBytes>,
+    pub skip: bool,
+    #[darling(default)]
+    pub transparent: bool,
+    pub prefix: Option<PrefixBytes>,
+    pub absolute_prefix: Option<PrefixBytes>,
 }
 uses_type_params!(StateFieldReceiver, ty);
 
@@ -397,7 +378,7 @@ impl StateFieldReceiver {
     }
 }
 
-enum Prefix {
+pub enum Prefix {
     Relative(Vec<u8>),
     Absolute(Vec<u8>),
 }
@@ -426,7 +407,7 @@ impl ToTokens for Prefix {
 }
 
 #[derive(Debug, Clone)]
-struct PrefixBytes(Vec<u8>);
+pub struct PrefixBytes(Vec<u8>);
 
 impl FromMeta for PrefixBytes {
     fn from_list(items: &[NestedMeta]) -> darling::Result<Self> {
