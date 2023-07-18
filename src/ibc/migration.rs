@@ -57,6 +57,7 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
+    use crate::migrate::Migrate;
     use crate::store::Write;
     use crate::{state::State, store::Store, Result};
     use ibc::clients::ics07_tendermint::{
@@ -91,7 +92,8 @@ mod tests {
             5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
         ];
         let store = Store::with_map_store();
-        let consensus_state = ConsensusStateV0::load(store, &mut bytes_v0.as_slice())?;
+        let consensus_state =
+            ConsensusState::migrate(store.clone(), store, &mut bytes_v0.as_slice())?;
 
         let mut out_bytes = vec![];
         consensus_state.flush(&mut out_bytes)?;
@@ -119,7 +121,7 @@ mod tests {
         ];
 
         let store = Store::with_map_store();
-        let client_state = ClientStateV0::load(store, &mut bytes_v0.as_slice())?;
+        let client_state = ClientState::migrate(store.clone(), store, &mut bytes_v0.as_slice())?;
 
         let mut out_bytes = vec![];
         client_state.flush(&mut out_bytes)?;
@@ -167,7 +169,10 @@ mod tests {
             .updates
             .insert(
                 "0-100".to_string().into(),
-                (1_000_000, Height::new(0, 100).unwrap().into()),
+                (
+                    1_000_000.migrate_into()?,
+                    Height::new(0, 100).unwrap().into(),
+                ),
             )
             .unwrap();
 
