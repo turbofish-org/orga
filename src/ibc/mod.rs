@@ -38,11 +38,11 @@ use crate::describe::{Describe, Descriptor};
 use crate::encoding::{
     Adapter, ByteTerminatedString, Decode, Encode, EofTerminatedString, FixedString,
 };
-use crate::migrate::Migrate;
+use crate::migrate::{Migrate, MigrateInto};
 use crate::plugins::Signer;
 use crate::state::State;
 use crate::store::Store;
-use crate::{orga, Error};
+use crate::{orga, Error, Result as OrgaResult};
 pub use ibc as ibc_rs;
 use ibc::core::timestamp::Timestamp as IbcTimestamp;
 
@@ -64,7 +64,7 @@ mod router;
 // mod tests2;
 pub const IBC_QUERY_PATH: &str = "store/ibc/key";
 
-#[orga(version = 2)]
+#[orga(version = 1)]
 pub struct Ibc {
     #[orga(version(V0))]
     _bytes0: [u8; 32],
@@ -81,64 +81,61 @@ pub struct Ibc {
     #[state(absolute_prefix(b""))]
     root_store: Store,
 
-    #[orga(version(V1, V2))]
+    #[orga(version(V1))]
     height: u64,
 
     #[orga(version(V1))]
-    host_consensus_states: Deque<ConsensusStateV0>,
-
-    #[orga(version(V2))]
     host_consensus_states: Deque<ConsensusState>,
 
-    #[orga(version(V1, V2))]
+    #[orga(version(V1))]
     channel_counter: u64,
 
-    #[orga(version(V1, V2))]
+    #[orga(version(V1))]
     connection_counter: u64,
 
-    #[orga(version(V1, V2))]
+    #[orga(version(V1))]
     client_counter: u64,
 
-    #[orga(version(V1, V2))]
+    #[orga(version(V1))]
     pub transfer: Transfer,
 
-    #[orga(version(V1, V2))]
+    #[orga(version(V1))]
     #[state(absolute_prefix(b"clients/"))]
     clients: Map<ClientId, Client>,
 
-    #[orga(version(V1, V2))]
+    #[orga(version(V1))]
     #[state(absolute_prefix(b"connections/"))]
     connections: Map<ConnectionId, ConnectionEnd>,
 
-    #[orga(version(V1, V2))]
+    #[orga(version(V1))]
     #[state(absolute_prefix(b"channelEnds/"))]
     channel_ends: Map<PortChannel, ChannelEnd>,
 
-    #[orga(version(V1, V2))]
+    #[orga(version(V1))]
     #[state(absolute_prefix(b"nextSequenceSend/"))]
     next_sequence_send: Map<PortChannel, Number>,
 
-    #[orga(version(V1, V2))]
+    #[orga(version(V1))]
     #[state(absolute_prefix(b"nextSequenceRecv/"))]
     next_sequence_recv: Map<PortChannel, Number>,
 
-    #[orga(version(V1, V2))]
+    #[orga(version(V1))]
     #[state(absolute_prefix(b"nextSequenceAck/"))]
     next_sequence_ack: Map<PortChannel, Number>,
 
-    #[orga(version(V1, V2))]
+    #[orga(version(V1))]
     #[state(absolute_prefix(b"commitments/"))]
     commitments: Map<PortChannelSequence, Vec<u8>>,
 
-    #[orga(version(V1, V2))]
+    #[orga(version(V1))]
     #[state(absolute_prefix(b"receipts/"))]
     receipts: Map<PortChannelSequence, ()>,
 
-    #[orga(version(V1, V2))]
+    #[orga(version(V1))]
     #[state(absolute_prefix(b"acks/"))]
     acks: Map<PortChannelSequence, Vec<u8>>,
 
-    #[orga(version(V1, V2))]
+    #[orga(version(V1))]
     #[state(absolute_prefix(b""))]
     store: Store,
 }
@@ -191,29 +188,14 @@ impl std::fmt::Debug for Ibc {
     }
 }
 
-#[orga(version = 1)]
+#[orga]
 pub struct Client {
-    #[orga(version(V0))]
-    #[state(prefix(b"updates/"))]
-    updates: Map<EpochHeight, (i128, BinaryHeight)>,
-
-    #[orga(version(V1))]
     #[state(prefix(b"updates/"))]
     updates: Map<EpochHeight, (Timestamp, BinaryHeight)>,
 
-    #[orga(version(V0))]
-    #[state(prefix(b"clientState"))]
-    client_state: Map<(), ClientStateV0>,
-
-    #[orga(version(V1))]
     #[state(prefix(b"clientState"))]
     client_state: Map<(), ClientState>,
 
-    #[orga(version(V0))]
-    #[state(prefix(b"consensusStates/"))]
-    consensus_states: Map<EpochHeight, ConsensusStateV0>,
-
-    #[orga(version(V1))]
     #[state(prefix(b"consensusStates/"))]
     consensus_states: Map<EpochHeight, ConsensusState>,
 
@@ -236,7 +218,11 @@ pub struct Timestamp {
     inner: IbcTimestamp,
 }
 
-impl Migrate for Timestamp {}
+impl Migrate for Timestamp {
+    fn migrate(src: Store, dest: Store, bytes: &mut &[u8]) -> OrgaResult<Self> {
+        i128::decode(bytes)?.migrate_into()
+    }
+}
 
 impl Describe for Timestamp {
     fn describe() -> Descriptor {
@@ -537,7 +523,7 @@ port_channel_sequence_from_impl!(AckPath);
 port_channel_sequence_from_impl!(ReceiptPath);
 
 macro_rules! protobuf_newtype {
-    ($newtype:tt, $inner:ty, $raw:ty, $proto:tt) => {
+    ($newtype:tt, $inner:ty, $raw:ty, $proto:tt, $prev:ty) => {
         #[derive(Serialize, Clone, Debug)]
         pub struct $newtype {
             inner: $inner,
@@ -607,7 +593,12 @@ macro_rules! protobuf_newtype {
             }
         }
 
-        impl Migrate for $newtype {}
+        impl Migrate for $newtype {
+            fn migrate(_src: Store, _dest: Store, bytes: &mut &[u8]) -> OrgaResult<Self> {
+                let prev = <$prev>::load(Store::default(), bytes)?;
+                prev.migrate_into()
+            }
+        }
 
         impl Describe for $newtype {
             fn describe() -> Descriptor {
@@ -617,17 +608,42 @@ macro_rules! protobuf_newtype {
     };
 }
 
-protobuf_newtype!(ClientState, TmClientState, RawTmClientState, Protobuf);
-protobuf_newtype!(ClientStateV0, TmClientState, Any, Protobuf);
+protobuf_newtype!(
+    ClientState,
+    TmClientState,
+    RawTmClientState,
+    Protobuf,
+    ClientStateV0
+);
+protobuf_newtype!(ClientStateV0, TmClientState, Any, Protobuf, ClientStateV0);
 protobuf_newtype!(
     ConsensusState,
     TmConsensusState,
     RawTmConsensusState,
-    TmProtobuf
+    TmProtobuf,
+    ConsensusStateV0
 );
-protobuf_newtype!(ConsensusStateV0, TmConsensusState, Any, TmProtobuf);
-protobuf_newtype!(ConnectionEnd, IbcConnectionEnd, RawConnectionEnd, Protobuf);
-protobuf_newtype!(ChannelEnd, IbcChannelEnd, RawChannelEnd, Protobuf);
+protobuf_newtype!(
+    ConsensusStateV0,
+    TmConsensusState,
+    Any,
+    TmProtobuf,
+    ConsensusStateV0
+);
+protobuf_newtype!(
+    ConnectionEnd,
+    IbcConnectionEnd,
+    RawConnectionEnd,
+    Protobuf,
+    ConnectionEnd
+);
+protobuf_newtype!(
+    ChannelEnd,
+    IbcChannelEnd,
+    RawChannelEnd,
+    Protobuf,
+    ChannelEnd
+);
 
 impl ConsensusStateTrait for ConsensusState {
     fn root(&self) -> &ibc_rs::core::ics23_commitment::commitment::CommitmentRoot {
