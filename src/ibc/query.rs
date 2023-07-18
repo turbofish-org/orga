@@ -13,6 +13,7 @@ use tendermint_proto::v0_34::crypto::{ProofOp, ProofOps};
 use super::{ClientId, ConnectionEnd, ConnectionId, Ibc, PortChannel, IBC_QUERY_PATH};
 use crate::abci::AbciQuery;
 use crate::encoding::LengthVec;
+#[cfg(feature = "merk-full")]
 use crate::merk::ics23::create_ics23_proof;
 use crate::store::Read;
 use crate::{Error, Result};
@@ -110,7 +111,7 @@ impl Ibc {
                 let (_, client_state) = entry?;
                 states.push(IdentifiedClientState {
                     client_id: id.clone().as_str().to_string(),
-                    client_state: Some(client_state.clone().into()),
+                    client_state: Some(client_state.clone().inner.into()),
                 });
             }
         }
@@ -134,7 +135,7 @@ impl Ibc {
             let height: Height = height.clone().try_into()?;
             states.push(ConsensusStateWithHeight {
                 height: Some(height.into()),
-                consensus_state: Some(consensus_state.clone().into()),
+                consensus_state: Some(consensus_state.clone().inner.into()),
             });
         }
 
