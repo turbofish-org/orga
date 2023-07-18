@@ -16,11 +16,11 @@ pub const NATIVE_CALL_FLAG: u8 = 0xff;
 
 #[orga(skip(Call), version = 1)]
 pub struct SdkCompatPlugin<S, T> {
+    #[cfg_attr(feature = "compat", state(skip))]
     #[orga(version(V0))]
-    #[state(skip)]
     pub(crate) symbol: PhantomData<S>,
+    #[cfg_attr(feature = "compat", state(transparent))]
     #[orga(version(V0))]
-    #[state(transparent)]
     pub inner: T,
 
     #[orga(version(V1))]
