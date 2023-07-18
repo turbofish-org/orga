@@ -220,7 +220,9 @@ pub struct Timestamp {
 
 impl Migrate for Timestamp {
     fn migrate(_src: Store, _dest: Store, bytes: &mut &[u8]) -> OrgaResult<Self> {
-        i128::decode(bytes)?.migrate_into()
+        let ts_bytes: [u8; 16] = (&bytes[..16]).try_into().unwrap();
+        *bytes = &bytes[16..];
+        i128::from_le_bytes(ts_bytes).migrate_into()
     }
 }
 
