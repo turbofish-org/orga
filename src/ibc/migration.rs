@@ -53,7 +53,7 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
-    use crate::migrate::Migrate;
+    use crate::migrate::{Migrate, MigrateInto};
     use crate::store::Write;
     use crate::{state::State, store::Store, Result};
     use ibc::clients::ics07_tendermint::{
@@ -61,7 +61,7 @@ mod tests {
         consensus_state::ConsensusState as TmConsensusState,
     };
 
-    use crate::ibc::Client;
+    use crate::ibc::{Client, ClientV0};
     use ibc::{
         clients::ics07_tendermint::{client_state::AllowUpdate, trust_threshold::TrustThreshold},
         core::{
@@ -166,7 +166,7 @@ mod tests {
             .insert(
                 "0-100".to_string().into(),
                 (
-                    1_000_000.migrate_into()?,
+                    1_000_000i128.migrate_into()?,
                     Height::new(0, 100).unwrap().into(),
                 ),
             )

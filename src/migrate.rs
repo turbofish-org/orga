@@ -176,12 +176,12 @@ mod tests {
     }
 
     impl Migrate for NumberV1 {
-        fn migrate(src: Store, dest: Store, bytes: &mut &[u8]) -> Result<Self> {
+        fn migrate(src: Store, _dest: Store, bytes: &mut &[u8]) -> Result<Self> {
             if bytes[0] == 1 {
                 return Self::load(src, bytes);
             }
 
-            let mut other = NumberV0::load(src, bytes)?;
+            let other = NumberV0::load(src, bytes)?;
             let value: u32 = other.value.into();
             Ok(Self { value: value * 2 })
         }
