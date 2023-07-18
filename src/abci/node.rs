@@ -231,7 +231,7 @@ impl<A: App> Node<A> {
     }
 
     // TODO: remove when we don't require compat migrations
-    pub fn migrate(self, version: Vec<u8>) -> Self
+    pub fn migrate(self, version: Vec<u8>, compat_mode: bool) -> Self
     where
         ABCIPlugin<A>: Migrate,
     {
@@ -258,15 +258,22 @@ impl<A: App> Node<A> {
         let mut store = Store::new(BackingStore::Merk(store));
         let bytes = store.get(&[]).unwrap().unwrap();
 
-        orga::set_compat_mode(true);
+        orga::set_compat_mode(compat_mode);
         let mut app =
             ABCIPlugin::<A>::migrate(store.clone(), store.clone(), &mut bytes.as_slice()).unwrap();
         orga::set_compat_mode(false);
 
         app.attach(store.clone()).unwrap();
+
         let mut bytes = vec![];
         app.flush(&mut bytes).unwrap();
         store.put(vec![], bytes).unwrap();
+        store
+            .put(
+                crate::upgrade::VERSION_KEY.to_vec(),
+                [vec![version.len() as u8], version.clone()].concat(),
+            )
+            .unwrap();
         if let BackingStore::Merk(merk_store) = store.into_backing_store().into_inner() {
             merk_store
                 .into_inner()
