@@ -220,8 +220,14 @@ pub struct Timestamp {
 
 impl Migrate for Timestamp {
     fn migrate(_src: Store, _dest: Store, bytes: &mut &[u8]) -> OrgaResult<Self> {
-        let ts_bytes: [u8; 16] = (&bytes[..16]).try_into().unwrap();
-        *bytes = &bytes[16..];
+        if bytes[0] != 0 {
+            return Err(crate::Error::Ibc(format!(
+                "Invalid timestamp version: {}",
+                bytes[0]
+            )));
+        }
+        let ts_bytes: [u8; 16] = (&bytes[1..17]).try_into().unwrap();
+        *bytes = &bytes[17..];
         i128::from_le_bytes(ts_bytes).migrate_into()
     }
 }
