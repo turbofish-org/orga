@@ -2,10 +2,7 @@ use std::time::Duration;
 
 use ibc::core::events::IbcEvent;
 use ibc::{
-    clients::ics07_tendermint::{
-        client_state::ClientState as TmClientState,
-        consensus_state::ConsensusState as TmConsensusState,
-    },
+    clients::ics07_tendermint::client_state::ClientState as TmClientState,
     core::{
         ics02_client::{
             consensus_state::ConsensusState as ConsensusStateTrait, error::ClientError,
@@ -35,6 +32,7 @@ use crate::{abci::BeginBlock, plugins::BeginBlockCtx};
 
 use super::*;
 
+#[cfg(feature = "abci")]
 const MAX_HOST_CONSENSUS_STATES: u64 = 100_000;
 
 #[cfg(feature = "abci")]

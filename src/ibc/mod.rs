@@ -219,7 +219,7 @@ pub struct Timestamp {
 }
 
 impl Migrate for Timestamp {
-    fn migrate(src: Store, dest: Store, bytes: &mut &[u8]) -> OrgaResult<Self> {
+    fn migrate(_src: Store, _dest: Store, bytes: &mut &[u8]) -> OrgaResult<Self> {
         i128::decode(bytes)?.migrate_into()
     }
 }

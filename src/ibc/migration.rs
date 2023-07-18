@@ -1,11 +1,7 @@
 use super::{
-    ClientState, ClientStateV0, ClientV0, ConsensusState, ConsensusStateV0, IbcV0, IbcV1, Timestamp,
+    ClientState, ClientStateV0, ConsensusState, ConsensusStateV0, IbcV0, IbcV1, Timestamp,
 };
-use crate::{
-    collections::Map,
-    migrate::{MigrateFrom, MigrateInto},
-    state::State,
-};
+use crate::{migrate::MigrateFrom, state::State};
 
 /// Upgrade from ibc-rs v0.15 -> v0.40.
 /// This migration resets all IBC state.
