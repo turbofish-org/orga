@@ -1093,6 +1093,7 @@ impl<'a, K: Encode, V> From<Entry<'a, K, V>> for Option<ChildMut<'a, K, V>> {
 mod tests {
     use super::super::deque::Deque;
     use super::{Map, *};
+    use crate::migrate::MigrateFrom;
     use crate::set_compat_mode;
     use crate::store::{MapStore, Store};
 
@@ -2179,25 +2180,53 @@ mod tests {
         assert_eq!(26, *actual);
     }
 
-    #[orga(version = 1)]
-    struct Foo {
-        #[orga(version(V1))]
-        bar: u32,
+    // #[orga(version = 1)]
+    // struct Foo {
+    //     #[orga(version(V1))]
+    //     bar: u32,
 
+    //     baz: u32,
+    // }
+    // Recursive expansion of orga macro
+    // ==================================
+
+    #[derive(
+        Default,
+        ::orga::encoding::VersionedEncoding,
+        ::orga::state::State,
+        ::orga::serde::Serialize,
+        ::orga::migrate::Migrate,
+    )]
+    #[state(version = 0u8)]
+    #[encoding(version = 0u8)]
+    #[migrate(version = 0u8)]
+    struct FooV0 {
         baz: u32,
     }
+    #[derive(
+        Default,
+        ::orga::encoding::VersionedEncoding,
+        ::orga::state::State,
+        ::orga::serde::Serialize,
+        ::orga::migrate::Migrate,
+        ::orga::call::FieldCall,
+        ::orga::query::FieldQuery,
+        ::orga::describe::Describe,
+    )]
+    #[state(version = 1u8, previous = "FooV0")]
+    #[encoding(version = 1u8, previous = "FooV0")]
+    #[migrate(version = 1u8, previous = "FooV0")]
+    struct Foo {
+        bar: u32,
+        baz: u32,
+    }
+    type FooV1 = Foo;
 
-    impl Migrate for FooV1 {
-        fn migrate(src: Store, dest: Store, bytes: &mut &[u8]) -> orga::Result<Self> {
-            if bytes[0] == 1 {
-                *bytes = &bytes[1..];
-                return Self::load(src, bytes);
-            }
-
-            let from = FooV0::load(src, bytes)?;
+    impl MigrateFrom<FooV0> for FooV1 {
+        fn migrate_from(prev: FooV0) -> orga::Result<Self> {
             Ok(Self {
                 bar: 0,
-                baz: from.baz,
+                baz: prev.baz,
             })
         }
     }

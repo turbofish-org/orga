@@ -116,7 +116,9 @@ impl OrgaSubStruct {
 
         attrs.push(self.state_attr());
         attrs.push(self.encoding_attr());
-        if !self.simple {
+
+        let migrate_ident: Ident = format_ident!("Migrate");
+        if !self.simple && !self.skip.contains_key(&migrate_ident) {
             attrs.push(self.migrate_attr());
         }
 

@@ -97,8 +97,11 @@ impl ToTokens for MigrateInputReceiver {
             impl #imp ::orga::migrate::Migrate for #ident #ty #wher
             {
                 fn migrate(src: ::orga::store::Store, dest: ::orga::store::Store, mut bytes: &mut &[u8]) -> ::orga::Result<Self> {
-                    if bytes[0] == #version {
-                        *bytes = &bytes[1..];
+                    if (::orga::compat_mode() && #version == 0)
+                        || (!::orga::compat_mode() && bytes[0] == #version) {
+                        if !::orga::compat_mode() {
+                            *bytes = &bytes[1..];
+                        }
                         return Ok(Self {
                             #(#field_migrations)*
                         });

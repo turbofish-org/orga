@@ -166,7 +166,7 @@ mod tests {
         Result,
     };
 
-    #[orga(version = 2)]
+    #[orga(version = 2, skip(Migrate))]
     #[derive(Clone, PartialEq, Eq)]
     struct Number {
         #[orga(version(V0))]
@@ -200,7 +200,7 @@ mod tests {
         }
     }
 
-    #[orga(version = 1)]
+    #[orga(version = 1, skip(Migrate))]
     #[derive(Entry, Eq, PartialEq)]
     struct NumberEntry {
         #[key]
@@ -226,7 +226,7 @@ mod tests {
         }
     }
 
-    #[orga(version = 1)]
+    #[orga(version = 1, skip(Migrate))]
     struct Foo {
         #[orga(version(V0))]
         bar: u32,
@@ -270,17 +270,11 @@ mod tests {
         b: T,
     }
 
-    impl<T: Migrate> Migrate for WithGenericV1<T> {
-        fn migrate(src: Store, dest: Store, mut bytes: &mut &[u8]) -> Result<Self> {
-            if bytes[0] == 1 {
-                return Self::load(src, bytes);
-            } else {
-                *bytes = &bytes[1..];
-            }
-
+    impl<T: State> MigrateFrom<WithGenericV0<T>> for WithGenericV1<T> {
+        fn migrate_from(value: WithGenericV0<T>) -> Result<Self> {
             Ok(Self {
-                a: u32::decode(&mut bytes)?,
-                b: T::migrate(src.sub(&[1]), dest.sub(&[1]), bytes)?,
+                a: value.a,
+                b: value.b,
             })
         }
     }
