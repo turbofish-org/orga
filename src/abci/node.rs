@@ -258,10 +258,10 @@ impl<A: App> Node<A> {
         let mut store = Store::new(BackingStore::Merk(store));
         let bytes = store.get(&[]).unwrap().unwrap();
 
-        // orga::set_compat_mode(true);
+        orga::set_compat_mode(true);
         let mut app =
             ABCIPlugin::<A>::migrate(store.clone(), store.clone(), &mut bytes.as_slice()).unwrap();
-        // orga::set_compat_mode(false);
+        orga::set_compat_mode(false);
 
         app.attach(store.clone()).unwrap();
         let mut bytes = vec![];

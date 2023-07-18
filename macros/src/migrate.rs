@@ -89,7 +89,11 @@ impl ToTokens for MigrateInputReceiver {
             }
         } else {
             quote! {
-                Err(::orga::Error::App(format!("Unknown version {}", bytes[0])))
+                Err(::orga::Error::App(format!(
+                    "Unknown version {} for type {}",
+                    bytes[0],
+                    ::std::any::type_name::<Self>(),
+                )))
             }
         };
 

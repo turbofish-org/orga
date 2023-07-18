@@ -36,18 +36,18 @@ where
 
 impl<K, V, S> MigrateFrom<PoolV0<K, V, S>> for PoolV1<K, V, S>
 where
-    K: Terminated + Encode + Decode + Clone + Send + Sync + MigrateFrom<K> + 'static,
-    V: State + MigrateFrom<V>,
+    K: Terminated + Encode + Decode + Clone + Send + Sync + 'static,
+    V: State,
     S: Symbol,
 {
     fn migrate_from(other: PoolV0<K, V, S>) -> Result<Self> {
         Ok(PoolV1 {
-            contributions: other.contributions.migrate_into()?,
-            rewards: other.rewards.migrate_into()?,
-            shares_issued: other.shares_issued.migrate_into()?,
-            map: other.map.migrate_into()?,
-            rewards_this_period: other.rewards_this_period.migrate_into()?,
-            last_period_entry: other.last_period_entry.migrate_into()?,
+            contributions: other.contributions,
+            rewards: other.rewards,
+            shares_issued: other.shares_issued,
+            map: other.map,
+            rewards_this_period: other.rewards_this_period,
+            last_period_entry: other.last_period_entry,
             drop_errored: false,
             symbol: PhantomData,
         })
