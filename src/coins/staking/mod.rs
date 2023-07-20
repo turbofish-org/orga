@@ -4,7 +4,7 @@ use crate::abci::{BeginBlock, EndBlock};
 use crate::collections::{Deque, Entry, EntryMap, Map};
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
-use crate::migrate::Migrate;
+use crate::migrate::{Migrate, MigrateFrom};
 use crate::orga;
 use crate::plugins::{BeginBlockCtx, EndBlockCtx, Validators};
 use crate::plugins::{Paid, Signer, Time};
@@ -27,7 +27,99 @@ pub const UNBONDING_SECONDS: u64 = 10; // 10 seconds
 pub const UNBONDING_SECONDS: u64 = 60 * 60 * 24 * 14; // 2 weeks
 const EDIT_INTERVAL_SECONDS: u64 = 60 * 60 * 24; // 1 day
 
-#[orga]
+// TODO: remove this once compat mode format is deprecated
+#[cfg(feature = "compat")]
+#[orga(version = 1)]
+#[state(allow_prefix_overlap)]
+pub struct Staking<S: Symbol> {
+    #[orga(version(V0))]
+    pub max_validators: u64,
+    #[orga(version(V0))]
+    pub min_self_delegation_min: u64,
+    #[orga(version(V0))]
+    unbonding_seconds: u64,
+    #[orga(version(V0))]
+    pub max_offline_blocks: u64,
+    #[orga(version(V0))]
+    pub slash_fraction_double_sign: Decimal,
+    #[orga(version(V0))]
+    pub slash_fraction_downtime: Decimal,
+    #[orga(version(V0))]
+    pub downtime_jail_seconds: u64,
+    #[orga(version(V0))]
+    #[state(prefix(0))]
+    validators: Pool<Address, Validator<S>, S>,
+    #[orga(version(V0))]
+    #[state(prefix(15))]
+    unbonding_delegation_queue: Deque<UnbondingDelegationEntry>,
+    #[orga(version(V0))]
+    #[state(prefix(16))]
+    redelegation_queue: Deque<RedelegationEntry>,
+    #[orga(version(V0))]
+    #[state(prefix(2))]
+    consensus_keys: Map<Address, [u8; 32]>,
+    #[orga(version(V0))]
+    #[state(prefix(3))]
+    last_signed_block: Map<[u8; 20], u64>,
+    #[orga(version(V0))]
+    #[state(prefix(4))]
+    validators_by_power: EntryMap<ValidatorPowerEntry>,
+    #[orga(version(V0))]
+    #[state(prefix(5))]
+    last_validator_powers: Map<Address, u64>,
+    #[orga(version(V0))]
+    #[state(prefix(7))]
+    last_indexed_power: Map<Address, u64>,
+    #[orga(version(V0))]
+    #[state(prefix(8))]
+    address_for_tm_hash: Map<[u8; 20], Address>,
+    #[orga(version(V0))]
+    #[state(prefix(14))]
+    validator_queue: EntryMap<ValidatorQueueEntry>,
+    #[orga(version(V0))]
+    #[state(prefix(17))]
+    delegation_index: Map<Address, Map<Address, ()>>,
+
+    #[orga(version(V1))]
+    validators: Pool<Address, Validator<S>, S>,
+    #[orga(version(V1))]
+    pub min_self_delegation_min: u64,
+    #[orga(version(V1))]
+    consensus_keys: Map<Address, [u8; 32]>,
+    #[orga(version(V1))]
+    last_signed_block: Map<[u8; 20], u64>,
+    #[orga(version(V1))]
+    validators_by_power: EntryMap<ValidatorPowerEntry>,
+    #[orga(version(V1))]
+    last_validator_powers: Map<Address, u64>,
+    #[orga(version(V1))]
+    pub max_validators: u64,
+    #[orga(version(V1))]
+    last_indexed_power: Map<Address, u64>,
+    #[orga(version(V1))]
+    address_for_tm_hash: Map<[u8; 20], Address>,
+    #[orga(version(V1))]
+    unbonding_seconds: u64,
+    #[orga(version(V1))]
+    pub max_offline_blocks: u64,
+    #[orga(version(V1))]
+    pub slash_fraction_double_sign: Decimal,
+    #[orga(version(V1))]
+    pub slash_fraction_downtime: Decimal,
+    #[orga(version(V1))]
+    pub downtime_jail_seconds: u64,
+    #[orga(version(V1))]
+    validator_queue: EntryMap<ValidatorQueueEntry>,
+    #[orga(version(V1))]
+    unbonding_delegation_queue: Deque<UnbondingDelegationEntry>,
+    #[orga(version(V1))]
+    redelegation_queue: Deque<RedelegationEntry>,
+    #[orga(version(V1))]
+    delegation_index: Map<Address, Map<Address, ()>>,
+}
+
+#[cfg(not(feature = "compat"))]
+#[orga(version = 1)]
 pub struct Staking<S: Symbol> {
     validators: Pool<Address, Validator<S>, S>,
     pub min_self_delegation_min: u64,
@@ -47,6 +139,31 @@ pub struct Staking<S: Symbol> {
     unbonding_delegation_queue: Deque<UnbondingDelegationEntry>,
     redelegation_queue: Deque<RedelegationEntry>,
     delegation_index: Map<Address, Map<Address, ()>>,
+}
+
+impl<S: Symbol> MigrateFrom<StakingV0<S>> for StakingV1<S> {
+    fn migrate_from(value: StakingV0<S>) -> Result<Self> {
+        Ok(Self {
+            max_validators: value.max_validators,
+            min_self_delegation_min: value.min_self_delegation_min,
+            unbonding_seconds: value.unbonding_seconds,
+            max_offline_blocks: value.max_offline_blocks,
+            slash_fraction_double_sign: value.slash_fraction_double_sign,
+            slash_fraction_downtime: value.slash_fraction_downtime,
+            downtime_jail_seconds: value.downtime_jail_seconds,
+            validators: value.validators,
+            unbonding_delegation_queue: value.unbonding_delegation_queue,
+            redelegation_queue: value.redelegation_queue,
+            consensus_keys: value.consensus_keys,
+            last_signed_block: value.last_signed_block,
+            validators_by_power: value.validators_by_power,
+            last_validator_powers: value.last_validator_powers,
+            last_indexed_power: value.last_indexed_power,
+            address_for_tm_hash: value.address_for_tm_hash,
+            validator_queue: value.validator_queue,
+            delegation_index: value.delegation_index,
+        })
+    }
 }
 
 #[derive(Entry, Clone, Serialize, Deserialize, State, Migrate)]
