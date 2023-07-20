@@ -2,7 +2,6 @@ use super::{Amount, Balance, Coin, Decimal, Give, Symbol};
 use crate::collections::map::{ChildMut as MapChildMut, Ref as MapRef};
 use crate::collections::{Map, Next};
 use crate::encoding::{Decode, Encode, Terminated};
-use crate::migrate::MigrateFrom;
 use crate::orga;
 use crate::state::State;
 use crate::{Error, Result};
