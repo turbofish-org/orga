@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Drop, RangeBounds};
 
-#[orga(version = 1)]
+#[orga]
 pub struct Pool<K, V, S>
 where
     K: Terminated + Encode + Decode + Clone + Send + Sync + 'static,
@@ -21,37 +21,13 @@ where
 {
     contributions: Decimal,
     rewards: Map<u8, Decimal>,
-    #[orga(version(V1))]
-    symbol: PhantomData<S>,
     shares_issued: Decimal,
     map: Map<K, RefCell<Entry<V>>>,
     rewards_this_period: Map<u8, Decimal>,
     last_period_entry: Map<u8, Decimal>,
-    #[orga(version(V1))]
     #[state(skip)]
     drop_errored: bool,
-    #[orga(version(V0))]
     symbol: PhantomData<S>,
-}
-
-impl<K, V, S> MigrateFrom<PoolV0<K, V, S>> for PoolV1<K, V, S>
-where
-    K: Terminated + Encode + Decode + Clone + Send + Sync + 'static,
-    V: State,
-    S: Symbol,
-{
-    fn migrate_from(other: PoolV0<K, V, S>) -> Result<Self> {
-        Ok(PoolV1 {
-            contributions: other.contributions,
-            rewards: other.rewards,
-            shares_issued: other.shares_issued,
-            map: other.map,
-            rewards_this_period: other.rewards_this_period,
-            last_period_entry: other.last_period_entry,
-            drop_errored: false,
-            symbol: PhantomData,
-        })
-    }
 }
 
 impl<K, V, S> Balance<S, Decimal> for Pool<K, V, S>
