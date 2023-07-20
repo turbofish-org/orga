@@ -66,7 +66,9 @@ pub struct ABCIPlugin<T> {
 
 impl<T: Migrate> Migrate for ABCIPlugin<T> {
     fn migrate(src: Store, dest: Store, bytes: &mut &[u8]) -> Result<Self> {
-        *bytes = &bytes[1..];
+        if !compat_mode() {
+            *bytes = &bytes[1..];
+        }
         Ok(Self {
             inner: T::migrate(src.sub(&[0]), dest.sub(&[0]), bytes)?,
             validator_updates: None,
@@ -496,6 +498,16 @@ impl<T: State> State for ABCIPlugin<T> {
             time: None,
             logs: None,
         })
+    }
+
+    fn field_keyop(field_name: &str) -> Option<crate::describe::KeyOp> {
+        match field_name {
+            "inner" => Some(crate::describe::KeyOp::Append(vec![0])),
+            "updates" => Some(crate::describe::KeyOp::Append(vec![1])),
+            "current_vp" => Some(crate::describe::KeyOp::Append(vec![2])),
+            "cons_key_by_op_addr" => Some(crate::describe::KeyOp::Append(vec![3])),
+            _ => None,
+        }
     }
 }
 

@@ -5,6 +5,7 @@ use crate::coins::{Address, Symbol};
 
 use crate::encoding::{Decode, Encode};
 
+use crate::migrate::MigrateFrom;
 use crate::state::State;
 use crate::{Error, Result};
 
@@ -13,9 +14,18 @@ use std::marker::PhantomData;
 pub const MAX_CALL_SIZE: usize = 65_535;
 pub const NATIVE_CALL_FLAG: u8 = 0xff;
 
-#[orga(skip(Call))]
+#[orga(skip(Call), version = 1)]
 pub struct SdkCompatPlugin<S, T> {
+    #[cfg_attr(feature = "compat", state(skip))]
+    #[orga(version(V0))]
     pub(crate) symbol: PhantomData<S>,
+    #[cfg_attr(feature = "compat", state(transparent))]
+    #[orga(version(V0))]
+    pub inner: T,
+
+    #[orga(version(V1))]
+    pub(crate) symbol: PhantomData<S>,
+    #[orga(version(V1))]
     pub inner: T,
 }
 
@@ -353,6 +363,15 @@ where
         };
 
         self.inner.call(call)
+    }
+}
+
+impl<S: 'static, T: State> MigrateFrom<SdkCompatPluginV0<S, T>> for SdkCompatPluginV1<S, T> {
+    fn migrate_from(value: SdkCompatPluginV0<S, T>) -> Result<Self> {
+        Ok(Self {
+            inner: value.inner,
+            symbol: PhantomData,
+        })
     }
 }
 
