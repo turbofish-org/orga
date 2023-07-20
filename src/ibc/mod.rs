@@ -391,7 +391,11 @@ pub struct PortChannel(
     EofTerminatedString<ChannelId>,
 );
 
-impl Migrate for PortChannel {}
+impl Migrate for PortChannel {
+    fn migrate(_src: Store, _dest: Store, bytes: &mut &[u8]) -> OrgaResult<Self> {
+        Ok(Decode::decode(bytes)?)
+    }
+}
 
 impl Describe for PortChannel {
     fn describe() -> Descriptor {
@@ -464,7 +468,11 @@ pub struct PortChannelSequence(
     EofTerminatedString<Sequence>,
 );
 
-impl Migrate for PortChannelSequence {}
+impl Migrate for PortChannelSequence {
+    fn migrate(_src: Store, _dest: Store, bytes: &mut &[u8]) -> OrgaResult<Self> {
+        Ok(Decode::decode(bytes)?)
+    }
+}
 
 impl Describe for PortChannelSequence {
     fn describe() -> Descriptor {
