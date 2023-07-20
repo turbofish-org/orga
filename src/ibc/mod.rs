@@ -220,7 +220,15 @@ pub struct Timestamp {
 
 impl Migrate for Timestamp {
     fn migrate(_src: Store, _dest: Store, bytes: &mut &[u8]) -> OrgaResult<Self> {
-        i128::decode(bytes)?.migrate_into()
+        if bytes[0] != 0 {
+            return Err(crate::Error::Ibc(format!(
+                "Invalid timestamp version: {}",
+                bytes[0]
+            )));
+        }
+        let ts_bytes: [u8; 16] = (&bytes[1..17]).try_into().unwrap();
+        *bytes = &bytes[17..];
+        i128::from_le_bytes(ts_bytes).migrate_into()
     }
 }
 
@@ -383,7 +391,11 @@ pub struct PortChannel(
     EofTerminatedString<ChannelId>,
 );
 
-impl Migrate for PortChannel {}
+impl Migrate for PortChannel {
+    fn migrate(_src: Store, _dest: Store, bytes: &mut &[u8]) -> OrgaResult<Self> {
+        Ok(Decode::decode(bytes)?)
+    }
+}
 
 impl Describe for PortChannel {
     fn describe() -> Descriptor {
@@ -456,7 +468,11 @@ pub struct PortChannelSequence(
     EofTerminatedString<Sequence>,
 );
 
-impl Migrate for PortChannelSequence {}
+impl Migrate for PortChannelSequence {
+    fn migrate(_src: Store, _dest: Store, bytes: &mut &[u8]) -> OrgaResult<Self> {
+        Ok(Decode::decode(bytes)?)
+    }
+}
 
 impl Describe for PortChannelSequence {
     fn describe() -> Descriptor {
