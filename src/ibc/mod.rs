@@ -23,9 +23,7 @@ use ibc_proto::ibc::applications::transfer::v1::MsgTransfer as RawMsgTransfer;
 use ibc_proto::ibc::core::{
     channel::v1::Channel as RawChannelEnd, connection::v1::ConnectionEnd as RawConnectionEnd,
 };
-use ibc_proto::ibc::lightclients::tendermint::v1::{
-    ClientState as RawTmClientState, ConsensusState as RawTmConsensusState,
-};
+
 use ibc_proto::protobuf::Protobuf;
 use ibc_rs::applications::transfer::msgs::transfer::MsgTransfer;
 use serde::Serialize;
@@ -624,28 +622,16 @@ macro_rules! protobuf_newtype {
     };
 }
 
-protobuf_newtype!(
-    ClientState,
-    TmClientState,
-    RawTmClientState,
-    Protobuf,
-    ClientStateV0
-);
-protobuf_newtype!(ClientStateV0, TmClientState, Any, Protobuf, ClientStateV0);
+protobuf_newtype!(ClientState, TmClientState, Any, Protobuf, ClientState);
+
 protobuf_newtype!(
     ConsensusState,
     TmConsensusState,
-    RawTmConsensusState,
-    TmProtobuf,
-    ConsensusStateV0
-);
-protobuf_newtype!(
-    ConsensusStateV0,
-    TmConsensusState,
     Any,
     TmProtobuf,
-    ConsensusStateV0
+    ConsensusState
 );
+
 protobuf_newtype!(
     ConnectionEnd,
     IbcConnectionEnd,
