@@ -236,13 +236,11 @@ impl<A: App> Node<A> {
         ABCIPlugin<A>: Migrate,
     {
         let merk_store = crate::merk::MerkStore::new(&self.merk_home);
-        if merk_store
-            .merk()
-            .get_aux(b"consensus_version")
-            .unwrap()
-            .is_some()
-        {
-            return self;
+        if let Some(store_ver) = merk_store.merk().get_aux(b"consensus_version").unwrap() {
+            if store_ver == version {
+                log::info!("Node has already migrated");
+                return self;
+            }
         }
 
         let genesis: serde_json::Value =
