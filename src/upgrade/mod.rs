@@ -102,7 +102,7 @@ impl Upgrade {
         self.signals.insert(cons_key, signal)
     }
 
-    pub fn step(&mut self, bin_version: &Version) -> Result<()> {
+    pub fn step(&mut self, bin_version: &Version, upgrade_authorized: bool) -> Result<()> {
         let bin_version = bin_version.clone();
         let net_version = self.current_version.get(())?.unwrap().clone();
         if bin_version != net_version {
@@ -112,9 +112,14 @@ impl Upgrade {
             }
             .into());
         }
+
+        if !upgrade_authorized {
+            return Ok(());
+        }
         if let Some(new_version) = self.upgrade_ready()? {
             self.current_version.insert((), new_version)?;
         }
+
         Ok(())
     }
 
@@ -234,7 +239,7 @@ mod tests {
         upgrade.current_version.insert((), version.clone())?;
 
         assert!(upgrade.upgrade_ready()?.is_none());
-        upgrade.step(&version)?;
+        upgrade.step(&version, true)?;
         assert_eq!(&*upgrade.current_version.get(())?.unwrap(), &version);
         set_signer([0; 20]);
         upgrade.signal(next_version.clone())?;
@@ -243,16 +248,18 @@ mod tests {
         set_signer([2; 20]);
         upgrade.signal(next_version.clone())?;
         assert!(upgrade.upgrade_ready()?.is_none());
-        upgrade.step(&version)?;
-        assert!(upgrade.step(&next_version).is_err());
+        upgrade.step(&version, true)?;
+        assert!(upgrade.step(&next_version, true).is_err());
         assert_eq!(&*upgrade.current_version.get(())?.unwrap(), &version);
         set_time(12);
         assert!(upgrade.upgrade_ready()?.unwrap() == next_version);
         assert_eq!(&*upgrade.current_version.get(())?.unwrap(), &version);
-        upgrade.step(&version)?;
+        upgrade.step(&version, false)?;
+        assert_eq!(&*upgrade.current_version.get(())?.unwrap(), &version);
+        upgrade.step(&version, true)?;
         assert_eq!(&*upgrade.current_version.get(())?.unwrap(), &next_version);
-        assert!(upgrade.step(&version).is_err());
-        upgrade.step(&next_version)?;
+        assert!(upgrade.step(&version, true).is_err());
+        upgrade.step(&next_version, true)?;
 
         Ok(())
     }
