@@ -598,6 +598,21 @@ impl Tendermint {
                                     msg.meta[3].1,
                                     msg.meta[4].1
                                 ),
+                                _ if msg.level == "E" => {
+                                    let module = msg
+                                        .meta
+                                        .iter()
+                                        .find(|(k, _)| *k == "module")
+                                        .map(|(_, v)| v.clone())
+                                        .unwrap();
+                                    if module != "p2p" && module != "rpc" {
+                                        log::error!(
+                                            "Tendermint error: {} {:?}",
+                                            msg.message,
+                                            msg.meta
+                                        )
+                                    }
+                                }
                                 _ => {}
                             }
                         })
@@ -641,6 +656,7 @@ impl Tendermint {
 
 #[derive(Debug)]
 struct LogMessage {
+    level: String,
     message: String,
     meta: Vec<(String, String)>,
 }
@@ -659,7 +675,7 @@ impl FromStr for LogMessage {
 
         let into_string = |chars: Vec<char>| chars.into_iter().collect::<String>();
 
-        let (s, _level) = take::<_, _, nom::error::Error<_>>(1usize)(s)
+        let (s, level) = take::<_, _, nom::error::Error<_>>(1usize)(s)
             .map_err(|_| Error::App("Could not parse log line".to_string()))?;
         let (s, _) = separated_pair(
             preceded(
@@ -699,6 +715,7 @@ impl FromStr for LogMessage {
         .map_err(|_| Error::App("Could not parse log line".to_string()))?;
 
         Ok(LogMessage {
+            level: level.to_string(),
             message: message.trim().to_string(),
             meta,
         })
