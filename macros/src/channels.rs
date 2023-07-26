@@ -19,7 +19,7 @@ impl VisitMut for ChannelFilter {
 
             let target: Attribute = if chan_attr.contains_key(&self.channel) {
                 // always true
-                parse_quote! { #[cfg(any(feature = "x", not(feature = "x")))]}
+                parse_quote! { #[cfg(all())]}
             } else {
                 for chan in chan_attr.keys() {
                     if !self.all_channels.contains_key(chan) {
@@ -27,7 +27,7 @@ impl VisitMut for ChannelFilter {
                     }
                 }
                 // always false
-                parse_quote! { #[cfg(all(feature = "x", not(feature = "x")))]}
+                parse_quote! { #[cfg(any())]}
             };
 
             i.meta = target.meta;
