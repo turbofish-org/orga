@@ -32,6 +32,8 @@ impl VisitMut for ChannelFilter {
 
             i.meta = target.meta;
         }
+
+        visit_mut::visit_attribute_mut(self, i);
     }
 }
 
