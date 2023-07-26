@@ -16,7 +16,7 @@
 #![feature(trait_upcasting)]
 
 extern crate self as orga;
-pub use orga_macros::orga;
+pub use orga_macros::{channels, orga};
 
 /// Integration with ABCI.
 pub mod abci;
