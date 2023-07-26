@@ -4,6 +4,7 @@
 use proc_macro::TokenStream;
 
 mod build_call;
+mod channels;
 mod child;
 mod describe;
 mod encoding;
@@ -46,6 +47,11 @@ pub fn derive_migrate(item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn orga(args: TokenStream, input: TokenStream) -> TokenStream {
     orga::orga(args, input)
+}
+
+#[proc_macro_attribute]
+pub fn channels(args: TokenStream, input: TokenStream) -> TokenStream {
+    channels::channels(args, input)
 }
 
 #[proc_macro_derive(VersionedEncoding, attributes(encoding))]
