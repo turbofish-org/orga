@@ -270,7 +270,7 @@ pub fn to_snake_case(ident: &Ident) -> Ident {
     Ident::new(&format!("{}", ident).as_str().to_snake_case(), ident.span())
 }
 
-pub fn impl_item_attrs(item: &ImplItem) -> Vec<Attribute> {
+pub fn _impl_item_attrs(item: &ImplItem) -> Vec<Attribute> {
     use ImplItem::*;
     match item {
         Fn(method) => method.attrs.clone(),
