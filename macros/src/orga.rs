@@ -1,9 +1,5 @@
-use crate::utils::{impl_item_attrs, path_to_ident};
-
 use super::utils::is_attr_with_ident;
-use darling::{
-    ast, export::NestedMeta, FromAttributes, FromDeriveInput, FromField, FromMeta, ToTokens,
-};
+use darling::{ast, export::NestedMeta, FromDeriveInput, FromField, FromMeta, ToTokens};
 use itertools::Itertools;
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
@@ -397,12 +393,6 @@ impl ToTokens for OrgaMetaStruct {
     }
 }
 
-#[derive(Debug, Clone, FromAttributes)]
-#[darling(attributes(orga))]
-struct OrgaMethodAttr {
-    channel: Option<HashMap<Ident, ()>>,
-}
-
 fn expand_item_impl(attr_args: Vec<NestedMeta>, item: ItemImpl) -> TokenStream {
     let attrs = OrgaImplAttrReceiver::from_list(&attr_args).unwrap();
     let channels = attrs
@@ -411,46 +401,22 @@ fn expand_item_impl(attr_args: Vec<NestedMeta>, item: ItemImpl) -> TokenStream {
         .map(|(ident, _)| ident.clone())
         .collect_vec();
 
-    let mut tokens = TokenStream2::new();
     if channels.is_empty() {
-        return quote! {
+        quote! {
             #[::orga::call::call_block]
             #[::orga::query::query_block]
             #item
         }
-        .into();
-    }
-    for channel in channels {
-        let mut item = item.clone();
-        if let box Type::Path(TypePath { path, .. }) = &mut item.self_ty {
-            let generic_args = path.segments.last().unwrap().arguments.clone();
-            let ident = path_to_ident(&path);
-            let ident = format_ident!("{}{}", ident, channel);
+    } else {
+        quote! {
 
-            *path = parse_quote! {#ident #generic_args};
-        }
-
-        item.items = item
-            .items
-            .into_iter()
-            .filter(|impl_item| {
-                let attrs = impl_item_attrs(impl_item);
-                let orga_method_attr = OrgaMethodAttr::from_attributes(&attrs)
-                    .expect("Failed to parse orga method attribute");
-                if let Some(channels) = &orga_method_attr.channel {
-                    return channels.contains_key(&channel);
-                }
-
-                true
-            })
-            .collect();
-
-        tokens.extend(quote! {
-            #[::orga::orga]
+            #[::orga::channels(#(#channels),*)]
+            #[::orga::call::call_block]
+            #[::orga::query::query_block]
             #item
-        });
+        }
     }
-    return tokens.into();
+    .into()
 }
 
 pub fn orga(args: TokenStream, input: TokenStream) -> TokenStream {
