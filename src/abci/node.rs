@@ -198,23 +198,26 @@ impl<A: App> Node<A> {
             .listen(format!("127.0.0.1:{}", self.abci_port));
         tm_process.kill()?;
 
-        if let Err(crate::Error::Upgrade(crate::upgrade::Error::Version { expected, actual })) = res
-        {
-            log::warn!(
-                "Node is version {}, but network is version {}",
-                hex::encode(actual.to_vec()),
-                hex::encode(expected.to_vec()),
-            );
+        match res {
+            Err(crate::Error::Upgrade(crate::upgrade::Error::Version { expected, actual })) => {
+                log::warn!(
+                    "Node is version {}, but network is version {}",
+                    hex::encode(actual.to_vec()),
+                    hex::encode(expected.to_vec()),
+                );
 
-            std::fs::write(
-                self.home.join("network_version"),
-                format!("{}\n", hex::encode(expected.to_vec())),
-            )?;
+                std::fs::write(
+                    self.home.join("network_version"),
+                    format!("{}\n", hex::encode(expected.to_vec())),
+                )?;
 
-            std::process::exit(138);
+                std::process::exit(138);
+            }
+            Err(crate::Error::ABCI(msg)) if msg.starts_with("Reached stop height ") => {
+                std::process::exit(138);
+            }
+            _ => res,
         }
-
-        res
     }
 
     #[must_use]
