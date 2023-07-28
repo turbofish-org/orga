@@ -155,6 +155,20 @@ mod server {
                     Ok(Res::InitChain(res_init_chain))
                 }
                 Req::BeginBlock(req) => {
+                    if let Some(stop_height_str) = env::var_os("STOP_HEIGHT") {
+                        let stop_height: i64 = stop_height_str
+                            .into_string()
+                            .unwrap()
+                            .parse()
+                            .expect("Invalid STOP_HEIGHT value");
+                        if req.header.as_ref().unwrap().height > stop_height {
+                            return Err(Error::ABCI(format!(
+                                "Reached stop height ({})",
+                                stop_height
+                            )));
+                        }
+                    }
+
                     let app = self.app.take().unwrap();
                     let self_store = self.store.take().unwrap().into_inner();
                     let self_store_shared = Shared::new(self_store);
