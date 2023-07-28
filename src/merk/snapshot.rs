@@ -102,6 +102,7 @@ impl SnapshotFilter {
     }
 }
 
+#[derive(Default)]
 pub struct Snapshots {
     snapshots: BTreeMap<u64, Snapshot>,
     filters: Vec<SnapshotFilter>,

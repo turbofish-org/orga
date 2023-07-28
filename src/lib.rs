@@ -46,9 +46,6 @@ pub mod query;
 /// High-level abstractions for state data.
 pub mod state;
 
-/// Helpers for executing state machine logic.
-pub mod state_machine;
-
 /// Low-level key/value store abstraction.
 pub mod store;
 

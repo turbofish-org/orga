@@ -55,7 +55,7 @@ impl MerkStore {
         MerkStore {
             map: Some(Default::default()),
             merk: Some(merk),
-            snapshots: Self::load_snapshots(home.join("snapshots")),
+            snapshots: snapshot::Snapshots::default(),
             home,
             target_snapshot: None,
             restorer: None,
