@@ -374,10 +374,7 @@ mod server {
                 }
 
                 let (req, cb) = self.receiver.recv().unwrap();
-                let is_commit = match req.value {
-                    Some(Req::Commit(_)) => true,
-                    _ => false,
-                };
+                let is_commit = matches!(req.value, Some(Req::Commit(_)));
                 let res = Response {
                     value: Some(self.run(req)?),
                 };
