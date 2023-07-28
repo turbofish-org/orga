@@ -155,12 +155,12 @@ mod server {
                     Ok(Res::InitChain(res_init_chain))
                 }
                 Req::BeginBlock(req) => {
-                    if let Some(stop_height_str) = env::var_os("STOP_HEIGHT") {
+                    if let Some(stop_height_str) = env::var_os("ORGA_STOP_HEIGHT") {
                         let stop_height: i64 = stop_height_str
                             .into_string()
                             .unwrap()
                             .parse()
-                            .expect("Invalid STOP_HEIGHT value");
+                            .expect("Invalid ORGA_STOP_HEIGHT value");
                         if req.header.as_ref().unwrap().height > stop_height {
                             return Err(Error::ABCI(format!(
                                 "Reached stop height ({})",
@@ -376,12 +376,12 @@ mod server {
                 cb.send(res).unwrap();
 
                 if is_commit {
-                    if let Some(stop_height_str) = env::var_os("STOP_HEIGHT") {
+                    if let Some(stop_height_str) = env::var_os("ORGA_STOP_HEIGHT") {
                         let stop_height: u64 = stop_height_str
                             .into_string()
                             .unwrap()
                             .parse()
-                            .expect("Invalid STOP_HEIGHT value");
+                            .expect("Invalid ORGA_STOP_HEIGHT value");
                         if self.height >= stop_height {
                             break Err(Error::ABCI(format!(
                                 "Reached stop height ({})",
