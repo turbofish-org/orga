@@ -271,19 +271,6 @@ mod server {
                         .borrow_mut()
                         .commit(self.header.clone().unwrap())?;
 
-                    if let Some(stop_height_str) = env::var_os("STOP_HEIGHT") {
-                        let stop_height: u64 = stop_height_str
-                            .into_string()
-                            .unwrap()
-                            .parse()
-                            .expect("Invalid STOP_HEIGHT value");
-                        assert!(
-                            self.height < stop_height,
-                            "Reached stop height ({})",
-                            stop_height
-                        );
-                    }
-
                     self.mempool_state.replace(Default::default());
                     self.consensus_state.replace(Default::default());
 
@@ -379,10 +366,30 @@ mod server {
                 }
 
                 let (req, cb) = self.receiver.recv().unwrap();
+                let is_commit = match req.value {
+                    Some(Req::Commit(_)) => true,
+                    _ => false,
+                };
                 let res = Response {
                     value: Some(self.run(req)?),
                 };
                 cb.send(res).unwrap();
+
+                if is_commit {
+                    if let Some(stop_height_str) = env::var_os("STOP_HEIGHT") {
+                        let stop_height: u64 = stop_height_str
+                            .into_string()
+                            .unwrap()
+                            .parse()
+                            .expect("Invalid STOP_HEIGHT value");
+                        if self.height >= stop_height {
+                            break Err(Error::ABCI(format!(
+                                "Reached stop height ({})",
+                                stop_height
+                            )));
+                        }
+                    }
+                }
             }
         }
 
@@ -418,9 +425,10 @@ mod server {
                             return;
                         }
                     };
-                    req_sender
-                        .send((req, res_sender.clone()))
-                        .expect("failed to send request");
+                    if let Err(err) = req_sender.send((req, res_sender.clone())) {
+                        log::warn!("Error sending request from worker: {}", err);
+                        break;
+                    }
                     let res = res_receiver.recv().unwrap();
                     conn.write(res).unwrap();
                 }
