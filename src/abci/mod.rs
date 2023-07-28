@@ -347,6 +347,14 @@ mod server {
         /// Creates a TCP server for the ABCI protocol and begins handling the
         /// incoming connections.
         pub fn listen<SA: ToSocketAddrs>(mut self, addr: SA) -> Result<()> {
+            if let Some(stop_height_str) = env::var_os("ORGA_STOP_HEIGHT") {
+                let _stop_height: u64 = stop_height_str
+                    .into_string()
+                    .unwrap()
+                    .parse()
+                    .expect("Invalid ORGA_STOP_HEIGHT value");
+            }
+
             let server = abci2::Server::listen(addr)?;
 
             let (err_sender, err_receiver) = mpsc::channel();
