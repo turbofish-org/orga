@@ -219,7 +219,7 @@ impl From<Address> for [u8; Address::LENGTH] {
 }
 
 #[orga]
-#[derive(Clone, Debug, Next, Copy)]
+#[derive(Clone, Debug, Next, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VersionedAddress {
     bytes: [u8; Address::LENGTH],
 }

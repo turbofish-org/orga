@@ -105,6 +105,7 @@ pub struct InitChainCtx {
     pub initial_height: i64,
 }
 
+#[derive(Encode, Decode, Debug)]
 pub struct Validator {
     pub pubkey: [u8; 32],
     pub power: u64,

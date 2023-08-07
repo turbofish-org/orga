@@ -24,6 +24,7 @@ type PubKey = [u8; 32];
 pub type Version = LengthVec<u8, u8>;
 
 #[orga]
+#[derive(Debug, Clone)]
 pub struct Signal {
     pub version: Version,
     pub time: i64,
@@ -31,7 +32,7 @@ pub struct Signal {
 
 #[orga(skip(Default), version = 1)]
 pub struct Upgrade {
-    signals: Map<PubKey, Signal>,
+    pub signals: Map<PubKey, Signal>,
     pub threshold: Decimal,
     pub activation_delay_seconds: i64,
     pub rate_limit_seconds: i64,
