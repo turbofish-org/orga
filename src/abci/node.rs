@@ -151,10 +151,14 @@ where
         let store = MerkStore::new(self.merk_home.clone());
 
         let res = ABCIStateMachine::new(app, store).listen(format!("127.0.0.1:{}", self.abci_port));
-
         tm_process.kill()?;
 
-        res
+        match res {
+            Err(crate::Error::ABCI(msg)) if msg.starts_with("Reached stop height ") => {
+                std::process::exit(138);
+            }
+            _ => res,
+        }
     }
 
     #[cfg(debug_assertions)]

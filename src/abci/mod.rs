@@ -146,6 +146,20 @@ impl<A: Application> ABCIStateMachine<A> {
                 Ok(Res::InitChain(res_init_chain))
             }
             Req::BeginBlock(req) => {
+                if let Some(stop_height_str) = env::var_os("ORGA_STOP_HEIGHT") {
+                    let stop_height: i64 = stop_height_str
+                        .into_string()
+                        .unwrap()
+                        .parse()
+                        .expect("Invalid ORGA_STOP_HEIGHT value");
+                    if req.header.as_ref().unwrap().height > stop_height {
+                        return Err(Error::ABCI(format!(
+                            "Reached stop height ({})",
+                            stop_height
+                        )));
+                    }
+                }
+
                 let app = self.app.take().unwrap();
                 let self_store = self.store.take().unwrap().into_inner();
                 let self_store_shared = Shared::new(self_store);
@@ -245,19 +259,6 @@ impl<A: Application> ABCIStateMachine<A> {
 
                 self_store_shared.borrow_mut().commit(self.height)?;
 
-                if let Some(stop_height_str) = env::var_os("STOP_HEIGHT") {
-                    let stop_height: u64 = stop_height_str
-                        .into_string()
-                        .unwrap()
-                        .parse()
-                        .expect("Invalid STOP_HEIGHT value");
-                    assert!(
-                        self.height < stop_height,
-                        "Reached stop height ({})",
-                        stop_height
-                    );
-                }
-
                 self.mempool_state.replace(Default::default());
                 self.consensus_state.replace(Default::default());
 
@@ -332,6 +333,14 @@ impl<A: Application> ABCIStateMachine<A> {
     /// Creates a TCP server for the ABCI protocol and begins handling the
     /// incoming connections.
     pub fn listen<SA: ToSocketAddrs>(mut self, addr: SA) -> Result<()> {
+        if let Some(stop_height_str) = env::var_os("ORGA_STOP_HEIGHT") {
+            let _stop_height: u64 = stop_height_str
+                .into_string()
+                .unwrap()
+                .parse()
+                .expect("Invalid ORGA_STOP_HEIGHT value");
+        }
+
         let server = abci2::Server::listen(addr)?;
 
         let (err_sender, err_receiver) = mpsc::channel();
@@ -351,10 +360,27 @@ impl<A: Application> ABCIStateMachine<A> {
             }
 
             let (req, cb) = self.receiver.recv().unwrap();
+            let is_commit = matches!(req.value, Some(Req::Commit(_)));
             let res = Response {
                 value: Some(self.run(req)?),
             };
             cb.send(res).unwrap();
+
+            if is_commit {
+                if let Some(stop_height_str) = env::var_os("ORGA_STOP_HEIGHT") {
+                    let stop_height: u64 = stop_height_str
+                        .into_string()
+                        .unwrap()
+                        .parse()
+                        .expect("Invalid ORGA_STOP_HEIGHT value");
+                    if self.height >= stop_height {
+                        break Err(Error::ABCI(format!(
+                            "Reached stop height ({})",
+                            stop_height
+                        )));
+                    }
+                }
+            }
         }
     }
 
@@ -386,9 +412,10 @@ impl Worker {
                         return;
                     }
                 };
-                req_sender
-                    .send((req, res_sender.clone()))
-                    .expect("failed to send request");
+                if let Err(err) = req_sender.send((req, res_sender.clone())) {
+                    log::warn!("Error sending request from worker: {}", err);
+                    break;
+                }
                 let res = res_receiver.recv().unwrap();
                 conn.write(res).unwrap();
             }
