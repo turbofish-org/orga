@@ -352,6 +352,7 @@ impl<A: Application> ABCIStateMachine<A> {
         self.create_worker(server.accept()?, err_sender.clone())?;
         self.create_worker(server.accept()?, err_sender)?;
 
+        let mut close_err = None;
         loop {
             match err_receiver.try_recv() {
                 Err(mpsc::TryRecvError::Empty) => {}
@@ -361,6 +362,7 @@ impl<A: Application> ABCIStateMachine<A> {
 
             let (req, cb) = self.receiver.recv().unwrap();
             let is_commit = matches!(req.value, Some(Req::Commit(_)));
+            let is_flush = matches!(req.value, Some(Req::Flush(_)));
             let res = Response {
                 value: Some(self.run(req)?),
             };
@@ -374,12 +376,14 @@ impl<A: Application> ABCIStateMachine<A> {
                         .parse()
                         .expect("Invalid ORGA_STOP_HEIGHT value");
                     if self.height >= stop_height {
-                        break Err(Error::ABCI(format!(
+                        close_err = Some(Error::ABCI(format!(
                             "Reached stop height ({})",
                             stop_height
                         )));
                     }
                 }
+            } else if is_flush && close_err.is_some() {
+                return Err(close_err.unwrap());
             }
         }
     }
