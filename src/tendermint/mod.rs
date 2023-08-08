@@ -44,9 +44,9 @@ fn verify_hash(tendermint_bytes: &[u8]) {
 }
 
 #[derive(Debug)]
-struct ProcessHandler {
+pub struct ProcessHandler {
     command: std::process::Command,
-    process: Option<std::process::Child>,
+    pub process: Option<std::process::Child>,
 }
 
 impl ProcessHandler {
@@ -101,7 +101,7 @@ impl ProcessHandler {
 
 #[derive(Debug)]
 pub struct Tendermint {
-    process: ProcessHandler,
+    pub process: ProcessHandler,
     home: PathBuf,
     genesis_bytes: Option<Vec<u8>>,
     config_contents: Option<toml_edit::Document>,
