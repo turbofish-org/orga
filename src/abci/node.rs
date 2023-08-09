@@ -140,10 +140,7 @@ where
                 .parse()
                 .expect("Invalid ORGA_STOP_HEIGHT value");
             let store_height = store.height()?;
-            if store_height == stop_height {
-                println!("Reached stop height");
-                std::process::exit(138);
-            } else if store_height > stop_height {
+            if store_height >= stop_height {
                 println!("Past stop height");
                 std::process::exit(137);
             }
