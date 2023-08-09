@@ -72,6 +72,7 @@ impl<A: Application> ABCIStateMachine<A> {
                 let self_store = self.store.take().unwrap().into_inner();
 
                 let start_height = self_store.height()?;
+
                 info!("State is at height {}", start_height);
 
                 let app_hash = if start_height == 0 {
@@ -152,11 +153,14 @@ impl<A: Application> ABCIStateMachine<A> {
                         .unwrap()
                         .parse()
                         .expect("Invalid ORGA_STOP_HEIGHT value");
-                    if req.header.as_ref().unwrap().height > stop_height {
+                    let height = req.header.as_ref().unwrap().height;
+                    if height == stop_height {
                         return Err(Error::ABCI(format!(
                             "Reached stop height ({})",
                             stop_height
                         )));
+                    } else if height > stop_height {
+                        return Err(Error::ABCI(format!("Past stop height ({})", stop_height)));
                     }
                 }
 
@@ -352,7 +356,6 @@ impl<A: Application> ABCIStateMachine<A> {
         self.create_worker(server.accept()?, err_sender.clone())?;
         self.create_worker(server.accept()?, err_sender)?;
 
-        let mut close_err = None;
         loop {
             match err_receiver.try_recv() {
                 Err(mpsc::TryRecvError::Empty) => {}
@@ -361,30 +364,10 @@ impl<A: Application> ABCIStateMachine<A> {
             }
 
             let (req, cb) = self.receiver.recv().unwrap();
-            let is_commit = matches!(req.value, Some(Req::Commit(_)));
-            let is_flush = matches!(req.value, Some(Req::Flush(_)));
             let res = Response {
                 value: Some(self.run(req)?),
             };
             cb.send(res).unwrap();
-
-            if is_commit {
-                if let Some(stop_height_str) = env::var_os("ORGA_STOP_HEIGHT") {
-                    let stop_height: u64 = stop_height_str
-                        .into_string()
-                        .unwrap()
-                        .parse()
-                        .expect("Invalid ORGA_STOP_HEIGHT value");
-                    if self.height >= stop_height {
-                        close_err = Some(Error::ABCI(format!(
-                            "Reached stop height ({})",
-                            stop_height
-                        )));
-                    }
-                }
-            } else if is_flush && close_err.is_some() {
-                return Err(close_err.unwrap());
-            }
         }
     }
 

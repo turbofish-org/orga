@@ -7,7 +7,7 @@ use crate::query::Query;
 use crate::state::State;
 use crate::store::{Read, Shared, Store, Write};
 use crate::tendermint::Tendermint;
-use crate::Result;
+use crate::{Error, Result};
 use home::home_dir;
 use std::borrow::Borrow;
 use std::marker::PhantomData;
@@ -132,6 +132,23 @@ where
         let maybe_genesis_bytes = self.genesis_bytes;
         let maybe_peers = self.p2p_persistent_peers;
 
+        let store = MerkStore::new(self.merk_home.clone());
+        if let Some(stop_height_str) = std::env::var_os("ORGA_STOP_HEIGHT") {
+            let stop_height: u64 = stop_height_str
+                .into_string()
+                .unwrap()
+                .parse()
+                .expect("Invalid ORGA_STOP_HEIGHT value");
+            let store_height = store.height()?;
+            if store_height == stop_height {
+                println!("Reached stop height");
+                std::process::exit(138);
+            } else if store_height > stop_height {
+                println!("Past stop height");
+                std::process::exit(137);
+            }
+        }
+
         let mut tm_process = Tendermint::new(&tm_home)
             .stdout(stdout)
             .stderr(stderr)
@@ -148,27 +165,18 @@ where
         tm_process = tm_process.start();
 
         let app = InternalApp::<ABCIPlugin<A>>::new();
-        let store = MerkStore::new(self.merk_home.clone());
 
         let res = ABCIStateMachine::new(app, store).listen(format!("127.0.0.1:{}", self.abci_port));
-
-        std::process::Command::new("kill")
-            .arg(
-                tm_process
-                    .process
-                    .process
-                    .as_ref()
-                    .unwrap()
-                    .id()
-                    .to_string(),
-            )
-            .output()
-            .unwrap();
-        tm_process.process.wait()?;
+        tm_process.kill()?;
 
         match res {
             Err(crate::Error::ABCI(msg)) if msg.starts_with("Reached stop height ") => {
+                println!("Reached stop height");
                 std::process::exit(138);
+            }
+            Err(crate::Error::ABCI(msg)) if msg.starts_with("Past stop height ") => {
+                println!("Past stop height");
+                std::process::exit(137);
             }
             _ => res,
         }
