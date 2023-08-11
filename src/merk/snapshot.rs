@@ -1,9 +1,8 @@
 use crate::store::Read;
 use crate::Result;
-use merk::{chunks::ChunkProducer, Hash, Merk};
+use merk::{Hash, Merk};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
-use std::mem::transmute;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use tendermint_proto::v0_34::abci::{RequestLoadSnapshotChunk, Snapshot as AbciSnapshot};
@@ -13,31 +12,32 @@ use super::store::{FIRST_SNAPSHOT_HEIGHT, SNAPSHOT_INTERVAL};
 #[derive(Clone)]
 pub struct Snapshot {
     pub(crate) checkpoint: Rc<RefCell<Merk>>,
-    chunks: Rc<RefCell<Option<ChunkProducer<'static>>>>,
     length: u32,
     hash: Hash,
 }
 
 impl Snapshot {
     fn new(checkpoint: Merk) -> Result<Self> {
-        let chunks = checkpoint.chunks()?;
-        let chunks: ChunkProducer<'static> = unsafe { transmute(chunks) };
+        let length = {
+            let chunks = checkpoint.chunks()?;
+            chunks.len() as u32
+        };
 
-        let length = chunks.len() as u32;
         let hash = checkpoint.root_hash();
 
         Ok(Self {
             checkpoint: Rc::new(RefCell::new(checkpoint)),
-            chunks: Rc::new(RefCell::new(Some(chunks))),
             length,
             hash,
         })
     }
 
     fn chunk(&self, index: usize) -> Result<Vec<u8>> {
-        let mut chunks = self.chunks.borrow_mut();
-        let chunks = chunks.as_mut().unwrap();
-        let chunk = chunks.chunk(index)?;
+        let checkpoint = self.checkpoint.borrow();
+        // TODO: refactor ChunkProducer in Merk to not retain reference to db,
+        // so we can reuse it across chunks rather than creating a new
+        // ChunkProducer each time
+        let chunk = checkpoint.chunks()?.chunk(index)?;
         Ok(chunk)
     }
 }
@@ -53,13 +53,6 @@ impl Read for Snapshot {
 
     fn get_prev(&self, key: Option<&[u8]>) -> Result<Option<crate::store::KV>> {
         super::store::get_prev(&self.checkpoint.borrow(), key)
-    }
-}
-
-impl Drop for Snapshot {
-    fn drop(&mut self) {
-        // drop the self-referential ChunkProducer before the Merk instance
-        self.chunks.borrow_mut().take();
     }
 }
 
