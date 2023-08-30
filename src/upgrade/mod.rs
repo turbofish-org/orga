@@ -36,9 +36,6 @@ pub struct Upgrade {
     pub threshold: Decimal,
     pub activation_delay_seconds: i64,
     pub rate_limit_seconds: i64,
-    #[orga(version(V0))]
-    pub current_version: Version,
-    #[orga(version(V1))]
     #[state(absolute_prefix(b"/version"))]
     // TODO: use Value/Box instead of Map<(), _>
     pub current_version: Map<(), Version>,
@@ -62,16 +59,7 @@ impl Default for Upgrade {
 
 impl MigrateFrom<UpgradeV0> for UpgradeV1 {
     fn migrate_from(prev: UpgradeV0) -> Result<Self> {
-        let mut current_version = Map::new();
-        current_version.insert((), prev.current_version)?;
-
-        Ok(Self {
-            signals: prev.signals,
-            threshold: prev.threshold,
-            activation_delay_seconds: prev.activation_delay_seconds,
-            rate_limit_seconds: prev.rate_limit_seconds,
-            current_version,
-        })
+        unreachable!()
     }
 }
 
