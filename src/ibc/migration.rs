@@ -1,10 +1,8 @@
 use super::{IbcV0, IbcV1, Timestamp};
-use crate::{migrate::MigrateFrom, state::State};
+use crate::migrate::MigrateFrom;
 
-/// Upgrade from ibc-rs v0.15 -> v0.40.
-/// This migration resets all IBC state.
 impl MigrateFrom<IbcV0> for IbcV1 {
-    fn migrate_from(mut value: IbcV0) -> crate::Result<Self> {
+    fn migrate_from(_value: IbcV0) -> crate::Result<Self> {
         unreachable!()
     }
 }

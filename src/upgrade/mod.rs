@@ -58,7 +58,7 @@ impl Default for Upgrade {
 }
 
 impl MigrateFrom<UpgradeV0> for UpgradeV1 {
-    fn migrate_from(prev: UpgradeV0) -> Result<Self> {
+    fn migrate_from(_prev: UpgradeV0) -> Result<Self> {
         unreachable!()
     }
 }

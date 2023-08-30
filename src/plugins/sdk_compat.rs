@@ -358,7 +358,7 @@ where
 }
 
 impl<S: 'static, T: State> MigrateFrom<SdkCompatPluginV0<S, T>> for SdkCompatPluginV1<S, T> {
-    fn migrate_from(value: SdkCompatPluginV0<S, T>) -> Result<Self> {
+    fn migrate_from(_value: SdkCompatPluginV0<S, T>) -> Result<Self> {
         unreachable!()
     }
 }
