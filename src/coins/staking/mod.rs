@@ -235,6 +235,15 @@ impl<S: Symbol> Staking<S> {
         Ok(consensus_key)
     }
 
+    pub fn address_by_consensus_key(&self, cons_key: [u8; 32]) -> Result<Option<Address>> {
+        let tm_pubkey_hash = tm_pubkey_hash(cons_key)?;
+        if let Some(address) = self.address_for_tm_hash.get(tm_pubkey_hash)? {
+            Ok(Some(*address))
+        } else {
+            Ok(None)
+        }
+    }
+
     pub fn declare(
         &mut self,
         val_address: Address,
