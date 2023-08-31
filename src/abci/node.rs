@@ -280,8 +280,6 @@ impl<A: App> Node<A> {
             store
                 .write(vec![(b"consensus_version".to_vec(), Some(version))])
                 .unwrap();
-            #[cfg(feature = "compat")]
-            store.into_merk().repair().unwrap();
         } else {
             unreachable!();
         }

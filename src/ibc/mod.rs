@@ -64,76 +64,40 @@ pub const IBC_QUERY_PATH: &str = "store/ibc/key";
 
 #[orga(version = 1)]
 pub struct Ibc {
-    #[orga(version(V0))]
-    _bytes0: [u8; 32],
-    #[orga(version(V0))]
-    _bytes1: [u8; 32],
-    #[orga(version(V0))]
-    _bytes2: [u8; 23],
-
-    #[orga(version(V0))]
-    #[state(prefix(b""))]
-    local_store: Store,
-
-    #[orga(version(V0))]
-    #[state(absolute_prefix(b""))]
-    root_store: Store,
-
-    #[orga(version(V1))]
     height: u64,
-
-    #[orga(version(V1))]
     host_consensus_states: Deque<ConsensusState>,
-
-    #[orga(version(V1))]
     channel_counter: u64,
-
-    #[orga(version(V1))]
     connection_counter: u64,
-
-    #[orga(version(V1))]
     client_counter: u64,
-
-    #[orga(version(V1))]
     pub transfer: Transfer,
 
-    #[orga(version(V1))]
     #[state(absolute_prefix(b"clients/"))]
     clients: Map<ClientId, Client>,
 
-    #[orga(version(V1))]
     #[state(absolute_prefix(b"connections/"))]
     connections: Map<ConnectionId, ConnectionEnd>,
 
-    #[orga(version(V1))]
     #[state(absolute_prefix(b"channelEnds/"))]
     channel_ends: Map<PortChannel, ChannelEnd>,
 
-    #[orga(version(V1))]
     #[state(absolute_prefix(b"nextSequenceSend/"))]
     next_sequence_send: Map<PortChannel, Number>,
 
-    #[orga(version(V1))]
     #[state(absolute_prefix(b"nextSequenceRecv/"))]
     next_sequence_recv: Map<PortChannel, Number>,
 
-    #[orga(version(V1))]
     #[state(absolute_prefix(b"nextSequenceAck/"))]
     next_sequence_ack: Map<PortChannel, Number>,
 
-    #[orga(version(V1))]
     #[state(absolute_prefix(b"commitments/"))]
     commitments: Map<PortChannelSequence, Vec<u8>>,
 
-    #[orga(version(V1))]
     #[state(absolute_prefix(b"receipts/"))]
     receipts: Map<PortChannelSequence, ()>,
 
-    #[orga(version(V1))]
     #[state(absolute_prefix(b"acks/"))]
     acks: Map<PortChannelSequence, Vec<u8>>,
 
-    #[orga(version(V1))]
     #[state(absolute_prefix(b""))]
     store: Store,
 }
@@ -216,17 +180,18 @@ pub struct Timestamp {
     inner: IbcTimestamp,
 }
 
+// TODO: replace when macro can specify min version
 impl Migrate for Timestamp {
     fn migrate(_src: Store, _dest: Store, bytes: &mut &[u8]) -> OrgaResult<Self> {
-        if bytes[0] != 0 {
+        if bytes[0] != 1 {
             return Err(crate::Error::Ibc(format!(
                 "Invalid timestamp version: {}",
                 bytes[0]
             )));
         }
-        let ts_bytes: [u8; 16] = (&bytes[1..17]).try_into().unwrap();
-        *bytes = &bytes[17..];
-        i128::from_le_bytes(ts_bytes).migrate_into()
+        *bytes = &bytes[1..];
+
+        Timestamp::load(Store::default(), bytes)
     }
 }
 

@@ -79,7 +79,6 @@ merk-verify = ["merk/verify"]
 merk-full = ["merk/full", "ics23"]
 state-sync = []
 feat-ibc = ["ibc", "bincode", "ics23", "prost-types", "ibc-proto", "tendermint"]
-compat = []
 
 [profile.release]
 lto = true

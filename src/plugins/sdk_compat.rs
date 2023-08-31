@@ -16,16 +16,7 @@ pub const NATIVE_CALL_FLAG: u8 = 0xff;
 
 #[orga(skip(Call), version = 1)]
 pub struct SdkCompatPlugin<S, T> {
-    #[cfg_attr(feature = "compat", state(skip))]
-    #[orga(version(V0))]
     pub(crate) symbol: PhantomData<S>,
-    #[cfg_attr(feature = "compat", state(transparent))]
-    #[orga(version(V0))]
-    pub inner: T,
-
-    #[orga(version(V1))]
-    pub(crate) symbol: PhantomData<S>,
-    #[orga(version(V1))]
     pub inner: T,
 }
 
@@ -367,11 +358,8 @@ where
 }
 
 impl<S: 'static, T: State> MigrateFrom<SdkCompatPluginV0<S, T>> for SdkCompatPluginV1<S, T> {
-    fn migrate_from(value: SdkCompatPluginV0<S, T>) -> Result<Self> {
-        Ok(Self {
-            inner: value.inner,
-            symbol: PhantomData,
-        })
+    fn migrate_from(_value: SdkCompatPluginV0<S, T>) -> Result<Self> {
+        unreachable!()
     }
 }
 
