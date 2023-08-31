@@ -153,7 +153,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-clippy-
       - name: Check
-        uses: actions-rs/clippy-check@v1
+        uses: giraffate/clippy-action@v1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-features -- -D warnings
+          clippy_flags: --all-features -- -D warnings
+          reporter: "github-pr-review"
+          github_token: ${{ secrets.GITHUB_TOKEN }}
