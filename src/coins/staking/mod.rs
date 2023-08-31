@@ -362,7 +362,7 @@ impl<S: Symbol> Staking<S> {
         self.validators.balance()?.amount()
     }
 
-    fn punish_downtime(&mut self, val_address: Address) -> Result<()> {
+    pub fn punish_downtime(&mut self, val_address: Address) -> Result<()> {
         {
             let mut validator = self.validators.get_mut(val_address)?;
             validator.jail_for_seconds(self.downtime_jail_seconds)?;
