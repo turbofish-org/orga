@@ -130,6 +130,10 @@ impl MerkStore {
         self.merk.as_ref().unwrap()
     }
 
+    pub fn into_merk(self) -> Merk {
+        self.merk.unwrap()
+    }
+
     pub(crate) fn snapshots(&self) -> &snapshot::Snapshots {
         &self.snapshots
     }

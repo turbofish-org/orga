@@ -276,10 +276,12 @@ impl<A: App> Node<A> {
             )
             .unwrap();
         if let BackingStore::Merk(merk_store) = store.into_backing_store().into_inner() {
-            merk_store
-                .into_inner()
+            let mut store = merk_store.into_inner();
+            store
                 .write(vec![(b"consensus_version".to_vec(), Some(version))])
                 .unwrap();
+            #[cfg(feature = "compat")]
+            store.into_merk().repair().unwrap();
         } else {
             unreachable!();
         }
