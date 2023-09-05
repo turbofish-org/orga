@@ -2,10 +2,13 @@ use super::Ibc;
 use crate::{
     coins::{Address, Amount, Coin, Symbol},
     collections::Map,
+    describe::{Builder, Describe},
     encoding::LengthVec,
     orga,
+    state::State,
 };
 use cosmrs::AccountId;
+use ed::{Decode, Encode};
 use ibc::{
     applications::transfer::{
         context::{
@@ -13,9 +16,12 @@ use ibc::{
             TokenTransferValidationContext,
         },
         error::TokenTransferError,
-        PrefixedCoin, PrefixedDenom, VERSION,
+        is_receiver_chain_source,
+        packet::PacketData,
+        PrefixedCoin, PrefixedDenom, TracePrefix, VERSION,
     },
     core::{
+        events::ModuleEvent,
         ics04_channel::{
             channel::{Counterparty, Order},
             error::{ChannelError, PacketError},
@@ -138,7 +144,7 @@ impl TryFrom<ibc::applications::transfer::Amount> for Amount {
 }
 
 impl From<crate::Error> for TokenTransferError {
-    fn from(_: crate::Error) -> Self {
+    fn from(_err: crate::Error) -> Self {
         TokenTransferError::InvalidToken
     }
 }
@@ -307,7 +313,60 @@ impl Module for Ibc {
         packet: &Packet,
         _relayer: &Signer,
     ) -> (ModuleExtras, Acknowledgement) {
-        on_recv_packet_execute(self, packet)
+        let (extras, ack) = on_recv_packet_execute(self, packet);
+
+        if let Ok(data) = serde_json::from_slice::<PacketData>(&packet.data) {
+            if is_receiver_chain_source(
+                packet.port_id_on_a.clone(),
+                packet.chan_id_on_a.clone(),
+                &data.token.denom,
+            ) {
+                let incoming_transfer = extras
+                    .events
+                    .iter()
+                    .find(|event| {
+                        event.kind == "fungible_token_packet"
+                            && event
+                                .attributes
+                                .contains(&("success".to_string(), "true".to_string()).into())
+                    })
+                    .map(|event| -> crate::Result<TransferInfo> {
+                        let mut denom = data.token.denom.clone();
+
+                        denom.remove_trace_prefix(&TracePrefix::new(
+                            packet.port_id_on_a.clone(),
+                            packet.chan_id_on_a.clone(),
+                        ));
+
+                        let get_attr = |ev: &ModuleEvent, key: &str| {
+                            ev.attributes
+                                .iter()
+                                .find(|attr| attr.key == key)
+                                .map(|attr| attr.value.clone())
+                                .ok_or_else(|| {
+                                    crate::Error::Ibc(format!(
+                                        "Missing transfer event attribute {}",
+                                        key
+                                    ))
+                                })
+                        };
+                        Ok(TransferInfo {
+                            denom,
+                            amount: get_attr(event, "amount")?.parse()?,
+                            memo: get_attr(event, "memo")?,
+                            receiver: get_attr(event, "receiver")?,
+                            sender: get_attr(event, "sender")?,
+                        })
+                    })
+                    .transpose()
+                    .unwrap_or_default();
+
+                if let Some(incoming_transfer) = incoming_transfer {
+                    self.incoming_transfer.replace(incoming_transfer);
+                }
+            }
+        };
+        (extras, ack)
     }
 
     fn on_acknowledgement_packet_validate(
@@ -359,3 +418,49 @@ impl Module for Ibc {
         )
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct TransferInfo {
+    pub denom: PrefixedDenom,
+    pub amount: u64,
+    pub sender: String,
+    pub receiver: String,
+    pub memo: String,
+}
+
+impl Describe for TransferInfo {
+    fn describe() -> orga::describe::Descriptor {
+        Builder::new::<()>().build()
+    }
+}
+
+impl Encode for TransferInfo {
+    fn encode_into<W: std::io::Write>(&self, _dest: &mut W) -> ed::Result<()> {
+        unreachable!()
+    }
+    fn encoding_length(&self) -> ed::Result<usize> {
+        unreachable!()
+    }
+}
+
+impl Decode for TransferInfo {
+    fn decode<R: std::io::Read>(_input: R) -> ed::Result<Self> {
+        unreachable!()
+    }
+}
+
+impl State for TransferInfo {
+    fn load(_store: orga::store::Store, _bytes: &mut &[u8]) -> orga::Result<Self> {
+        unreachable!()
+    }
+
+    fn attach(&mut self, _store: orga::store::Store) -> orga::Result<()> {
+        unreachable!()
+    }
+
+    fn flush<W: std::io::Write>(self, _out: &mut W) -> orga::Result<()> {
+        unreachable!()
+    }
+}
+
+impl crate::encoding::Terminated for TransferInfo {}

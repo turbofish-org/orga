@@ -289,6 +289,10 @@ impl Events {
     pub fn add(&mut self, event: Event) {
         self.events.push(event);
     }
+
+    pub fn events(&self) -> &[Event] {
+        &self.events
+    }
 }
 
 #[derive(Default)]
