@@ -46,7 +46,7 @@ use ibc::core::timestamp::Timestamp as IbcTimestamp;
 
 mod impls;
 pub mod transfer;
-use transfer::Transfer;
+use transfer::{Transfer, TransferInfo};
 #[cfg(feature = "abci")]
 mod service;
 #[cfg(feature = "abci")]
@@ -100,18 +100,23 @@ pub struct Ibc {
 
     #[state(absolute_prefix(b""))]
     store: Store,
+
+    #[state(skip)]
+    #[serde(skip)]
+    incoming_transfer: Option<transfer::TransferInfo>,
 }
 
 #[orga]
 impl Ibc {
-    #[call]
-    pub fn deliver(&mut self, messages: RawIbcTx) -> crate::Result<()> {
+    pub fn deliver(&mut self, messages: RawIbcTx) -> crate::Result<Vec<TransferInfo>> {
         let messages: IbcTx = messages.try_into()?;
+        let mut incoming_transfers = vec![];
         for message in messages.0 {
-            self.deliver_message(message)?;
+            if let Some(incoming_transfer) = self.deliver_message(message)? {
+                incoming_transfers.push(incoming_transfer);
+            }
         }
-
-        Ok(())
+        Ok(incoming_transfers)
     }
 
     #[call]
@@ -125,15 +130,18 @@ impl Ibc {
             ));
         }
 
-        self.deliver_message(IbcMessage::Ics20(message))
+        self.deliver_message(IbcMessage::Ics20(message))?;
+
+        Ok(())
     }
 
-    pub fn deliver_message(&mut self, message: IbcMessage) -> crate::Result<()> {
+    pub fn deliver_message(&mut self, message: IbcMessage) -> crate::Result<Option<TransferInfo>> {
         use IbcMessage::*;
         match message {
-            Ics26(msg) => dispatch(self, msg).map_err(|e| Error::Ibc(e.to_string())),
-            Ics20(msg) => send_transfer(self, msg).map_err(|e| Error::Ibc(e.to_string())),
-        }
+            Ics26(msg) => dispatch(self, msg).map_err(|e| Error::Ibc(e.to_string()))?,
+            Ics20(msg) => send_transfer(self, msg).map_err(|e| Error::Ibc(e.to_string()))?,
+        };
+        Ok(self.incoming_transfer.take())
     }
 
     fn signer(&mut self) -> crate::Result<Address> {
