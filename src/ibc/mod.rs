@@ -254,11 +254,17 @@ impl Encode for Adapter<IbcSigner> {
 }
 
 impl Decode for Adapter<IbcSigner> {
-    fn decode<R: std::io::Read>(input: R) -> ed::Result<Self> {
-        let bytes = input
-            .bytes()
-            .collect::<Result<Vec<_>, _>>()
+    fn decode<R: std::io::Read>(mut input: R) -> ed::Result<Self> {
+        let mut len_buf = [0; 4];
+        input.read_exact(&mut len_buf)?;
+        let len: u32 = borsh::BorshDeserialize::deserialize(&mut len_buf.as_slice())
             .map_err(|_| ed::Error::UnexpectedByte(40))?;
+
+        let mut buf = vec![0; len as usize];
+
+        input.read_exact(&mut buf)?;
+        let bytes = [len_buf.to_vec(), buf].concat();
+
         Ok(Self(
             borsh::BorshDeserialize::deserialize(&mut bytes.as_slice())
                 .map_err(|_| ed::Error::UnexpectedByte(40))?,
