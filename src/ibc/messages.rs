@@ -2,6 +2,7 @@ use crate::encoding::{Decode, Encode};
 use crate::Result;
 use cosmrs::proto::cosmos::tx::v1beta1::Tx as TxProto;
 use cosmrs::Tx;
+use ed::Terminated;
 use ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use ibc::core::MsgEnvelope;
 use ibc_proto::google::protobuf::Any;
@@ -42,6 +43,8 @@ impl Decode for RawIbcTx {
         ))
     }
 }
+
+impl Terminated for RawIbcTx {}
 
 #[derive(Clone, Debug)]
 pub enum IbcMessage {
