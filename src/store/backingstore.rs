@@ -1,4 +1,6 @@
 #[cfg(feature = "merk-full")]
+use crate::merk::memsnapshot::MemSnapshot;
+#[cfg(feature = "merk-full")]
 use crate::merk::snapshot::Snapshot;
 #[cfg(feature = "merk-verify")]
 use crate::merk::ProofStore;
@@ -27,9 +29,13 @@ pub enum BackingStore {
     #[cfg(feature = "merk-full")]
     ProofBuilderSnapshot(ProofBuilder<Snapshot>),
     #[cfg(feature = "merk-full")]
+    ProofBuilderMemSnapshot(ProofBuilder<MemSnapshot>),
+    #[cfg(feature = "merk-full")]
     Merk(Shared<MerkStore>),
     #[cfg(feature = "merk-full")]
     Snapshot(Shared<Snapshot>),
+    #[cfg(feature = "merk-full")]
+    MemSnapshot(Shared<MemSnapshot>),
     #[cfg(feature = "merk-verify")]
     ProofMap(Shared<ProofStore>),
 }
@@ -55,9 +61,13 @@ impl Read for BackingStore {
             #[cfg(feature = "merk-full")]
             BackingStore::ProofBuilderSnapshot(ref builder) => builder.get(key),
             #[cfg(feature = "merk-full")]
+            BackingStore::ProofBuilderMemSnapshot(ref builder) => builder.get(key),
+            #[cfg(feature = "merk-full")]
             BackingStore::Merk(ref store) => store.get(key),
             #[cfg(feature = "merk-full")]
             BackingStore::Snapshot(ref store) => store.get(key),
+            #[cfg(feature = "merk-full")]
+            BackingStore::MemSnapshot(ref store) => store.get(key),
             #[cfg(feature = "merk-verify")]
             BackingStore::ProofMap(ref map) => map.get(key),
         }
@@ -77,9 +87,13 @@ impl Read for BackingStore {
             #[cfg(feature = "merk-full")]
             BackingStore::ProofBuilderSnapshot(ref builder) => builder.get_next(key),
             #[cfg(feature = "merk-full")]
+            BackingStore::ProofBuilderMemSnapshot(ref builder) => builder.get_next(key),
+            #[cfg(feature = "merk-full")]
             BackingStore::Merk(ref store) => store.get_next(key),
             #[cfg(feature = "merk-full")]
             BackingStore::Snapshot(ref store) => store.get_next(key),
+            #[cfg(feature = "merk-full")]
+            BackingStore::MemSnapshot(ref store) => store.get_next(key),
             #[cfg(feature = "merk-verify")]
             BackingStore::ProofMap(ref map) => map.get_next(key),
         }
@@ -99,9 +113,13 @@ impl Read for BackingStore {
             #[cfg(feature = "merk-full")]
             BackingStore::ProofBuilderSnapshot(ref builder) => builder.get_prev(key),
             #[cfg(feature = "merk-full")]
+            BackingStore::ProofBuilderMemSnapshot(ref builder) => builder.get_prev(key),
+            #[cfg(feature = "merk-full")]
             BackingStore::Merk(ref store) => store.get_prev(key),
             #[cfg(feature = "merk-full")]
             BackingStore::Snapshot(ref store) => store.get_prev(key),
+            #[cfg(feature = "merk-full")]
+            BackingStore::MemSnapshot(ref store) => store.get_prev(key),
             #[cfg(feature = "merk-verify")]
             BackingStore::ProofMap(ref map) => map.get_prev(key),
         }
@@ -127,12 +145,20 @@ impl Write for BackingStore {
                 panic!("put() is not implemented for Snapshot")
             }
             #[cfg(feature = "merk-full")]
+            BackingStore::MemSnapshot(_) => {
+                panic!("put() is not implemented for MemSnapshot")
+            }
+            #[cfg(feature = "merk-full")]
             BackingStore::ProofBuilder(_) => {
                 panic!("put() is not implemented for ProofBuilder")
             }
             #[cfg(feature = "merk-full")]
             BackingStore::ProofBuilderSnapshot(_) => {
                 panic!("put() is not implemented for ProofBuilderSnapshot")
+            }
+            #[cfg(feature = "merk-full")]
+            BackingStore::ProofBuilderMemSnapshot(_) => {
+                panic!("put() is not implemented for ProofBuilderMemSnapshot")
             }
             #[cfg(feature = "merk-verify")]
             BackingStore::ProofMap(_) => {
@@ -163,8 +189,16 @@ impl Write for BackingStore {
                 panic!("delete() is not implemented for ProofBuilderSnapshot")
             }
             #[cfg(feature = "merk-full")]
+            BackingStore::ProofBuilderMemSnapshot(_) => {
+                panic!("delete() is not implemented for ProofBuilderMemSnapshot")
+            }
+            #[cfg(feature = "merk-full")]
             BackingStore::Snapshot(_) => {
                 panic!("delete() is not implemented for Snapshot")
+            }
+            #[cfg(feature = "merk-full")]
+            BackingStore::MemSnapshot(_) => {
+                panic!("delete() is not implemented for MemSnapshot")
             }
             #[cfg(feature = "merk-verify")]
             BackingStore::ProofMap(_) => {
@@ -193,6 +227,28 @@ impl BackingStore {
             BackingStore::ProofBuilderSnapshot(builder) => Ok(builder),
             _ => Err(Error::Downcast(
                 "Failed to downcast backing store to proof builder snapshot".into(),
+            )),
+        }
+    }
+
+    #[cfg(feature = "merk-full")]
+    pub fn into_memsnapshot(self) -> Result<Shared<MemSnapshot>> {
+        match self {
+            #[cfg(feature = "merk-full")]
+            BackingStore::MemSnapshot(ss) => Ok(ss),
+            _ => Err(Error::Downcast(
+                "Failed to downcast backing store to memsnapshot".into(),
+            )),
+        }
+    }
+
+    #[cfg(feature = "merk-full")]
+    pub fn into_proof_builder_memsnapshot(self) -> Result<ProofBuilder<MemSnapshot>> {
+        match self {
+            #[cfg(feature = "merk-full")]
+            BackingStore::ProofBuilderMemSnapshot(builder) => Ok(builder),
+            _ => Err(Error::Downcast(
+                "Failed to downcast backing store to proof builder memsnapshot".into(),
             )),
         }
     }
