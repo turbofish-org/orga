@@ -1,10 +1,11 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use super::memsnapshot::MemSnapshot;
 use super::snapshot::Snapshot;
 use super::MerkStore;
-use crate::store;
 use crate::store::Shared;
+use crate::store::{self, Write};
 use crate::Result;
 use merk::proofs::query::Query;
 use store::Read;
@@ -37,10 +38,12 @@ impl<T: Prove> ProofBuilder<T> {
 
     /// Builds a Merk proof including all the data accessed during the life of
     /// the `ProofBuilder`.
-    pub fn build(self) -> Result<Vec<u8>> {
+    pub fn build(self) -> Result<(Vec<u8>, T)> {
         let store = self.store.borrow();
         let query = self.query.take();
-        store.prove(query)
+        let proof = store.prove(query)?;
+        drop(store);
+        Ok((proof, self.store.into_inner()))
     }
 }
 
@@ -110,6 +113,12 @@ impl Prove for Snapshot {
     }
 }
 
+impl<'a> Prove for MemSnapshot {
+    fn prove(&self, query: Query) -> Result<Vec<u8>> {
+        Ok(self.use_snapshot(|ss| ss.prove(query))?)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::*;
@@ -135,7 +144,7 @@ mod tests {
         let key = [1, 2, 3];
         assert_eq!(builder.get(&key[..]).unwrap(), Some(vec![2]));
 
-        let proof = builder.build().unwrap();
+        let (proof, _) = builder.build().unwrap();
         let root_hash = store.borrow().merk().root_hash();
         let map = verify(proof.as_slice(), root_hash).unwrap();
         let res = map.get(&[1, 2, 3]).unwrap();
@@ -153,7 +162,7 @@ mod tests {
         let key = [5];
         assert_eq!(builder.get(&key[..]).unwrap(), None);
 
-        let proof = builder.build().unwrap();
+        let (proof, _) = builder.build().unwrap();
         let root_hash = store.borrow().merk().root_hash();
         let map = verify(proof.as_slice(), root_hash).unwrap();
         let res = map.get(&[5]).unwrap();
@@ -175,7 +184,7 @@ mod tests {
             Some((vec![3, 4, 5], vec![4]))
         );
 
-        let proof = builder.build().unwrap();
+        let (proof, _) = builder.build().unwrap();
         let root_hash = store.borrow().merk().root_hash();
         let map = verify(proof.as_slice(), root_hash).unwrap();
         let mut iter = map.range(&[3, 4, 4][..]..=&[3, 4, 5][..]);
@@ -196,7 +205,7 @@ mod tests {
         let key = [3, 4, 5];
         assert_eq!(builder.get_next(&key[..]).unwrap(), None);
 
-        let proof = builder.build().unwrap();
+        let (proof, _) = builder.build().unwrap();
         let root_hash = store.borrow().merk().root_hash();
         let map = verify(proof.as_slice(), root_hash).unwrap();
         assert!(map.get(&[3, 4, 5]).unwrap().is_some());
