@@ -162,18 +162,17 @@ impl Read for MerkStore {
     }
 
     fn get_next(&self, start: &[u8]) -> Result<Option<KV>> {
-        get_next(self.merk(), start)
+        get_next(self.merk().raw_iter(), start)
     }
 
     fn get_prev(&self, end: Option<&[u8]>) -> Result<Option<KV>> {
-        get_prev(self.merk(), end)
+        get_prev(self.merk().raw_iter(), end)
     }
 }
 
-pub(crate) fn get_next(merk: &Merk, start: &[u8]) -> Result<Option<KV>> {
+pub(crate) fn get_next(mut iter: merk::rocksdb::DBRawIterator, start: &[u8]) -> Result<Option<KV>> {
     // TODO: use an iterator in merk which steps through in-memory nodes
     // (loading if necessary)
-    let mut iter = merk.raw_iter();
     iter.seek(start);
 
     if !iter.valid() {
@@ -197,10 +196,12 @@ pub(crate) fn get_next(merk: &Merk, start: &[u8]) -> Result<Option<KV>> {
     Ok(Some((key.to_vec(), value.to_vec())))
 }
 
-pub(crate) fn get_prev(merk: &Merk, end: Option<&[u8]>) -> Result<Option<KV>> {
+pub(crate) fn get_prev(
+    mut iter: merk::rocksdb::DBRawIterator,
+    end: Option<&[u8]>,
+) -> Result<Option<KV>> {
     // TODO: use an iterator in merk which steps through in-memory nodes
     // (loading if necessary)
-    let mut iter = merk.raw_iter();
     if let Some(key) = end {
         iter.seek(key);
 
