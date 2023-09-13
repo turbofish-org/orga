@@ -2,6 +2,7 @@ use super::{ABCIStateMachine, ABCIStore, AbciQuery, App, Application, WrappedMer
 use crate::call::Call;
 use crate::context::Context;
 use crate::encoding::Decode;
+use crate::merk::memsnapshot::MemSnapshot;
 use crate::merk::{MerkStore, ProofBuilder};
 use crate::migrate::Migrate;
 use crate::plugins::{ABCICall, ABCIPlugin};
@@ -496,7 +497,7 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
         Ok(check_tx_res)
     }
 
-    fn query(&self, merk_store: Shared<MerkStore>, req: RequestQuery) -> Result<ResponseQuery> {
+    fn query(&self, mut merk_store: Shared<MerkStore>, req: RequestQuery) -> Result<ResponseQuery> {
         let create_state = |store| {
             let store = Store::new(store);
             let state_bytes = store
@@ -504,34 +505,54 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
                 .ok_or_else(|| crate::Error::Query("Store is empty".to_string()))?;
             ABCIPlugin::<A>::load(store, &mut state_bytes.as_slice())
         };
-        let store = merk_store.borrow();
+
+        let mut merk_store_ref = merk_store.borrow_mut();
         let (height, snapshot) = if req.height == 0 {
-            store.snapshots().get_latest()
+            merk_store_ref.mem_snapshots_mut().pop_last()
         } else {
-            store
-                .snapshots()
-                .get(req.height.try_into()?)
-                .map(|s| (req.height as u64, s))
+            merk_store_ref
+                .mem_snapshots_mut()
+                .remove_entry(&req.height.try_into()?)
         }
         .ok_or_else(|| crate::Error::Query(format!("Cannot query for height {}", req.height)))?;
+        drop(merk_store_ref);
 
         if !req.path.is_empty() {
-            let store = BackingStore::Snapshot(Shared::new(snapshot.clone()));
-            let state = create_state(store)?;
+            let store = BackingStore::MemSnapshot(Shared::new(MemSnapshot {
+                snapshot,
+                merk_store: merk_store.clone(),
+            }));
+            let state = create_state(store.clone())?;
             let mut res = state.abci_query(&req)?;
             res.height = height.try_into().unwrap();
+            drop(state);
+
+            let ss = store.into_memsnapshot().unwrap();
+            merk_store
+                .borrow_mut()
+                .mem_snapshots_mut()
+                .insert(height, ss.into_inner().snapshot);
+
             return Ok(res);
         }
 
         let query = Decode::decode(&*req.data)?;
         let store =
-            BackingStore::ProofBuilderSnapshot(ProofBuilder::new(Shared::new(snapshot.clone())));
+            BackingStore::ProofBuilderMemSnapshot(ProofBuilder::new(Shared::new(MemSnapshot {
+                snapshot,
+                merk_store: merk_store.clone(),
+            })));
         let state = create_state(store.clone())?;
         state.query(query)?;
+        drop(state);
 
-        let root_hash = snapshot.checkpoint.as_ref().borrow().root_hash();
-        let proof_builder = store.into_proof_builder_snapshot()?;
-        let proof_bytes = proof_builder.build()?;
+        let proof_builder = store.into_proof_builder_memsnapshot()?;
+        let (proof_bytes, ss) = proof_builder.build()?;
+        let root_hash = ss.use_snapshot(|ss| ss.root_hash());
+        merk_store
+            .borrow_mut()
+            .mem_snapshots_mut()
+            .insert(height, ss.snapshot);
 
         // TODO: we shouldn't need to include the root hash in the response
         let mut value = vec![];
