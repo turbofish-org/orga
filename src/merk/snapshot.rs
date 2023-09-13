@@ -48,11 +48,15 @@ impl Read for Snapshot {
     }
 
     fn get_next(&self, key: &[u8]) -> Result<Option<crate::store::KV>> {
-        super::store::get_next(&self.checkpoint.borrow(), key)
+        let cp = self.checkpoint.borrow();
+        let iter = cp.raw_iter();
+        super::store::get_next(iter, key)
     }
 
     fn get_prev(&self, key: Option<&[u8]>) -> Result<Option<crate::store::KV>> {
-        super::store::get_prev(&self.checkpoint.borrow(), key)
+        let cp = self.checkpoint.borrow();
+        let iter = cp.raw_iter();
+        super::store::get_prev(iter, key)
     }
 }
 
