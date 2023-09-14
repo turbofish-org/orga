@@ -548,6 +548,7 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
 
         let proof_builder = store.into_proof_builder_memsnapshot()?;
         let (proof_bytes, ss) = proof_builder.build()?;
+        let ss = ss.into_inner();
         let root_hash = ss.use_snapshot(|ss| ss.root_hash());
         merk_store
             .borrow_mut()
