@@ -392,22 +392,35 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
         store: WrappedMerk,
         req: RequestBeginBlock,
     ) -> Result<ResponseBeginBlock> {
-        self.run(store, move |state| state.call(req.into()))??;
+        let (events, _logs) = self.run(store, move |state| -> Result<_> {
+            state.call(req.into())?;
+            Ok((
+                state.events.take().unwrap_or_default(),
+                state.logs.take().unwrap_or_default(),
+            ))
+        })??;
 
-        Ok(Default::default())
+        Ok(ResponseBeginBlock { events })
     }
 
     fn end_block(&self, store: WrappedMerk, req: RequestEndBlock) -> Result<ResponseEndBlock> {
-        let mut updates = self.run(store, move |state| -> Result<_> {
+        let (mut updates, events, _logs) = self.run(store, move |state| -> Result<_> {
             state.call(req.into())?;
-            Ok(state
-                .validator_updates
-                .take()
-                .expect("ABCI plugin did not create validator update map"))
+            Ok((
+                state
+                    .validator_updates
+                    .take()
+                    .expect("ABCI plugin did not create validator update map"),
+                state.events.take().unwrap_or_default(),
+                state.logs.take().unwrap_or_default(),
+            ))
         })??;
 
         // Write back validator updates
-        let mut res: ResponseEndBlock = Default::default();
+        let mut res = ResponseEndBlock {
+            events,
+            ..Default::default()
+        };
         updates.drain().for_each(|(_key, update)| {
             if let Ok(flag) = std::env::var("ORGA_STATIC_VALSET") {
                 if flag != "0" && flag != "false" {
