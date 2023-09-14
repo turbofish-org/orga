@@ -1,6 +1,7 @@
 use crate::abci::ABCIStore;
 use crate::error::{Error, Result};
 use crate::store::*;
+use merk::snapshot::StaticSnapshot;
 use merk::{restore::Restorer, tree::Tree, BatchEntry, Merk, Op};
 use std::path::{Path, PathBuf};
 use std::{collections::BTreeMap, convert::TryInto};
@@ -21,6 +22,7 @@ pub struct MerkStore {
     snapshots: snapshot::Snapshots,
     restorer: Option<Restorer>,
     target_snapshot: Option<Snapshot>,
+    mem_snapshots: BTreeMap<u64, StaticSnapshot>,
 }
 
 impl MerkStore {
@@ -36,12 +38,13 @@ impl MerkStore {
         maybe_remove_restore(&home).expect("Failed to remove incomplete state sync restore");
 
         MerkStore {
-            map: Some(Default::default()),
+            map: Some(Map::new()),
             merk: Some(merk),
             snapshots: Self::load_snapshots(home.join("snapshots")),
             home,
             target_snapshot: None,
             restorer: None,
+            mem_snapshots: BTreeMap::new(),
         }
     }
 
@@ -59,6 +62,7 @@ impl MerkStore {
             home,
             target_snapshot: None,
             restorer: None,
+            mem_snapshots: BTreeMap::new(),
         }
     }
 
@@ -71,7 +75,6 @@ impl MerkStore {
                 snapshot::SnapshotFilter::specific_height(2, None),
                 #[cfg(feature = "state-sync")]
                 snapshot::SnapshotFilter::interval(1000, 4),
-                snapshot::SnapshotFilter::interval(1, 20),
             ])
     }
 
@@ -134,8 +137,8 @@ impl MerkStore {
         self.merk.unwrap()
     }
 
-    pub(crate) fn snapshots(&self) -> &snapshot::Snapshots {
-        &self.snapshots
+    pub(crate) fn mem_snapshots_mut(&mut self) -> &mut BTreeMap<u64, StaticSnapshot> {
+        &mut self.mem_snapshots
     }
 }
 
@@ -162,18 +165,17 @@ impl Read for MerkStore {
     }
 
     fn get_next(&self, start: &[u8]) -> Result<Option<KV>> {
-        get_next(self.merk(), start)
+        get_next(self.merk().raw_iter(), start)
     }
 
     fn get_prev(&self, end: Option<&[u8]>) -> Result<Option<KV>> {
-        get_prev(self.merk(), end)
+        get_prev(self.merk().raw_iter(), end)
     }
 }
 
-pub(crate) fn get_next(merk: &Merk, start: &[u8]) -> Result<Option<KV>> {
+pub(crate) fn get_next(mut iter: merk::rocksdb::DBRawIterator, start: &[u8]) -> Result<Option<KV>> {
     // TODO: use an iterator in merk which steps through in-memory nodes
     // (loading if necessary)
-    let mut iter = merk.raw_iter();
     iter.seek(start);
 
     if !iter.valid() {
@@ -197,10 +199,12 @@ pub(crate) fn get_next(merk: &Merk, start: &[u8]) -> Result<Option<KV>> {
     Ok(Some((key.to_vec(), value.to_vec())))
 }
 
-pub(crate) fn get_prev(merk: &Merk, end: Option<&[u8]>) -> Result<Option<KV>> {
+pub(crate) fn get_prev(
+    mut iter: merk::rocksdb::DBRawIterator,
+    end: Option<&[u8]>,
+) -> Result<Option<KV>> {
     // TODO: use an iterator in merk which steps through in-memory nodes
     // (loading if necessary)
-    let mut iter = merk.raw_iter();
     if let Some(key) = end {
         iter.seek(key);
 
@@ -291,8 +295,18 @@ impl ABCIStore for MerkStore {
         #[cfg(feature = "state-sync")]
         if recent && self.snapshots.should_create(height) {
             let path = self.snapshots.path(height);
-            let checkpoint = self.merk.as_ref().unwrap().checkpoint(path)?;
+            let checkpoint = self.merk().checkpoint(path)?;
             self.snapshots.create(height, checkpoint)?;
+        }
+
+        let snapshot = self.merk().snapshot()?.staticize();
+        self.mem_snapshots.insert(height, snapshot);
+
+        // TODO: parameterize
+        while self.mem_snapshots.len() > 20 {
+            let ss = self.mem_snapshots.pop_first().unwrap();
+            let db = self.merk().db();
+            unsafe { ss.1.drop(db) };
         }
 
         Ok(())
