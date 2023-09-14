@@ -3,7 +3,6 @@ use crate::error::{Error, Result};
 use crate::store::*;
 use merk::snapshot::StaticSnapshot;
 use merk::{restore::Restorer, tree::Tree, BatchEntry, Merk, Op};
-use std::mem::ManuallyDrop;
 use std::path::{Path, PathBuf};
 use std::{collections::BTreeMap, convert::TryInto};
 use tendermint_proto::v0_34::abci::{self, *};
@@ -136,14 +135,6 @@ impl MerkStore {
 
     pub fn into_merk(self) -> Merk {
         self.merk.unwrap()
-    }
-
-    pub(crate) fn snapshots(&self) -> &snapshot::Snapshots {
-        &self.snapshots
-    }
-
-    pub(crate) fn mem_snapshots(&self) -> &BTreeMap<u64, StaticSnapshot> {
-        &self.mem_snapshots
     }
 
     pub(crate) fn mem_snapshots_mut(&mut self) -> &mut BTreeMap<u64, StaticSnapshot> {
