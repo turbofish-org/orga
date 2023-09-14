@@ -5,7 +5,7 @@ use super::memsnapshot::MemSnapshot;
 use super::snapshot::Snapshot;
 use super::MerkStore;
 use crate::store::Shared;
-use crate::store::{self, Write};
+use crate::store::{self};
 use crate::Result;
 use merk::proofs::query::Query;
 use store::Read;
@@ -113,7 +113,7 @@ impl Prove for Snapshot {
     }
 }
 
-impl<'a> Prove for MemSnapshot {
+impl Prove for MemSnapshot {
     fn prove(&self, query: Query) -> Result<Vec<u8>> {
         Ok(self.use_snapshot(|ss| ss.prove(query))?)
     }
