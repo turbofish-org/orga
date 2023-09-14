@@ -38,12 +38,12 @@ impl<T: Prove> ProofBuilder<T> {
 
     /// Builds a Merk proof including all the data accessed during the life of
     /// the `ProofBuilder`.
-    pub fn build(self) -> Result<(Vec<u8>, T)> {
+    pub fn build(self) -> Result<(Vec<u8>, Shared<T>)> {
         let store = self.store.borrow();
         let query = self.query.take();
         let proof = store.prove(query)?;
         drop(store);
-        Ok((proof, self.store.into_inner()))
+        Ok((proof, self.store))
     }
 }
 
