@@ -137,8 +137,8 @@ impl MerkStore {
         self.merk.unwrap()
     }
 
-    pub(crate) fn mem_snapshots_mut(&mut self) -> &mut BTreeMap<u64, StaticSnapshot> {
-        &mut self.mem_snapshots
+    pub(crate) fn mem_snapshots(&self) -> &BTreeMap<u64, StaticSnapshot> {
+        &self.mem_snapshots
     }
 }
 
