@@ -295,6 +295,14 @@ impl BackingStore {
                 let borrow = borrow.checkpoint.borrow();
                 f(&borrow)
             }
+            BackingStore::MemSnapshot(store) => {
+                // TODO: remove use_merk support for MemSnapshot once
+                // constructing proofs from a snapshot is supported
+                let borrow = store.borrow();
+                let borrow = borrow.merk_store.borrow();
+                let borrow = borrow.merk();
+                f(borrow)
+            }
             _ => panic!("Cannot get MerkStore from BackingStore variant"),
         }
     }
