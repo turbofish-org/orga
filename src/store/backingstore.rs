@@ -5,12 +5,14 @@ use crate::merk::snapshot::Snapshot;
 #[cfg(feature = "merk-verify")]
 use crate::merk::ProofStore;
 #[cfg(feature = "merk-full")]
-use crate::merk::{MerkStore, ProofBuilder};
+use crate::merk::{merk::HASH_LENGTH, MerkStore, ProofBuilder};
 #[cfg(feature = "merk-full")]
 use crate::store::BufStore;
 use crate::store::ReadWrite;
 use crate::store::{Empty, MapStore, PartialMapStore, Read, Shared, Write, KV};
 use crate::{Error, Result};
+#[cfg(feature = "merk-full")]
+use ics23::CommitmentProof;
 
 #[cfg(feature = "merk-full")]
 type WrappedMerkStore = Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>;
@@ -283,27 +285,32 @@ impl BackingStore {
     }
 
     #[cfg(feature = "merk-full")]
-    pub fn use_merk<F: FnOnce(&merk::Merk) -> T, T>(&self, f: F) -> T {
+    pub fn root_hash(&self) -> [u8; HASH_LENGTH] {
         match self {
-            BackingStore::WrappedMerk(_store) => todo!(),
             BackingStore::Merk(store) => {
                 let borrow = store.borrow();
-                f(borrow.merk())
+                borrow.merk().root_hash()
             }
             BackingStore::Snapshot(store) => {
                 let borrow = store.borrow();
                 let borrow = borrow.checkpoint.borrow();
-                f(&borrow)
+                borrow.root_hash()
             }
             BackingStore::MemSnapshot(store) => {
-                // TODO: remove use_merk support for MemSnapshot once
-                // constructing proofs from a snapshot is supported
                 let borrow = store.borrow();
-                let borrow = borrow.merk_store.borrow();
-                let borrow = borrow.merk();
-                f(borrow)
+                borrow.use_snapshot(|ss| ss.root_hash())
             }
-            _ => panic!("Cannot get MerkStore from BackingStore variant"),
+            _ => todo!(),
+        }
+    }
+
+    #[cfg(feature = "merk-full")]
+    pub fn create_ics23_proof(&self, key: &[u8]) -> Result<CommitmentProof> {
+        match self {
+            BackingStore::MemSnapshot(s) => s.borrow().use_snapshot(|ss| {
+                ss.walk(|maybe_root| crate::merk::ics23::create_ics23_proof(maybe_root, key))
+            }),
+            _ => todo!(),
         }
     }
 }

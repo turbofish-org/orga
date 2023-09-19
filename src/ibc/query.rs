@@ -37,11 +37,7 @@ impl AbciQuery for Ibc {
         use prost::Message;
 
         let mut outer_proof_bytes = vec![];
-        let inner_root_hash = self
-            .store
-            .backing_store()
-            .borrow()
-            .use_merk(|store| store.root_hash());
+        let inner_root_hash = self.store.backing_store().borrow().root_hash();
 
         let outer_proof = ics23::CommitmentProof {
             proof: Some(ics23::commitment_proof::Proof::Exist(
@@ -68,7 +64,7 @@ impl AbciQuery for Ibc {
             .store
             .backing_store()
             .borrow()
-            .use_merk(|store| create_ics23_proof(store, key.as_slice()))?;
+            .create_ics23_proof(key.as_slice())?;
 
         proof
             .encode(&mut proof_bytes)
