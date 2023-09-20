@@ -63,7 +63,24 @@ pub const IBC_QUERY_PATH: &str = "store/ibc/key";
 
 #[orga(version = 2)]
 pub struct Ibc {
+    #[orga(version(V1))]
+    _bytes1: [u8; 32],
+
+    #[orga(version(V1))]
+    _bytes2: [u8; 18],
+
+    #[orga(version(V1))]
+    #[state(absolute_prefix(b""))]
+    root_store: Store,
+
+    #[orga(version(V1))]
+    #[state(prefix(b""))]
+    local_store: Store,
+
+    #[orga(version(V2))]
     pub ctx: IbcContext,
+
+    #[orga(version(V2))]
     pub router: router::IbcRouter,
 }
 
