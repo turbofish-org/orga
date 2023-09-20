@@ -1,4 +1,3 @@
-use super::Ibc;
 use crate::{
     coins::{Address, Amount, Coin, Symbol},
     collections::Map,
@@ -23,9 +22,10 @@ use ibc::{
     core::{
         events::ModuleEvent,
         ics04_channel::{
+            acknowledgement::Acknowledgement,
             channel::{Counterparty, Order},
             error::{ChannelError, PacketError},
-            packet::{Acknowledgement, Packet},
+            packet::Packet,
             Version as ChannelVersion,
         },
         ics24_host::identifier::{ChannelId, ConnectionId, PortId},
@@ -43,9 +43,23 @@ impl From<TokenTransferError> for crate::Error {
 #[orga]
 pub struct Transfer {
     pub accounts: Map<Denom, Map<Address, Amount>>,
+
+    #[state(skip)]
+    #[serde(skip)]
+    incoming_transfer: Option<TransferInfo>,
+}
+
+impl std::fmt::Debug for Transfer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Transfer").finish()
+    }
 }
 
 impl Transfer {
+    pub(crate) fn incoming_transfer_mut(&mut self) -> &mut Option<TransferInfo> {
+        &mut self.incoming_transfer
+    }
+
     pub fn balance(&self, address: Address, denom: Denom) -> crate::Result<Amount> {
         Ok(*self
             .accounts
@@ -62,7 +76,7 @@ impl Transfer {
     }
 }
 
-impl TokenTransferValidationContext for Ibc {
+impl TokenTransferValidationContext for Transfer {
     type AccountId = Address;
 
     fn get_port(&self) -> Result<ibc::core::ics24_host::identifier::PortId, TokenTransferError> {
@@ -149,7 +163,7 @@ impl From<crate::Error> for TokenTransferError {
     }
 }
 
-impl TokenTransferExecutionContext for Ibc {
+impl TokenTransferExecutionContext for Transfer {
     fn burn_coins_execute(
         &mut self,
         account: &Self::AccountId,
@@ -158,7 +172,7 @@ impl TokenTransferExecutionContext for Ibc {
         let denom: Denom = coin.denom.clone().try_into()?;
         let amount: Amount = coin.amount.try_into()?;
 
-        let mut denom_balances = self.transfer.accounts.entry(denom)?.or_default()?;
+        let mut denom_balances = self.accounts.entry(denom)?.or_default()?;
 
         let mut account_balance = denom_balances.entry(*account)?.or_default()?;
         *account_balance = (*account_balance - amount).result()?;
@@ -175,7 +189,7 @@ impl TokenTransferExecutionContext for Ibc {
         let denom: Denom = coin.denom.clone().try_into()?;
         let amount: Amount = coin.amount.try_into()?;
 
-        let mut denom_balances = self.transfer.accounts.entry(denom)?.or_default()?;
+        let mut denom_balances = self.accounts.entry(denom)?.or_default()?;
 
         let mut sender_balance = denom_balances.entry(*from)?.or_default()?;
         *sender_balance = (*sender_balance - amount).result()?;
@@ -194,7 +208,7 @@ impl TokenTransferExecutionContext for Ibc {
         let denom: Denom = coin.denom.clone().try_into()?;
         let amount: Amount = coin.amount.try_into()?;
 
-        let mut denom_balances = self.transfer.accounts.entry(denom)?.or_default()?;
+        let mut denom_balances = self.accounts.entry(denom)?.or_default()?;
 
         let mut receiver_balance = denom_balances.entry(*account)?.or_default()?;
         *receiver_balance = (*receiver_balance + amount).result()?;
@@ -213,7 +227,7 @@ impl<S: Symbol> From<Coin<S>> for PrefixedCoin {
 }
 
 use ibc::applications::transfer::context::*;
-impl Module for Ibc {
+impl Module for Transfer {
     fn on_chan_open_init_validate(
         &self,
         order: Order,

@@ -27,7 +27,6 @@ use ibc_proto::ibc::core::{
 use ibc_proto::protobuf::Protobuf;
 use ibc_rs::applications::transfer::msgs::transfer::MsgTransfer;
 use serde::Serialize;
-use tendermint_proto::Protobuf as TmProtobuf;
 
 use crate::coins::Address;
 use crate::collections::{Deque, Map};
@@ -62,14 +61,36 @@ mod router;
 // mod tests2;
 pub const IBC_QUERY_PATH: &str = "store/ibc/key";
 
-#[orga(version = 1)]
+#[orga(version = 2)]
 pub struct Ibc {
+    #[orga(version(V1))]
+    _bytes1: [u8; 32],
+
+    #[orga(version(V1))]
+    _bytes2: [u8; 18],
+
+    #[orga(version(V1))]
+    #[state(absolute_prefix(b""))]
+    root_store: Store,
+
+    #[orga(version(V1))]
+    #[state(prefix(b""))]
+    local_store: Store,
+
+    #[orga(version(V2))]
+    pub ctx: IbcContext,
+
+    #[orga(version(V2))]
+    pub router: router::IbcRouter,
+}
+
+#[orga]
+pub struct IbcContext {
     height: u64,
     host_consensus_states: Deque<ConsensusState>,
     channel_counter: u64,
     connection_counter: u64,
     client_counter: u64,
-    pub transfer: Transfer,
 
     #[state(absolute_prefix(b"clients/"))]
     clients: Map<ClientId, Client>,
@@ -100,10 +121,6 @@ pub struct Ibc {
 
     #[state(absolute_prefix(b""))]
     store: Store,
-
-    #[state(skip)]
-    #[serde(skip)]
-    incoming_transfer: Option<transfer::TransferInfo>,
 }
 
 #[orga]
@@ -137,11 +154,17 @@ impl Ibc {
 
     pub fn deliver_message(&mut self, message: IbcMessage) -> crate::Result<Option<TransferInfo>> {
         use IbcMessage::*;
+
         match message {
-            Ics26(msg) => dispatch(self, msg).map_err(|e| Error::Ibc(e.to_string()))?,
-            Ics20(msg) => send_transfer(self, msg).map_err(|e| Error::Ibc(e.to_string()))?,
+            Ics26(msg) => dispatch(&mut self.ctx, &mut self.router, msg)
+                .map_err(|e| Error::Ibc(e.to_string()))?,
+            Ics20(msg) => {
+                let transfer_module = &mut self.router.transfer;
+                send_transfer(&mut self.ctx, transfer_module, msg)
+                    .map_err(|e| Error::Ibc(e.to_string()))?
+            }
         };
-        Ok(self.incoming_transfer.take())
+        Ok(self.router.transfer.incoming_transfer_mut().take())
     }
 
     fn signer(&mut self) -> crate::Result<Address> {
@@ -150,11 +173,19 @@ impl Ibc {
             .signer
             .ok_or_else(|| Error::Coins("Call must be signed".into()))
     }
+
+    pub fn transfer(&self) -> &Transfer {
+        &self.router.transfer
+    }
+
+    pub fn transfer_mut(&mut self) -> &mut Transfer {
+        &mut self.router.transfer
+    }
 }
 
-impl std::fmt::Debug for Ibc {
+impl std::fmt::Debug for IbcContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Ibc").finish()
+        f.debug_struct("IbcContext").finish()
     }
 }
 
@@ -600,16 +631,17 @@ macro_rules! protobuf_newtype {
         }
     };
 }
+use ibc::Any as IbcAny;
 
-protobuf_newtype!(ClientState, TmClientState, Any, Protobuf, ClientState);
+protobuf_newtype!(ClientState, TmClientState, IbcAny, Protobuf, ClientState);
 
-protobuf_newtype!(
-    ConsensusState,
-    TmConsensusState,
-    Any,
-    TmProtobuf,
-    ConsensusState
-);
+// protobuf_newtype!(
+//     ConsensusState,
+//     TmConsensusState,
+//     ibc::Any,
+//     Protobuf,
+//     ConsensusState
+// );
 
 protobuf_newtype!(
     ConnectionEnd,
@@ -626,6 +658,88 @@ protobuf_newtype!(
     ChannelEnd
 );
 
+#[derive(Serialize, Clone, Debug)]
+pub struct ConsensusState {
+    inner: TmConsensusState,
+}
+impl Encode for ConsensusState {
+    fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
+        let mut buf = vec![];
+        Protobuf::<ibc::Any>::encode(&self.inner, &mut buf)
+            .map_err(|_| ed::Error::UnexpectedByte(10))?;
+        dest.write_all(&buf)?;
+        Ok(())
+    }
+    fn encoding_length(&self) -> ed::Result<usize> {
+        let mut buf = vec![];
+        Protobuf::<ibc::Any>::encode(&self.inner, &mut buf)
+            .map_err(|_| ed::Error::UnexpectedByte(10))?;
+        Ok(buf.len())
+    }
+}
+impl Decode for ConsensusState {
+    fn decode<R: std::io::Read>(mut input: R) -> ed::Result<Self> {
+        let mut buf = vec![];
+        input.read_to_end(&mut buf)?;
+        let inner = Protobuf::<ibc::Any>::decode(buf.as_slice())
+            .map_err(|_| ed::Error::UnexpectedByte(10))?;
+        Ok(Self { inner })
+    }
+}
+impl crate::state::State for ConsensusState {
+    fn attach(&mut self, _store: crate::store::Store) -> crate::Result<()> {
+        Ok(())
+    }
+    fn flush<W: std::io::Write>(self, out: &mut W) -> crate::Result<()> {
+        self.encode_into(out)?;
+        Ok(())
+    }
+    fn load(_store: crate::store::Store, bytes: &mut &[u8]) -> crate::Result<Self> {
+        Ok(Self::decode(bytes)?)
+    }
+}
+
+impl From<TmConsensusState> for ConsensusState {
+    fn from(inner: TmConsensusState) -> Self {
+        Self { inner }
+    }
+}
+
+// impl From<ConsensusState> for TmConsensusState {
+//     fn from(outer: ConsensusState) -> Self {
+//         outer.inner
+//     }
+// }
+impl TryFrom<ConsensusState> for TmConsensusState {
+    type Error = &'static str;
+
+    fn try_from(outer: ConsensusState) -> Result<Self, &'static str> {
+        Ok(outer.inner)
+    }
+}
+#[allow(trivial_bounds)]
+impl From<ConsensusState> for ibc::Any
+where
+    TmConsensusState: Into<ibc::Any>,
+{
+    fn from(outer: ConsensusState) -> Self {
+        outer.inner.into()
+    }
+}
+
+impl Migrate for ConsensusState {
+    fn migrate(_src: Store, _dest: Store, bytes: &mut &[u8]) -> OrgaResult<Self> {
+        let prev = <ConsensusState>::load(Store::default(), bytes)?;
+        prev.migrate_into()
+    }
+}
+
+impl Describe for ConsensusState {
+    fn describe() -> Descriptor {
+        crate::describe::Builder::new::<Self>().build()
+    }
+}
+
 impl ConsensusStateTrait for ConsensusState {
     fn root(&self) -> &ibc_rs::core::ics23_commitment::commitment::CommitmentRoot {
         self.inner.root()
@@ -635,7 +749,7 @@ impl ConsensusStateTrait for ConsensusState {
         self.inner.timestamp()
     }
 
-    fn encode_vec(&self) -> Result<Vec<u8>, tendermint_proto::Error> {
+    fn encode_vec(&self) -> Vec<u8> {
         ConsensusStateTrait::encode_vec(&self.inner)
     }
 }
@@ -722,13 +836,13 @@ mod tests {
         app.attach(store.clone()).unwrap();
         let ibc = &mut app.ibc;
 
-        ibc.channel_counter = 123;
-        ibc.connection_counter = 456;
-        ibc.client_counter = 789;
+        ibc.ctx.channel_counter = 123;
+        ibc.ctx.connection_counter = 456;
+        ibc.ctx.client_counter = 789;
 
         let mut client = Client::default();
         let client_state = TmClientState::new(
-            ChainId::new("foo", 0),
+            ChainId::new("foo", 0).unwrap(),
             TrustThreshold::default(),
             Duration::from_secs(60 * 60 * 24 * 7),
             Duration::from_secs(60 * 60 * 24 * 14),
@@ -774,9 +888,9 @@ mod tests {
             .insert(conn_id.clone().into(), ())
             .unwrap();
 
-        ibc.clients.insert(client_id, client).unwrap();
+        ibc.ctx.clients.insert(client_id, client).unwrap();
         let conn = IbcConnectionEnd::default().into();
-        ibc.connections.insert(conn_id.into(), conn).unwrap();
+        ibc.ctx.connections.insert(conn_id.into(), conn).unwrap();
 
         let channel_end_path = ChannelEndPath(PortId::transfer(), ChannelId::new(123)).into();
         let chan = IbcChannelEnd::new(
@@ -788,20 +902,23 @@ mod tests {
         )
         .unwrap()
         .into();
-        ibc.channel_ends.insert(channel_end_path, chan).unwrap();
+        ibc.ctx.channel_ends.insert(channel_end_path, chan).unwrap();
 
         let seq_sends_path = SeqSendPath(PortId::transfer(), ChannelId::new(123)).into();
-        ibc.next_sequence_send
+        ibc.ctx
+            .next_sequence_send
             .insert(seq_sends_path, 1.into())
             .unwrap();
 
         let seq_recvs_path = SeqRecvPath(PortId::transfer(), ChannelId::new(123)).into();
-        ibc.next_sequence_recv
+        ibc.ctx
+            .next_sequence_recv
             .insert(seq_recvs_path, 2.into())
             .unwrap();
 
         let seq_acks_path = SeqAckPath(PortId::transfer(), ChannelId::new(123)).into();
-        ibc.next_sequence_ack
+        ibc.ctx
+            .next_sequence_ack
             .insert(seq_acks_path, 3.into())
             .unwrap();
 
@@ -811,7 +928,8 @@ mod tests {
             sequence: 1.into(),
         }
         .into();
-        ibc.commitments
+        ibc.ctx
+            .commitments
             .insert(commitments_path, vec![1, 2, 3])
             .unwrap();
 
@@ -821,7 +939,7 @@ mod tests {
             sequence: 1.into(),
         }
         .into();
-        ibc.acks.insert(acks_path, vec![1, 2, 3]).unwrap();
+        ibc.ctx.acks.insert(acks_path, vec![1, 2, 3]).unwrap();
 
         let receipts_path = ReceiptPath {
             port_id: PortId::transfer(),
@@ -829,16 +947,16 @@ mod tests {
             sequence: 1.into(),
         }
         .into();
-        ibc.receipts.insert(receipts_path, ()).unwrap();
+        ibc.ctx.receipts.insert(receipts_path, ()).unwrap();
 
         let mut bytes = vec![];
         app.flush(&mut bytes).unwrap();
         assert_eq!(
             bytes,
             vec![
-                0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 127, 255, 255, 255, 255, 255, 255, 255, 127, 255,
-                255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 123, 0, 0, 0, 0, 0, 0, 1, 200,
-                0, 0, 0, 0, 0, 0, 3, 21, 0
+                0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 127, 255, 255, 255, 255, 255, 255, 255, 127,
+                255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 123, 0, 0, 0, 0, 0, 0, 1,
+                200, 0, 0, 0, 0, 0, 0, 3, 21, 0, 0
             ]
         );
 
