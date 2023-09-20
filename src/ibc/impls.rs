@@ -38,6 +38,13 @@ const MAX_HOST_CONSENSUS_STATES: u64 = 100_000;
 #[cfg(feature = "abci")]
 impl BeginBlock for Ibc {
     fn begin_block(&mut self, ctx: &BeginBlockCtx) -> crate::Result<()> {
+        self.ctx.begin_block(ctx)
+    }
+}
+
+#[cfg(feature = "abci")]
+impl BeginBlock for IbcContext {
+    fn begin_block(&mut self, ctx: &BeginBlockCtx) -> crate::Result<()> {
         self.height = ctx.height;
         let timestamp = if let Some(ref timestamp) = ctx.header.time {
             tendermint::Time::from_unix_timestamp(timestamp.seconds, timestamp.nanos as u32)
@@ -73,7 +80,7 @@ impl BeginBlock for Ibc {
     }
 }
 
-impl ValidationContext for Ibc {
+impl ValidationContext for IbcContext {
     type AnyConsensusState = ConsensusState;
     type AnyClientState = TmClientState;
     type ClientValidationContext = Self;
@@ -362,7 +369,7 @@ impl ValidationContext for Ibc {
     }
 }
 
-impl ExecutionContext for Ibc {
+impl ExecutionContext for IbcContext {
     fn get_client_execution_context(&mut self) -> &mut Self::E {
         self
     }
@@ -595,7 +602,7 @@ mod tests {
 
     #[test]
     fn next_prev_consensus_state() -> Result<()> {
-        let mut ibc = Ibc::default();
+        let mut ibc = IbcContext::default();
 
         let consensus_states = &mut ibc
             .clients

@@ -10,16 +10,20 @@ use ics23::LeafOp;
 use tendermint_proto::v0_34::abci::{RequestQuery, ResponseQuery};
 use tendermint_proto::v0_34::crypto::{ProofOp, ProofOps};
 
-use super::{ClientId, ConnectionEnd, ConnectionId, Ibc, PortChannel, IBC_QUERY_PATH};
+use super::{ClientId, ConnectionEnd, ConnectionId, Ibc, IbcContext, PortChannel, IBC_QUERY_PATH};
 use crate::abci::AbciQuery;
 use crate::encoding::LengthVec;
-#[cfg(feature = "merk-full")]
-use crate::merk::ics23::create_ics23_proof;
 use crate::store::Read;
 use crate::{Error, Result};
 
-#[cfg(feature = "abci")]
 impl AbciQuery for Ibc {
+    fn abci_query(&self, req: &RequestQuery) -> Result<ResponseQuery> {
+        self.ctx.abci_query(req)
+    }
+}
+
+#[cfg(feature = "abci")]
+impl AbciQuery for IbcContext {
     fn abci_query(&self, req: &RequestQuery) -> Result<ResponseQuery> {
         if req.path != IBC_QUERY_PATH {
             return Err(Error::Ibc("Invalid query path".to_string()));
@@ -94,7 +98,7 @@ impl AbciQuery for Ibc {
     }
 }
 
-impl Ibc {
+impl IbcContext {
     pub fn query_height(&self) -> Result<u64> {
         Ok(self.height)
     }

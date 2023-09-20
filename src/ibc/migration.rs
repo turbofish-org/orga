@@ -1,4 +1,4 @@
-use super::{IbcV0, IbcV1, Timestamp};
+use super::{IbcV0, IbcV1, IbcV2};
 use crate::migrate::MigrateFrom;
 
 impl MigrateFrom<IbcV0> for IbcV1 {
@@ -7,15 +7,8 @@ impl MigrateFrom<IbcV0> for IbcV1 {
     }
 }
 
-impl MigrateFrom<i128> for Timestamp {
-    fn migrate_from(other: i128) -> crate::Result<Self> {
-        let nanos = other
-            .try_into()
-            .map_err(|_| crate::Error::Ibc("Invalid timestamp".to_string()))?;
-
-        Ok(Self {
-            inner: ibc::core::timestamp::Timestamp::from_nanoseconds(nanos)
-                .map_err(|e| crate::Error::Ibc(e.to_string()))?,
-        })
+impl MigrateFrom<IbcV1> for IbcV2 {
+    fn migrate_from(_value: IbcV1) -> crate::Result<Self> {
+        todo!()
     }
 }

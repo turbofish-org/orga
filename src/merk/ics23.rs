@@ -6,8 +6,8 @@ use ics23::{
 };
 use merk::tree::{Fetch, RefWalker, Tree};
 
-pub fn create_ics23_proof<'a, S>(
-    maybe_root: Option<RefWalker<'a, S>>,
+pub fn create_ics23_proof<S>(
+    maybe_root: Option<RefWalker<'_, S>>,
     key: &[u8],
 ) -> Result<CommitmentProof>
 where
@@ -42,8 +42,8 @@ impl MerkStore {
     }
 }
 
-fn create_proof<'a, S>(
-    mut node: RefWalker<'a, S>,
+fn create_proof<S>(
+    mut node: RefWalker<'_, S>,
     key: &[u8],
     mut path: Vec<InnerOp>,
     mut left_neighbor: Option<ExistenceProof>,
@@ -104,7 +104,7 @@ enum Branch {
     KV,
 }
 
-fn inner_op<'a, S>(node: &RefWalker<'a, S>, branch: Branch) -> InnerOp
+fn inner_op<S>(node: &RefWalker<'_, S>, branch: Branch) -> InnerOp
 where
     S: Fetch + Sized + Clone + Send,
 {
