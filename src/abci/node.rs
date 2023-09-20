@@ -744,7 +744,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn historical_queries() -> Result<()> {
-        spawn_node();
+        spawn_node().await;
 
         // TODO: node spawn should wait for node to be ready
         tokio::time::sleep(std::time::Duration::from_secs(15)).await;
