@@ -103,7 +103,7 @@ use tonic::{Request, Response, Status};
 
 use crate::client::Client;
 
-use super::{Ibc, PortChannel};
+use super::{IbcContext, PortChannel};
 
 impl From<crate::Error> for tonic::Status {
     fn from(err: crate::Error) -> Self {
@@ -116,7 +116,7 @@ pub struct IbcClientService<C> {
 }
 
 #[tonic::async_trait]
-impl<C: Client<Ibc> + 'static> ClientQuery for IbcClientService<C> {
+impl<C: Client<IbcContext> + 'static> ClientQuery for IbcClientService<C> {
     async fn client_state(
         &self,
         _request: Request<QueryClientStateRequest>,
@@ -211,7 +211,7 @@ pub struct IbcConnectionService<C> {
 }
 
 #[tonic::async_trait]
-impl<C: Client<Ibc> + 'static> ConnectionQuery for IbcConnectionService<C> {
+impl<C: Client<IbcContext> + 'static> ConnectionQuery for IbcConnectionService<C> {
     async fn connection(
         &self,
         request: Request<QueryConnectionRequest>,
@@ -297,7 +297,7 @@ pub struct IbcChannelService<C> {
 }
 
 #[tonic::async_trait]
-impl<C: Client<Ibc> + 'static> ChannelQuery for IbcChannelService<C> {
+impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
     async fn channel(
         &self,
         request: Request<QueryChannelRequest>,
@@ -908,7 +908,7 @@ pub struct GrpcOpts {
     pub port: u16,
 }
 
-pub async fn start_grpc<C: Client<Ibc> + 'static>(client: fn() -> C, opts: &GrpcOpts) {
+pub async fn start_grpc<C: Client<IbcContext> + 'static>(client: fn() -> C, opts: &GrpcOpts) {
     use tonic::transport::Server;
     let auth_service = AuthQueryServer::new(AuthService {});
     let bank_service = BankQueryServer::new(BankService {});

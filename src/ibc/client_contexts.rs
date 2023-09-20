@@ -1,7 +1,7 @@
 use crate::encoding::EofTerminatedString;
 
-use super::{ConsensusState, Ibc};
-use std::{convert::Infallible, ops::Bound};
+use super::{ConsensusState, IbcContext};
+use std::ops::Bound;
 
 use ibc::{
     clients::ics07_tendermint::{
@@ -20,7 +20,7 @@ use ibc::{
     Height,
 };
 
-impl ClientExecutionContext for Ibc {
+impl ClientExecutionContext for IbcContext {
     type ClientValidationContext = Self;
     type AnyClientState = TmClientState;
     type AnyConsensusState = ConsensusState;
@@ -64,7 +64,7 @@ impl ClientExecutionContext for Ibc {
     }
 }
 
-impl TmValidationContext for Ibc {
+impl TmValidationContext for IbcContext {
     fn host_timestamp(&self) -> Result<Timestamp, ContextError> {
         ValidationContext::host_timestamp(self)
     }
@@ -118,8 +118,8 @@ impl TmValidationContext for Ibc {
     }
 }
 
-impl CommonContext for Ibc {
-    type ConversionError = Infallible;
+impl CommonContext for IbcContext {
+    type ConversionError = &'static str;
     type AnyConsensusState = ConsensusState;
     fn consensus_state(
         &self,

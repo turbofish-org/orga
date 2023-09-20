@@ -10,16 +10,20 @@ use ics23::LeafOp;
 use tendermint_proto::v0_34::abci::{RequestQuery, ResponseQuery};
 use tendermint_proto::v0_34::crypto::{ProofOp, ProofOps};
 
-use super::{ClientId, ConnectionEnd, ConnectionId, Ibc, PortChannel, IBC_QUERY_PATH};
+use super::{ClientId, ConnectionEnd, ConnectionId, Ibc, IbcContext, PortChannel, IBC_QUERY_PATH};
 use crate::abci::AbciQuery;
 use crate::encoding::LengthVec;
-#[cfg(feature = "merk-full")]
-use crate::merk::ics23::create_ics23_proof;
 use crate::store::Read;
 use crate::{Error, Result};
 
-#[cfg(feature = "abci")]
 impl AbciQuery for Ibc {
+    fn abci_query(&self, req: &RequestQuery) -> Result<ResponseQuery> {
+        self.ctx.abci_query(req)
+    }
+}
+
+#[cfg(feature = "abci")]
+impl AbciQuery for IbcContext {
     fn abci_query(&self, req: &RequestQuery) -> Result<ResponseQuery> {
         if req.path != IBC_QUERY_PATH {
             return Err(Error::Ibc("Invalid query path".to_string()));
@@ -37,11 +41,7 @@ impl AbciQuery for Ibc {
         use prost::Message;
 
         let mut outer_proof_bytes = vec![];
-        let inner_root_hash = self
-            .store
-            .backing_store()
-            .borrow()
-            .use_merk(|store| store.root_hash());
+        let inner_root_hash = self.store.backing_store().borrow().root_hash();
 
         let outer_proof = ics23::CommitmentProof {
             proof: Some(ics23::commitment_proof::Proof::Exist(
@@ -68,7 +68,7 @@ impl AbciQuery for Ibc {
             .store
             .backing_store()
             .borrow()
-            .use_merk(|store| create_ics23_proof(store, key.as_slice()))?;
+            .create_ics23_proof(key.as_slice())?;
 
         proof
             .encode(&mut proof_bytes)
@@ -98,7 +98,7 @@ impl AbciQuery for Ibc {
     }
 }
 
-impl Ibc {
+impl IbcContext {
     pub fn query_height(&self) -> Result<u64> {
         Ok(self.height)
     }
