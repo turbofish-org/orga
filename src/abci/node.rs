@@ -8,14 +8,61 @@ use crate::plugins::{ABCICall, ABCIPlugin};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::{BackingStore, Read, Shared, Store, Write};
+use crate::tendermint::Child as TendermintChild;
 use crate::tendermint::Tendermint;
-use crate::Result;
+use crate::{Error, Result};
 use home::home_dir;
 use std::borrow::Borrow;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::{Arc, RwLock};
 use tendermint_proto::v0_34::abci::*;
+
+pub struct Child {
+    tm_child: TendermintChild,
+    abci_shutdown_handle: Arc<RwLock<Option<Error>>>,
+    abci_shutdown_notifier: Arc<RwLock<bool>>,
+}
+
+impl Child {
+    fn new(
+        tm_child: TendermintChild,
+        abci_shutdown_handle: Arc<RwLock<Option<Error>>>,
+        abci_shutdown_notifier: Arc<RwLock<bool>>,
+    ) -> Self {
+        Self {
+            tm_child,
+            abci_shutdown_handle,
+            abci_shutdown_notifier,
+        }
+    }
+
+    pub fn kill(&mut self) -> Result<()> {
+        let mut shutdown = self.abci_shutdown_handle.write().unwrap();
+        *shutdown = Some(Error::App("Node killed".to_string()));
+        drop(shutdown);
+        self.tm_child.kill()?;
+
+        loop {
+            if *self.abci_shutdown_notifier.read().unwrap() {
+                break;
+            } else {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn wait(&self) -> Result<()> {
+        loop {
+            if let Some(err) = self.abci_shutdown_handle.read().unwrap().as_ref() {
+                break Err(Error::App(err.to_string()));
+            }
+        }
+    }
+}
 
 pub struct Node<A> {
     _app: PhantomData<A>,
@@ -61,7 +108,7 @@ pub struct DefaultConfig {
 }
 
 impl<A: App> Node<A> {
-    pub fn new<P: AsRef<Path>>(
+    pub async fn new<P: AsRef<Path>>(
         home: P,
         chain_id: Option<&str>,
         cfg_defaults: DefaultConfig,
@@ -80,7 +127,8 @@ impl<A: App> Node<A> {
         let _ = Tendermint::new(tm_home.clone())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
-            .init();
+            .init()
+            .await;
 
         let read_toml = || {
             let config =
@@ -158,8 +206,7 @@ impl<A: App> Node<A> {
         }
     }
 
-    pub fn run(self) -> Result<()> {
-        // Start tendermint process
+    pub async fn run(self) -> Result<Child> {
         let tm_home = self.tm_home.clone();
         let abci_port = self.abci_port;
         let stdout = self.stdout;
@@ -182,7 +229,7 @@ impl<A: App> Node<A> {
             tm_process = tm_process.p2p_persistent_peers(peers);
         }
 
-        tm_process = tm_process.start();
+        let tm_child = tm_process.start().await;
 
         let genesis: serde_json::Value =
             std::fs::read_to_string(self.tm_home.join("config/genesis.json"))?
@@ -190,45 +237,72 @@ impl<A: App> Node<A> {
                 .unwrap();
         let chain_id = genesis["chain_id"].as_str().unwrap();
         Context::add(crate::plugins::ChainId(chain_id.to_string()));
+        let shutdown_handler = Arc::new(RwLock::new(None));
+        let shutdown_notifier = Arc::new(RwLock::new(false));
+        let shutdown = shutdown_handler.clone();
+        let notifier = shutdown_notifier.clone();
 
-        let app = InternalApp::<ABCIPlugin<A>>::new();
-        let store = MerkStore::new(self.merk_home.clone());
-
-        let res = ABCIStateMachine::new(app, store, self.skip_init_chain)
+        std::thread::spawn(move || {
+            let app = InternalApp::<ABCIPlugin<A>>::new();
+            let store = MerkStore::new(self.merk_home.clone());
+            let res = ABCIStateMachine::new(
+                app,
+                store,
+                self.skip_init_chain,
+                shutdown.clone(),
+                shutdown_notifier,
+            )
             .listen(format!("127.0.0.1:{}", self.abci_port));
-        tm_process.kill()?;
+            let mut shutdown = shutdown.write().unwrap();
 
-        match res {
-            Err(crate::Error::Upgrade(crate::upgrade::Error::Version { expected, actual })) => {
-                log::warn!(
-                    "Node is version {}, but network is version {}",
-                    hex::encode(actual.to_vec()),
-                    hex::encode(expected.to_vec()),
-                );
+            match res {
+                Err(crate::Error::Upgrade(crate::upgrade::Error::Version { expected, actual })) => {
+                    *shutdown = Some(crate::Error::Upgrade(crate::upgrade::Error::Version {
+                        expected: expected.clone(),
+                        actual: actual.clone(),
+                    }));
 
-                std::fs::write(
-                    self.home.join("network_version"),
-                    format!("{}\n", hex::encode(expected.to_vec())),
-                )?;
+                    log::warn!(
+                        "Node is version {}, but network is version {}",
+                        hex::encode(actual.to_vec()),
+                        hex::encode(expected.to_vec()),
+                    );
 
-                std::process::exit(138);
+                    std::fs::write(
+                        self.home.join("network_version"),
+                        format!("{}\n", hex::encode(expected.to_vec())),
+                    )
+                    .unwrap();
+
+                    std::process::exit(138);
+                }
+                Err(crate::Error::ABCI(msg)) if msg.starts_with("Reached stop height ") => {
+                    *shutdown = Some(crate::Error::ABCI(msg));
+
+                    std::process::exit(138);
+                }
+                Err(e) => {
+                    *shutdown = Some(e);
+                }
+                Ok(_) => {
+                    *shutdown = Some(crate::Error::App("Node exited".to_string()));
+                }
             }
-            Err(crate::Error::ABCI(msg)) if msg.starts_with("Reached stop height ") => {
-                std::process::exit(138);
-            }
-            _ => res,
-        }
+        });
+
+        Ok(Child::new(tm_child, shutdown_handler, notifier))
     }
 
     #[must_use]
-    pub fn reset(self) -> Self {
+    pub async fn reset(self) -> Self {
         if self.merk_home.exists() {
             std::fs::remove_dir_all(&self.merk_home).expect("Failed to clear Merk data");
         }
 
         Tendermint::new(&self.tm_home)
             .stdout(std::process::Stdio::null())
-            .unsafe_reset_all();
+            .unsafe_reset_all()
+            .await;
 
         self
     }
@@ -561,6 +635,14 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
     }
 }
 
+impl Drop for Child {
+    fn drop(&mut self) {
+        if let Err(e) = self.kill() {
+            log::error!("Failed to kill node: {}", e);
+        }
+    }
+}
+
 struct InternalApp<A> {
     _app: PhantomData<A>,
 }
@@ -608,10 +690,10 @@ mod tests {
     }
 
     // TODO: dedupe w/ tendermint::client tests
-    pub fn spawn_node() {
+    pub async fn spawn_node() {
         pretty_env_logger::init();
 
-        std::thread::spawn(move || {
+        std::thread::spawn(async move || {
             // TODO: find available ports
 
             Context::add(ChainId("foo".to_string()));
@@ -624,8 +706,9 @@ mod tests {
                     seeds: None,
                     timeout_commit: None,
                 },
-            );
-            node.run().unwrap();
+            )
+            .await;
+            node.run().await.unwrap();
             home.close().unwrap();
         });
 
