@@ -18,6 +18,7 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 use tendermint_proto::v0_34::abci::*;
 
 pub struct Child {
@@ -60,6 +61,8 @@ impl Child {
         loop {
             if let Some(err) = self.abci_shutdown_handle.read().unwrap().as_ref() {
                 break Err(Error::App(err.to_string()));
+            } else {
+                std::thread::sleep(Duration::from_millis(10));
             }
         }
     }
