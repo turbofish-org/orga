@@ -148,10 +148,13 @@ mod tests {
         }
     }
 
-    pub fn spawn_node() {
+    #[cfg(feature = "tokio")]
+    #[tokio::test]
+    #[serial_test::serial]
+    pub async fn spawn_node() {
         pretty_env_logger::init();
 
-        std::thread::spawn(move || {
+        std::thread::spawn(async move || {
             // TODO: find available ports
 
             Context::add(ChainId("foo".to_string()));
@@ -165,7 +168,7 @@ mod tests {
                     timeout_commit: None,
                 },
             );
-            node.run().unwrap();
+            node.await.run().await.unwrap();
             home.close().unwrap();
         });
 

@@ -26,7 +26,8 @@ pub struct App {
     pub accounts: Accounts<FooCoin>,
 }
 
-pub fn main() {
+#[tokio::main]
+pub async fn main() {
     pretty_env_logger::init();
 
     let home = tempdir::TempDir::new("orga-foo").unwrap();
@@ -38,7 +39,7 @@ pub fn main() {
             timeout_commit: None,
         },
     );
-    node.run().unwrap();
+    node.await.run().await.unwrap();
     home.close().unwrap();
 }
 
