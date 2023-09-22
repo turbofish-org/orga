@@ -1,7 +1,8 @@
 use ed::Terminated;
 use ibc::applications::transfer::send_transfer;
 use ibc::clients::ics07_tendermint::{
-    client_state::ClientState as TmClientState, consensus_state::ConsensusState as TmConsensusState,
+    client_state::ClientState as TmClientState,
+    consensus_state::ConsensusState as TmConsensusState, header::Header as TmHeader,
 };
 use ibc::core::dispatch;
 use ibc::core::ics02_client::client_type::ClientType;
@@ -23,9 +24,12 @@ use ibc_proto::ibc::applications::transfer::v1::MsgTransfer as RawMsgTransfer;
 use ibc_proto::ibc::core::{
     channel::v1::Channel as RawChannelEnd, connection::v1::ConnectionEnd as RawConnectionEnd,
 };
+use ibc_proto::ibc::lightclients::tendermint::v1::Header as RawHeader;
 
 use ibc_proto::protobuf::Protobuf;
 use ibc_rs::applications::transfer::msgs::transfer::MsgTransfer;
+use ibc_rs::core::ics02_client::msgs::ClientMsg;
+use ibc_rs::core::MsgEnvelope;
 use serde::Serialize;
 use tendermint_proto::Protobuf as TmProtobuf;
 
@@ -38,6 +42,7 @@ use crate::encoding::{
 };
 use crate::migrate::{Migrate, MigrateInto};
 use crate::plugins::Signer;
+use crate::query::Query;
 use crate::state::State;
 use crate::store::Store;
 use crate::{orga, Error, Result as OrgaResult};
@@ -64,39 +69,39 @@ pub const IBC_QUERY_PATH: &str = "store/ibc/key";
 
 #[orga(version = 1)]
 pub struct Ibc {
-    height: u64,
-    host_consensus_states: Deque<ConsensusState>,
-    channel_counter: u64,
-    connection_counter: u64,
-    client_counter: u64,
+    pub height: u64,
+    pub host_consensus_states: Deque<ConsensusState>,
+    pub channel_counter: u64,
+    pub connection_counter: u64,
+    pub client_counter: u64,
     pub transfer: Transfer,
 
     #[state(absolute_prefix(b"clients/"))]
-    clients: Map<ClientId, Client>,
+    pub clients: Map<ClientId, Client>,
 
     #[state(absolute_prefix(b"connections/"))]
-    connections: Map<ConnectionId, ConnectionEnd>,
+    pub connections: Map<ConnectionId, ConnectionEnd>,
 
     #[state(absolute_prefix(b"channelEnds/"))]
-    channel_ends: Map<PortChannel, ChannelEnd>,
+    pub channel_ends: Map<PortChannel, ChannelEnd>,
 
     #[state(absolute_prefix(b"nextSequenceSend/"))]
-    next_sequence_send: Map<PortChannel, Number>,
+    pub next_sequence_send: Map<PortChannel, Number>,
 
     #[state(absolute_prefix(b"nextSequenceRecv/"))]
-    next_sequence_recv: Map<PortChannel, Number>,
+    pub next_sequence_recv: Map<PortChannel, Number>,
 
     #[state(absolute_prefix(b"nextSequenceAck/"))]
-    next_sequence_ack: Map<PortChannel, Number>,
+    pub next_sequence_ack: Map<PortChannel, Number>,
 
     #[state(absolute_prefix(b"commitments/"))]
-    commitments: Map<PortChannelSequence, Vec<u8>>,
+    pub commitments: Map<PortChannelSequence, Vec<u8>>,
 
     #[state(absolute_prefix(b"receipts/"))]
-    receipts: Map<PortChannelSequence, ()>,
+    pub receipts: Map<PortChannelSequence, ()>,
 
     #[state(absolute_prefix(b"acks/"))]
-    acks: Map<PortChannelSequence, Vec<u8>>,
+    pub acks: Map<PortChannelSequence, Vec<u8>>,
 
     #[state(absolute_prefix(b""))]
     store: Store,
@@ -136,11 +141,33 @@ impl Ibc {
     }
 
     pub fn deliver_message(&mut self, message: IbcMessage) -> crate::Result<Option<TransferInfo>> {
+        let mut maybe_client_update = None;
+
         use IbcMessage::*;
         match message {
-            Ics26(msg) => dispatch(self, msg).map_err(|e| Error::Ibc(e.to_string()))?,
+            Ics26(msg) => {
+                if let MsgEnvelope::Client(ClientMsg::UpdateClient(msg)) = &msg {
+                    maybe_client_update = Some(msg.clone());
+                }
+
+                dispatch(self, msg).map_err(|e| Error::Ibc(e.to_string()))?
+            }
             Ics20(msg) => send_transfer(self, msg).map_err(|e| Error::Ibc(e.to_string()))?,
         };
+
+        if let Some(msg) = maybe_client_update {
+            match TmHeader::try_from(msg.header) {
+                Ok(header) => {
+                    let mut client = self
+                        .clients
+                        .get_mut(msg.client_id.into())?
+                        .ok_or_else(|| Error::Ibc("Expected client".to_string()))?;
+                    client.last_header = Some(header.into())
+                }
+                Err(err) => log::debug!("Error decoding header: {}", err),
+            }
+        }
+
         Ok(self.incoming_transfer.take())
     }
 
@@ -161,18 +188,41 @@ impl std::fmt::Debug for Ibc {
 #[orga]
 pub struct Client {
     #[state(prefix(b"updates/"))]
-    updates: Map<EpochHeight, (Timestamp, BinaryHeight)>,
+    pub updates: Map<EpochHeight, (Timestamp, BinaryHeight)>,
 
     #[state(prefix(b"clientState"))]
-    client_state: Map<(), ClientState>,
+    pub client_state: Map<(), ClientState>,
 
     #[state(prefix(b"consensusStates/"))]
-    consensus_states: Map<EpochHeight, ConsensusState>,
+    pub consensus_states: Map<EpochHeight, ConsensusState>,
 
     #[state(prefix(b"connections/"))]
-    connections: Map<ConnectionId, ()>,
+    pub connections: Map<ConnectionId, ()>,
+
+    // TODO: support headers for non-tendermint clients
+    pub last_header: Option<Header>,
 
     client_type: EofTerminatedString,
+}
+
+impl Client {
+    pub fn client_type(&self) -> crate::Result<ClientType> {
+        ClientType::new(self.client_type.to_string().as_str())
+            .map_err(|_| Error::Ibc("Invalid client type".to_string()))
+    }
+
+    pub fn set_client_type(&mut self, client_type: ClientType) {
+        self.client_type = client_type.into();
+    }
+
+    pub fn last_header(&self) -> crate::Result<TmHeader> {
+        Ok(self
+            .last_header
+            .as_ref()
+            .ok_or_else(|| Error::Ibc("Expected relayed header".to_string()))?
+            .clone()
+            .into())
+    }
 }
 
 pub type SlashTerminatedString<T> = ByteTerminatedString<b'/', T>;
@@ -592,6 +642,14 @@ macro_rules! protobuf_newtype {
                 crate::describe::Builder::new::<Self>().build()
             }
         }
+
+        impl Query for $newtype {
+            type Query = ();
+
+            fn query(&self, _: ()) -> crate::Result<()> {
+                Ok(())
+            }
+        }
     };
 }
 
@@ -619,6 +677,9 @@ protobuf_newtype!(
     Protobuf,
     ChannelEnd
 );
+
+protobuf_newtype!(Header, TmHeader, RawHeader, Protobuf, Header);
+impl Terminated for Header {}
 
 impl ConsensusStateTrait for ConsensusState {
     fn root(&self) -> &ibc_rs::core::ics23_commitment::commitment::CommitmentRoot {
