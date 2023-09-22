@@ -6,11 +6,22 @@ use crate::{
 use super::MerkStore;
 
 pub struct MemSnapshot {
-    pub(crate) snapshot: merk::snapshot::StaticSnapshot,
-    pub(crate) merk_store: Shared<MerkStore>,
+    snapshot: merk::snapshot::StaticSnapshot,
+    merk_store: Shared<MerkStore>,
 }
 
 impl MemSnapshot {
+    pub fn new(
+        mut snapshot: merk::snapshot::StaticSnapshot,
+        merk_store: Shared<MerkStore>,
+    ) -> Self {
+        snapshot.should_drop = true;
+        Self {
+            snapshot,
+            merk_store,
+        }
+    }
+
     pub fn use_snapshot<R, F: FnOnce(&merk::Snapshot) -> R>(&self, f: F) -> R {
         let store = self.merk_store.borrow();
         let db = store.merk().db();

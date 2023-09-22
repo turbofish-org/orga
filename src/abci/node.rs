@@ -609,10 +609,7 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
             .ok_or_else(|| crate::Error::Query(format!("Cannot query for height {}", req.height)))?
         };
 
-        let mss = Shared::new(MemSnapshot {
-            snapshot,
-            merk_store,
-        });
+        let mss = Shared::new(MemSnapshot::new(snapshot, merk_store));
 
         if !req.path.is_empty() {
             let store = BackingStore::MemSnapshot(mss);
