@@ -15,6 +15,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::str::FromStr;
+use std::sync::mpsc::{self, Receiver, Sender};
 use tar::Archive;
 use toml_edit::{value, Document};
 
@@ -48,67 +49,27 @@ fn verify_hash(tendermint_bytes: &[u8]) {
     );
     info!("Confirmed correct Tendermint zip hash");
 }
-
-#[derive(Debug)]
-struct ProcessHandler {
-    command: std::process::Command,
-    process: Option<std::process::Child>,
+pub struct Child {
+    child: std::process::Child,
+    sender: Sender<Option<()>>,
 }
 
-impl ProcessHandler {
-    pub fn new(command: &str) -> Self {
-        let command = Command::new(command);
-        ProcessHandler {
-            command,
-            process: None,
-        }
+impl Child {
+    pub fn new(child: std::process::Child, sender: Sender<Option<()>>) -> Self {
+        Self { child, sender }
     }
 
-    pub fn set_arg(&mut self, arg: &str) {
-        self.command.arg(arg);
-    }
-
-    pub fn spawn(&mut self) -> Result<()> {
-        log::debug!("Spawning tendermint: {:#?}", self.command);
-        match self.process {
-            Some(_) => {
-                return Err(Error::Tendermint("Child process already spawned".into()));
-            }
-            None => self.process = Some(self.command.spawn()?),
-        };
-        Ok(())
-    }
-
-    pub fn wait(&mut self) -> Result<()> {
-        match &mut self.process {
-            Some(process) => process.wait()?,
-            None => {
-                return Err(Error::Tendermint("Child process not yet spawned".into()));
-            }
-        };
-        Ok(())
-    }
-
-    #[allow(dead_code)]
-    pub fn kill(self) -> Result<()> {
-        let mut child = match self.process {
-            Some(inner) => inner,
-            None => {
-                return Err(Error::Tendermint(
-                    "Child process is not yet spawned. How do you kill that which has no life?"
-                        .into(),
-                ));
-            }
-        };
-        child.kill()?;
-        child.wait()?;
+    pub fn kill(&mut self) -> Result<()> {
+        let _ = self.sender.send(Some(()));
+        self.child.kill()?;
+        self.child.wait()?;
         Ok(())
     }
 }
 
 #[derive(Debug)]
 pub struct Tendermint {
-    process: ProcessHandler,
+    command: std::process::Command,
     home: PathBuf,
     genesis_bytes: Option<Vec<u8>>,
     config_contents: Option<toml_edit::Document>,
@@ -129,7 +90,7 @@ impl Tendermint {
         }
         let tm_bin_path = path.join(TENDERMINT_BINARY_NAME);
         let tendermint = Tendermint {
-            process: ProcessHandler::new(tm_bin_path.to_str().unwrap()),
+            command: Command::new(tm_bin_path.to_str().unwrap()),
             home: home_path.clone().into(),
             genesis_bytes: None,
             config_contents: None,
@@ -138,7 +99,7 @@ impl Tendermint {
         tendermint.home(home_path.into())
     }
 
-    fn install(&self) {
+    async fn install(&self) {
         let tendermint_path = self.home.join(TENDERMINT_BINARY_NAME);
 
         if tendermint_path.is_executable() {
@@ -147,15 +108,17 @@ impl Tendermint {
         }
 
         info!("Installing Tendermint to {}", self.home.to_str().unwrap());
-        let mut buf: Vec<u8> = vec![];
-        reqwest::blocking::get(TENDERMINT_BINARY_URL)
+        let buf = reqwest::get(TENDERMINT_BINARY_URL)
+            .await
             .expect("Failed to download Tendermint zip file from GitHub")
-            .copy_to(&mut buf)
-            .expect("Failed to read bytes from zip file");
+            .bytes()
+            .await
+            .expect("Failed to read bytes from Tendermint zip file")
+            .to_vec();
 
         verify_hash(&buf);
 
-        let cursor = std::io::Cursor::new(buf.clone());
+        let cursor = std::io::Cursor::new(buf);
         let tar = GzDecoder::new(cursor);
         let mut archive = Archive::new(tar);
 
@@ -180,15 +143,15 @@ impl Tendermint {
 
     pub fn flags(mut self, flags: Vec<String>) -> Self {
         for flag in flags {
-            self.process.set_arg(flag.trim());
+            self.command.arg(flag.trim());
         }
         self
     }
 
     fn home(mut self, home_path: PathBuf) -> Self {
         let new_home = home_path.to_str().unwrap();
-        self.process.set_arg("--home");
-        self.process.set_arg(new_home);
+        self.command.arg("--home");
+        self.command.arg(new_home);
         self
     }
 
@@ -201,8 +164,8 @@ impl Tendermint {
     ///     unsafe_reset_all
     #[must_use]
     pub fn log_level(mut self, level: &str) -> Self {
-        self.process.set_arg("--log_level");
-        self.process.set_arg(level);
+        self.command.arg("--log_level");
+        self.command.arg(level);
         self
     }
 
@@ -215,7 +178,7 @@ impl Tendermint {
     ///     unsafe_reset_all
     #[must_use]
     pub fn trace(mut self) -> Self {
-        self.process.set_arg("--trace");
+        self.command.arg("--trace");
         self
     }
 
@@ -226,8 +189,8 @@ impl Tendermint {
     ///     start
     #[must_use]
     pub fn moniker(mut self, moniker: &str) -> Self {
-        self.process.set_arg("--moniker");
-        self.process.set_arg(moniker);
+        self.command.arg("--moniker");
+        self.command.arg(moniker);
         self
     }
 
@@ -243,8 +206,8 @@ impl Tendermint {
     /// terminating methods will cause the tendermint process to fail
     #[must_use]
     pub fn p2p_laddr(mut self, addr: &str) -> Self {
-        self.process.set_arg("--p2p.laddr");
-        self.process.set_arg(addr);
+        self.command.arg("--p2p.laddr");
+        self.command.arg(addr);
         self
     }
 
@@ -259,10 +222,10 @@ impl Tendermint {
     /// terminating methods will cause the tendermint process to fail
     #[must_use]
     pub fn p2p_persistent_peers(mut self, peers: Vec<String>) -> Self {
-        self.process.set_arg("--p2p.persistent_peers");
+        self.command.arg("--p2p.persistent_peers");
         let mut arg: String = "".to_string();
         peers.iter().for_each(|x| arg += x);
-        self.process.set_arg(&arg);
+        self.command.arg(&arg);
         self
     }
 
@@ -278,8 +241,8 @@ impl Tendermint {
     /// terminating methods will cause the tendermint process to fail
     #[must_use]
     pub fn rpc_laddr(mut self, addr: &str) -> Self {
-        self.process.set_arg("--rpc.laddr");
-        self.process.set_arg(addr);
+        self.command.arg("--rpc.laddr");
+        self.command.arg(addr);
         self
     }
 
@@ -296,8 +259,8 @@ impl Tendermint {
     /// methods will cause the tendermint process to fail
     #[must_use]
     pub fn proxy_app(mut self, addr: &str) -> Self {
-        self.process.set_arg("--proxy_app");
-        self.process.set_arg(addr);
+        self.command.arg("--proxy_app");
+        self.command.arg(addr);
         self
     }
 
@@ -330,7 +293,7 @@ impl Tendermint {
     /// ```
     #[must_use]
     pub fn stdout<T: Into<Stdio>>(mut self, cfg: T) -> Self {
-        self.process.command.stdout(cfg);
+        self.command.stdout(cfg);
         self
     }
 
@@ -363,7 +326,7 @@ impl Tendermint {
     /// ```
     #[must_use]
     pub fn stderr<T: Into<Stdio>>(mut self, cfg: T) -> Self {
-        self.process.command.stderr(cfg);
+        self.command.stderr(cfg);
         self
     }
 
@@ -376,7 +339,7 @@ impl Tendermint {
     /// terminating methods will cause the tendermint process to fail
     #[must_use]
     pub fn keep_addr_book(mut self) -> Self {
-        self.process.set_arg("--keep_addr_book");
+        self.command.arg("--keep_addr_book");
         self
     }
 
@@ -561,29 +524,31 @@ impl Tendermint {
     ///
     /// Note: This will locally install the Tendermint binary if it is
     /// not already contained in the Tendermint home directory
-    pub fn start(mut self) -> Self {
-        self.install();
+    pub async fn start(mut self) -> Child {
+        self.install().await;
         self.mutate_configuration();
-        self.process.set_arg("start");
+        self.command.arg("start");
         if !self.show_logs {
-            self.process.command.stdout(Stdio::piped());
+            self.command.stdout(Stdio::piped());
         }
-        self.process.spawn().unwrap();
+
+        let mut child = self.command.spawn().unwrap();
+
+        let (tx, rx): (Sender<Option<()>>, Receiver<Option<()>>) = mpsc::channel();
         if !self.show_logs {
-            let stdout = self
-                .process
-                .process
-                .as_mut()
-                .unwrap()
-                .stdout
-                .take()
-                .unwrap();
+            let stdout = child.stdout.take().unwrap();
+
             std::thread::spawn(move || {
-                let stdout = BufReader::new(stdout).lines();
-                for line in stdout {
-                    line.as_ref()
-                        .unwrap()
-                        .parse()
+                let mut stdout = BufReader::new(stdout);
+                let mut line = String::new();
+
+                loop {
+                    if let Ok(Some(_)) = rx.try_recv() {
+                        break;
+                    }
+
+                    stdout.read_line(&mut line).unwrap();
+                    line.parse()
                         .map(|msg: LogMessage| {
                             log::debug!("{:#?}", msg);
                             match msg.message.as_str() {
@@ -616,11 +581,14 @@ impl Tendermint {
                                 _ => {}
                             }
                         })
-                        .unwrap_or_else(|_| println!("! {}", line.unwrap()));
+                        .unwrap_or_else(|_| println!("! {}", line));
+
+                    line.clear();
                 }
             });
         }
-        self
+
+        Child::new(child, tx)
     }
 
     /// Calls tendermint init with configured arguments
@@ -628,29 +596,25 @@ impl Tendermint {
     /// Note: This will locally install the Tendermint binary if it is
     /// not already contained in the Tendermint home directory
     #[must_use]
-    pub fn init(mut self) -> Self {
-        self.install();
-        self.process.set_arg("init");
-        self.process.spawn().unwrap();
-        self.process.wait().unwrap();
+    pub async fn init(mut self) -> Self {
+        self.install().await;
+        self.command.arg("init");
+        let mut child = self.command.spawn().unwrap();
+        child.wait().unwrap();
         self.mutate_configuration();
 
         self
-    }
-
-    pub fn kill(self) -> Result<()> {
-        self.process.kill()
     }
 
     /// Calls tendermint start with configured arguments
     ///
     /// Note: This will locally install the Tendermint binary if it is
     /// not already contained in the Tendermint home directory
-    pub fn unsafe_reset_all(mut self) {
-        self.install();
-        self.process.set_arg("unsafe_reset_all");
-        self.process.spawn().unwrap();
-        self.process.wait().unwrap();
+    pub async fn unsafe_reset_all(mut self) {
+        self.install().await;
+        self.command.arg("unsafe_reset_all");
+        let mut child = self.command.spawn().unwrap();
+        child.wait().unwrap();
     }
 }
 

@@ -22,7 +22,8 @@ mod server {
     use log::info;
     use std::env;
     use std::net::ToSocketAddrs;
-    use std::sync::mpsc::{self, Receiver, Sender, SyncSender};
+    use std::sync::mpsc::{self, Receiver, SyncSender};
+    use std::sync::{Arc, RwLock};
     use tendermint_proto::v0_34::abci::request::Value as Req;
     use tendermint_proto::v0_34::abci::response::Value as Res;
     use tendermint_proto::v0_34::types::Header;
@@ -39,13 +40,21 @@ mod server {
         height: u64,
         skip_init_chain: bool,
         header: Option<Header>,
+        shutdown: Arc<RwLock<Option<Error>>>,
+        shutdown_notifier: Arc<RwLock<bool>>,
     }
 
     impl<A: Application> ABCIStateMachine<A> {
         /// Constructs an `ABCIStateMachine` from the given app (a set of handlers
         /// for transactions and blocks), and store (a key/value store to persist
         /// the state data).
-        pub fn new(app: A, store: MerkStore, skip_init_chain: bool) -> Self {
+        pub fn new(
+            app: A,
+            store: MerkStore,
+            skip_init_chain: bool,
+            shutdown: Arc<RwLock<Option<Error>>>,
+            shutdown_notifier: Arc<RwLock<bool>>,
+        ) -> Self {
             let (sender, receiver) = mpsc::sync_channel(0);
             ABCIStateMachine {
                 app: Some(app),
@@ -57,6 +66,8 @@ mod server {
                 height: 0,
                 skip_init_chain,
                 header: None,
+                shutdown,
+                shutdown_notifier,
             }
         }
 
@@ -346,7 +357,7 @@ mod server {
 
         /// Creates a TCP server for the ABCI protocol and begins handling the
         /// incoming connections.
-        pub fn listen<SA: ToSocketAddrs>(mut self, addr: SA) -> Result<()> {
+        pub fn listen<SA: ToSocketAddrs>(mut self, addr: SA) -> Result<Arc<RwLock<bool>>> {
             if let Some(stop_height_str) = env::var_os("ORGA_STOP_HEIGHT") {
                 let _stop_height: u64 = stop_height_str
                     .into_string()
@@ -357,27 +368,41 @@ mod server {
 
             let server = abci2::Server::listen(addr)?;
 
-            let (err_sender, err_receiver) = mpsc::channel();
-
             // TODO: keep workers in struct
             // TODO: more intelligently handle connections, e.g. handle tendermint dying/reconnecting?
-            self.create_worker(server.accept()?, err_sender.clone())?;
-            self.create_worker(server.accept()?, err_sender.clone())?;
-            self.create_worker(server.accept()?, err_sender.clone())?;
-            self.create_worker(server.accept()?, err_sender)?;
+            self.create_worker(server.accept()?, self.shutdown.clone())?;
+            self.create_worker(server.accept()?, self.shutdown.clone())?;
+            self.create_worker(server.accept()?, self.shutdown.clone())?;
+            self.create_worker(server.accept()?, self.shutdown.clone())?;
 
             loop {
-                match err_receiver.try_recv() {
-                    Err(mpsc::TryRecvError::Empty) => {}
-                    Err(err) => Err(err).unwrap(),
-                    _ => {}
+                if let Some(e) = self.shutdown.read().unwrap().as_ref() {
+                    let mut shutdown = self.shutdown_notifier.write().unwrap();
+                    *shutdown = true;
+                    return Err(Error::ABCI(e.to_string()));
                 }
-
-                let (req, cb) = self.receiver.recv().unwrap();
-                let is_commit = matches!(req.value, Some(Req::Commit(_)));
-                let res = Response {
-                    value: Some(self.run(req)?),
+                let (req, cb) = match self
+                    .receiver
+                    .recv_timeout(std::time::Duration::from_secs(1))
+                {
+                    Ok((req, cb)) => (req, cb),
+                    Err(e) => {
+                        log::debug!("{}", e.to_string());
+                        continue;
+                    }
                 };
+                let is_commit = matches!(req.value, Some(Req::Commit(_)));
+                let value = match self.run(req) {
+                    Ok(val) => val,
+                    Err(e) => {
+                        let mut shutdown = self.shutdown.write().unwrap();
+                        *shutdown = Some(Error::ABCI(e.to_string()));
+                        let mut shutdown = self.shutdown_notifier.write().unwrap();
+                        *shutdown = true;
+                        return Err(e);
+                    }
+                };
+                let res = Response { value: Some(value) };
                 cb.send(res).unwrap();
 
                 if is_commit {
@@ -388,6 +413,8 @@ mod server {
                             .parse()
                             .expect("Invalid ORGA_STOP_HEIGHT value");
                         if self.height >= stop_height {
+                            let mut shutdown = self.shutdown_notifier.write().unwrap();
+                            *shutdown = true;
                             break Err(Error::ABCI(format!(
                                 "Reached stop height ({})",
                                 stop_height
@@ -403,9 +430,9 @@ mod server {
         fn create_worker(
             &self,
             conn: abci2::Connection,
-            err_channel: Sender<Error>,
+            shutdown: Arc<RwLock<Option<Error>>>,
         ) -> Result<Worker> {
-            Ok(Worker::new(self.sender.clone(), conn, err_channel))
+            Ok(Worker::new(self.sender.clone(), conn, shutdown))
         }
     }
 
@@ -418,15 +445,22 @@ mod server {
         fn new(
             req_sender: SyncSender<(Request, SyncSender<Response>)>,
             mut conn: abci2::Connection,
-            err_sender: Sender<Error>,
+            shutdown: Arc<RwLock<Option<Error>>>,
         ) -> Self {
             let thread = std::thread::spawn(move || {
                 let (res_sender, res_receiver) = mpsc::sync_channel(0);
                 loop {
+                    if shutdown.read().unwrap().is_some() {
+                        if let Err(e) = conn.close() {
+                            log::debug!("Error closing connection: {}", e);
+                        };
+                        break;
+                    }
                     let req = match conn.read() {
                         Ok(req) => req,
                         Err(e) => {
-                            err_sender.send(e.into()).unwrap_or(());
+                            let mut shutdown = shutdown.write().unwrap();
+                            *shutdown = Some(Error::ABCI2(e));
                             return;
                         }
                     };

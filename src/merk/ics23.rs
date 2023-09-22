@@ -4,22 +4,23 @@ use ics23::{
     commitment_proof::Proof, CommitmentProof, ExistenceProof, HashOp, InnerOp, InnerSpec, LeafOp,
     LengthOp, NonExistenceProof, ProofSpec,
 };
-use merk::{
-    tree::{RefWalker, Tree},
-    Merk, MerkSource,
-};
+use merk::tree::{Fetch, RefWalker, Tree};
 
-pub fn create_ics23_proof(store: &Merk, key: &[u8]) -> Result<CommitmentProof> {
-    store.walk(|maybe_root| {
-        let root = maybe_root.ok_or_else(|| {
-            Error::Merk(merk::Error::Proof(
-                "Cannot create ICS 23 proof for empty tree".to_string(),
-            ))
-        })?;
+pub fn create_ics23_proof<S>(
+    maybe_root: Option<RefWalker<'_, S>>,
+    key: &[u8],
+) -> Result<CommitmentProof>
+where
+    S: Fetch + Sized + Clone + Send,
+{
+    let root = maybe_root.ok_or_else(|| {
+        Error::Merk(merk::Error::Proof(
+            "Cannot create ICS 23 proof for empty tree".to_string(),
+        ))
+    })?;
 
-        let proof = create_proof(root, key, vec![], None, None)?;
-        Ok(CommitmentProof { proof: Some(proof) })
-    })
+    let proof = create_proof(root, key, vec![], None, None)?;
+    Ok(CommitmentProof { proof: Some(proof) })
 }
 
 impl MerkStore {
@@ -41,13 +42,16 @@ impl MerkStore {
     }
 }
 
-fn create_proof<'a>(
-    mut node: RefWalker<'a, MerkSource<'a>>,
+fn create_proof<S>(
+    mut node: RefWalker<'_, S>,
     key: &[u8],
     mut path: Vec<InnerOp>,
     mut left_neighbor: Option<ExistenceProof>,
     mut right_neighbor: Option<ExistenceProof>,
-) -> Result<Proof> {
+) -> Result<Proof>
+where
+    S: Fetch + Sized + Clone + Send,
+{
     let existence_proof = |mut path: Vec<InnerOp>, tree: &Tree| {
         path.reverse();
         ExistenceProof {
@@ -100,7 +104,10 @@ enum Branch {
     KV,
 }
 
-fn inner_op(node: &RefWalker<MerkSource<'_>>, branch: Branch) -> InnerOp {
+fn inner_op<S>(node: &RefWalker<'_, S>, branch: Branch) -> InnerOp
+where
+    S: Fetch + Sized + Clone + Send,
+{
     let tree = node.tree();
     let kv_hash = || tree.kv_hash().to_vec();
     let left_hash = || tree.child_hash(true).to_vec();
@@ -153,7 +160,9 @@ mod tests {
         store.put(b"baz4".to_vec(), b"7".to_vec()).unwrap();
         store.write(vec![]).unwrap();
 
-        let proof = create_ics23_proof(store.merk(), b"foo").unwrap();
+        let proof = store
+            .merk()
+            .walk(|w| create_ics23_proof(w, b"foo").unwrap());
         let root_hash = store.merk().root_hash().to_vec();
 
         drop(store);
@@ -183,7 +192,9 @@ mod tests {
         store.put(b"baz4".to_vec(), b"7".to_vec()).unwrap();
         store.write(vec![]).unwrap();
 
-        let proof = create_ics23_proof(store.merk(), b"foo2").unwrap();
+        let proof = store
+            .merk()
+            .walk(|w| create_ics23_proof(w, b"foo2").unwrap());
         dbg!(&proof);
         let root_hash = store.merk().root_hash().to_vec();
 

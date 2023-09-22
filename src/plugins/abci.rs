@@ -359,14 +359,41 @@ impl<T: App> Call for ABCIPlugin<T> {
                 self.inner.init_chain(&ctx)?;
             }
             BeginBlock(req) => {
+                Context::add(Events::default());
+                Context::add(Logs::default());
+                self.events.replace(vec![]);
+                self.logs.replace(vec![]);
                 let ctx: BeginBlockCtx = req.into_inner().into();
                 self.time = ctx.header.clone().time;
                 create_time_ctx(&self.time);
-                self.inner.begin_block(&ctx)?;
+                let res = self.inner.begin_block(&ctx);
+                if res.is_ok() {
+                    self.events
+                        .replace(Context::resolve::<Events>().unwrap().events.clone());
+                }
+                self.logs
+                    .replace(Context::resolve::<Logs>().unwrap().messages.clone());
+                Context::remove::<Events>();
+                Context::remove::<Logs>();
+
+                res?;
             }
             EndBlock(req) => {
+                Context::add(Events::default());
+                Context::add(Logs::default());
+                self.events.replace(vec![]);
+                self.logs.replace(vec![]);
                 let ctx = req.into_inner().into();
-                self.inner.end_block(&ctx)?;
+                let res = self.inner.end_block(&ctx);
+                if res.is_ok() {
+                    self.events
+                        .replace(Context::resolve::<Events>().unwrap().events.clone());
+                }
+                self.logs
+                    .replace(Context::resolve::<Logs>().unwrap().messages.clone());
+                Context::remove::<Events>();
+                Context::remove::<Logs>();
+                res?;
             }
             DeliverTx(inner_call) => {
                 Context::add(Events::default());
