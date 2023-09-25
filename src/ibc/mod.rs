@@ -28,6 +28,7 @@ use ibc_proto::ibc::lightclients::tendermint::v1::Header as RawHeader;
 
 use ibc_proto::protobuf::Protobuf;
 use ibc_rs::applications::transfer::msgs::transfer::MsgTransfer;
+use ibc_rs::clients::ics07_tendermint::client_type;
 use ibc_rs::core::ics02_client::msgs::ClientMsg;
 use ibc_rs::core::MsgEnvelope;
 use serde::Serialize;
@@ -238,8 +239,7 @@ pub struct Client {
 
 impl Client {
     pub fn client_type(&self) -> crate::Result<ClientType> {
-        ClientType::new(self.client_type.to_string().as_str())
-            .map_err(|_| Error::Ibc("Invalid client type".to_string()))
+        Ok(client_type())
     }
 
     pub fn set_client_type(&mut self, client_type: ClientType) {
@@ -600,7 +600,7 @@ macro_rules! protobuf_newtype {
     ($newtype:tt, $inner:ty, $raw:ty, $proto:tt, $prev:ty) => {
         #[derive(Serialize, Clone, Debug)]
         pub struct $newtype {
-            inner: $inner,
+            pub inner: $inner,
         }
 
         impl Encode for $newtype {
