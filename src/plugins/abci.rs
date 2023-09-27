@@ -36,6 +36,12 @@ impl Time {
     }
 }
 
+impl<T: Into<i64>> From<T> for Time {
+    fn from(seconds: T) -> Self {
+        Self::from_seconds(seconds)
+    }
+}
+
 #[derive(Entry, Clone)]
 pub struct ValidatorEntry {
     #[key]
