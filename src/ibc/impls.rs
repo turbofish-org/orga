@@ -23,9 +23,10 @@ use ibc::{
 
 #[cfg(feature = "abci")]
 use ibc_rs::core::ics23_commitment::commitment::CommitmentRoot;
+use ibc_rs::core::ics24_host::identifier::ChainId;
 
-use crate::context::GetContext;
-use crate::plugins::{Events, Logs};
+use crate::context::{Context, GetContext};
+use crate::plugins::{ChainId as ChainIdCtx, Events, Logs};
 use crate::Error;
 #[cfg(feature = "abci")]
 use crate::{abci::BeginBlock, plugins::BeginBlockCtx};
@@ -87,7 +88,6 @@ impl ValidationContext for IbcContext {
     type E = Self;
 
     fn validate_message_signer(&self, signer: &Signer) -> Result<(), ContextError> {
-        use crate::context::Context;
         use crate::plugins::Signer as SignerCtx;
         let ctx = Context::resolve::<SignerCtx>()
             .ok_or_else(|| Error::Signer("Invalid signer".to_string()))
@@ -165,7 +165,13 @@ impl ValidationContext for IbcContext {
     }
 
     fn host_height(&self) -> Result<Height, ContextError> {
-        Ok(Height::new(0, self.height)?)
+        let ctx = Context::resolve::<ChainIdCtx>()
+            .ok_or_else(|| ContextError::ClientError(ClientError::ImplementationSpecific))?;
+        let chain_id: ChainId = ctx
+            .0
+            .parse()
+            .map_err(|_| ContextError::ClientError(ClientError::ImplementationSpecific))?;
+        Ok(Height::new(chain_id.revision_number(), self.height)?)
     }
 
     fn host_timestamp(&self) -> Result<Timestamp, ContextError> {
