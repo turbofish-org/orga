@@ -269,20 +269,7 @@ pub struct Timestamp {
     inner: IbcTimestamp,
 }
 
-// TODO: replace when macro can specify min version
-impl Migrate for Timestamp {
-    fn migrate(_src: Store, _dest: Store, bytes: &mut &[u8]) -> OrgaResult<Self> {
-        if bytes[0] != 1 {
-            return Err(crate::Error::Ibc(format!(
-                "Invalid timestamp version: {}",
-                bytes[0]
-            )));
-        }
-        *bytes = &bytes[1..];
-
-        Timestamp::load(Store::default(), bytes)
-    }
-}
+impl Migrate for Timestamp {}
 
 impl Describe for Timestamp {
     fn describe() -> Descriptor {
