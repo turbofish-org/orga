@@ -42,3 +42,31 @@ impl<R: Read> Decoder<R> {
         Ok(value.into())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn simple() {
+        let bytes = [0, 1];
+        let mut bytes = &bytes[..];
+        let mut decoder = super::Decoder::new(&mut bytes, 0);
+        assert_eq!(decoder.decode_child::<u8>().unwrap(), 1);
+    }
+
+    #[test]
+    fn higher_version() {
+        let bytes = [10, 1];
+        let mut bytes = &bytes[..];
+        let mut decoder = super::Decoder::new(&mut bytes, 10);
+        assert_eq!(decoder.decode_child::<u8>().unwrap(), 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: UnexpectedByte(0)")]
+    fn incorrect_version() {
+        let bytes = [0, 1];
+        let mut bytes = &bytes[..];
+        let mut decoder = super::Decoder::new(&mut bytes, 1);
+        decoder.decode_child::<u8>().unwrap();
+    }
+}
