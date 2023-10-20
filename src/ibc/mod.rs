@@ -222,8 +222,8 @@ pub struct Client {
     #[state(prefix(b"updates/"))]
     pub updates: Map<EpochHeight, (Timestamp, BinaryHeight)>,
 
-    #[state(prefix(b"clientState"))]
-    pub client_state: Map<(), ClientState>,
+    #[state(prefix(b""))]
+    pub client_state: Map<FixedString<"clientState">, ClientState>,
 
     #[state(prefix(b"consensusStates/"))]
     pub consensus_states: Map<EpochHeight, ConsensusState>,
@@ -900,7 +900,10 @@ mod tests {
         )
         .unwrap()
         .into();
-        client.client_state.insert((), client_state).unwrap();
+        client
+            .client_state
+            .insert(Default::default(), client_state)
+            .unwrap();
         let consensus_state = TmConsensusState::new(
             CommitmentRoot::from_bytes(&[0; 32]),
             Time::from_unix_timestamp(0, 0).unwrap(),

@@ -123,7 +123,7 @@ impl ValidationContext for IbcContext {
                 client_id: client_id.clone(),
             })?
             .client_state
-            .get(())
+            .get(Default::default())
             .map_err(|_| ClientError::ImplementationSpecific)?
             .ok_or(ClientError::ImplementationSpecific)?
             .clone()

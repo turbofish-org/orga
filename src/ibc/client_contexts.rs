@@ -36,7 +36,7 @@ impl ClientExecutionContext for IbcContext {
             .or_insert_default()
             .map_err(|_| ClientError::ImplementationSpecific)?
             .client_state
-            .insert((), client_state.into())
+            .insert(Default::default(), client_state.into())
             .map_err(|_| ClientError::ImplementationSpecific)?;
 
         Ok(())
