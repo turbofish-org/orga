@@ -222,8 +222,8 @@ pub struct Client {
     #[state(prefix(b"updates/"))]
     pub updates: Map<EpochHeight, (Timestamp, BinaryHeight)>,
 
-    #[state(prefix(b""))]
-    pub client_state: Map<FixedString<"clientState">, ClientState>,
+    #[state(prefix(b"client"))]
+    pub client_state: Map<FixedString<"State">, ClientState>,
 
     #[state(prefix(b"consensusStates/"))]
     pub consensus_states: Map<EpochHeight, ConsensusState>,
