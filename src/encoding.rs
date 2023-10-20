@@ -346,7 +346,7 @@ impl<T: FromStr + ToString> EofTerminatedString<T> {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Default)]
 pub struct FixedString<const S: &'static str>;
 
 impl<const S: &'static str> Migrate for FixedString<S> {}
