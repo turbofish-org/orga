@@ -67,26 +67,26 @@ mod router;
 // mod tests2;
 pub const IBC_QUERY_PATH: &str = "store/ibc/key";
 
-#[orga(version = 2)]
+#[orga(version = 3)]
 pub struct Ibc {
-    #[orga(version(V1))]
+    #[orga(version(V2))]
     _bytes1: [u8; 32],
 
-    #[orga(version(V1))]
-    _bytes2: [u8; 18],
+    #[orga(version(V2))]
+    _bytes2: [u8; 21],
 
-    #[orga(version(V1))]
+    #[orga(version(V2))]
     #[state(absolute_prefix(b""))]
     root_store: Store,
 
-    #[orga(version(V1))]
+    #[orga(version(V2))]
     #[state(prefix(b""))]
     local_store: Store,
 
-    #[orga(version(V2))]
+    #[orga(version(V3))]
     pub ctx: IbcContext,
 
-    #[orga(version(V2))]
+    #[orga(version(V3))]
     pub router: router::IbcRouter,
 }
 
@@ -997,7 +997,7 @@ mod tests {
         assert_eq!(
             bytes,
             vec![
-                0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 127, 255, 255, 255, 255, 255, 255, 255, 127,
+                0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 127, 255, 255, 255, 255, 255, 255, 255, 127,
                 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 123, 0, 0, 0, 0, 0, 0, 1,
                 200, 0, 0, 0, 0, 0, 0, 3, 21, 0, 0
             ]

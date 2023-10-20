@@ -23,7 +23,6 @@ use ibc::{
 
 #[cfg(feature = "abci")]
 use ibc_rs::core::ics23_commitment::commitment::CommitmentRoot;
-use ibc_rs::core::ics24_host::identifier::ChainId;
 
 use crate::context::{Context, GetContext};
 use crate::plugins::{ChainId as ChainIdCtx, Events, Logs};
@@ -165,13 +164,17 @@ impl ValidationContext for IbcContext {
     }
 
     fn host_height(&self) -> Result<Height, ContextError> {
-        let ctx = Context::resolve::<ChainIdCtx>()
-            .ok_or_else(|| ContextError::ClientError(ClientError::ImplementationSpecific))?;
-        let chain_id: ChainId = ctx
-            .0
-            .parse()
-            .map_err(|_| ContextError::ClientError(ClientError::ImplementationSpecific))?;
-        Ok(Height::new(chain_id.revision_number(), self.height)?)
+        let ctx = Context::resolve::<ChainIdCtx>().ok_or_else(|| {
+            log::error!("Missing chain ID context");
+            ContextError::ClientError(ClientError::ImplementationSpecific)
+        })?;
+        let chain_id = ctx.0.as_str();
+        let revision_number = chain_id
+            .rsplit_once('-')
+            .map(|(_, n)| n.parse::<u64>().unwrap_or(0))
+            .unwrap_or(0);
+
+        Ok(Height::new(revision_number, self.height)?)
     }
 
     fn host_timestamp(&self) -> Result<Timestamp, ContextError> {
