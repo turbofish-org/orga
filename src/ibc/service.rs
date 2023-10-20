@@ -22,6 +22,7 @@ use ibc_proto::cosmos::bank::v1beta1::{
     QuerySpendableBalancesResponse, QuerySupplyOfRequest, QuerySupplyOfResponse,
     QueryTotalSupplyRequest, QueryTotalSupplyResponse,
 };
+use ibc_proto::cosmos::base::v1beta1::Coin;
 use ibc_proto::ibc::core::connection::v1::{
     QueryConnectionParamsRequest, QueryConnectionParamsResponse,
 };
@@ -748,9 +749,14 @@ pub struct BankService {}
 impl BankQuery for BankService {
     async fn balance(
         &self,
-        _request: Request<QueryBalanceRequest>,
+        request: Request<QueryBalanceRequest>,
     ) -> Result<Response<QueryBalanceResponse>, Status> {
-        Ok(Response::new(QueryBalanceResponse { balance: None }))
+        Ok(Response::new(QueryBalanceResponse {
+            balance: Some(Coin {
+                amount: "0".to_string(),
+                denom: request.get_ref().denom.clone(),
+            }),
+        }))
     }
 
     async fn all_balances(
