@@ -863,7 +863,7 @@ mod tests {
     use super::*;
     use crate::{
         state::State,
-        store::{BackingStore, MapStore, Shared, Store},
+        store::{BackingStore, MapStore, Read, Shared, Store, Write},
     };
 
     #[orga]
@@ -871,9 +871,8 @@ mod tests {
         ibc: Ibc,
     }
 
-    #[test]
-    fn state_structure() {
-        let store = Store::new(BackingStore::MapStore(Shared::new(MapStore::new())));
+    fn create_state() -> Store {
+        let mut store = Store::new(BackingStore::MapStore(Shared::new(MapStore::new())));
 
         let mut app = App::default();
         app.attach(store.clone()).unwrap();
@@ -997,21 +996,20 @@ mod tests {
 
         let mut bytes = vec![];
         app.flush(&mut bytes).unwrap();
-        assert_eq!(
-            bytes,
-            vec![
-                0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 127, 255, 255, 255, 255, 255, 255, 255, 127,
-                255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 123, 0, 0, 0, 0, 0, 0, 1,
-                200, 0, 0, 0, 0, 0, 0, 3, 21, 0, 0
-            ]
-        );
 
+        store.put(vec![], bytes).unwrap();
+
+        store
+    }
+
+    fn assert_state(store: &Store) {
         let mut entries = store.range(..);
+
         let mut assert_next = |key: &[u8], value: &[u8]| {
             let (k, v) = entries.next().unwrap().unwrap();
             assert_eq!(
+                String::from_utf8(key.to_vec()).unwrap(),
                 String::from_utf8(k).unwrap(),
-                String::from_utf8(key.to_vec()).unwrap()
             );
             assert_eq!(
                 v,
@@ -1020,6 +1018,15 @@ mod tests {
                 String::from_utf8(key.to_vec()).unwrap()
             );
         };
+
+        assert_next(
+            &[],
+            &[
+                0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 127, 255, 255, 255, 255, 255, 255, 255, 127,
+                255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 123, 0, 0, 0, 0, 0, 0, 1,
+                200, 0, 0, 0, 0, 0, 0, 3, 21, 0, 0,
+            ],
+        );
 
         assert_next(
             b"acks/ports/transfer/channels/channel-123/sequences/1",
@@ -1088,5 +1095,24 @@ mod tests {
             &[],
         );
         assert!(entries.next().is_none());
+    }
+
+    #[test]
+    fn state_structure() {
+        let store = create_state();
+        assert_state(&store);
+    }
+
+    #[test]
+    fn migrate() {
+        let mut store = create_state();
+
+        let mut bytes = store.get(&[]).unwrap().unwrap();
+        let app = App::migrate(store.clone(), store.clone(), &mut bytes.as_slice()).unwrap();
+        bytes.clear();
+        app.flush(&mut bytes).unwrap();
+        store.put(vec![], bytes).unwrap();
+
+        assert_state(&store);
     }
 }
