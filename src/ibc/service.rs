@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use ibc::core::ics24_host::identifier::{ChainId, ClientId, ConnectionId, PortId};
+use ibc::core::ics24_host::identifier::{ClientId, ConnectionId, PortId};
 use ibc::core::ics24_host::{identifier::ChannelId, path::ChannelEndPath};
 
 use ibc_proto::cosmos::auth::v1beta1::{
@@ -295,7 +295,7 @@ impl<C: Client<IbcContext> + 'static> ConnectionQuery for IbcConnectionService<C
 
 pub struct IbcChannelService<C> {
     ibc: fn() -> C,
-    chain_id: ChainId,
+    revision_number: u64,
 }
 
 #[tonic::async_trait]
@@ -328,7 +328,7 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
         _request: Request<QueryChannelsRequest>,
     ) -> Result<Response<QueryChannelsResponse>, Status> {
         let ibc = (self.ibc)();
-        let revision_number = self.chain_id.revision_number();
+        let revision_number = self.revision_number;
         tokio::task::spawn_blocking(move || {
             let (channels, height) =
                 ibc.query_sync(|ibc| Ok((ibc.query_all_channels()?, ibc.height)))?;
@@ -351,7 +351,7 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
         request: Request<QueryConnectionChannelsRequest>,
     ) -> Result<Response<QueryConnectionChannelsResponse>, Status> {
         let ibc = (self.ibc)();
-        let revision_number = self.chain_id.revision_number();
+        let revision_number = self.revision_number;
         tokio::task::spawn_blocking(move || {
             let conn_id = ConnectionId::from_str(&request.get_ref().connection)
                 .map_err(|_| Status::invalid_argument("invalid connection id"))?;
@@ -401,7 +401,7 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
         request: Request<QueryPacketCommitmentsRequest>,
     ) -> Result<Response<QueryPacketCommitmentsResponse>, Status> {
         let ibc = (self.ibc)();
-        let revision_number = self.chain_id.revision_number();
+        let revision_number = self.revision_number;
         tokio::task::spawn_blocking(move || {
             let request = request.into_inner();
             let port_id = PortId::from_str(&request.port_id)
@@ -446,7 +446,7 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
         request: Request<QueryPacketAcknowledgementsRequest>,
     ) -> Result<Response<QueryPacketAcknowledgementsResponse>, Status> {
         let ibc = (self.ibc)();
-        let revision_number = self.chain_id.revision_number();
+        let revision_number = self.revision_number;
         tokio::task::spawn_blocking(move || {
             let request = request.into_inner();
             let port_id = PortId::from_str(&request.port_id)
@@ -476,7 +476,7 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
         request: Request<QueryUnreceivedPacketsRequest>,
     ) -> Result<Response<QueryUnreceivedPacketsResponse>, Status> {
         let ibc = (self.ibc)();
-        let revision_number = self.chain_id.revision_number();
+        let revision_number = self.revision_number;
         tokio::task::spawn_blocking(move || {
             let request = request.into_inner();
             let port_id = PortId::from_str(&request.port_id)
@@ -513,7 +513,7 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
         request: Request<QueryUnreceivedAcksRequest>,
     ) -> Result<Response<QueryUnreceivedAcksResponse>, Status> {
         let ibc = (self.ibc)();
-        let revision_number = self.chain_id.revision_number();
+        let revision_number = self.revision_number;
         tokio::task::spawn_blocking(move || {
             let request = request.into_inner();
             let port_id = PortId::from_str(&request.port_id)
@@ -929,9 +929,14 @@ pub async fn start_grpc<C: Client<IbcContext> + 'static>(client: fn() -> C, opts
     let staking_service = StakingQueryServer::new(StakingService {});
     let ibc_client_service = ClientQueryServer::new(IbcClientService { ibc: client });
     let ibc_connection_service = ConnectionQueryServer::new(IbcConnectionService { ibc: client });
+    let revision_number = opts
+        .chain_id
+        .rsplit_once('-')
+        .map(|(_, n)| n.parse::<u64>().unwrap_or(0))
+        .unwrap_or(0);
     let ibc_channel_service = ChannelQueryServer::new(IbcChannelService {
         ibc: client,
-        chain_id: opts.chain_id.parse().expect("Invalid chain ID"),
+        revision_number,
     });
     let health_service = HealthServer::new(AppHealthService {});
     let tx_service = TxServer::new(AppTxService {});
