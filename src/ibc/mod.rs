@@ -73,7 +73,7 @@ pub struct Ibc {
     _bytes1: [u8; 32],
 
     #[orga(version(V2))]
-    _bytes2: [u8; 21],
+    _bytes2: [u8; 20],
 
     #[orga(version(V2))]
     #[state(absolute_prefix(b""))]
