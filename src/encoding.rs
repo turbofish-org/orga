@@ -349,6 +349,12 @@ impl<T: FromStr + ToString> EofTerminatedString<T> {
 #[derive(Clone, Debug, Serialize, Default)]
 pub struct FixedString<const S: &'static str>;
 
+impl<const S: &'static str> Describe for FixedString<S> {
+    fn describe() -> crate::describe::Descriptor {
+        crate::describe::Builder::new::<Self>().build()
+    }
+}
+
 impl<const S: &'static str> Migrate for FixedString<S> {}
 
 impl<const S: &'static str> Encode for FixedString<S> {
