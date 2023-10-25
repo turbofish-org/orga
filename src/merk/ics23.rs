@@ -28,7 +28,7 @@ impl MerkStore {
         ProofSpec {
             leaf_spec: Some(leaf_op()),
             inner_spec: Some(InnerSpec {
-                child_order: vec![1, 0, 2],
+                child_order: vec![0, 1, 2],
                 child_size: 32,
                 empty_child: vec![0; 32],
                 hash: HashOp::Sha512256.into(),
@@ -116,9 +116,9 @@ where
     let concat = |a, b| [a, b].concat();
 
     let (prefix, suffix) = match branch {
-        Branch::KV => (vec![], concat(left_hash(), right_hash())),
-        Branch::Left => (kv_hash(), right_hash()),
-        Branch::Right => (concat(kv_hash(), left_hash()), vec![]),
+        Branch::Left => (vec![], concat(kv_hash(), right_hash())),
+        Branch::KV => (left_hash(), right_hash()),
+        Branch::Right => (concat(left_hash(), kv_hash()), vec![]),
     };
 
     InnerOp {
