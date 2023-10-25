@@ -90,7 +90,7 @@ pub struct Ibc {
     pub router: router::IbcRouter,
 }
 
-#[orga]
+#[orga(version = 1)]
 pub struct IbcContext {
     height: u64,
     host_consensus_states: Deque<ConsensusState>,
@@ -119,8 +119,13 @@ pub struct IbcContext {
     #[state(absolute_prefix(b"commitments/"))]
     pub commitments: Map<PortChannelSequence, Vec<u8>>,
 
+    #[orga(version(V0))]
     #[state(absolute_prefix(b"receipts/"))]
     pub receipts: Map<PortChannelSequence, ()>,
+
+    #[orga(version(V1))]
+    #[state(absolute_prefix(b"receipts/"))]
+    pub receipts: Map<PortChannelSequence, u8>,
 
     #[state(absolute_prefix(b"acks/"))]
     pub acks: Map<PortChannelSequence, Vec<u8>>,
@@ -992,7 +997,7 @@ mod tests {
             sequence: 1.into(),
         }
         .into();
-        ibc.ctx.receipts.insert(receipts_path, ()).unwrap();
+        ibc.ctx.receipts.insert(receipts_path, 1).unwrap();
 
         let mut bytes = vec![];
         app.flush(&mut bytes).unwrap();
@@ -1022,7 +1027,7 @@ mod tests {
         assert_next(
             &[],
             &[
-                0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 127, 255, 255, 255, 255, 255, 255, 255, 127,
+                0, 3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 127, 255, 255, 255, 255, 255, 255, 255, 127,
                 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 123, 0, 0, 0, 0, 0, 0, 1,
                 200, 0, 0, 0, 0, 0, 0, 3, 21, 0, 0,
             ],
@@ -1092,7 +1097,7 @@ mod tests {
         );
         assert_next(
             b"receipts/ports/transfer/channels/channel-123/sequences/1",
-            &[],
+            &[1],
         );
         assert!(entries.next().is_none());
     }
