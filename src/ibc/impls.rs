@@ -485,7 +485,7 @@ impl ExecutionContext for IbcContext {
         _receipt: Receipt,
     ) -> Result<(), ContextError> {
         self.receipts
-            .insert(receipt_path.clone().into(), ())
+            .insert(receipt_path.clone().into(), 1)
             .map_err(|_| PacketError::ImplementationSpecific)?;
         Ok(())
     }
