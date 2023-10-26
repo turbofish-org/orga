@@ -453,10 +453,15 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
                 .map_err(|_| Status::invalid_argument("invalid port id"))?;
             let channel_id = ChannelId::from_str(&request.channel_id)
                 .map_err(|_| Status::invalid_argument("invalid channel id"))?;
+            let sequences = request.packet_commitment_sequences;
 
             let path = PortChannel::new(port_id, channel_id);
-            let (acknowledgements, height) =
-                ibc.query_sync(|ibc| Ok((ibc.query_packet_acks(path.clone())?, ibc.height)))?;
+            let (acknowledgements, height) = ibc.query_sync(|ibc| {
+                Ok((
+                    ibc.query_packet_acks(sequences.clone().try_into().unwrap(), path.clone())?,
+                    ibc.height,
+                ))
+            })?;
 
             Ok(Response::new(QueryPacketAcknowledgementsResponse {
                 acknowledgements,
