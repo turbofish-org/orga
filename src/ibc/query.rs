@@ -286,24 +286,26 @@ impl IbcContext {
         Ok(unreceived)
     }
 
-    pub fn query_packet_acks(&self, port_chan: PortChannel) -> Result<Vec<PacketState>> {
+    pub fn query_packet_acks(
+        &self,
+        sequences: LengthVec<u8, u64>,
+        port_chan: PortChannel,
+    ) -> Result<Vec<PacketState>> {
         let mut acks = vec![];
-
-        // TODO: iter over range instead of filtering
-        for entry in self.acks.iter()? {
-            let (path, data) = entry?;
-            if path.port_id()? != port_chan.port_id()?
-                || path.channel_id()? != port_chan.channel_id()?
-                || data.is_empty()
-            {
-                continue;
+        for seq in sequences.iter() {
+            let path = port_chan.clone().with_sequence((*seq).into())?;
+            let entry = self.acks.get(path)?;
+            if let Some(data) = entry {
+                if data.is_empty() {
+                    continue;
+                }
+                acks.push(PacketState {
+                    port_id: port_chan.port_id()?.to_string(),
+                    channel_id: port_chan.channel_id()?.to_string(),
+                    sequence: *seq,
+                    data: data.clone(),
+                });
             }
-            acks.push(PacketState {
-                port_id: path.port_id()?.to_string(),
-                channel_id: path.channel_id()?.to_string(),
-                sequence: path.sequence()?.to_string().parse()?,
-                data: data.clone(),
-            });
         }
 
         Ok(acks)
