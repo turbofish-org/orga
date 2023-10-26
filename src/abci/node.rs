@@ -312,7 +312,7 @@ impl<A: App> Node<A> {
     }
 
     // TODO: remove when we don't require compat migrations
-    pub fn migrate(self, version: Vec<u8>, compat_mode: bool) -> Self
+    pub fn migrate(self, version: Vec<u8>, compat_mode: bool, repair: bool) -> Self
     where
         ABCIPlugin<A>: Migrate,
     {
@@ -358,6 +358,10 @@ impl<A: App> Node<A> {
             store
                 .write(vec![(b"consensus_version".to_vec(), Some(version))])
                 .unwrap();
+
+            if repair {
+                store.into_merk().repair().unwrap();
+            }
         } else {
             unreachable!();
         }

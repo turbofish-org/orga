@@ -485,7 +485,7 @@ impl ExecutionContext for IbcContext {
         _receipt: Receipt,
     ) -> Result<(), ContextError> {
         self.receipts
-            .insert(receipt_path.clone().into(), ())
+            .insert(receipt_path.clone().into(), 1)
             .map_err(|_| PacketError::ImplementationSpecific)?;
         Ok(())
     }
@@ -565,10 +565,14 @@ impl ExecutionContext for IbcContext {
             Ok(event) => event,
             Err(_) => return,
         };
-        let event = match event.try_into() {
+        let mut event: tendermint_proto::v0_34::abci::Event = match event.try_into() {
             Ok(event) => event,
             Err(_) => return,
         };
+
+        for attribute in event.attributes.iter_mut() {
+            attribute.index = true;
+        }
 
         ctx.add(event);
     }
