@@ -4,7 +4,7 @@ use std::{fmt::Display, str::FromStr};
 pub use amount::*;
 
 pub mod symbol;
-use orga_macros::{orga, FieldQuery};
+use orga_macros::orga;
 pub use symbol::*;
 
 pub mod coin;
@@ -55,31 +55,13 @@ pub use ops::*;
 use bech32::{self, encode_to_fmt, FromBase32, ToBase32, Variant};
 
 use crate::collections::Next;
-use crate::describe::Describe;
-use crate::macros::State;
 use crate::migrate::Migrate;
-use ed::{Decode, Encode};
 use ripemd::{Digest as _, Ripemd160};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
-#[derive(
-    Encode,
-    Decode,
-    State,
-    Next,
-    FieldQuery,
-    Clone,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    Debug,
-    Copy,
-    Default,
-    Describe,
-)]
+#[orga(skip(Serialize, Deserialize, Migrate))]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Copy, Next)]
 pub struct Address {
     bytes: [u8; Address::LENGTH],
 }
@@ -90,7 +72,11 @@ impl Migrate for Address {
         _dest: crate::store::Store,
         bytes: &mut &[u8],
     ) -> crate::Result<Self> {
-        Ok(Self::decode(bytes)?)
+        let mut buf = [0u8; Address::LENGTH];
+        buf.copy_from_slice(&bytes[..Address::LENGTH]);
+        *bytes = &bytes[Address::LENGTH..];
+
+        Ok(Self { bytes: buf })
     }
 }
 

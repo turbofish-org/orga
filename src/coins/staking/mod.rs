@@ -1,5 +1,5 @@
 use super::pool::{Child as PoolChild, ChildMut as PoolChildMut};
-use super::{Address, Amount, Balance, Coin, Decimal, Give, Pool, Symbol};
+use super::{Address, Amount, Balance, Coin, Decimal, Give, Pool, Symbol, VersionedAddress};
 use crate::abci::{BeginBlock, EndBlock};
 use crate::collections::{Deque, Entry, EntryMap, Map};
 use crate::context::GetContext;
@@ -37,7 +37,7 @@ pub struct Staking<S: Symbol> {
     last_validator_powers: Map<Address, u64>,
     pub max_validators: u64,
     last_indexed_power: Map<Address, u64>,
-    address_for_tm_hash: Map<[u8; 20], Address>,
+    address_for_tm_hash: Map<[u8; 20], VersionedAddress>,
     unbonding_seconds: u64,
     pub max_offline_blocks: u64,
     pub slash_fraction_double_sign: Decimal,
@@ -81,16 +81,16 @@ impl EntryMap<ValidatorQueueEntry> {
 
 #[orga]
 pub struct UnbondingDelegationEntry {
-    validator_address: Address,
-    delegator_address: Address,
+    validator_address: VersionedAddress,
+    delegator_address: VersionedAddress,
     start_seconds: i64,
 }
 
 #[orga]
 pub struct RedelegationEntry {
-    src_validator_address: Address,
-    dst_validator_address: Address,
-    delegator_address: Address,
+    src_validator_address: VersionedAddress,
+    dst_validator_address: VersionedAddress,
+    delegator_address: VersionedAddress,
     start_seconds: i64,
 }
 
@@ -150,11 +150,11 @@ impl<S: Symbol> BeginBlock for Staking<S> {
             for hash in offline_validator_hashes.iter() {
                 if let Some(address) = self.address_for_tm_hash.get(*hash)? {
                     let address = *address;
-                    let validator = self.validators.get(address)?;
+                    let validator = self.validators.get(address.into())?;
                     let in_active_set = validator.in_active_set;
                     drop(validator);
                     if in_active_set {
-                        self.punish_downtime(address)?;
+                        self.punish_downtime(address.into())?;
                     }
                     self.last_signed_block.remove(*hash)?;
                 }
@@ -172,10 +172,10 @@ impl<S: Symbol> BeginBlock for Staking<S> {
                             let address = *address;
                             match evidence.r#type() {
                                 EvidenceType::DuplicateVote => {
-                                    self.punish_double_sign(address)?;
+                                    self.punish_double_sign(address.into())?;
                                 }
                                 EvidenceType::LightClientAttack => {
-                                    self.punish_light_client_attack(address)?;
+                                    self.punish_light_client_attack(address.into())?;
                                 }
                                 _ => {}
                             };
@@ -238,7 +238,7 @@ impl<S: Symbol> Staking<S> {
     pub fn address_by_consensus_key(&self, cons_key: [u8; 32]) -> Result<Option<Address>> {
         let tm_pubkey_hash = tm_pubkey_hash(cons_key)?;
         if let Some(address) = self.address_for_tm_hash.get(tm_pubkey_hash)? {
-            Ok(Some(*address))
+            Ok(Some((*address).into()))
         } else {
             Ok(None)
         }
@@ -297,7 +297,8 @@ impl<S: Symbol> Staking<S> {
 
         self.consensus_keys.insert(val_address, consensus_key)?;
 
-        self.address_for_tm_hash.insert(tm_hash, val_address)?;
+        self.address_for_tm_hash
+            .insert(tm_hash, val_address.into())?;
 
         let val_ctx = self
             .context::<Validators>()
@@ -445,8 +446,8 @@ impl<S: Symbol> Staking<S> {
         if let Some(start_seconds) = start_seconds {
             self.unbonding_delegation_queue
                 .push_back(UnbondingDelegationEntry {
-                    delegator_address,
-                    validator_address,
+                    delegator_address: delegator_address.into(),
+                    validator_address: validator_address.into(),
                     start_seconds,
                 })?;
         }
@@ -510,9 +511,9 @@ impl<S: Symbol> Staking<S> {
 
         if let Some(start_seconds) = start_seconds {
             self.redelegation_queue.push_back(RedelegationEntry {
-                src_validator_address,
-                dst_validator_address,
-                delegator_address,
+                src_validator_address: src_validator_address.into(),
+                dst_validator_address: dst_validator_address.into(),
+                delegator_address: delegator_address.into(),
                 start_seconds,
             })?;
         }
@@ -723,8 +724,8 @@ impl<S: Symbol> Staking<S> {
                     .unbonding_delegation_queue
                     .pop_front()?
                     .ok_or_else(|| Error::Coins("Unbonding delegation queue is empty".into()))?;
-                let mut validator = self.validators.get_mut(unbond.validator_address)?;
-                let mut delegator = validator.get_mut(unbond.delegator_address)?;
+                let mut validator = self.validators.get_mut(unbond.validator_address.into())?;
+                let mut delegator = validator.get_mut(unbond.delegator_address.into())?;
                 delegator.process_unbonds()?;
             } else {
                 break;
@@ -748,18 +749,18 @@ impl<S: Symbol> Staking<S> {
                 {
                     let mut src_validator = self
                         .validators
-                        .get_mut(redelegation.src_validator_address)?;
+                        .get_mut(redelegation.src_validator_address.into())?;
                     let mut src_delegator =
-                        src_validator.get_mut(redelegation.delegator_address)?;
+                        src_validator.get_mut(redelegation.delegator_address.into())?;
                     src_delegator.process_redelegations_out()?;
                 }
 
                 {
                     let mut dst_validator = self
                         .validators
-                        .get_mut(redelegation.dst_validator_address)?;
+                        .get_mut(redelegation.dst_validator_address.into())?;
                     let mut dst_delegator =
-                        dst_validator.get_mut(redelegation.delegator_address)?;
+                        dst_validator.get_mut(redelegation.delegator_address.into())?;
                     dst_delegator.process_redelegations_in()?;
                 }
             } else {
