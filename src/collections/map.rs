@@ -220,6 +220,10 @@ where
             self.get_from_store(&map_key.inner)?.map(Ref::Owned)
         })
     }
+
+    pub fn store(&self) -> &Store {
+        &self.store
+    }
 }
 
 impl<K: Serialize, V: Serialize> Serialize for Map<K, V>
@@ -664,7 +668,7 @@ where
     }
 }
 
-struct StoreNextIter<'a, S: Default + Read, K: Decode> {
+pub struct StoreNextIter<'a, S: Default + Read, K: Decode> {
     store: &'a S,
     next_key: Bound<Vec<u8>>,
     end_key: Bound<Vec<u8>>,
@@ -672,7 +676,7 @@ struct StoreNextIter<'a, S: Default + Read, K: Decode> {
 }
 
 // TODO: dedupe this with the same code in Store
-fn increment_bytes(mut bytes: Vec<u8>) -> Vec<u8> {
+pub fn increment_bytes(mut bytes: Vec<u8>) -> Vec<u8> {
     for byte in bytes.iter_mut().rev() {
         if *byte == 255 {
             *byte = 0;

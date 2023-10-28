@@ -1,6 +1,7 @@
 use super::pool::{Child as PoolChild, ChildMut as PoolChildMut};
 use super::{Address, Amount, Balance, Coin, Decimal, Give, Pool, Symbol, VersionedAddress};
 use crate::abci::{BeginBlock, EndBlock};
+use crate::collections::map::{increment_bytes, StoreNextIter};
 use crate::collections::{Deque, Entry, EntryMap, Map};
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
@@ -911,19 +912,42 @@ impl<S: Symbol> Staking<S> {
     }
 
     pub fn repair(&mut self) -> Result<()> {
-        let mut addresses = vec![];
-        for entry in self.validators.iter()? {
-            let (address, validator) = entry?;
-            if validator.info.is_empty() {
-                addresses.push(address);
+        let mut invalid = vec![];
+        let mut valid = vec![];
+        let store = self.validators.map.store();
+
+        for entry in StoreNextIter::<_, Vec<u8>>::new(store, vec![]..)? {
+            let (k, _) = entry?;
+            let address = Address::decode(k.as_slice())?;
+            if let Ok(Some(validator)) = self.validators.map.get(address) {
+                if validator.borrow().info.is_empty() {
+                    invalid.push(address);
+                } else {
+                    valid.push(address);
+                }
+            } else {
+                invalid.push(address);
             }
         }
-        for address in addresses {
+        for address in invalid {
             self.validators.map.remove(address)?;
+            let addr_bytes = Address::encode(&address)?;
+            let end = increment_bytes(addr_bytes.clone());
+            self.validators
+                .map
+                .store()
+                .clone()
+                .remove_range(addr_bytes..end)?;
         }
         self.unbonding_delegation_queue
             .retain_unordered(|_| Ok(false))?;
         self.redelegation_queue.retain_unordered(|_| Ok(false))?;
+
+        for address in valid {
+            let Some(consensus_key) = self.consensus_keys.get(address)? else { continue };
+            let tm_hash = tm_pubkey_hash(*consensus_key)?;
+            self.address_for_tm_hash.insert(tm_hash, address.into())?;
+        }
 
         Ok(())
     }
