@@ -21,7 +21,7 @@ where
     contributions: Decimal,
     rewards: Map<u8, Decimal>,
     shares_issued: Decimal,
-    map: Map<K, RefCell<Entry<V>>>,
+    pub map: Map<K, RefCell<Entry<V>>>,
     rewards_this_period: Map<u8, Decimal>,
     last_period_entry: Map<u8, Decimal>,
     #[state(skip)]

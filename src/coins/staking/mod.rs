@@ -909,6 +909,24 @@ impl<S: Symbol> Staking<S> {
 
         Ok(time.seconds)
     }
+
+    pub fn repair(&mut self) -> Result<()> {
+        let mut addresses = vec![];
+        for entry in self.validators.iter()? {
+            let (address, validator) = entry?;
+            if validator.info.is_empty() {
+                addresses.push(address);
+            }
+        }
+        for address in addresses {
+            self.validators.map.remove(address)?;
+        }
+        self.unbonding_delegation_queue
+            .retain_unordered(|_| Ok(false))?;
+        self.redelegation_queue.retain_unordered(|_| Ok(false))?;
+
+        Ok(())
+    }
 }
 
 fn assert_positive(amount: Amount) -> Result<()> {
