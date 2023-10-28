@@ -1,7 +1,7 @@
 use super::pool::{Child as PoolChild, ChildMut as PoolChildMut};
 use super::{Address, Amount, Balance, Coin, Decimal, Give, Pool, Symbol, VersionedAddress};
 use crate::abci::{BeginBlock, EndBlock};
-use crate::collections::map::{increment_bytes, StoreNextIter};
+use crate::collections::map::{increment_bytes, MapKey, StoreNextIter};
 use crate::collections::{Deque, Entry, EntryMap, Map};
 use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
@@ -914,11 +914,12 @@ impl<S: Symbol> Staking<S> {
     pub fn repair(&mut self) -> Result<()> {
         let mut invalid = vec![];
         let mut valid = vec![];
-        let store = self.validators.map.store();
+        let store = self.validators.map.store().clone();
 
-        for entry in StoreNextIter::<_, Vec<u8>>::new(store, vec![]..)? {
+        for entry in StoreNextIter::<_, Vec<u8>>::new(&store, vec![]..)? {
             let (k, _) = entry?;
-            let address = Address::decode(k.as_slice())?;
+            let address =
+                Address::migrate(Default::default(), Default::default(), &mut k.as_slice())?;
             if let Ok(Some(validator)) = self.validators.map.get(address) {
                 if validator.borrow().info.is_empty() {
                     invalid.push(address);
@@ -929,16 +930,14 @@ impl<S: Symbol> Staking<S> {
                 invalid.push(address);
             }
         }
+
         for address in invalid {
-            self.validators.map.remove(address)?;
-            let addr_bytes = Address::encode(&address)?;
-            let end = increment_bytes(addr_bytes.clone());
             self.validators
                 .map
-                .store()
-                .clone()
-                .remove_range(addr_bytes..end)?;
+                .children
+                .remove(&MapKey::<Address>::new(address)?);
         }
+
         self.unbonding_delegation_queue
             .retain_unordered(|_| Ok(false))?;
         self.redelegation_queue.retain_unordered(|_| Ok(false))?;

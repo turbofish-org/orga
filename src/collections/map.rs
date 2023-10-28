@@ -91,7 +91,7 @@ impl<K> Eq for MapKey<K> {}
 #[derive(FieldQuery, FieldCall)]
 pub struct Map<K, V> {
     pub(super) store: Store,
-    children: BTreeMap<MapKey<K>, Option<V>>,
+    pub(crate) children: BTreeMap<MapKey<K>, Option<V>>,
 }
 
 impl<K, V> std::fmt::Debug for Map<K, V> {
