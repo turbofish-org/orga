@@ -4,14 +4,72 @@ use itertools::Itertools;
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::RangeInclusive};
 use syn::*;
+
+#[derive(Debug, Clone)]
+struct VersionSpec {
+    range: RangeInclusive<u8>,
+}
+
+impl Default for VersionSpec {
+    fn default() -> Self {
+        Self { range: 0..=0 }
+    }
+}
+
+impl FromMeta for VersionSpec {
+    fn from_expr(expr: &Expr) -> darling::Result<Self> {
+        if let Expr::Range(range) = expr {
+            let (Expr::Lit(ExprLit { lit: Lit::Int(start), .. }), Expr::Lit(ExprLit { lit: Lit::Int(end), .. })) =
+                (*range
+                    .start
+                    .as_ref()
+                    .expect("Start of version range must be specified")
+                    .clone(),
+                    *range
+                    .end
+                    .as_ref()
+                    .expect("End of version range must be specified")
+                    .clone(),
+                )
+             else {
+                return Err(darling::Error::custom("Version must be integer or inclusive range"));
+            };
+
+            let start: u8 = start.base10_parse().unwrap_or_default();
+            let end: u8 = end
+                .base10_parse()
+                .expect("Version range end must be integer");
+            if matches!(range.limits, RangeLimits::HalfOpen(_)) {
+                return Err(darling::Error::custom("Version range must be inclusive"));
+            }
+
+            return Ok(Self { range: start..=end });
+        }
+        if let Expr::Lit(ExprLit {
+            lit: Lit::Int(value),
+            ..
+        }) = expr
+        {
+            let version: u8 = value
+                .base10_parse()
+                .expect("Version must be integer or inclusive range");
+
+            return Ok(Self { range: 0..=version });
+        }
+
+        return Err(darling::Error::custom(
+            "Version must be integer or inclusive range",
+        ));
+    }
+}
 
 /// Arguments to the top-level orga macro invocation.
 #[derive(Debug, FromMeta, Clone)]
 struct OrgaAttrReceiver {
     #[darling(default)]
-    version: u8,
+    version: VersionSpec,
     #[darling(default)]
     skip: HashMap<Ident, ()>,
     #[darling(default)]
@@ -62,6 +120,7 @@ struct OrgaSubStruct {
     attrs: Vec<Attribute>,
     data: ast::Data<(), OrgaFieldReceiver>,
     version: u8,
+    version_start: u8,
     is_last: bool,
     skip: HashMap<Ident, ()>,
     simple: bool,
@@ -128,7 +187,7 @@ impl OrgaSubStruct {
     fn state_attr(&self) -> Attribute {
         let version = self.version;
 
-        let maybe_prev = if self.version > 0 {
+        let maybe_prev = if self.version > self.version_start {
             let prev_ty_generics = self
                 .prev_generics
                 .as_ref()
@@ -158,7 +217,7 @@ impl OrgaSubStruct {
     fn encoding_attr(&self) -> Attribute {
         let version = self.version;
 
-        let maybe_prev = if self.version > 0 {
+        let maybe_prev = if self.version > self.version_start {
             let prev_ty_generics = self
                 .prev_generics
                 .as_ref()
@@ -188,7 +247,7 @@ impl OrgaSubStruct {
     fn migrate_attr(&self) -> Attribute {
         let version = self.version;
 
-        let maybe_prev = if self.version > 0 {
+        let maybe_prev = if self.version > self.version_start {
             let prev_ty_generics = self
                 .prev_generics
                 .as_ref()
@@ -322,10 +381,11 @@ impl OrgaMetaStruct {
         let mut substructs = vec![];
         for channel in channels.iter() {
             let mut prev = None;
-            for version in 0..=self.attrs.version {
+            let attrs = self.attrs.clone();
+            for version in attrs.version.range {
                 let substruct = self.substruct_for_version_channel(version, channel.clone(), &prev);
                 substructs.push(substruct.clone());
-                if version < self.attrs.version {
+                if version < *self.attrs.version.range.end() {
                     prev.replace(substruct);
                 }
             }
@@ -340,7 +400,7 @@ impl OrgaMetaStruct {
         channel: Option<Ident>,
         maybe_prev: &Option<OrgaSubStruct>,
     ) -> OrgaSubStruct {
-        let is_last = version == self.attrs.version;
+        let is_last = version == *self.attrs.version.range.end();
         let item = self.item.clone();
         let style = item.clone().data.take_struct().unwrap().style;
         let fields: Vec<_> = item
@@ -372,6 +432,7 @@ impl OrgaMetaStruct {
             generics: item.generics,
             base_ident: item.ident,
             version,
+            version_start: *self.attrs.version.range.start(),
             is_last,
             attrs: item.attrs,
             vis: item.vis,
