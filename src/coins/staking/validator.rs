@@ -155,7 +155,7 @@ impl<S: Symbol + Default> Validator<S> {
         Ok(redelegations)
     }
 
-    pub(super) fn delegator_keys(&self) -> Result<Vec<Address>> {
+    pub fn delegator_keys(&self) -> Result<Vec<Address>> {
         let mut delegator_keys: Vec<Address> = vec![];
         self.delegators
             .iter()?

@@ -55,29 +55,14 @@ pub use ops::*;
 use bech32::{self, encode_to_fmt, FromBase32, ToBase32, Variant};
 
 use crate::collections::Next;
-use crate::migrate::Migrate;
 use ripemd::{Digest as _, Ripemd160};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
-#[orga(skip(Serialize, Deserialize, Migrate))]
+#[orga(skip(Serialize, Deserialize))]
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Copy, Next)]
 pub struct Address {
     bytes: [u8; Address::LENGTH],
-}
-
-impl Migrate for Address {
-    fn migrate(
-        _src: crate::store::Store,
-        _dest: crate::store::Store,
-        bytes: &mut &[u8],
-    ) -> crate::Result<Self> {
-        let mut buf = [0u8; Address::LENGTH];
-        buf.copy_from_slice(&bytes[..Address::LENGTH]);
-        *bytes = &bytes[Address::LENGTH..];
-
-        Ok(Self { bytes: buf })
-    }
 }
 
 impl Address {
