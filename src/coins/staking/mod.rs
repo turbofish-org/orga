@@ -557,14 +557,14 @@ impl<S: Symbol> Staking<S> {
         &self,
         validator_address: Address,
     ) -> Result<Vec<(Address, DelegationInfo)>> {
-        let validator = self.validators.get(validator_address)?;
-        let delegators = &validator.delegators;
-        let iter = delegators.iter()?;
-        let map = iter.map(|entry| -> Result<(Address, DelegationInfo)> {
-            let (delegator, delegation) = entry?;
-            Ok((delegator, delegation.info()?))
-        });
-        map.collect()
+        self.validators.get(validator_address)?
+            .delegators
+            .iter()?
+            .map(|entry| -> Result<(Address, DelegationInfo)> {
+                let (delegator, delegation) = entry?;
+                Ok((delegator, delegation.info()?))
+            })
+            .collect()
     }
 
     #[query]
