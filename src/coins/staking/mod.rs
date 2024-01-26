@@ -553,6 +553,22 @@ impl<S: Symbol> Staking<S> {
     }
 
     #[query]
+    pub fn validator_delegations(
+        &self,
+        validator_address: Address,
+    ) -> Result<Vec<(Address, DelegationInfo)>> {
+        self.validators
+            .get(validator_address)?
+            .delegators
+            .iter()?
+            .map(|entry| -> Result<(Address, DelegationInfo)> {
+                let (delegator, delegation) = entry?;
+                Ok((delegator, delegation.info()?))
+            })
+            .collect()
+    }
+
+    #[query]
     pub fn all_validators(&self) -> Result<Vec<ValidatorQueryInfo>> {
         self.validators
             .iter()?
