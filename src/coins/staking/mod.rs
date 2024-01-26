@@ -557,7 +557,8 @@ impl<S: Symbol> Staking<S> {
         &self,
         validator_address: Address,
     ) -> Result<Vec<(Address, DelegationInfo)>> {
-        self.validators.get(validator_address)?
+        self.validators
+            .get(validator_address)?
             .delegators
             .iter()?
             .map(|entry| -> Result<(Address, DelegationInfo)> {
