@@ -214,6 +214,45 @@ impl Ibc {
     pub fn transfer_mut(&mut self) -> &mut Transfer {
         &mut self.router.transfer
     }
+
+    pub fn update_client_from_header(
+        &mut self,
+        client_index: u64,
+        rev_number: u64,
+        header_json: &str,
+    ) -> crate::Result<()> {
+        let client_id: ClientId =
+            IbcClientId::new(ClientType::new("07-tendermint").unwrap(), client_index)
+                .unwrap()
+                .into();
+        let header: orga::cosmrs::tendermint::block::Header = serde_json::from_str(header_json)?;
+        let mut client = self
+            .ctx
+            .clients
+            .get_mut(client_id)?
+            .ok_or(Error::Ibc("Client not found".to_string()))?;
+        let height = Height::new(rev_number, header.height.value()).unwrap();
+        client.updates.insert(
+            height.into(),
+            (IbcTimestamp::from(header.time).into(), height.into()),
+        )?;
+
+        let mut state = client
+            .client_state
+            .get_mut(orga::encoding::FixedString::<"State">)?
+            .unwrap();
+
+        state.inner.latest_height = height;
+
+        let consensus_state = ConsensusState {
+            inner: header.into(),
+        };
+        client
+            .consensus_states
+            .insert(height.into(), consensus_state)?;
+
+        Ok(())
+    }
 }
 
 impl std::fmt::Debug for IbcContext {
