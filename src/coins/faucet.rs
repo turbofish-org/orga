@@ -10,7 +10,7 @@ use std::time::Duration;
 pub struct Faucet<S: Symbol> {
     _symbol: PhantomData<S>,
     configured: bool,
-    amount_minted: Amount,
+    pub amount_minted: Amount,
     start_seconds: i64,
     multiplier_total: Decimal,
     total_to_mint: Amount,
