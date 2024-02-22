@@ -256,9 +256,9 @@ mod tests {
             }
 
             Ok(Self {
-                bar: u32::decode(&mut bytes)?.try_into().unwrap(),
+                bar: u32::decode(&mut bytes)?.into(),
                 boop: 43,
-                baz: Map::migrate(src.sub(&[1]), dest.sub(&[1]), &mut bytes)?,
+                baz: Map::migrate(src.sub(&[1]), dest.sub(&[1]), bytes)?,
                 beep: Map::migrate(src.sub(&[2]), dest.sub(&[3]), bytes)?,
             })
         }

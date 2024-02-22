@@ -21,20 +21,30 @@ impl Default for VersionSpec {
 impl FromMeta for VersionSpec {
     fn from_expr(expr: &Expr) -> darling::Result<Self> {
         if let Expr::Range(range) = expr {
-            let (Expr::Lit(ExprLit { lit: Lit::Int(start), .. }), Expr::Lit(ExprLit { lit: Lit::Int(end), .. })) =
-                (*range
+            let (
+                Expr::Lit(ExprLit {
+                    lit: Lit::Int(start),
+                    ..
+                }),
+                Expr::Lit(ExprLit {
+                    lit: Lit::Int(end), ..
+                }),
+            ) = (
+                *range
                     .start
                     .as_ref()
                     .expect("Start of version range must be specified")
                     .clone(),
-                    *range
+                *range
                     .end
                     .as_ref()
                     .expect("End of version range must be specified")
                     .clone(),
-                )
-             else {
-                return Err(darling::Error::custom("Version must be integer or inclusive range"));
+            )
+            else {
+                return Err(darling::Error::custom(
+                    "Version must be integer or inclusive range",
+                ));
             };
 
             let start: u8 = start.base10_parse().unwrap_or_default();

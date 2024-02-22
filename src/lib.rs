@@ -1,4 +1,3 @@
-#![feature(bound_map)]
 #![feature(associated_type_defaults)]
 #![feature(trivial_bounds)]
 #![allow(incomplete_features)]
@@ -8,11 +7,9 @@
 #![feature(adt_const_params)]
 #![feature(fn_traits)]
 #![feature(async_closure)]
-#![feature(local_key_cell_methods)]
 #![feature(auto_traits)]
 #![feature(negative_impls)]
 #![feature(lazy_cell)]
-#![feature(async_fn_in_trait)]
 #![feature(trait_upcasting)]
 
 extern crate self as orga;

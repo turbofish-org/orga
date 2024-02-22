@@ -27,6 +27,7 @@ pub enum StepResult<T: Query, U> {
 
 // TODO: dedupe sync/async versions
 
+#[allow(async_fn_in_trait)]
 pub trait Transport<T: Query + Call>: Send + Sync {
     async fn query(&self, query: T::Query) -> Result<Store>;
 

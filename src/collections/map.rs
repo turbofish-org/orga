@@ -1075,7 +1075,7 @@ where
     /// `or_default` for a variation which will only write the newly created
     /// value if it gets modified.
     pub fn or_insert_default(self) -> Result<ChildMut<'a, K, V>> {
-        #[allow(clippy::or_fun_call)]
+        #[allow(clippy::unwrap_or_default)]
         self.or_insert(V::default())
     }
 }
