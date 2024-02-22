@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 
 thread_local! {
-    static COMPAT_MODE: RefCell<bool> = RefCell::new(false);
+    static COMPAT_MODE: RefCell<bool> = const { RefCell::new(false) };
 }
 
 pub fn compat_mode() -> bool {

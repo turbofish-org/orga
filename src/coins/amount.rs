@@ -3,7 +3,7 @@ use orga::orga;
 use std::convert::TryFrom;
 
 #[orga]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialOrd, Ord)]
 #[serde(transparent)]
 pub struct Amount {
     pub(crate) value: u64,
@@ -12,12 +12,6 @@ pub struct Amount {
 impl std::fmt::Display for Amount {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.value)
-    }
-}
-
-impl Ord for Amount {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.partial_cmp(other).unwrap()
     }
 }
 

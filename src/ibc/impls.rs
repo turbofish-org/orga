@@ -134,10 +134,9 @@ impl ValidationContext for IbcContext {
         if let Ok(client_state) = TmClientState::try_from(client_state.clone()) {
             Ok(client_state)
         } else {
-            Err(ClientError::UnknownClientStateType {
+            Err(ContextError::from(ClientError::UnknownClientStateType {
                 client_state_type: client_state.type_url,
-            })
-            .map_err(ContextError::from)
+            }))
         }
     }
 
@@ -565,10 +564,7 @@ impl ExecutionContext for IbcContext {
             Ok(event) => event,
             Err(_) => return,
         };
-        let mut event: tendermint_proto::v0_34::abci::Event = match event.try_into() {
-            Ok(event) => event,
-            Err(_) => return,
-        };
+        let mut event: tendermint_proto::v0_34::abci::Event = event.into();
 
         for attribute in event.attributes.iter_mut() {
             attribute.index = true;

@@ -1,12 +1,6 @@
 use super::super::{Amount, Decimal};
 use std::cmp::{Ordering, PartialOrd};
 
-impl PartialOrd<Amount> for Amount {
-    fn partial_cmp(&self, other: &Amount) -> Option<Ordering> {
-        self.value.partial_cmp(&other.value)
-    }
-}
-
 impl PartialOrd<Amount> for u64 {
     fn partial_cmp(&self, other: &Amount) -> Option<Ordering> {
         self.partial_cmp(&other.value)
@@ -16,12 +10,6 @@ impl PartialOrd<Amount> for u64 {
 impl PartialOrd<u64> for Amount {
     fn partial_cmp(&self, other: &u64) -> Option<Ordering> {
         self.value.partial_cmp(other)
-    }
-}
-
-impl PartialOrd<Decimal> for Decimal {
-    fn partial_cmp(&self, other: &Decimal) -> Option<Ordering> {
-        self.value.partial_cmp(&other.value)
     }
 }
 
