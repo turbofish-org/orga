@@ -6,12 +6,12 @@ use crate::migrate::Migrate;
 use crate::orga;
 use crate::{Error, Result};
 use rust_decimal::{prelude::ToPrimitive, Decimal as NumDecimal};
-use std::cmp::Ordering;
+
 use std::convert::TryFrom;
 use std::str::FromStr;
 
 #[orga(simple, skip(Describe, Migrate))]
-#[derive(Copy, Debug)]
+#[derive(Copy, Debug, PartialOrd, Ord)]
 #[serde(transparent)]
 pub struct Decimal {
     pub(crate) value: NumDecimal,
@@ -65,12 +65,6 @@ impl From<u64> for Decimal {
 }
 
 impl Eq for Decimal {}
-
-impl Ord for Decimal {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap()
-    }
-}
 
 impl Decimal {
     pub fn amount(&self) -> Result<Amount> {

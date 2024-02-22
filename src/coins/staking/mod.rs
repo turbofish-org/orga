@@ -235,6 +235,20 @@ impl<S: Symbol> Staking<S> {
         Ok(consensus_key)
     }
 
+    #[query]
+    pub fn consensus_keys(&self) -> Result<Vec<(Address, [u8; 32])>> {
+        let mut vec = vec![];
+
+        for entry in self.validators.iter()? {
+            let (_, validator) = entry?;
+            let address: Address = validator.address.into();
+            let key = self.consensus_key(address)?;
+            vec.push((address, key));
+        }
+
+        Ok(vec)
+    }
+
     pub fn address_by_consensus_key(&self, cons_key: [u8; 32]) -> Result<Option<Address>> {
         let tm_pubkey_hash = tm_pubkey_hash(cons_key)?;
         if let Some(address) = self.address_for_tm_hash.get(tm_pubkey_hash)? {

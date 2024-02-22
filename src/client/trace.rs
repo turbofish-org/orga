@@ -3,7 +3,7 @@ use std::any::TypeId;
 use std::cell::RefCell;
 
 thread_local! {
-    static TRACING: RefCell<bool> = RefCell::new(false);
+    static TRACING: RefCell<bool> = const { RefCell::new(false) };
 }
 
 pub fn tracing() -> bool {
@@ -43,7 +43,7 @@ pub struct Trace {
 
 impl Trace {
     pub fn bytes(&self) -> Vec<u8> {
-        vec![self.method_prefix.clone(), self.method_args.clone()].concat()
+        [self.method_prefix.clone(), self.method_args.clone()].concat()
     }
 }
 
