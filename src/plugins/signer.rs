@@ -1,6 +1,6 @@
 use super::{
     sdk_compat::{self, sdk::Tx as SdkTx, ConvertSdkTx},
-    ChainId, GetNonce,
+    ChainId, Events, GetNonce,
 };
 use crate::coins::{Address, Symbol};
 use crate::context::{Context, GetContext};
@@ -16,6 +16,7 @@ use crate::{Error, Result};
 use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
 use serde::Serialize;
 use std::ops::Deref;
+use tendermint_proto::v0_34::abci::{Event, EventAttribute};
 
 #[orga(skip(Call))]
 pub struct SignerPlugin<T> {
@@ -202,6 +203,22 @@ where
         let signer_ctx = Signer {
             signer: self.verify(&call)?,
         };
+
+        if let Some(signer) = signer_ctx.signer {
+            let ev_ctx: &mut Events = self
+                .context::<Events>()
+                .ok_or_else(|| Error::Coins("No Events context available".into()))?;
+
+            ev_ctx.add(Event {
+                r#type: "message".to_string(),
+                attributes: vec![EventAttribute {
+                    key: "sender".into(),
+                    value: signer.to_string().into(),
+                    index: true,
+                }],
+            });
+        }
+
         Context::add(signer_ctx);
 
         let inner_call = Decode::decode(call.call_bytes.as_slice())?;

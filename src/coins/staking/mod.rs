@@ -6,14 +6,14 @@ use crate::context::GetContext;
 use crate::encoding::{Decode, Encode};
 use crate::migrate::{Migrate, MigrateFrom};
 use crate::orga;
-use crate::plugins::{BeginBlockCtx, EndBlockCtx, Validators};
+use crate::plugins::{BeginBlockCtx, EndBlockCtx, Events, Validators};
 use crate::plugins::{Paid, Signer, Time};
 use crate::state::State;
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::convert::TryInto;
-use tendermint_proto::v0_34::abci::EvidenceType;
+use tendermint_proto::v0_34::abci::{Event, EventAttribute, EvidenceType};
 
 mod delegator;
 pub use delegator::*;
@@ -599,6 +599,31 @@ impl<S: Symbol> Staking<S> {
     pub fn unbond_self(&mut self, val_address: Address, amount: Amount) -> Result<()> {
         assert_positive(amount)?;
         let signer = self.signer()?;
+        let ev_ctx = self.events()?;
+
+        let denom = S::NAME;
+
+        ev_ctx.add(Event {
+            r#type: "unbond".to_string(),
+            attributes: vec![
+                EventAttribute {
+                    key: "validator".into(),
+                    value: val_address.to_string().into(),
+                    index: true,
+                },
+                EventAttribute {
+                    key: "delegator".into(),
+                    value: signer.to_string().into(),
+                    index: true,
+                },
+                EventAttribute {
+                    key: "amount".into(),
+                    value: format!("{}{}", amount, denom).into(), // "1000unom"
+                    index: true,
+                },
+            ],
+        });
+
         self.unbond(val_address, signer, amount)
     }
 
@@ -611,6 +636,36 @@ impl<S: Symbol> Staking<S> {
     ) -> Result<()> {
         assert_positive(amount)?;
         let signer = self.signer()?;
+        let ev_ctx = self.events()?;
+
+        let denom = S::NAME;
+
+        ev_ctx.add(Event {
+            r#type: "redelegate".to_string(),
+            attributes: vec![
+                EventAttribute {
+                    key: "source_validator".into(),
+                    value: src_val_address.to_string().into(),
+                    index: true,
+                },
+                EventAttribute {
+                    key: "destination_validator".into(),
+                    value: dst_val_address.to_string().into(),
+                    index: true,
+                },
+                EventAttribute {
+                    key: "delegator".into(),
+                    value: signer.to_string().into(),
+                    index: true,
+                },
+                EventAttribute {
+                    key: "amount".into(),
+                    value: format!("{}{}", amount, denom).into(), // "1000unom"
+                    index: true,
+                },
+            ],
+        });
+
         self.redelegate(src_val_address, dst_val_address, signer, amount)
     }
 
@@ -627,7 +682,37 @@ impl<S: Symbol> Staking<S> {
         assert_positive(amount)?;
         let signer = self.signer()?;
         let payment = self.paid()?.take(amount)?;
+        let ev_ctx = self.events()?;
+
+        let denom = S::NAME;
+
+        ev_ctx.add(Event {
+            r#type: "delegate".to_string(),
+            attributes: vec![
+                EventAttribute {
+                    key: "validator".into(),
+                    value: validator_address.to_string().into(),
+                    index: true,
+                },
+                EventAttribute {
+                    key: "delegator".into(),
+                    value: signer.to_string().into(),
+                    index: true,
+                },
+                EventAttribute {
+                    key: "amount".into(),
+                    value: format!("{}{}", amount, denom).into(), // "1000unom"
+                    index: true,
+                },
+            ],
+        });
+
         self.delegate(validator_address, signer, payment)
+    }
+
+    fn events(&mut self) -> Result<&mut Events> {
+        self.context::<Events>()
+            .ok_or_else(|| Error::Coins("No Events context available".into()))
     }
 
     #[call]
@@ -639,6 +724,25 @@ impl<S: Symbol> Staking<S> {
     ) -> Result<()> {
         assert_positive(amount)?;
         let signer = self.signer()?;
+        let ev_ctx = self.events()?;
+        let denom = S::NAME;
+
+        ev_ctx.add(Event {
+            r#type: "coin_spend".to_string(),
+            attributes: vec![
+                EventAttribute {
+                    key: "spender".into(),
+                    value: signer.to_string().into(),
+                    index: true,
+                },
+                EventAttribute {
+                    key: "amount".into(),
+                    value: format!("{}{}", amount, denom).into(), // "1000unom"
+                    index: true,
+                },
+            ],
+        });
+
         self.deduct(validator_address, signer, amount, denom)?;
         self.paid()?.give_denom(amount, denom)
     }
@@ -647,11 +751,29 @@ impl<S: Symbol> Staking<S> {
     pub fn claim_all(&mut self) -> Result<()> {
         let signer = self.signer()?;
         let delegations = self.delegations(signer)?;
+
         delegations
             .iter()
             .try_for_each(|(val_address, delegation)| {
                 for (denom, amount) in delegation.liquid.iter() {
                     if *amount > 0 {
+                        let ev_ctx = self.events()?;
+                        ev_ctx.add(Event {
+                            r#type: "withdraw_rewards".to_string(),
+                            attributes: vec![
+                                EventAttribute {
+                                    key: "validator".into(),
+                                    value: val_address.clone().to_string().into(),
+                                    index: true,
+                                },
+                                EventAttribute {
+                                    key: "delegator".into(),
+                                    value: signer.to_string().into(),
+                                    index: true,
+                                },
+                            ],
+                        });
+
                         self.take_as_funding(*val_address, *amount, *denom)?;
                     }
                 }
