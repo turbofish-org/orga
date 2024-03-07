@@ -32,10 +32,6 @@ pub struct Store<S = DefaultBackingStore> {
     store: Shared<S>,
 }
 
-// TODO: reevaluate the client usage of Store so we don't need theses
-unsafe impl<S> Send for Store<S> {}
-unsafe impl<S> Sync for Store<S> {}
-
 impl Store {
     pub fn with_map_store() -> Self {
         use super::MapStore;

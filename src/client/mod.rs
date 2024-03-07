@@ -21,7 +21,7 @@ pub mod wallet;
 pub use exec::Transport;
 pub use wallet::Wallet;
 
-pub trait Client<T: Query + Call>: Send + Sync {
+pub trait Client<T: Query + Call> {
     fn query_sync<U, F: FnMut(T) -> Result<U>>(&self, f: F) -> Result<U>;
 
     fn call_sync(

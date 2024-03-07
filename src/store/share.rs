@@ -19,6 +19,9 @@ use std::{
 #[derive(Default)]
 pub struct Shared<T>(Rc<RefCell<T>>);
 
+// unsafe impl<T> Send for Shared<T> {}
+// unsafe impl<T> Sync for Shared<T> {}
+
 impl<T> Shared<T> {
     /// Constructs a `Shared` by wrapping the given store.
     #[inline]
