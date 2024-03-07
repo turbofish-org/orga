@@ -72,13 +72,11 @@ where
         match query {
             Query::Query(query) => self.inner.borrow().query(query),
             Query::Call(call) => self.inner.borrow_mut().call(call),
-            Query::RawKey(key) => unsafe { self.store.with_prefix(vec![]) }
-                .get(&key)
-                .map(|_| ()),
-            Query::RawNext(key) => unsafe { self.store.with_prefix(vec![]) }
-                .get_next(&key)
-                .map(|_| ()),
-            Query::RawPrev(key) => unsafe { self.store.with_prefix(vec![]) }
+            Query::RawKey(key) => self.store.with_prefix(vec![]).get(&key).map(|_| ()),
+            Query::RawNext(key) => self.store.with_prefix(vec![]).get_next(&key).map(|_| ()),
+            Query::RawPrev(key) => self
+                .store
+                .with_prefix(vec![])
                 .get_prev(key.as_deref())
                 .map(|_| ()),
         }
