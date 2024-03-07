@@ -109,7 +109,7 @@ pub enum KeyOp {
 impl KeyOp {
     pub fn apply(&self, store: &Store) -> Store {
         match self {
-            KeyOp::Absolute(prefix) => unsafe { store.with_prefix(prefix.clone()) },
+            KeyOp::Absolute(prefix) => store.with_prefix(prefix.clone()),
             KeyOp::Append(prefix) => store.sub(prefix.as_slice()),
         }
     }

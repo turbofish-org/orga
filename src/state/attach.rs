@@ -48,7 +48,7 @@ impl Attacher {
     where
         U: State,
     {
-        let substore = unsafe { self.store.with_prefix(prefix) };
+        let substore = self.store.with_prefix(prefix);
         value.attach(substore)?;
         self.field_count += 1;
 

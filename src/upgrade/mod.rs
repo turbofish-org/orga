@@ -173,7 +173,7 @@ impl Upgrade {
 }
 
 pub fn load_version(store: Store) -> Result<Option<Vec<u8>>> {
-    let store = unsafe { store.with_prefix(vec![]) };
+    let store = store.with_prefix(vec![]);
     store.get(VERSION_KEY)
 }
 

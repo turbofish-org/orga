@@ -117,9 +117,8 @@ impl<S: Read> Store<S> {
         self.prefix.as_slice()
     }
 
-    /// # Safety
     /// Overrides the store's prefix, potentially causing key collisions.
-    pub unsafe fn with_prefix(&self, prefix: Vec<u8>) -> Self {
+    pub fn with_prefix(&self, prefix: Vec<u8>) -> Self {
         let mut store = self.clone();
         store.prefix = prefix;
 
