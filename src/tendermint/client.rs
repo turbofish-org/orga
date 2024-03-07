@@ -1,7 +1,7 @@
 use crate::{
     abci::App,
     call::Call,
-    client::{sync::Transport as SyncTransport, Transport},
+    client::Transport,
     encoding::Encode,
     merk::ProofStore,
     plugins::{ABCICall, ABCIPlugin},
@@ -86,16 +86,6 @@ impl<T: App + Call + Query + State + Default> Transport<ABCIPlugin<T>> for HttpC
         let store = Store::new(BackingStore::ProofMap(store));
 
         Ok(store)
-    }
-}
-
-impl<T: App + Call + Query + State + Default> SyncTransport<ABCIPlugin<T>> for HttpClient {
-    fn call_sync(&self, call: <ABCIPlugin<T> as Call>::Call) -> Result<()> {
-        block_on(Transport::<ABCIPlugin<T>>::call(self, call))
-    }
-
-    fn query_sync(&self, query: T::Query) -> Result<Store> {
-        block_on(Transport::<ABCIPlugin<T>>::query(self, query))
     }
 }
 
