@@ -80,62 +80,6 @@ where
     }
 }
 
-pub mod sync {
-    use std::collections::HashSet;
-
-    use super::*;
-
-    pub trait Transport<T: Query + Call> {
-        fn query_sync(&self, query: T::Query) -> Result<Store>;
-
-        fn call_sync(&self, call: T::Call) -> Result<()>;
-    }
-
-    impl<T: Transport<U>, U: Query + Call> Transport<U> for &mut T {
-        fn query_sync(&self, query: <U as Query>::Query) -> Result<Store> {
-            (**self).query_sync(query)
-        }
-
-        fn call_sync(&self, call: <U as Call>::Call) -> Result<()> {
-            (**self).call_sync(call)
-        }
-    }
-
-    // TODO: remove need for ABCIPlugin wrapping at this level, and App bound
-    pub fn execute<T, U>(
-        store: Store,
-        client: &impl Transport<ABCIPlugin<QueryPlugin<T>>>,
-        mut query_fn: impl FnMut(ABCIPlugin<QueryPlugin<T>>) -> Result<U>,
-    ) -> Result<(U, Store)>
-    where
-        T: App + State + Query + Call + Describe,
-    {
-        let mut store = store;
-
-        let mut queries = HashSet::new();
-
-        loop {
-            let query = match step(store.clone(), &mut query_fn)? {
-                StepResult::Done(value) => return Ok((value, store)),
-                StepResult::FetchKey(key) => QueryPluginQuery::RawKey(key),
-                StepResult::FetchNext(key) => QueryPluginQuery::RawNext(key),
-                StepResult::FetchPrev(key) => QueryPluginQuery::RawPrev(key),
-                StepResult::FetchQuery(query) => QueryPluginQuery::Query(query),
-            };
-
-            let query_bytes = query.encode()?;
-            if queries.contains(&query_bytes) {
-                return Err(Error::Client("Execution did not advance".into()));
-            }
-            queries.insert(query_bytes);
-
-            let res = client.query_sync(query)?;
-
-            store = join_store(store, res)?;
-        }
-    }
-}
-
 type QueryPluginQuery<T> = <QueryPlugin<T> as Query>::Query;
 
 pub fn step<T, U>(
