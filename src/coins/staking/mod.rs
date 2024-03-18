@@ -725,7 +725,7 @@ impl<S: Symbol> Staking<S> {
         assert_positive(amount)?;
         let signer = self.signer()?;
         let ev_ctx = self.events()?;
-        let denom = S::NAME;
+        let denom_as_string = S::NAME;
 
         ev_ctx.add(Event {
             r#type: "coin_spend".to_string(),
@@ -737,7 +737,7 @@ impl<S: Symbol> Staking<S> {
                 },
                 EventAttribute {
                     key: "amount".into(),
-                    value: format!("{}{}", amount, denom).into(), // "1000unom"
+                    value: format!("{}{}", amount, denom_as_string).into(), // "1000unom"
                     index: true,
                 },
             ],
