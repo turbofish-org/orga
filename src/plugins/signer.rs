@@ -567,6 +567,7 @@ mod tests {
         };
 
         Context::add(ChainId("testchain".to_string()));
+        Context::add(Events::default());
 
         // sign bytes: {"account_number":"0","chain_id":"testchain","fee":{"amount":[{"amount":"0","denom":"unom"}],"gas":"10000"},"memo":"","msgs":[{"type":"x","value":{}}],"sequence":"1"}
         // signature and pubkey taken from metamask
