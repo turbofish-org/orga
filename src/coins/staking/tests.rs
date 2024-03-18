@@ -45,6 +45,7 @@ fn setup_state() -> Result<Staking<Simp>> {
     );
     Context::add(val_ctx);
     Context::add(Time::from_seconds(0));
+    Context::add(Events::default());
 
     Ok(staking)
 }
