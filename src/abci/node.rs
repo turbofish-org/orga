@@ -15,9 +15,10 @@ use crate::{Error, Result};
 use home::home_dir;
 use std::borrow::Borrow;
 use std::marker::PhantomData;
+use std::panic::{catch_unwind, UnwindSafe};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 use tendermint_proto::v0_34::abci::*;
 
@@ -426,7 +427,11 @@ impl<A: App> Node<A> {
 }
 
 impl<A: App> InternalApp<ABCIPlugin<A>> {
-    fn run<T, F: FnOnce(&mut ABCIPlugin<A>) -> T>(&self, store: WrappedMerk, op: F) -> Result<T> {
+    fn run<T, F: FnOnce(&Mutex<ABCIPlugin<A>>) -> T>(
+        &self,
+        store: WrappedMerk,
+        op: F,
+    ) -> Result<T> {
         let mut store = Store::new(store.into());
         let state_bytes = match store.get(&[])? {
             Some(inner) => inner,
@@ -441,11 +446,13 @@ impl<A: App> InternalApp<ABCIPlugin<A>> {
                 encoded_bytes
             }
         };
-        let mut state: ABCIPlugin<A> =
-            ABCIPlugin::<A>::load(store.clone(), &mut state_bytes.as_slice())?;
-        let res = op(&mut state);
+        let mut state: Mutex<ABCIPlugin<A>> = Mutex::new(ABCIPlugin::<A>::load(
+            store.clone(),
+            &mut state_bytes.as_slice(),
+        )?);
+        let res = op(&state);
         let mut bytes = vec![];
-        state.flush(&mut bytes)?;
+        state.into_inner().unwrap().flush(&mut bytes)?;
         store.put(vec![], bytes)?;
         Ok(res)
     }
@@ -454,6 +461,7 @@ impl<A: App> InternalApp<ABCIPlugin<A>> {
 impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
     fn init_chain(&self, store: WrappedMerk, req: RequestInitChain) -> Result<ResponseInitChain> {
         let mut updates = self.run(store, move |state| -> Result<_> {
+            let mut state = state.lock().unwrap();
             state.call(req.into())?;
             Ok(state
                 .validator_updates
@@ -474,6 +482,7 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
         req: RequestBeginBlock,
     ) -> Result<ResponseBeginBlock> {
         let (events, _logs) = self.run(store, move |state| -> Result<_> {
+            let mut state = state.lock().unwrap();
             state.call(req.into())?;
             Ok((
                 state.events.take().unwrap_or_default(),
@@ -486,6 +495,7 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
 
     fn end_block(&self, store: WrappedMerk, req: RequestEndBlock) -> Result<ResponseEndBlock> {
         let (mut updates, events, _logs) = self.run(store, move |state| -> Result<_> {
+            let mut state = state.lock().unwrap();
             state.call(req.into())?;
             Ok((
                 state
@@ -516,9 +526,13 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
 
     fn deliver_tx(&self, store: WrappedMerk, req: RequestDeliverTx) -> Result<ResponseDeliverTx> {
         let run_res = self.run(store, move |state| -> Result<_> {
-            let inner_call = Decode::decode(req.tx.to_vec().as_slice())?;
-            let res = state.call(ABCICall::DeliverTx(inner_call));
+            let res = catch_unwind(|| {
+                let inner_call = Decode::decode(req.tx.to_vec().as_slice())?;
+                state.lock().unwrap().call(ABCICall::DeliverTx(inner_call))
+            })
+            .map_err(|_| crate::Error::Call("Panicked".to_string()));
 
+            let mut state = state.lock().unwrap();
             Ok((
                 res,
                 state.events.take().unwrap_or_default(),
@@ -529,12 +543,12 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
         let mut deliver_tx_res = ResponseDeliverTx::default();
         match run_res {
             Ok((res, events, logs)) => match res {
-                Ok(()) => {
+                Ok(Ok(())) => {
                     deliver_tx_res.code = 0;
                     deliver_tx_res.log = logs.join("\n");
                     deliver_tx_res.events = events;
                 }
-                Err(err) => {
+                Err(err) | Ok(Err(err)) => {
                     deliver_tx_res.code = 1;
                     if logs.is_empty() {
                         deliver_tx_res.log = err.to_string();
@@ -554,9 +568,13 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
 
     fn check_tx(&self, store: WrappedMerk, req: RequestCheckTx) -> Result<ResponseCheckTx> {
         let run_res = self.run(store, move |state| -> Result<_> {
-            let inner_call = Decode::decode(req.tx.to_vec().as_slice())?;
-            let res = state.call(ABCICall::CheckTx(inner_call));
+            let res = catch_unwind(|| {
+                let inner_call = Decode::decode(req.tx.to_vec().as_slice())?;
+                state.lock().unwrap().call(ABCICall::CheckTx(inner_call))
+            })
+            .map_err(|_| crate::Error::Call("Panicked".to_string()));
 
+            let mut state = state.lock().unwrap();
             Ok((
                 res,
                 state.events.take().unwrap_or_default(),
@@ -568,12 +586,12 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
 
         match run_res {
             Ok((res, events, logs)) => match res {
-                Ok(()) => {
+                Ok(Ok(())) => {
                     check_tx_res.code = 0;
                     check_tx_res.log = logs.join("\n");
                     check_tx_res.events = events;
                 }
-                Err(err) => {
+                Err(err) | Ok(Err(err)) => {
                     check_tx_res.code = 1;
                     if logs.is_empty() {
                         check_tx_res.log = err.to_string();
@@ -617,18 +635,26 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
 
         if !req.path.is_empty() {
             let store = BackingStore::MemSnapshot(mss);
-            let state = create_state(store)?;
-            let mut res = state.abci_query(&req)?;
+            let state = Mutex::new(create_state(store)?);
+
+            let mut res = catch_unwind(|| state.lock().unwrap().abci_query(&req))
+                .map_err(|_| crate::Error::Query("Panicked".to_string()))??;
+
             res.height = height.try_into().unwrap();
             drop(state);
 
             return Ok(res);
         }
 
-        let query = Decode::decode(&*req.data)?;
         let store = BackingStore::ProofBuilderMemSnapshot(ProofBuilder::new(mss));
-        let state = create_state(store.clone())?;
-        state.query(query)?;
+        let state = Mutex::new(create_state(store.clone())?);
+
+        catch_unwind(|| {
+            let query = Decode::decode(&*req.data)?;
+            state.lock().unwrap().query(query)
+        })
+        .map_err(|_| crate::Error::Query("Panicked".to_string()))??;
+
         drop(state);
 
         let proof_builder = store.into_proof_builder_memsnapshot()?;
