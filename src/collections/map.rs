@@ -756,6 +756,11 @@ impl<'a, S: Default + Read, K: Decode> StoreNextIter<'a, S, K> {
         match &self.next_key {
             Bound::Excluded(end) if key <= *end => return None,
             Bound::Included(end) if key < *end => return None,
+            // FIXME: this is the one place where iterator ranges become
+            // un-pure, due to the fact that we store the base value of
+            // collections at the empty key, which overlaps with the descendant
+            // keyspace.
+            Bound::Unbounded if key.is_empty() => return None,
             _ => {}
         };
 
