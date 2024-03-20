@@ -1759,9 +1759,31 @@ mod tests {
         let map: Map<u32, Map<u32, u32>> = Map::with_store(store).unwrap();
 
         let mut iter = map.iter().unwrap().rev();
-        assert_eq!(*iter.next().unwrap().unwrap().0, 3);
-        assert_eq!(*iter.next().unwrap().unwrap().0, 2);
-        assert_eq!(*iter.next().unwrap().unwrap().0, 1);
+
+        let (key, submap) = iter.next().unwrap().unwrap();
+        assert_eq!(*key, 3);
+        let mut subiter = submap.iter().unwrap().rev().peekable();
+        assert_eq!(*subiter.peek().unwrap().as_ref().unwrap().0, 5);
+        assert_eq!(*subiter.next().unwrap().unwrap().1, 50);
+        assert_eq!(*subiter.peek().unwrap().as_ref().unwrap().0, 4);
+        assert_eq!(*subiter.next().unwrap().unwrap().1, 40);
+        assert!(subiter.next().is_none());
+
+        let (key, submap) = iter.next().unwrap().unwrap();
+        assert_eq!(*key, 2);
+        assert!(submap.iter().unwrap().next().is_none());
+
+        let (key, submap) = iter.next().unwrap().unwrap();
+        assert_eq!(*key, 1);
+        let mut subiter = submap.iter().unwrap().rev().peekable();
+        assert_eq!(*subiter.peek().unwrap().as_ref().unwrap().0, 3);
+        assert_eq!(*subiter.next().unwrap().unwrap().1, 30);
+        assert_eq!(*subiter.peek().unwrap().as_ref().unwrap().0, 2);
+        assert_eq!(*subiter.next().unwrap().unwrap().1, 20);
+        assert_eq!(*subiter.peek().unwrap().as_ref().unwrap().0, 1);
+        assert_eq!(*subiter.next().unwrap().unwrap().1, 10);
+        assert!(subiter.next().is_none());
+
         assert!(iter.next().is_none());
     }
 
