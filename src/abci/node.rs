@@ -701,6 +701,7 @@ mod tests {
         client::{wallet::Unsigned, AppClient},
         coins::Symbol,
         context::Context,
+        macros::build_call,
         plugins::{ChainId, ConvertSdkTx, DefaultPlugins, PaidCall},
         tendermint::client::HttpClient,
     };
@@ -720,6 +721,7 @@ mod tests {
     #[orga]
     pub struct App {
         pub count: u32,
+        pub map: crate::collections::Map<u32, u32>,
     }
 
     impl BeginBlock for App {
@@ -730,17 +732,42 @@ mod tests {
         }
     }
 
+    #[orga]
+    impl App {
+        #[query]
+        fn query_ok(&self) -> Result<()> {
+            self.map.get(0)?;
+            Ok(())
+        }
+
+        #[query]
+        fn query_panic(&self) -> Result<()> {
+            self.map.get(0)?;
+            panic!("Panic");
+        }
+
+        #[call]
+        fn call_ok(&mut self) -> Result<()> {
+            self.map.get(0)?;
+            Ok(())
+        }
+
+        #[call]
+        fn call_panic(&mut self) -> Result<()> {
+            self.map.get(0)?;
+            panic!("Panic");
+        }
+    }
+
     // TODO: dedupe w/ tendermint::client tests
     pub async fn spawn_node() {
-        pretty_env_logger::init();
-
-        std::thread::spawn(async move || {
+        tokio::spawn(async {
             // TODO: find available ports
 
             Context::add(ChainId("foo".to_string()));
 
             let home = tempdir::TempDir::new("orga-node").unwrap();
-            let node = Node::<DefaultPlugins<FooCoin, App>>::new(
+            let mut node = Node::<DefaultPlugins<FooCoin, App>>::new(
                 home.path(),
                 Some("foo"),
                 orga::abci::DefaultConfig {
@@ -749,8 +776,10 @@ mod tests {
                 },
             )
             .await;
-            node.run().await.unwrap();
-            home.close().unwrap();
+            let res = node.run().await.unwrap();
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            }
         });
 
         // TODO: wait for node to be ready
@@ -786,5 +815,54 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    #[ignore]
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn query_panic_handling() {
+        spawn_node().await;
+
+        // TODO: node spawn should wait for node to be ready
+        tokio::time::sleep(std::time::Duration::from_secs(8)).await;
+
+        let client = HttpClient::new("http://localhost:26657").unwrap();
+        let client = AppClient::<App, App, _, FooCoin, _>::new(client, Unsigned);
+        client
+            .query(|app| {
+                let app = Mutex::new(app);
+                catch_unwind(|| app.lock().unwrap().query_panic()).unwrap_err();
+                Ok(())
+            })
+            .await
+            .unwrap();
+
+        // ensure node is still live
+        client.query(|app| Ok(app.query_ok())).await.unwrap();
+    }
+
+    #[ignore]
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn call_panic_handling() {
+        // TODO: this only tests the CheckTx path, add something for DeliverTx
+
+        spawn_node().await;
+
+        // TODO: node spawn should wait for node to be ready
+        tokio::time::sleep(std::time::Duration::from_secs(8)).await;
+
+        let client = HttpClient::new("http://localhost:26657").unwrap();
+        let client = AppClient::<App, App, _, FooCoin, _>::new(client, Unsigned);
+        client
+            .call(
+                |app| build_call!(app.call_panic()),
+                |app| build_call!(app.call_ok()),
+            )
+            .await
+            .unwrap_err();
+
+        // ensure node is still live
+        client.query(|app| Ok(app.query_ok())).await.unwrap();
     }
 }
