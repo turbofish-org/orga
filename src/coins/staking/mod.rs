@@ -249,6 +249,21 @@ impl<S: Symbol> Staking<S> {
         Ok(vec)
     }
 
+    #[query]
+    pub fn last_signed_blocks(&self) -> Result<Vec<(Address, Option<u64>)>> {
+        let mut res = vec![];
+
+        for entry in self.consensus_keys.iter()? {
+            let (address, cons_key) = entry?;
+            let hash = tm_pubkey_hash(*cons_key)?;
+
+            let last_signed_block = self.last_signed_block.get(hash)?.map(|v| *v);
+            res.push((*address, last_signed_block));
+        }
+
+        Ok(res)
+    }
+
     pub fn address_by_consensus_key(&self, cons_key: [u8; 32]) -> Result<Option<Address>> {
         let tm_pubkey_hash = tm_pubkey_hash(cons_key)?;
         if let Some(address) = self.address_for_tm_hash.get(tm_pubkey_hash)? {
