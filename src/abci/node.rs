@@ -451,9 +451,11 @@ impl<A: App> InternalApp<ABCIPlugin<A>> {
             &mut state_bytes.as_slice(),
         )?);
         let res = op(&state);
-        let mut bytes = vec![];
-        state.into_inner().unwrap().flush(&mut bytes)?;
-        store.put(vec![], bytes)?;
+        if let Ok(state) = state.into_inner() {
+            let mut bytes = vec![];
+            state.flush(&mut bytes)?;
+            store.put(vec![], bytes)?;
+        }
         Ok(res)
     }
 }
@@ -574,12 +576,15 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
             })
             .map_err(|_| crate::Error::Call("Panicked".to_string()));
 
-            let mut state = state.lock().unwrap();
-            Ok((
-                res,
-                state.events.take().unwrap_or_default(),
-                state.logs.take().unwrap_or_default(),
-            ))
+            if let Ok(mut state) = state.lock() {
+                Ok((
+                    res,
+                    state.events.take().unwrap_or_default(),
+                    state.logs.take().unwrap_or_default(),
+                ))
+            } else {
+                Ok((res, vec![], vec![]))
+            }
         })?;
 
         let mut check_tx_res = ResponseCheckTx::default();
@@ -601,7 +606,6 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
                 }
             },
             Err(err) => {
-                check_tx_res.code = 1;
                 check_tx_res.log = err.to_string();
             }
         }
@@ -649,11 +653,21 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
         let store = BackingStore::ProofBuilderMemSnapshot(ProofBuilder::new(mss));
         let state = Mutex::new(create_state(store.clone())?);
 
-        catch_unwind(|| {
+        let res = catch_unwind(|| {
             let query = Decode::decode(&*req.data)?;
             state.lock().unwrap().query(query)
         })
-        .map_err(|_| crate::Error::Query("Panicked".to_string()))??;
+        .map_err(|_| crate::Error::Query("Panicked".to_string()));
+
+        match res {
+            Ok(Err(err)) | Err(err) => {
+                let mut res = ResponseQuery::default();
+                res.code = 1;
+                res.log = err.to_string();
+                return Ok(res);
+            }
+            _ => {}
+        }
 
         drop(state);
 
