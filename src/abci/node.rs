@@ -15,9 +15,10 @@ use crate::{Error, Result};
 use home::home_dir;
 use std::borrow::Borrow;
 use std::marker::PhantomData;
+use std::panic::{catch_unwind, UnwindSafe};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 use tendermint_proto::v0_34::abci::*;
 
@@ -426,7 +427,11 @@ impl<A: App> Node<A> {
 }
 
 impl<A: App> InternalApp<ABCIPlugin<A>> {
-    fn run<T, F: FnOnce(&mut ABCIPlugin<A>) -> T>(&self, store: WrappedMerk, op: F) -> Result<T> {
+    fn run<T, F: FnOnce(&Mutex<ABCIPlugin<A>>) -> T>(
+        &self,
+        store: WrappedMerk,
+        op: F,
+    ) -> Result<T> {
         let mut store = Store::new(store.into());
         let state_bytes = match store.get(&[])? {
             Some(inner) => inner,
@@ -441,12 +446,16 @@ impl<A: App> InternalApp<ABCIPlugin<A>> {
                 encoded_bytes
             }
         };
-        let mut state: ABCIPlugin<A> =
-            ABCIPlugin::<A>::load(store.clone(), &mut state_bytes.as_slice())?;
-        let res = op(&mut state);
-        let mut bytes = vec![];
-        state.flush(&mut bytes)?;
-        store.put(vec![], bytes)?;
+        let mut state: Mutex<ABCIPlugin<A>> = Mutex::new(ABCIPlugin::<A>::load(
+            store.clone(),
+            &mut state_bytes.as_slice(),
+        )?);
+        let res = op(&state);
+        if let Ok(state) = state.into_inner() {
+            let mut bytes = vec![];
+            state.flush(&mut bytes)?;
+            store.put(vec![], bytes)?;
+        }
         Ok(res)
     }
 }
@@ -454,6 +463,7 @@ impl<A: App> InternalApp<ABCIPlugin<A>> {
 impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
     fn init_chain(&self, store: WrappedMerk, req: RequestInitChain) -> Result<ResponseInitChain> {
         let mut updates = self.run(store, move |state| -> Result<_> {
+            let mut state = state.lock().unwrap();
             state.call(req.into())?;
             Ok(state
                 .validator_updates
@@ -474,6 +484,7 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
         req: RequestBeginBlock,
     ) -> Result<ResponseBeginBlock> {
         let (events, _logs) = self.run(store, move |state| -> Result<_> {
+            let mut state = state.lock().unwrap();
             state.call(req.into())?;
             Ok((
                 state.events.take().unwrap_or_default(),
@@ -486,6 +497,7 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
 
     fn end_block(&self, store: WrappedMerk, req: RequestEndBlock) -> Result<ResponseEndBlock> {
         let (mut updates, events, _logs) = self.run(store, move |state| -> Result<_> {
+            let mut state = state.lock().unwrap();
             state.call(req.into())?;
             Ok((
                 state
@@ -516,9 +528,13 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
 
     fn deliver_tx(&self, store: WrappedMerk, req: RequestDeliverTx) -> Result<ResponseDeliverTx> {
         let run_res = self.run(store, move |state| -> Result<_> {
-            let inner_call = Decode::decode(req.tx.to_vec().as_slice())?;
-            let res = state.call(ABCICall::DeliverTx(inner_call));
+            let res = catch_unwind(|| {
+                let inner_call = Decode::decode(req.tx.to_vec().as_slice())?;
+                state.lock().unwrap().call(ABCICall::DeliverTx(inner_call))
+            })
+            .map_err(|_| crate::Error::Call("Panicked".to_string()));
 
+            let mut state = state.lock().unwrap();
             Ok((
                 res,
                 state.events.take().unwrap_or_default(),
@@ -529,12 +545,12 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
         let mut deliver_tx_res = ResponseDeliverTx::default();
         match run_res {
             Ok((res, events, logs)) => match res {
-                Ok(()) => {
+                Ok(Ok(())) => {
                     deliver_tx_res.code = 0;
                     deliver_tx_res.log = logs.join("\n");
                     deliver_tx_res.events = events;
                 }
-                Err(err) => {
+                Err(err) | Ok(Err(err)) => {
                     deliver_tx_res.code = 1;
                     if logs.is_empty() {
                         deliver_tx_res.log = err.to_string();
@@ -554,26 +570,33 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
 
     fn check_tx(&self, store: WrappedMerk, req: RequestCheckTx) -> Result<ResponseCheckTx> {
         let run_res = self.run(store, move |state| -> Result<_> {
-            let inner_call = Decode::decode(req.tx.to_vec().as_slice())?;
-            let res = state.call(ABCICall::CheckTx(inner_call));
+            let res = catch_unwind(|| {
+                let inner_call = Decode::decode(req.tx.to_vec().as_slice())?;
+                state.lock().unwrap().call(ABCICall::CheckTx(inner_call))
+            })
+            .map_err(|_| crate::Error::Call("Panicked".to_string()));
 
-            Ok((
-                res,
-                state.events.take().unwrap_or_default(),
-                state.logs.take().unwrap_or_default(),
-            ))
+            if let Ok(mut state) = state.lock() {
+                Ok((
+                    res,
+                    state.events.take().unwrap_or_default(),
+                    state.logs.take().unwrap_or_default(),
+                ))
+            } else {
+                Ok((res, vec![], vec![]))
+            }
         })?;
 
         let mut check_tx_res = ResponseCheckTx::default();
 
         match run_res {
             Ok((res, events, logs)) => match res {
-                Ok(()) => {
+                Ok(Ok(())) => {
                     check_tx_res.code = 0;
                     check_tx_res.log = logs.join("\n");
                     check_tx_res.events = events;
                 }
-                Err(err) => {
+                Err(err) | Ok(Err(err)) => {
                     check_tx_res.code = 1;
                     if logs.is_empty() {
                         check_tx_res.log = err.to_string();
@@ -583,7 +606,6 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
                 }
             },
             Err(err) => {
-                check_tx_res.code = 1;
                 check_tx_res.log = err.to_string();
             }
         }
@@ -617,18 +639,36 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
 
         if !req.path.is_empty() {
             let store = BackingStore::MemSnapshot(mss);
-            let state = create_state(store)?;
-            let mut res = state.abci_query(&req)?;
+            let state = Mutex::new(create_state(store)?);
+
+            let mut res = catch_unwind(|| state.lock().unwrap().abci_query(&req))
+                .map_err(|_| crate::Error::Query("Panicked".to_string()))??;
+
             res.height = height.try_into().unwrap();
             drop(state);
 
             return Ok(res);
         }
 
-        let query = Decode::decode(&*req.data)?;
         let store = BackingStore::ProofBuilderMemSnapshot(ProofBuilder::new(mss));
-        let state = create_state(store.clone())?;
-        state.query(query)?;
+        let state = Mutex::new(create_state(store.clone())?);
+
+        let res = catch_unwind(|| {
+            let query = Decode::decode(&*req.data)?;
+            state.lock().unwrap().query(query)
+        })
+        .map_err(|_| crate::Error::Query("Panicked".to_string()));
+
+        match res {
+            Ok(Err(err)) | Err(err) => {
+                let mut res = ResponseQuery::default();
+                res.code = 1;
+                res.log = err.to_string();
+                return Ok(res);
+            }
+            _ => {}
+        }
+
         drop(state);
 
         let proof_builder = store.into_proof_builder_memsnapshot()?;
@@ -675,6 +715,7 @@ mod tests {
         client::{wallet::Unsigned, AppClient},
         coins::Symbol,
         context::Context,
+        macros::build_call,
         plugins::{ChainId, ConvertSdkTx, DefaultPlugins, PaidCall},
         tendermint::client::HttpClient,
     };
@@ -694,6 +735,7 @@ mod tests {
     #[orga]
     pub struct App {
         pub count: u32,
+        pub map: crate::collections::Map<u32, u32>,
     }
 
     impl BeginBlock for App {
@@ -704,17 +746,42 @@ mod tests {
         }
     }
 
+    #[orga]
+    impl App {
+        #[query]
+        fn query_ok(&self) -> Result<()> {
+            self.map.get(0)?;
+            Ok(())
+        }
+
+        #[query]
+        fn query_panic(&self) -> Result<()> {
+            self.map.get(0)?;
+            panic!("Panic");
+        }
+
+        #[call]
+        fn call_ok(&mut self) -> Result<()> {
+            self.map.get(0)?;
+            Ok(())
+        }
+
+        #[call]
+        fn call_panic(&mut self) -> Result<()> {
+            self.map.get(0)?;
+            panic!("Panic");
+        }
+    }
+
     // TODO: dedupe w/ tendermint::client tests
     pub async fn spawn_node() {
-        pretty_env_logger::init();
-
-        std::thread::spawn(async move || {
+        tokio::spawn(async {
             // TODO: find available ports
 
             Context::add(ChainId("foo".to_string()));
 
             let home = tempdir::TempDir::new("orga-node").unwrap();
-            let node = Node::<DefaultPlugins<FooCoin, App>>::new(
+            let mut node = Node::<DefaultPlugins<FooCoin, App>>::new(
                 home.path(),
                 Some("foo"),
                 orga::abci::DefaultConfig {
@@ -723,8 +790,10 @@ mod tests {
                 },
             )
             .await;
-            node.run().await.unwrap();
-            home.close().unwrap();
+            let res = node.run().await.unwrap();
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            }
         });
 
         // TODO: wait for node to be ready
@@ -760,5 +829,54 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    #[ignore]
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn query_panic_handling() {
+        spawn_node().await;
+
+        // TODO: node spawn should wait for node to be ready
+        tokio::time::sleep(std::time::Duration::from_secs(8)).await;
+
+        let client = HttpClient::new("http://localhost:26657").unwrap();
+        let client = AppClient::<App, App, _, FooCoin, _>::new(client, Unsigned);
+        client
+            .query(|app| {
+                let app = Mutex::new(app);
+                catch_unwind(|| app.lock().unwrap().query_panic()).unwrap_err();
+                Ok(())
+            })
+            .await
+            .unwrap();
+
+        // ensure node is still live
+        client.query(|app| Ok(app.query_ok())).await.unwrap();
+    }
+
+    #[ignore]
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn call_panic_handling() {
+        // TODO: this only tests the CheckTx path, add something for DeliverTx
+
+        spawn_node().await;
+
+        // TODO: node spawn should wait for node to be ready
+        tokio::time::sleep(std::time::Duration::from_secs(8)).await;
+
+        let client = HttpClient::new("http://localhost:26657").unwrap();
+        let client = AppClient::<App, App, _, FooCoin, _>::new(client, Unsigned);
+        client
+            .call(
+                |app| build_call!(app.call_panic()),
+                |app| build_call!(app.call_ok()),
+            )
+            .await
+            .unwrap_err();
+
+        // ensure node is still live
+        client.query(|app| Ok(app.query_ok())).await.unwrap();
     }
 }
