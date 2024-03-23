@@ -491,6 +491,53 @@ mod test {
     }
 
     #[test]
+    fn deque_iter_rev() -> crate::Result<()> {
+        let mut store = Store::with_map_store().sub(&[123]);
+        let mut deque: Deque<u32> = Deque::new();
+        deque.attach(store.clone())?;
+
+        deque.push_back(1)?;
+        deque.push_back(2)?;
+        deque.push_back(3)?;
+
+        let mut bytes = vec![];
+
+        use crate::store::Write;
+        deque.flush(&mut bytes)?;
+        store.put(vec![], bytes.clone()).unwrap();
+
+        let mut deque: Deque<u32> = Deque::load(store.clone(), &mut &bytes[..])?;
+        deque.attach(store)?;
+
+        let mut iter = deque.iter()?.rev();
+        assert_eq!(*iter.next().unwrap()?, 3);
+        assert_eq!(*iter.next().unwrap()?, 2);
+        assert_eq!(*iter.next().unwrap()?, 1);
+        assert!(iter.next().is_none());
+
+        Ok(())
+    }
+
+    #[test]
+    fn deque_iter_rev_noflush() -> crate::Result<()> {
+        let store = Store::with_map_store().sub(&[123]);
+        let mut deque: Deque<u32> = Deque::new();
+        deque.attach(store.clone())?;
+
+        deque.push_back(1)?;
+        deque.push_back(2)?;
+        deque.push_back(3)?;
+
+        let mut iter = deque.iter()?.rev();
+        assert_eq!(*iter.next().unwrap()?, 3);
+        assert_eq!(*iter.next().unwrap()?, 2);
+        assert_eq!(*iter.next().unwrap()?, 1);
+        assert!(iter.next().is_none());
+
+        Ok(())
+    }
+
+    #[test]
     fn deque_swap() {
         let mut deque: Deque<u32> = Deque::new();
 
