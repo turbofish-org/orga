@@ -32,10 +32,6 @@ pub struct Store<S = DefaultBackingStore> {
     store: Shared<S>,
 }
 
-// TODO: reevaluate the client usage of Store so we don't need theses
-unsafe impl<S> Send for Store<S> {}
-unsafe impl<S> Sync for Store<S> {}
-
 impl Store {
     pub fn with_map_store() -> Self {
         use super::MapStore;
@@ -121,9 +117,8 @@ impl<S: Read> Store<S> {
         self.prefix.as_slice()
     }
 
-    /// # Safety
     /// Overrides the store's prefix, potentially causing key collisions.
-    pub unsafe fn with_prefix(&self, prefix: Vec<u8>) -> Self {
+    pub fn with_prefix(&self, prefix: Vec<u8>) -> Self {
         let mut store = self.clone();
         store.prefix = prefix;
 

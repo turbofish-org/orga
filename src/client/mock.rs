@@ -11,7 +11,7 @@ use crate::{
     Error, Result,
 };
 
-use super::exec::{sync::Transport as SyncTransport, Transport};
+use super::exec::Transport;
 
 #[derive(Default)]
 pub struct MockClient<T> {
@@ -32,10 +32,10 @@ impl<T> MockClient<T> {
     }
 }
 
-impl<T: App + State + Query + Call> SyncTransport<ABCIPlugin<QueryPlugin<T>>>
+impl<T: App + State + Query + Call> Transport<ABCIPlugin<QueryPlugin<T>>>
     for MockClient<ABCIPlugin<QueryPlugin<T>>>
 {
-    fn query_sync(&self, query: <ABCIPlugin<QueryPlugin<T>> as Query>::Query) -> Result<Store> {
+    async fn query(&self, query: <ABCIPlugin<QueryPlugin<T>> as Query>::Query) -> Result<Store> {
         let query_bytes = query.encode()?;
         self.queries.lock().unwrap().push(query_bytes);
 
@@ -97,7 +97,7 @@ impl<T: App + State + Query + Call> SyncTransport<ABCIPlugin<QueryPlugin<T>>>
         ))))
     }
 
-    fn call_sync(&self, call: <ABCIPlugin<QueryPlugin<T>> as Call>::Call) -> Result<()> {
+    async fn call(&self, call: <ABCIPlugin<QueryPlugin<T>> as Call>::Call) -> Result<()> {
         self.calls.lock().unwrap().push(call.encode()?);
 
         let root_bytes = self.store.get(&[])?.unwrap_or_default();
@@ -111,17 +111,5 @@ impl<T: App + State + Query + Call> SyncTransport<ABCIPlugin<QueryPlugin<T>>>
         self.store.clone().put(vec![], out)?;
 
         Ok(())
-    }
-}
-
-impl<T: App + State + Query + Call> Transport<ABCIPlugin<QueryPlugin<T>>>
-    for MockClient<ABCIPlugin<QueryPlugin<T>>>
-{
-    async fn query(&self, query: <ABCIPlugin<QueryPlugin<T>> as Query>::Query) -> Result<Store> {
-        self.query_sync(query)
-    }
-
-    async fn call(&self, call: <ABCIPlugin<QueryPlugin<T>> as Call>::Call) -> Result<()> {
-        self.call_sync(call)
     }
 }
