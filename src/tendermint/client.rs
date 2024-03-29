@@ -159,7 +159,7 @@ mod tests {
 
             Context::add(ChainId("foo".to_string()));
 
-            let home = tempdir::TempDir::new("orga-node").unwrap();
+            let home = tempfile::TempDir::new().unwrap();
             let node = orga::abci::Node::<DefaultPlugins<FooCoin, App>>::new(
                 home.path(),
                 Some("foo"),

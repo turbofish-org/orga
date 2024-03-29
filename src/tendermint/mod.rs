@@ -690,12 +690,12 @@ impl FromStr for LogMessage {
 mod tests {
     use super::*;
     use std::collections::HashSet;
-    use tempdir::TempDir;
+    use tempfile::TempDir;
 
     #[test]
     #[ignore]
     fn tendermint_init() {
-        let temp_dir = TempDir::new("tendermint_test").unwrap();
+        let temp_dir = TempDir::new().unwrap();
         let temp_dir_path = temp_dir.path();
         let _ = Tendermint::new(temp_dir_path).stdout(Stdio::null()).init();
 
