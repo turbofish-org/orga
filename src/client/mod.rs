@@ -22,8 +22,11 @@ pub mod wallet;
 pub use exec::Transport;
 pub use wallet::Wallet;
 
-pub trait Client<T: Query + Call> {
-    fn query<U, F: FnMut(T) -> Result<U>>(&self, f: F) -> impl Future<Output = Result<U>>;
+pub trait Client<T: Query + Call>: Send + Sync {
+    fn query<U, F: FnMut(T) -> Result<U> + Send>(
+        &self,
+        f: F,
+    ) -> impl Future<Output = Result<U>> + Send;
 
     fn call(
         &self,
@@ -47,8 +50,11 @@ where
     Wallet: wallet::Wallet + Clone,
     Symbol: crate::coins::Symbol,
 {
-    async fn query<R, F: FnMut(U) -> Result<R>>(&self, f: F) -> Result<R> {
-        AppClient::query(self, f).await
+    fn query<R, F: FnMut(U) -> Result<R> + Send>(
+        &self,
+        f: F,
+    ) -> impl std::future::Future<Output = Result<R>> + Send {
+        AppClient::query(self, f)
     }
 
     async fn call(

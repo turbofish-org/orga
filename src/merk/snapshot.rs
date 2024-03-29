@@ -1,17 +1,16 @@
 use crate::store::Read;
 use crate::Result;
 use merk::{Hash, Merk};
-use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::sync::{Arc, RwLock};
 use tendermint_proto::v0_34::abci::{RequestLoadSnapshotChunk, Snapshot as AbciSnapshot};
 
 use super::store::{FIRST_SNAPSHOT_HEIGHT, SNAPSHOT_INTERVAL};
 
 #[derive(Clone)]
 pub struct Snapshot {
-    pub(crate) checkpoint: Rc<RefCell<Merk>>,
+    pub(crate) checkpoint: Arc<RwLock<Merk>>,
     length: u32,
     hash: Hash,
 }
@@ -26,14 +25,14 @@ impl Snapshot {
         let hash = checkpoint.root_hash();
 
         Ok(Self {
-            checkpoint: Rc::new(RefCell::new(checkpoint)),
+            checkpoint: Arc::new(RwLock::new(checkpoint)),
             length,
             hash,
         })
     }
 
     fn chunk(&self, index: usize) -> Result<Vec<u8>> {
-        let checkpoint = self.checkpoint.borrow();
+        let checkpoint = self.checkpoint.read().unwrap();
         // TODO: refactor ChunkProducer in Merk to not retain reference to db,
         // so we can reuse it across chunks rather than creating a new
         // ChunkProducer each time
@@ -44,17 +43,17 @@ impl Snapshot {
 
 impl Read for Snapshot {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        Ok(self.checkpoint.borrow().get(key)?)
+        Ok(self.checkpoint.read().unwrap().get(key)?)
     }
 
     fn get_next(&self, key: &[u8]) -> Result<Option<crate::store::KV>> {
-        let cp = self.checkpoint.borrow();
+        let cp = self.checkpoint.read().unwrap();
         let iter = cp.raw_iter();
         super::store::get_next(iter, key)
     }
 
     fn get_prev(&self, key: Option<&[u8]>) -> Result<Option<crate::store::KV>> {
-        let cp = self.checkpoint.borrow();
+        let cp = self.checkpoint.read().unwrap();
         let iter = cp.raw_iter();
         super::store::get_prev(iter, key)
     }

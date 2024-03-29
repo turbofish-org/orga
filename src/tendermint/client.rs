@@ -10,7 +10,6 @@ use crate::{
     store::{BackingStore, Shared, Store},
     Error, Result,
 };
-use futures_lite::future::block_on;
 use tendermint_rpc::{self as tm, Client as _};
 use tokio::sync::Mutex;
 

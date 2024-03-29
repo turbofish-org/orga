@@ -25,13 +25,11 @@ pub enum StepResult<T: Query, U> {
     FetchQuery(T::Query),
 }
 
-// TODO: dedupe sync/async versions
-
 #[allow(async_fn_in_trait)]
-pub trait Transport<T: Query + Call> {
-    async fn query(&self, query: T::Query) -> Result<Store>;
+pub trait Transport<T: Query + Call>: Send + Sync {
+    fn query(&self, query: T::Query) -> impl std::future::Future<Output = Result<Store>> + Send;
 
-    async fn call(&self, call: T::Call) -> Result<()>;
+    fn call(&self, call: T::Call) -> impl std::future::Future<Output = Result<()>> + Send;
 }
 
 impl<T: Transport<U>, U: Query + Call> Transport<U> for &mut T {
