@@ -1,9 +1,6 @@
 use super::{Read, Write, KV};
 use crate::Result;
-use std::{
-    cell::{Ref, RefCell, RefMut},
-    rc::Rc,
-};
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 // TODO: we can probably use UnsafeCell instead of RefCell since operations are
 // guaranteed not to interfere with each other (the borrows only last until the
@@ -17,28 +14,28 @@ use std::{
 /// will never be more than one reference borrowing the underlying store at a
 /// time.
 #[derive(Default)]
-pub struct Shared<T>(Rc<RefCell<T>>);
+pub struct Shared<T>(Arc<RwLock<T>>);
 
 impl<T> Shared<T> {
     /// Constructs a `Shared` by wrapping the given store.
     #[inline]
     pub fn new(inner: T) -> Self {
-        Shared(Rc::new(RefCell::new(inner)))
+        Shared(Arc::new(RwLock::new(inner)))
     }
 
     pub fn into_inner(self) -> T {
-        match Rc::try_unwrap(self.0) {
-            Ok(inner) => inner.into_inner(),
+        match Arc::try_unwrap(self.0) {
+            Ok(inner) => inner.into_inner().unwrap(),
             _ => panic!("Store is already borrowed"),
         }
     }
 
-    pub fn borrow_mut(&mut self) -> RefMut<T> {
-        self.0.borrow_mut()
+    pub fn borrow_mut(&mut self) -> RwLockWriteGuard<T> {
+        self.0.write().unwrap()
     }
 
-    pub fn borrow(&self) -> Ref<T> {
-        self.0.borrow()
+    pub fn borrow(&self) -> RwLockReadGuard<T> {
+        self.0.read().unwrap()
     }
 }
 
@@ -46,7 +43,7 @@ impl<T> Clone for Shared<T> {
     #[inline]
     fn clone(&self) -> Self {
         // we need this implementation rather than just deriving clone because
-        // we don't need T to have Clone, we just clone the Rc
+        // we don't need T to have Clone, we just clone the Arc
         Shared(self.0.clone())
     }
 }
@@ -54,30 +51,30 @@ impl<T> Clone for Shared<T> {
 impl<T: Read> Read for Shared<T> {
     #[inline]
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        self.0.borrow().get(key)
+        self.borrow().get(key)
     }
 
     #[inline]
     fn get_next(&self, key: &[u8]) -> Result<Option<KV>> {
-        self.0.borrow().get_next(key)
+        self.borrow().get_next(key)
     }
 
     #[inline]
     fn get_prev(&self, key: Option<&[u8]>) -> Result<Option<KV>> {
-        self.0.borrow().get_prev(key)
+        self.borrow().get_prev(key)
     }
 }
 
 impl<W: Write> Write for Shared<W> {
     #[inline]
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
-        let mut store = self.0.borrow_mut();
+        let mut store = self.borrow_mut();
         store.put(key, value)
     }
 
     #[inline]
     fn delete(&mut self, key: &[u8]) -> Result<()> {
-        let mut store = self.0.borrow_mut();
+        let mut store = self.borrow_mut();
         store.delete(key)
     }
 }

@@ -245,9 +245,6 @@ impl AbciQuery for IbcApp {
     }
 }
 
-unsafe impl<T, U, V, W, X> Send for AppClient<T, U, V, W, X> {}
-unsafe impl<T, U, V, W, X> Sync for AppClient<T, U, V, W, X> {}
-
 #[ignore]
 #[tokio::test]
 #[serial_test::serial]
