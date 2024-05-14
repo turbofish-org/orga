@@ -6,9 +6,7 @@ use crate::plugins::{ABCICall, ABCIPlugin};
 use crate::query::Query;
 use crate::state::State;
 use crate::store::{Read, Shared, Store, Write};
-use crate::tendermint::Tendermint;
 use crate::Result;
-use home::home_dir;
 use std::borrow::Borrow;
 use std::marker::PhantomData;
 use std::path::PathBuf;
@@ -28,13 +26,11 @@ pub struct Node<A> {
 
 impl Node<()> {
     pub fn home(name: &str) -> PathBuf {
-        home_dir()
-            .expect("Could not resolve user home directory")
-            .join(format!(".{}", name).as_str())
+        PathBuf::new()
     }
 
     pub fn height(name: &str) -> Result<u64> {
-        let home = Node::home(name);
+        let home = PathBuf::new();
 
         if !home.exists() {
             return Ok(0);
@@ -56,7 +52,7 @@ where
     <A as State>::Encoding: Default,
 {
     pub fn new(name: &str, cfg_defaults: DefaultConfig) -> Self {
-        let home = Node::home(name);
+        let home = PathBuf::new();
         let merk_home = home.join("merk");
         let tm_home = home.join("tendermint");
 
@@ -65,10 +61,6 @@ where
         }
         let cfg_path = tm_home.join("config/config.toml");
         let tm_previously_configured = cfg_path.exists();
-        let _ = Tendermint::new(tm_home.clone())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .init();
 
         let read_toml = || {
             let config =
@@ -124,37 +116,7 @@ where
     }
 
     pub fn run(self) -> Result<()> {
-        // Start tendermint process
-        let tm_home = self.tm_home.clone();
-        let abci_port = self.abci_port;
-        let stdout = self.stdout;
-        let stderr = self.stderr;
-        let maybe_genesis_bytes = self.genesis_bytes;
-        let maybe_peers = self.p2p_persistent_peers;
-
-        let mut tm_process = Tendermint::new(&tm_home)
-            .stdout(stdout)
-            .stderr(stderr)
-            .proxy_app(format!("tcp://0.0.0.0:{}", abci_port).as_str());
-
-        if let Some(genesis_bytes) = maybe_genesis_bytes {
-            tm_process = tm_process.with_genesis(genesis_bytes);
-        }
-
-        if let Some(peers) = maybe_peers {
-            tm_process = tm_process.p2p_persistent_peers(peers);
-        }
-
-        tm_process = tm_process.start();
-
-        let app = InternalApp::<ABCIPlugin<A>>::new();
-        let store = MerkStore::new(self.merk_home.clone());
-
-        let res = ABCIStateMachine::new(app, store).listen(format!("127.0.0.1:{}", self.abci_port));
-
-        tm_process.kill()?;
-
-        res
+        Ok(())
     }
 
     #[cfg(debug_assertions)]
@@ -163,10 +125,6 @@ where
         if self.merk_home.exists() {
             std::fs::remove_dir_all(&self.merk_home).expect("Failed to clear Merk data");
         }
-
-        Tendermint::new(&self.tm_home)
-            .stdout(std::process::Stdio::null())
-            .unsafe_reset_all();
 
         self
     }

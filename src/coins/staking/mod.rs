@@ -27,9 +27,6 @@ pub use delegator::*;
 mod validator;
 pub use validator::*;
 
-#[cfg(feature = "abci")]
-mod migrate;
-
 #[cfg(test)]
 const UNBONDING_SECONDS: u64 = 10; // 10 seconds
 #[cfg(not(test))]

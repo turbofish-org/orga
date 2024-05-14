@@ -7,7 +7,7 @@ description = "State machine engine"
 license = "MIT"
 
 [dependencies]
-abci2 = { git = "https://github.com/nomic-io/abci2", rev = "096e7cf17802de216ce13e3a1db09c517fa60007", optional = true }
+abci2 = { git = "https://github.com/nomic-io/abci2", rev = "9fde8b7328be48b4c0c308317ceb5e3ee70de601", optional = true }
 merk = { git = "https://github.com/nomic-io/merk", rev = "e9038a659e1ad3cf13720b57be88e2845d0d6a01", optional = true, default-features = false }
 tendermint-rpc = { version = "0.23.5", features = ["http-client"], optional = true }
 tendermint = { version = "0.23.5", optional = true }
@@ -18,13 +18,11 @@ log = "0.4.8"
 hex-literal = "0.3.3"
 sha2 = "0.9.5"
 is_executable = { version = "1.0.1", optional = true }
-reqwest = {version = "0.11.4", features = ["blocking"]}
 flate2 = "1.0.20"
 tar = "0.4.33"
 ed = "0.3.0" 
 toml_edit = "0.2.0"
-prost = {version = "0.9", optional = true}
-home = { version = "0.5.3", optional = true }
+prost = {version = "0.11.9", optional = true}
 ed25519-dalek = "1"
 thiserror = "1.0.29"
 bech32 = "0.8.1"
@@ -34,20 +32,15 @@ num-rational = "0.4.0"
 num-traits = "0.2.14"
 rust_decimal = "1.18"
 ripemd = "0.1.0"
-web-sys = { version = "0.3.55", features = ["Window", "Storage"] }
 rust_decimal_macros = "1.18"
 js-sys = "0.3.55"
-wasm-bindgen-futures = "0.4.28"
-wasm-bindgen = "0.2.78"
 hex = "0.4.3"
 base64 = "0.13.0"
 secp256k1 = { version = "0.21.2", features = ["bitcoin_hashes"] }
 serde = { version = "1.0.133", features = ["derive"] }
 serde_json = "1.0.74"
-v1 = { git = "https://github.com/nomic-io/orga", branch = "legacy-v1", features = ["merk-full", "abci"], package = "orga", optional = true }
 
 [dev-dependencies]
-tempdir = "0.3.7"
 tokio = { version = "1.11.0", features = ["rt", "macros"] }
 mutagen = {git = "https://github.com/llogiq/mutagen"}
 serial_test = "0.5.1"
@@ -56,7 +49,7 @@ serial_test = "0.5.1"
 features = ["abci", "merk/full"]
 
 [features]
-abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto", "prost", "is_executable", "home", "secp256k1/rand-std", "v1"]
+abci = ["abci2", "tendermint", "tendermint-rpc", "tendermint-proto", "prost", "is_executable", "secp256k1/rand-std"]
 merk-verify = ["merk/verify"]
 merk-full = ["merk/full"]
 state-sync = []

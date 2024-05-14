@@ -9,6 +9,7 @@
 #![feature(try_trait_v2)]
 #![feature(never_type)]
 #![feature(adt_const_params)]
+#![feature(lazy_cell)]
 
 extern crate self as orga;
 
@@ -45,10 +46,6 @@ pub mod state_machine;
 /// Low-level key/value store abstraction.
 pub mod store;
 
-/// Tendermint process handler.
-#[cfg(feature = "abci")]
-pub mod tendermint;
-
 #[cfg(any(target_arch = "wasm32", feature = "abci"))]
 pub mod plugins;
 
@@ -56,9 +53,6 @@ pub mod plugins;
 pub mod coins;
 
 pub mod context;
-
-#[cfg(feature = "abci")]
-pub mod migrate;
 
 mod error;
 

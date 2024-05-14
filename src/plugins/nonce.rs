@@ -241,28 +241,7 @@ impl<T: Client<NonceAdapter<T, U>> + State, U: Clone> Client<U> for NoncePlugin<
 
 #[cfg(not(target_arch = "wasm32"))]
 fn nonce_path() -> Result<std::path::PathBuf> {
-    let orga_home = home::home_dir()
-        .expect("No home directory set")
-        .join(".orga-wallet");
-
-    std::fs::create_dir_all(&orga_home)?;
-    Ok(orga_home.join("nonce"))
-}
-
-#[cfg(target_arch = "wasm32")]
-fn load_nonce() -> Result<u64> {
-    let window = web_sys::window().unwrap();
-    let storage = window
-        .local_storage()
-        .map_err(|_| Error::Nonce("Could not get local storage".into()))?
-        .unwrap();
-    let res = storage
-        .get("orga/nonce")
-        .map_err(|_| Error::Nonce("Could not load from local storage".into()))?;
-    match res {
-        Some(nonce) => Ok(nonce.parse()?),
-        None => Ok(1),
-    }
+    Ok(std::path::PathBuf::new())
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -276,19 +255,6 @@ fn load_nonce() -> Result<u64> {
         std::fs::write(&nonce_path, bytes)?;
         Ok(1)
     }
-}
-
-#[cfg(target_arch = "wasm32")]
-fn write_nonce(nonce: u64) -> Result<()> {
-    let window = web_sys::window().unwrap();
-    let storage = window
-        .local_storage()
-        .map_err(|_| Error::Nonce("Could not get local storage".into()))?
-        .unwrap();
-    storage
-        .set("orga/nonce", nonce.to_string().as_str())
-        .map_err(|_| Error::Nonce("Could not write to local storage".into()))?;
-    Ok(())
 }
 
 #[cfg(not(target_arch = "wasm32"))]
