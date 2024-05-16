@@ -1,28 +1,19 @@
 use std::time::Duration;
 
-use ibc::core::events::IbcEvent;
-use ibc::{
-    clients::ics07_tendermint::client_state::ClientState as TmClientState,
-    core::{
-        ics02_client::{
-            consensus_state::ConsensusState as ConsensusStateTrait, error::ClientError,
-        },
-        ics03_connection::error::ConnectionError,
-        ics04_channel::{
-            commitment::{AcknowledgementCommitment, PacketCommitment},
-            error::{ChannelError, PacketError},
-            packet::Receipt,
-        },
-        ics23_commitment::commitment::CommitmentPrefix,
-        ics24_host::path::{ClientConnectionPath, ClientConsensusStatePath, ConnectionPath},
-        timestamp::Timestamp,
-        ContextError, ExecutionContext, ValidationContext,
-    },
-    Height, Signer,
-};
-
+use ibc::primitives::Signer;
+use ibc_rs::clients::tendermint::types::{ClientState, ConsensusState};
+use ibc_rs::core::channel::types::commitment::{AcknowledgementCommitment, PacketCommitment};
+use ibc_rs::core::channel::types::error::{ChannelError, PacketError};
+use ibc_rs::core::channel::types::packet::Receipt;
+use ibc_rs::core::client::types::error::ClientError;
+use ibc_rs::core::commitment_types::commitment::CommitmentPrefix;
 #[cfg(feature = "abci")]
-use ibc_rs::core::ics23_commitment::commitment::CommitmentRoot;
+use ibc_rs::core::commitment_types::commitment::CommitmentRoot;
+use ibc_rs::core::connection::types::error::ConnectionError;
+use ibc_rs::core::handler::types::error::ContextError;
+use ibc_rs::core::handler::types::events::IbcEvent;
+use ibc_rs::core::host::{ExecutionContext, ValidationContext};
+use ibc_rs::primitives::Timestamp;
 
 use crate::context::{Context, GetContext};
 use crate::plugins::{ChainId as ChainIdCtx, Events, Logs};
@@ -81,10 +72,11 @@ impl BeginBlock for IbcContext {
 }
 
 impl ValidationContext for IbcContext {
-    type AnyConsensusState = ConsensusState;
-    type AnyClientState = TmClientState;
-    type ClientValidationContext = Self;
-    type E = Self;
+    type V = Self;
+
+    type HostClientState = TmClientState;
+
+    type HostConsensusState = TmConsensusState;
 
     fn validate_message_signer(&self, signer: &Signer) -> Result<(), ContextError> {
         use crate::plugins::Signer as SignerCtx;
@@ -114,53 +106,53 @@ impl ValidationContext for IbcContext {
         Ok(())
     }
 
-    fn client_state(&self, client_id: &IbcClientId) -> Result<Self::AnyClientState, ContextError> {
-        Ok(self
-            .clients
-            .get(client_id.clone().into())
-            .map_err(|_| ClientError::ImplementationSpecific)?
-            .ok_or_else(|| ClientError::ClientStateNotFound {
-                client_id: client_id.clone(),
-            })?
-            .client_state
-            .get(Default::default())
-            .map_err(|_| ClientError::ImplementationSpecific)?
-            .ok_or(ClientError::ImplementationSpecific)?
-            .clone()
-            .into())
-    }
+    // fn client_state(&self, client_id: &IbcClientId) -> Result<Self::AnyClientState, ContextError> {
+    //     Ok(self
+    //         .clients
+    //         .get(client_id.clone().into())
+    //         .map_err(|_| ClientError::ImplementationSpecific)?
+    //         .ok_or_else(|| ClientError::ClientStateNotFound {
+    //             client_id: client_id.clone(),
+    //         })?
+    //         .client_state
+    //         .get(Default::default())
+    //         .map_err(|_| ClientError::ImplementationSpecific)?
+    //         .ok_or(ClientError::ImplementationSpecific)?
+    //         .clone()
+    //         .into())
+    // }
 
-    fn decode_client_state(&self, client_state: Any) -> Result<Self::AnyClientState, ContextError> {
-        if let Ok(client_state) = TmClientState::try_from(client_state.clone()) {
-            Ok(client_state)
-        } else {
-            Err(ContextError::from(ClientError::UnknownClientStateType {
-                client_state_type: client_state.type_url,
-            }))
-        }
-    }
+    // fn decode_client_state(&self, client_state: Any) -> Result<Self::AnyClientState, ContextError> {
+    //     if let Ok(client_state) = TmClientState::try_from(client_state.clone()) {
+    //         Ok(client_state)
+    //     } else {
+    //         Err(ContextError::from(ClientError::UnknownClientStateType {
+    //             client_state_type: client_state.type_url,
+    //         }))
+    //     }
+    // }
 
-    fn consensus_state(
-        &self,
-        client_cons_state_path: &ClientConsensusStatePath,
-    ) -> Result<Self::AnyConsensusState, ContextError> {
-        Ok(self
-            .clients
-            .get(client_cons_state_path.client_id.clone().into())
-            .map_err(|_| ClientError::ImplementationSpecific)?
-            .ok_or_else(|| ClientError::ClientStateNotFound {
-                client_id: client_cons_state_path.client_id.clone(),
-            })?
-            .consensus_states
-            .get(
-                Height::new(client_cons_state_path.epoch, client_cons_state_path.height)
-                    .map_err(|_| ClientError::ImplementationSpecific)?
-                    .into(),
-            )
-            .map_err(|_| ClientError::ImplementationSpecific)?
-            .ok_or(ClientError::ImplementationSpecific)?
-            .clone())
-    }
+    // fn consensus_state(
+    //     &self,
+    //     client_cons_state_path: &ClientConsensusStatePath,
+    // ) -> Result<Self::AnyConsensusState, ContextError> {
+    //     Ok(self
+    //         .clients
+    //         .get(client_cons_state_path.client_id.clone().into())
+    //         .map_err(|_| ClientError::ImplementationSpecific)?
+    //         .ok_or_else(|| ClientError::ClientStateNotFound {
+    //             client_id: client_cons_state_path.client_id.clone(),
+    //         })?
+    //         .consensus_states
+    //         .get(
+    //             Height::new(client_cons_state_path.epoch, client_cons_state_path.height)
+    //                 .map_err(|_| ClientError::ImplementationSpecific)?
+    //                 .into(),
+    //         )
+    //         .map_err(|_| ClientError::ImplementationSpecific)?
+    //         .ok_or(ClientError::ImplementationSpecific)?
+    //         .clone())
+    // }
 
     fn host_height(&self) -> Result<Height, ContextError> {
         let ctx = Context::resolve::<ChainIdCtx>().ok_or_else(|| {
@@ -185,7 +177,7 @@ impl ValidationContext for IbcContext {
     fn host_consensus_state(
         &self,
         height: &Height,
-    ) -> Result<Self::AnyConsensusState, ContextError> {
+    ) -> Result<Self::HostConsensusState, ContextError> {
         let index = self.host_consensus_states.len() - 1 - (self.height - height.revision_height());
         Ok(self
             .host_consensus_states
@@ -199,7 +191,7 @@ impl ValidationContext for IbcContext {
         Ok(self.client_counter)
     }
 
-    fn connection_end(&self, conn_id: &IbcConnectionId) -> Result<IbcConnectionEnd, ContextError> {
+    fn connection_end(&self, conn_id: &ConnectionId) -> Result<ConnectionEnd, ContextError> {
         Ok(self
             .connections
             .get(conn_id.clone().into())
@@ -213,7 +205,7 @@ impl ValidationContext for IbcContext {
 
     fn validate_self_client(
         &self,
-        _client_state_of_host_on_counterparty: Any,
+        _client_state_of_host_on_counterparty: Self::HostClientState,
     ) -> Result<(), ContextError> {
         Ok(())
     }
@@ -316,53 +308,53 @@ impl ValidationContext for IbcContext {
             .into())
     }
 
-    fn client_update_time(
-        &self,
-        client_id: &IbcClientId,
-        height: &Height,
-    ) -> Result<Timestamp, ContextError> {
-        Ok(self
-            .clients
-            .get(client_id.clone().into())
-            .map_err(|_| ClientError::ImplementationSpecific)?
-            .ok_or(ClientError::ClientStateNotFound {
-                client_id: client_id.clone(),
-            })?
-            .updates
-            .get((*height).into())
-            .map_err(|_| ClientError::ImplementationSpecific)?
-            .ok_or(ChannelError::ProcessedTimeNotFound {
-                client_id: client_id.clone(),
-                height: *height,
-            })?
-            .0
-            .clone()
-            .into())
-    }
+    // fn client_update_time(
+    //     &self,
+    //     client_id: &IbcClientId,
+    //     height: &Height,
+    // ) -> Result<Timestamp, ContextError> {
+    //     Ok(self
+    //         .clients
+    //         .get(client_id.clone().into())
+    //         .map_err(|_| ClientError::ImplementationSpecific)?
+    //         .ok_or(ClientError::ClientStateNotFound {
+    //             client_id: client_id.clone(),
+    //         })?
+    //         .updates
+    //         .get((*height).into())
+    //         .map_err(|_| ClientError::ImplementationSpecific)?
+    //         .ok_or(ChannelError::ProcessedTimeNotFound {
+    //             client_id: client_id.clone(),
+    //             height: *height,
+    //         })?
+    //         .0
+    //         .clone()
+    //         .into())
+    // }
 
-    fn client_update_height(
-        &self,
-        client_id: &IbcClientId,
-        height: &Height,
-    ) -> Result<Height, ContextError> {
-        self.clients
-            .get(client_id.clone().into())
-            .map_err(|_| ClientError::ImplementationSpecific)?
-            .ok_or(ClientError::ClientStateNotFound {
-                client_id: client_id.clone(),
-            })?
-            .updates
-            .get((*height).into())
-            .map_err(|_| ClientError::ImplementationSpecific)?
-            .ok_or(ChannelError::ProcessedHeightNotFound {
-                client_id: client_id.clone(),
-                height: *height,
-            })?
-            .1
-            .clone()
-            .try_into()
-            .map_err(|_| ClientError::ImplementationSpecific.into())
-    }
+    // fn client_update_height(
+    //     &self,
+    //     client_id: &IbcClientId,
+    //     height: &Height,
+    // ) -> Result<Height, ContextError> {
+    //     self.clients
+    //         .get(client_id.clone().into())
+    //         .map_err(|_| ClientError::ImplementationSpecific)?
+    //         .ok_or(ClientError::ClientStateNotFound {
+    //             client_id: client_id.clone(),
+    //         })?
+    //         .updates
+    //         .get((*height).into())
+    //         .map_err(|_| ClientError::ImplementationSpecific)?
+    //         .ok_or(ChannelError::ProcessedHeightNotFound {
+    //             client_id: client_id.clone(),
+    //             height: *height,
+    //         })?
+    //         .1
+    //         .clone()
+    //         .try_into()
+    //         .map_err(|_| ClientError::ImplementationSpecific.into())
+    // }
 
     fn channel_counter(&self) -> Result<u64, ContextError> {
         Ok(self.channel_counter)
@@ -372,64 +364,68 @@ impl ValidationContext for IbcContext {
         Duration::from_secs(8)
     }
 
-    fn get_client_validation_context(&self) -> &Self::ClientValidationContext {
+    fn get_client_validation_context(&self) -> &Self::V {
         self
     }
 }
 
 impl ExecutionContext for IbcContext {
+    type E = Self;
+
     fn get_client_execution_context(&mut self) -> &mut Self::E {
         self
     }
 
-    fn increase_client_counter(&mut self) {
+    fn increase_client_counter(&mut self) -> Result<(), ContextError> {
         self.client_counter += 1;
-    }
 
-    fn store_update_time(
-        &mut self,
-        client_id: IbcClientId,
-        height: Height,
-        timestamp: Timestamp,
-    ) -> Result<(), ContextError> {
-        self.clients
-            .entry(client_id.into())
-            .map_err(|_| ClientError::ImplementationSpecific)?
-            .or_insert_default()
-            .map_err(|_| ClientError::ImplementationSpecific)?
-            .updates
-            .entry(height.into())
-            .map_err(|_| ClientError::ImplementationSpecific)?
-            .or_insert_default()
-            .map_err(|_| ClientError::ImplementationSpecific)?
-            .0 = timestamp.into();
         Ok(())
     }
 
-    fn store_update_height(
-        &mut self,
-        client_id: IbcClientId,
-        height: Height,
-        host_height: Height,
-    ) -> Result<(), ContextError> {
-        self.clients
-            .entry(client_id.into())
-            .map_err(|_| ClientError::ImplementationSpecific)?
-            .or_insert_default()
-            .map_err(|_| ClientError::ImplementationSpecific)?
-            .updates
-            .entry(height.into())
-            .map_err(|_| ClientError::ImplementationSpecific)?
-            .or_insert_default()
-            .map_err(|_| ClientError::ImplementationSpecific)?
-            .1 = host_height.into();
-        Ok(())
-    }
+    // fn store_update_time(
+    //     &mut self,
+    //     client_id: IbcClientId,
+    //     height: Height,
+    //     timestamp: Timestamp,
+    // ) -> Result<(), ContextError> {
+    //     self.clients
+    //         .entry(client_id.into())
+    //         .map_err(|_| ClientError::ImplementationSpecific)?
+    //         .or_insert_default()
+    //         .map_err(|_| ClientError::ImplementationSpecific)?
+    //         .updates
+    //         .entry(height.into())
+    //         .map_err(|_| ClientError::ImplementationSpecific)?
+    //         .or_insert_default()
+    //         .map_err(|_| ClientError::ImplementationSpecific)?
+    //         .0 = timestamp.into();
+    //     Ok(())
+    // }
+
+    // fn store_update_height(
+    //     &mut self,
+    //     client_id: IbcClientId,
+    //     height: Height,
+    //     host_height: Height,
+    // ) -> Result<(), ContextError> {
+    //     self.clients
+    //         .entry(client_id.into())
+    //         .map_err(|_| ClientError::ImplementationSpecific)?
+    //         .or_insert_default()
+    //         .map_err(|_| ClientError::ImplementationSpecific)?
+    //         .updates
+    //         .entry(height.into())
+    //         .map_err(|_| ClientError::ImplementationSpecific)?
+    //         .or_insert_default()
+    //         .map_err(|_| ClientError::ImplementationSpecific)?
+    //         .1 = host_height.into();
+    //     Ok(())
+    // }
 
     fn store_connection(
         &mut self,
         connection_path: &ConnectionPath,
-        connection_end: IbcConnectionEnd,
+        connection_end: ConnectionEnd,
     ) -> Result<(), ContextError> {
         self.connections
             .insert(connection_path.clone().into(), connection_end.into())
@@ -440,7 +436,7 @@ impl ExecutionContext for IbcContext {
     fn store_connection_to_client(
         &mut self,
         client_connection_path: &ClientConnectionPath,
-        conn_id: IbcConnectionId,
+        conn_id: ConnectionId,
     ) -> Result<(), ContextError> {
         self.clients
             .entry(client_connection_path.clone().into())
@@ -453,8 +449,9 @@ impl ExecutionContext for IbcContext {
         Ok(())
     }
 
-    fn increase_connection_counter(&mut self) {
+    fn increase_connection_counter(&mut self) -> Result<(), ContextError> {
         self.connection_counter += 1;
+        Ok(())
     }
 
     fn store_packet_commitment(
@@ -551,18 +548,20 @@ impl ExecutionContext for IbcContext {
         Ok(())
     }
 
-    fn increase_channel_counter(&mut self) {
+    fn increase_channel_counter(&mut self) -> Result<(), ContextError> {
         self.channel_counter += 1;
+
+        Ok(())
     }
 
-    fn emit_ibc_event(&mut self, event: IbcEvent) {
+    fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), ContextError> {
         let ctx = match self.context::<Events>() {
             Some(ctx) => ctx,
-            None => return,
+            None => return Ok(()),
         };
         let event: tendermint::abci::Event = match event.try_into() {
             Ok(event) => event,
-            Err(_) => return,
+            Err(_) => return Ok(()),
         };
         let mut event: tendermint_proto::v0_34::abci::Event = event.into();
 
@@ -571,28 +570,31 @@ impl ExecutionContext for IbcContext {
         }
 
         ctx.add(event);
+
+        Ok(())
     }
 
-    fn log_message(&mut self, message: String) {
+    fn log_message(&mut self, message: String) -> Result<(), ContextError> {
         let ctx = match self.context::<Logs>() {
             Some(ctx) => ctx,
-            None => return,
+            None => return Ok(()),
         };
         ctx.add(message);
+
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use ibc_rs::clients::ics07_tendermint::ValidationContext;
     use tendermint::Time;
 
     use crate::Result;
 
     use super::*;
 
-    fn tm_client_id(n: u64) -> ClientId {
-        IbcClientId::new(ClientType::new("07-tendermint").unwrap(), n)
+    fn tm_client_id(n: u64) -> ClientIdKey {
+        ClientId::new(ClientType::new("07-tendermint").unwrap(), n)
             .unwrap()
             .into()
     }

@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
-use ibc::core::ics24_host::identifier::{ClientId, ConnectionId, PortId};
-use ibc::core::ics24_host::{identifier::ChannelId, path::ChannelEndPath};
+use ibc::core::host::types::identifiers::{ClientId, ConnectionId, PortId};
+use ibc::core::host::{identifier::ChannelId, path::ChannelEndPath};
 
 use ibc_proto::cosmos::auth::v1beta1::{
     query_server::Query as AuthQuery, query_server::QueryServer as AuthQueryServer,

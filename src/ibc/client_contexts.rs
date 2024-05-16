@@ -1,34 +1,68 @@
-use crate::encoding::EofTerminatedString;
-
-use super::{ConsensusState, IbcContext};
-use std::ops::Bound;
-
 use ibc::{
-    clients::ics07_tendermint::{
-        client_state::ClientState as TmClientState, CommonContext,
-        ValidationContext as TmValidationContext,
+    clients::tendermint::{
+        client_state::ClientState, consensus_state::ConsensusState, context::ValidationContext,
     },
     core::{
-        ics02_client::{error::ClientError, ClientExecutionContext},
-        ics24_host::{
-            identifier::ClientId,
+        client::{
+            context::{ClientExecutionContext, ClientValidationContext},
+            types::{error::ClientError, Height},
+        },
+        handler::types::error::ContextError,
+        host::types::{
+            identifiers::ClientId,
             path::{ClientConsensusStatePath, ClientStatePath},
         },
-        timestamp::Timestamp,
-        ContextError, ValidationContext,
     },
-    Height,
+    derive::ConsensusState,
+    primitives::{proto::Any, Timestamp},
 };
 
+use ibc::clients::tendermint::context::{
+    ConsensusStateConverter, ValidationContext as TmValidationContext,
+};
+
+use crate::encoding::EofTerminatedString;
+use ibc::clients::tendermint::client_state::ClientState as TmClientState;
+use ibc::clients::tendermint::consensus_state::ConsensusState as TmConsensusState;
+
+use super::{IbcContext, WrappedClientState, WrappedConsensusState};
+use std::ops::Bound;
+
+impl ClientValidationContext for IbcContext {
+    type ClientStateRef = TmClientState;
+
+    type ConsensusStateRef = AnyConsensusState;
+
+    fn client_state(
+        &self,
+        client_id: &ibc::core::host::types::identifiers::ClientId,
+    ) -> Result<Self::ClientStateRef, ContextError> {
+        todo!()
+    }
+
+    fn consensus_state(
+        &self,
+        client_cons_state_path: &ClientConsensusStatePath,
+    ) -> Result<Self::ConsensusStateRef, ContextError> {
+        todo!()
+    }
+
+    fn client_update_meta(
+        &self,
+        client_id: &ibc::core::host::types::identifiers::ClientId,
+        height: &ibc::core::client::types::Height,
+    ) -> Result<(ibc::primitives::Timestamp, ibc::core::client::types::Height), ContextError> {
+        todo!()
+    }
+}
+
 impl ClientExecutionContext for IbcContext {
-    type ClientValidationContext = Self;
-    type AnyClientState = TmClientState;
-    type AnyConsensusState = ConsensusState;
+    type ClientStateMut = TmClientState;
 
     fn store_client_state(
         &mut self,
         client_state_path: ClientStatePath,
-        client_state: Self::AnyClientState,
+        client_state: Self::ClientStateRef,
     ) -> Result<(), ContextError> {
         self.clients
             .entry(client_state_path.0.into())
@@ -45,7 +79,7 @@ impl ClientExecutionContext for IbcContext {
     fn store_consensus_state(
         &mut self,
         consensus_state_path: ClientConsensusStatePath,
-        consensus_state: Self::AnyConsensusState,
+        consensus_state: Self::ConsensusStateRef,
     ) -> Result<(), ContextError> {
         let epoch_height = format!(
             "{}-{}",
@@ -62,6 +96,31 @@ impl ClientExecutionContext for IbcContext {
 
         Ok(())
     }
+
+    fn delete_consensus_state(
+        &mut self,
+        consensus_state_path: ibc::core::host::types::path::ClientConsensusStatePath,
+    ) -> Result<(), ContextError> {
+        todo!()
+    }
+
+    fn store_update_meta(
+        &mut self,
+        client_id: ibc::core::host::types::identifiers::ClientId,
+        height: ibc::core::client::types::Height,
+        host_timestamp: ibc::primitives::Timestamp,
+        host_height: ibc::core::client::types::Height,
+    ) -> Result<(), ContextError> {
+        todo!()
+    }
+
+    fn delete_update_meta(
+        &mut self,
+        client_id: ibc::core::host::types::identifiers::ClientId,
+        height: ibc::core::client::types::Height,
+    ) -> Result<(), ContextError> {
+        todo!()
+    }
 }
 
 impl TmValidationContext for IbcContext {
@@ -71,8 +130,8 @@ impl TmValidationContext for IbcContext {
     fn next_consensus_state(
         &self,
         client_id: &ClientId,
-        height: &ibc::Height,
-    ) -> Result<Option<Self::AnyConsensusState>, ContextError> {
+        height: &Height,
+    ) -> Result<Option<Self::ConsensusStateRef>, ContextError> {
         let end_height = Height::new(height.revision_number() + 1, 1)
             .map_err(|_| ClientError::ImplementationSpecific)?;
         self.clients
@@ -95,8 +154,8 @@ impl TmValidationContext for IbcContext {
     fn prev_consensus_state(
         &self,
         client_id: &ClientId,
-        height: &ibc::Height,
-    ) -> Result<Option<Self::AnyConsensusState>, ContextError> {
+        height: &Height,
+    ) -> Result<Option<Self::ConsensusStateRef>, ContextError> {
         let end_height = Height::new(height.revision_number(), 1)
             .map_err(|_| ClientError::ImplementationSpecific)?;
         self.clients
@@ -116,15 +175,45 @@ impl TmValidationContext for IbcContext {
             .transpose()
             .map_err(|_| ContextError::ClientError(ClientError::ImplementationSpecific))
     }
+
+    fn host_height(&self) -> Result<Height, ContextError> {
+        todo!()
+    }
+
+    fn consensus_state_heights(&self, client_id: &ClientId) -> Result<Vec<Height>, ContextError> {
+        todo!()
+    }
 }
 
-impl CommonContext for IbcContext {
-    type ConversionError = &'static str;
-    type AnyConsensusState = ConsensusState;
-    fn consensus_state(
-        &self,
-        client_cons_state_path: &ClientConsensusStatePath,
-    ) -> Result<Self::AnyConsensusState, ContextError> {
-        ValidationContext::consensus_state(self, client_cons_state_path)
+use derive_more::{From, TryInto};
+use ibc::clients::tendermint::types::ConsensusState as ConsensusStateType;
+#[derive(ConsensusState, From, TryInto)]
+pub enum AnyConsensusState {
+    Tendermint(ConsensusState),
+}
+
+impl From<ConsensusStateType> for AnyConsensusState {
+    fn from(value: ConsensusStateType) -> Self {
+        AnyConsensusState::Tendermint(value.into())
+    }
+}
+
+impl TryFrom<AnyConsensusState> for ConsensusStateType {
+    type Error = ClientError;
+
+    fn try_from(value: AnyConsensusState) -> Result<Self, Self::Error> {
+        match value {
+            AnyConsensusState::Tendermint(tm_consensus_state) => {
+                Ok(tm_consensus_state.inner().clone())
+            }
+        }
+    }
+}
+
+impl From<AnyConsensusState> for Any {
+    fn from(value: AnyConsensusState) -> Self {
+        match value {
+            AnyConsensusState::Tendermint(tm_consensus_state) => tm_consensus_state.into(),
+        }
     }
 }

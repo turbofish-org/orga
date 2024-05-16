@@ -1,9 +1,13 @@
 use crate::orga;
 use std::borrow::Borrow;
 
-use ibc::applications::transfer::MODULE_ID_STR;
-use ibc::core::ics24_host::identifier::PortId;
-use ibc::core::router::{Module, ModuleId, Router};
+use ibc::{
+    apps::transfer::types::MODULE_ID_STR,
+    core::{
+        host::types::identifiers::PortId,
+        router::{module::Module, router::Router, types::module::ModuleId},
+    },
+};
 
 use super::transfer::Transfer;
 

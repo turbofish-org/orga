@@ -1,6 +1,5 @@
-use ibc::core::ics03_connection::connection::ConnectionEnd as IbcConnectionEnd;
-use ibc::core::ics24_host::path::Path;
-use ibc::Height;
+use ibc::core::client::types::Height;
+use ibc::core::host::types::path::Path;
 use ibc_proto::ibc::core::channel::v1::{Channel, IdentifiedChannel, PacketState};
 use ibc_proto::ibc::core::client::v1::{ConsensusStateWithHeight, IdentifiedClientState};
 use ibc_proto::ibc::core::connection::v1::{
@@ -10,7 +9,9 @@ use ics23::LeafOp;
 use tendermint_proto::v0_34::abci::{RequestQuery, ResponseQuery};
 use tendermint_proto::v0_34::crypto::{ProofOp, ProofOps};
 
-use super::{ClientId, ConnectionEnd, ConnectionId, Ibc, IbcContext, PortChannel, IBC_QUERY_PATH};
+use super::{
+    ClientIdKey, ConnectionEnd, ConnectionIdKey, Ibc, IbcContext, PortChannel, IBC_QUERY_PATH,
+};
 use crate::abci::AbciQuery;
 use crate::encoding::LengthVec;
 use crate::store::Read;
@@ -121,7 +122,7 @@ impl IbcContext {
 
     pub fn query_consensus_states(
         &self,
-        client_id: ClientId,
+        client_id: ClientIdKey,
     ) -> Result<Vec<ConsensusStateWithHeight>> {
         let mut states = vec![];
 
@@ -142,7 +143,7 @@ impl IbcContext {
         Ok(states)
     }
 
-    pub fn query_connection(&self, conn_id: ConnectionId) -> Result<Option<ConnectionEnd>> {
+    pub fn query_connection(&self, conn_id: ConnectionIdKey) -> Result<Option<ConnectionEnd>> {
         Ok(self
             .connections
             .get(conn_id)?
@@ -154,7 +155,7 @@ impl IbcContext {
 
         for entry in self.connections.iter()? {
             let (id, connection) = entry?;
-            let connection: IbcConnectionEnd = connection.clone().into();
+            let connection: ConnectionEnd = connection.clone().into();
             let raw_connection: RawConnectionEnd = connection.into();
             connections.push(IdentifiedConnection {
                 client_id: raw_connection.client_id,
@@ -169,7 +170,7 @@ impl IbcContext {
         Ok(connections)
     }
 
-    pub fn query_client_connections(&self, client_id: ClientId) -> Result<Vec<ConnectionId>> {
+    pub fn query_client_connections(&self, client_id: ClientIdKey) -> Result<Vec<ConnectionIdKey>> {
         let mut connection_ids = vec![];
 
         let client = self
@@ -207,6 +208,7 @@ impl IbcContext {
                 counterparty: channel_end.counterparty,
                 ordering: channel_end.ordering,
                 state: channel_end.state,
+                upgrade_sequence: 0,
             });
         }
 
@@ -215,7 +217,7 @@ impl IbcContext {
 
     pub fn query_connection_channels(
         &self,
-        conn_id: ConnectionId,
+        conn_id: ConnectionIdKey,
     ) -> Result<Vec<IdentifiedChannel>> {
         let channels = self
             .query_all_channels()?
