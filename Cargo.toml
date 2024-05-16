@@ -7,7 +7,7 @@ description = "State machine engine"
 license = "MIT"
 
 [dependencies]
-abci2 = { git = "https://github.com/nomic-io/abci2", rev = "9fde8b7328be48b4c0c308317ceb5e3ee70de601", optional = true }
+abci2 = { git = "https://github.com/nomic-io/abci2", rev = "89c35fb1e666ca6e718844b47a9e9580bd9a12a3", optional = true }
 merk = { git = "https://github.com/nomic-io/merk", rev = "e9038a659e1ad3cf13720b57be88e2845d0d6a01", optional = true, default-features = false }
 tendermint-rpc = { version = "0.23.5", features = ["http-client"], optional = true }
 tendermint = { version = "0.23.5", optional = true }
