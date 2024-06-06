@@ -1,26 +1,27 @@
 use std::str::FromStr;
 
 use ibc::core::host::types::identifiers::{ClientId, ConnectionId, PortId};
-use ibc::core::host::{identifier::ChannelId, path::ChannelEndPath};
+use ibc::core::host::types::{identifiers::ChannelId, path::ChannelEndPath};
 
 use ibc_proto::cosmos::auth::v1beta1::{
     query_server::Query as AuthQuery, query_server::QueryServer as AuthQueryServer,
     AddressBytesToStringRequest, AddressBytesToStringResponse, AddressStringToBytesRequest,
     AddressStringToBytesResponse, BaseAccount, Bech32PrefixRequest, Bech32PrefixResponse,
-    QueryAccountAddressByIdRequest, QueryAccountAddressByIdResponse, QueryAccountRequest,
-    QueryAccountResponse, QueryAccountsRequest, QueryAccountsResponse,
-    QueryModuleAccountByNameRequest, QueryModuleAccountByNameResponse, QueryModuleAccountsRequest,
-    QueryModuleAccountsResponse, QueryParamsRequest as AuthQueryParamsRequest,
-    QueryParamsResponse as AuthQueryParamsResponse,
+    QueryAccountAddressByIdRequest, QueryAccountAddressByIdResponse, QueryAccountInfoRequest,
+    QueryAccountInfoResponse, QueryAccountRequest, QueryAccountResponse, QueryAccountsRequest,
+    QueryAccountsResponse, QueryModuleAccountByNameRequest, QueryModuleAccountByNameResponse,
+    QueryModuleAccountsRequest, QueryModuleAccountsResponse,
+    QueryParamsRequest as AuthQueryParamsRequest, QueryParamsResponse as AuthQueryParamsResponse,
 };
 use ibc_proto::cosmos::bank::v1beta1::{
     query_server::{Query as BankQuery, QueryServer as BankQueryServer},
     QueryAllBalancesRequest, QueryAllBalancesResponse, QueryBalanceRequest, QueryBalanceResponse,
     QueryDenomMetadataRequest, QueryDenomMetadataResponse, QueryDenomOwnersRequest,
     QueryDenomOwnersResponse, QueryDenomsMetadataRequest, QueryDenomsMetadataResponse,
-    QueryParamsRequest, QueryParamsResponse, QuerySpendableBalancesRequest,
-    QuerySpendableBalancesResponse, QuerySupplyOfRequest, QuerySupplyOfResponse,
-    QueryTotalSupplyRequest, QueryTotalSupplyResponse,
+    QueryParamsRequest, QueryParamsResponse, QuerySendEnabledRequest, QuerySendEnabledResponse,
+    QuerySpendableBalanceByDenomRequest, QuerySpendableBalanceByDenomResponse,
+    QuerySpendableBalancesRequest, QuerySpendableBalancesResponse, QuerySupplyOfRequest,
+    QuerySupplyOfResponse, QueryTotalSupplyRequest, QueryTotalSupplyResponse,
 };
 use ibc_proto::cosmos::base::v1beta1::Coin;
 use ibc_proto::ibc::core::connection::v1::{
@@ -30,16 +31,19 @@ use ibc_proto::ibc::core::{
     channel::v1::{
         query_server::{Query as ChannelQuery, QueryServer as ChannelQueryServer},
         QueryChannelClientStateRequest, QueryChannelClientStateResponse,
-        QueryChannelConsensusStateRequest, QueryChannelConsensusStateResponse, QueryChannelRequest,
+        QueryChannelConsensusStateRequest, QueryChannelConsensusStateResponse,
+        QueryChannelParamsRequest, QueryChannelParamsResponse, QueryChannelRequest,
         QueryChannelResponse, QueryChannelsRequest, QueryChannelsResponse,
         QueryConnectionChannelsRequest, QueryConnectionChannelsResponse,
         QueryNextSequenceReceiveRequest, QueryNextSequenceReceiveResponse,
+        QueryNextSequenceSendRequest, QueryNextSequenceSendResponse,
         QueryPacketAcknowledgementRequest, QueryPacketAcknowledgementResponse,
         QueryPacketAcknowledgementsRequest, QueryPacketAcknowledgementsResponse,
         QueryPacketCommitmentRequest, QueryPacketCommitmentResponse, QueryPacketCommitmentsRequest,
         QueryPacketCommitmentsResponse, QueryPacketReceiptRequest, QueryPacketReceiptResponse,
         QueryUnreceivedAcksRequest, QueryUnreceivedAcksResponse, QueryUnreceivedPacketsRequest,
-        QueryUnreceivedPacketsResponse,
+        QueryUnreceivedPacketsResponse, QueryUpgradeErrorRequest, QueryUpgradeErrorResponse,
+        QueryUpgradeRequest, QueryUpgradeResponse,
     },
     client::v1::{
         query_server::{Query as ClientQuery, QueryServer as ClientQueryServer},
@@ -93,7 +97,9 @@ use ibc_proto::{
             service_server::{Service as TxService, ServiceServer as TxServer},
             BroadcastTxRequest, BroadcastTxResponse, GetBlockWithTxsRequest,
             GetBlockWithTxsResponse, GetTxRequest, GetTxResponse, GetTxsEventRequest,
-            GetTxsEventResponse, SimulateRequest, SimulateResponse,
+            GetTxsEventResponse, SimulateRequest, SimulateResponse, TxDecodeAminoRequest,
+            TxDecodeAminoResponse, TxDecodeRequest, TxDecodeResponse, TxEncodeAminoRequest,
+            TxEncodeAminoResponse, TxEncodeRequest, TxEncodeResponse,
         },
     },
     google::protobuf::Any,
@@ -552,8 +558,74 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
 
     async fn next_sequence_receive(
         &self,
-        _request: Request<QueryNextSequenceReceiveRequest>,
+        request: Request<QueryNextSequenceReceiveRequest>,
     ) -> Result<Response<QueryNextSequenceReceiveResponse>, Status> {
+        let ibc_client = (self.ibc)();
+        tokio::task::spawn_blocking(move || {
+            let request_inner = request.into_inner();
+            let port_id = PortId::from_str(&request_inner.port_id)
+                .map_err(|_| Status::invalid_argument("invalid port id"))?;
+            let channel_id = ChannelId::from_str(&request_inner.channel_id)
+                .map_err(|_| Status::invalid_argument("invalid channel id"))?;
+            let res = QueryNextSequenceReceiveResponse {
+                next_sequence_receive: ibc_client.query_sync(|ibc| {
+                    ibc.query_next_sequence_receive(PortChannel::new(
+                        port_id.clone(),
+                        channel_id.clone(),
+                    ))
+                })?,
+                ..Default::default()
+            };
+            Ok(Response::new(res))
+        })
+        .await
+        .unwrap()
+    }
+
+    async fn next_sequence_send(
+        &self,
+        request: Request<QueryNextSequenceSendRequest>,
+    ) -> Result<Response<QueryNextSequenceSendResponse>, Status> {
+        let ibc_client = (self.ibc)();
+        tokio::task::spawn_blocking(move || {
+            let request_inner = request.into_inner();
+            let port_id = PortId::from_str(&request_inner.port_id)
+                .map_err(|_| Status::invalid_argument("invalid port id"))?;
+            let channel_id = ChannelId::from_str(&request_inner.channel_id)
+                .map_err(|_| Status::invalid_argument("invalid channel id"))?;
+            let res = QueryNextSequenceSendResponse {
+                next_sequence_send: ibc_client.query_sync(|ibc| {
+                    ibc.query_next_sequence_send(PortChannel::new(
+                        port_id.clone(),
+                        channel_id.clone(),
+                    ))
+                })?,
+                ..Default::default()
+            };
+            Ok(Response::new(res))
+        })
+        .await
+        .unwrap()
+    }
+
+    async fn upgrade(
+        &self,
+        _request: Request<QueryUpgradeRequest>,
+    ) -> Result<Response<QueryUpgradeResponse>, Status> {
+        unimplemented!()
+    }
+
+    async fn upgrade_error(
+        &self,
+        _request: Request<QueryUpgradeErrorRequest>,
+    ) -> Result<Response<QueryUpgradeErrorResponse>, Status> {
+        unimplemented!()
+    }
+
+    async fn channel_params(
+        &self,
+        _request: Request<QueryChannelParamsRequest>,
+    ) -> Result<Response<QueryChannelParamsResponse>, Status> {
         unimplemented!()
     }
 }
@@ -746,6 +818,13 @@ impl AuthQuery for AuthService {
     ) -> Result<Response<AddressStringToBytesResponse>, Status> {
         unimplemented!()
     }
+
+    async fn account_info(
+        &self,
+        _request: Request<QueryAccountInfoRequest>,
+    ) -> Result<Response<QueryAccountInfoResponse>, Status> {
+        unimplemented!()
+    }
 }
 
 pub struct BankService {}
@@ -817,6 +896,20 @@ impl BankQuery for BankService {
         &self,
         _request: Request<QueryDenomOwnersRequest>,
     ) -> Result<Response<QueryDenomOwnersResponse>, Status> {
+        unimplemented!()
+    }
+
+    async fn send_enabled(
+        &self,
+        _request: Request<QuerySendEnabledRequest>,
+    ) -> Result<Response<QuerySendEnabledResponse>, Status> {
+        unimplemented!()
+    }
+
+    async fn spendable_balance_by_denom(
+        &self,
+        _request: Request<QuerySpendableBalanceByDenomRequest>,
+    ) -> Result<Response<QuerySpendableBalanceByDenomResponse>, Status> {
         unimplemented!()
     }
 }
@@ -917,6 +1010,34 @@ impl TxService for AppTxService {
         &self,
         _request: Request<GetBlockWithTxsRequest>,
     ) -> Result<Response<GetBlockWithTxsResponse>, Status> {
+        unimplemented!()
+    }
+
+    async fn tx_decode(
+        &self,
+        _request: Request<TxDecodeRequest>,
+    ) -> Result<Response<TxDecodeResponse>, Status> {
+        unimplemented!()
+    }
+
+    async fn tx_encode(
+        &self,
+        _request: Request<TxEncodeRequest>,
+    ) -> Result<Response<TxEncodeResponse>, Status> {
+        unimplemented!()
+    }
+
+    async fn tx_decode_amino(
+        &self,
+        _request: Request<TxDecodeAminoRequest>,
+    ) -> Result<Response<TxDecodeAminoResponse>, Status> {
+        unimplemented!()
+    }
+
+    async fn tx_encode_amino(
+        &self,
+        _request: Request<TxEncodeAminoRequest>,
+    ) -> Result<Response<TxEncodeAminoResponse>, Status> {
         unimplemented!()
     }
 }

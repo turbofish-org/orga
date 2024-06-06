@@ -48,20 +48,19 @@ impl BeginBlock for IbcContext {
             return Ok(());
         }
 
-        self.host_consensus_states.push_back(
-            TmConsensusState::new(
-                CommitmentRoot::from_bytes(ctx.header.app_hash.as_slice()),
-                timestamp,
-                tendermint::Hash::Sha256(
-                    ctx.header
-                        .next_validators_hash
-                        .clone()
-                        .try_into()
-                        .map_err(|_| Error::Tendermint("Invalid hash".to_string()))?,
-                ),
-            )
-            .into(),
-        )?;
+        let consensus_state = ibc::clients::tendermint::types::ConsensusState::new(
+            CommitmentRoot::from_bytes(ctx.header.app_hash.as_slice()),
+            timestamp,
+            tendermint::Hash::Sha256(
+                ctx.header
+                    .next_validators_hash
+                    .clone()
+                    .try_into()
+                    .map_err(|_| Error::Tendermint("Invalid hash".to_string()))?,
+            ),
+        );
+        self.host_consensus_states
+            .push_back(TmConsensusState::from(consensus_state).into())?;
 
         while self.host_consensus_states.len() > MAX_HOST_CONSENSUS_STATES {
             self.host_consensus_states.pop_front()?;
@@ -157,7 +156,9 @@ impl ValidationContext for IbcContext {
     fn host_height(&self) -> Result<Height, ContextError> {
         let ctx = Context::resolve::<ChainIdCtx>().ok_or_else(|| {
             log::error!("Missing chain ID context");
-            ContextError::ClientError(ClientError::ImplementationSpecific)
+            ContextError::ClientError(ClientError::ClientSpecific {
+                description: "Missing chain ID context".to_string(),
+            })
         })?;
         let chain_id = ctx.0.as_str();
         let revision_number = chain_id
@@ -171,7 +172,7 @@ impl ValidationContext for IbcContext {
     fn host_timestamp(&self) -> Result<Timestamp, ContextError> {
         let host_height = self.host_height()?;
         let host_cons_state = self.host_consensus_state(&host_height)?;
-        Ok(host_cons_state.timestamp())
+        Ok(host_cons_state.timestamp().into())
     }
 
     fn host_consensus_state(
@@ -182,9 +183,15 @@ impl ValidationContext for IbcContext {
         Ok(self
             .host_consensus_states
             .get(index)
-            .map_err(|_| ClientError::ImplementationSpecific)?
+            .map_err(|_| ClientError::ClientSpecific {
+                description: "Unable to get host consensus state".to_string(),
+            })?
             .unwrap()
-            .clone())
+            .clone()
+            .try_into()
+            .map_err(|_| ClientError::ClientSpecific {
+                description: "Unable to get host consensus state".to_string(),
+            })?)
     }
 
     fn client_counter(&self) -> Result<u64, ContextError> {
@@ -429,7 +436,11 @@ impl ExecutionContext for IbcContext {
     ) -> Result<(), ContextError> {
         self.connections
             .insert(connection_path.clone().into(), connection_end.into())
-            .map_err(|_| ConnectionError::Client(ClientError::ImplementationSpecific))?;
+            .map_err(|_| {
+                ConnectionError::Client(ClientError::ClientSpecific {
+                    description: "Unable to store connection".to_string(),
+                })
+            })?;
         Ok(())
     }
 
@@ -440,12 +451,18 @@ impl ExecutionContext for IbcContext {
     ) -> Result<(), ContextError> {
         self.clients
             .entry(client_connection_path.clone().into())
-            .map_err(|_| ClientError::ImplementationSpecific)?
+            .map_err(|_| ClientError::ClientSpecific {
+                description: "Unable to find client connection path".to_string(),
+            })?
             .or_insert_default()
-            .map_err(|_| ClientError::ImplementationSpecific)?
+            .map_err(|_| ClientError::ClientSpecific {
+                description: "Unable to find client connection path".to_string(),
+            })?
             .connections
             .insert(conn_id.into(), ())
-            .map_err(|_| ClientError::ImplementationSpecific)?;
+            .map_err(|_| ClientError::ClientSpecific {
+                description: "Unable to find client connection path".to_string(),
+            })?;
         Ok(())
     }
 
@@ -592,19 +609,20 @@ mod tests {
     use crate::Result;
 
     use super::*;
+    use ibc::clients::tendermint::context::ValidationContext;
+    use ibc::clients::tendermint::types::ConsensusState;
 
     fn tm_client_id(n: u64) -> ClientIdKey {
-        ClientId::new(ClientType::new("07-tendermint").unwrap(), n)
-            .unwrap()
-            .into()
+        ClientId::new("07-tendermint", n).unwrap().into()
     }
 
     fn tm_consensus_state(n: i64) -> TmConsensusState {
-        TmConsensusState::new(
+        let consensus_state = ConsensusState::new(
             vec![0; 32].into(),
             Time::from_unix_timestamp(n * 10_000, 0).unwrap(),
             tendermint::Hash::Sha256([0; 32]),
-        )
+        );
+        TmConsensusState::from(consensus_state)
     }
 
     fn height(epoch: u64, height: u64) -> Height {
@@ -637,17 +655,15 @@ mod tests {
 
         assert_eq!(
             ibc.next_consensus_state(&tm_client_id(123), &height(1, 1))?
-                .unwrap()
-                .inner,
-            tm_consensus_state(10),
+                .unwrap(),
+            tm_consensus_state(10).into(),
             "next_consensus_state, skipped heights",
         );
 
         assert_eq!(
             ibc.next_consensus_state(&tm_client_id(123), &height(1, 10))?
-                .unwrap()
-                .inner,
-            tm_consensus_state(12),
+                .unwrap(),
+            tm_consensus_state(12).into(),
             "next_consensus_state, has value at height",
         );
 
@@ -665,17 +681,15 @@ mod tests {
 
         assert_eq!(
             ibc.prev_consensus_state(&tm_client_id(123), &height(1, 13))?
-                .unwrap()
-                .inner,
-            tm_consensus_state(12),
+                .unwrap(),
+            tm_consensus_state(12).into(),
             "prev_consensus_state, has value at height",
         );
 
         assert_eq!(
             ibc.prev_consensus_state(&tm_client_id(123), &height(1, 12))?
-                .unwrap()
-                .inner,
-            tm_consensus_state(10),
+                .unwrap(),
+            tm_consensus_state(10).into(),
             "prev_consensus_state, skipped heights",
         );
 

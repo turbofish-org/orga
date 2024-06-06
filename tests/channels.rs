@@ -40,8 +40,8 @@ impl<T: Default> Foo<T> {
             x *= 2;
         }
 
-        #[channel(Bar, Baz)]
-        x += 1;
+        (#[channel(Bar, Baz)]
+        x) += 1;
 
         #[channel(Bar)]
         let res = self.a + x + n;

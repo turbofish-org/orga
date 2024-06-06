@@ -8,6 +8,7 @@ use crate::{
 };
 use cosmrs::AccountId;
 use ed::{Decode, Encode};
+use ibc::cosmos_host::utils::cosmos_adr028_escrow_address;
 use ibc::{
     apps::transfer::{
         context::{TokenTransferExecutionContext, TokenTransferValidationContext},
@@ -74,6 +75,22 @@ impl Transfer {
 
         self.balance(address, denom)
     }
+
+    pub fn get_escrow_account(
+        &self,
+        port_id: &ibc::core::host::types::identifiers::PortId,
+        channel_id: &ChannelId,
+    ) -> Result<Address, TokenTransferError> {
+        let account_id = AccountId::new(
+            ACCOUNT_PREFIX,
+            &cosmos_adr028_escrow_address(port_id, channel_id),
+        )
+        .map_err(|_| TokenTransferError::ParseAccountFailure)?;
+        account_id
+            .to_string()
+            .parse()
+            .map_err(|_| TokenTransferError::ParseAccountFailure)
+    }
 }
 
 impl TokenTransferValidationContext for Transfer {
@@ -82,22 +99,6 @@ impl TokenTransferValidationContext for Transfer {
     fn get_port(&self) -> Result<ibc::core::host::types::identifiers::PortId, TokenTransferError> {
         Ok(PortId::transfer())
     }
-
-    // fn get_escrow_account(
-    //     &self,
-    //     port_id: &ibc::core::host::types::identifiers::PortId,
-    //     channel_id: &ChannelId,
-    // ) -> Result<Self::AccountId, TokenTransferError> {
-    //     let account_id = AccountId::new(
-    //         ACCOUNT_PREFIX,
-    //         &cosmos_adr028_escrow_address(port_id, channel_id),
-    //     )
-    //     .map_err(|_| TokenTransferError::ParseAccountFailure)?;
-    //     account_id
-    //         .to_string()
-    //         .parse()
-    //         .map_err(|_| TokenTransferError::ParseAccountFailure)
-    // }
 
     fn can_send_coins(&self) -> Result<(), TokenTransferError> {
         Ok(())
@@ -141,7 +142,7 @@ impl TokenTransferValidationContext for Transfer {
         coin: &PrefixedCoin,
         memo: &ibc::apps::transfer::types::Memo,
     ) -> Result<(), TokenTransferError> {
-        todo!()
+        Ok(())
     }
 
     fn unescrow_coins_validate(
@@ -151,7 +152,7 @@ impl TokenTransferValidationContext for Transfer {
         channel_id: &ChannelId,
         coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
-        todo!()
+        Ok(())
     }
 }
 
@@ -247,7 +248,20 @@ impl TokenTransferExecutionContext for Transfer {
         coin: &PrefixedCoin,
         memo: &ibc::apps::transfer::types::Memo,
     ) -> Result<(), TokenTransferError> {
-        todo!()
+        let escrow_address = self.get_escrow_account(port_id, channel_id)?;
+
+        let denom: Denom = coin.denom.clone().try_into()?;
+        let mut denom_balances = self.accounts.entry(denom)?.or_default()?;
+
+        let amount: Amount = coin.amount.try_into()?;
+
+        let mut from_balance = denom_balances.entry(*from_account)?.or_default()?;
+        *from_balance = (*from_balance - amount).result()?;
+
+        let mut escrow_balance = denom_balances.entry(escrow_address)?.or_default()?;
+        *escrow_balance = (*escrow_balance + amount).result()?;
+
+        Ok(())
     }
 
     fn unescrow_coins_execute(
@@ -257,7 +271,19 @@ impl TokenTransferExecutionContext for Transfer {
         channel_id: &ChannelId,
         coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
-        todo!()
+        let escrow_address = self.get_escrow_account(port_id, channel_id)?;
+        let amount: Amount = coin.amount.try_into()?;
+
+        let denom: Denom = coin.denom.clone().try_into()?;
+        let mut denom_balances = self.accounts.entry(denom)?.or_default()?;
+
+        let mut escrow_balance = denom_balances.entry(escrow_address)?.or_default()?;
+        *escrow_balance = (*escrow_balance - amount).result()?;
+
+        let mut to_balance = denom_balances.entry(*to_account)?.or_default()?;
+        *to_balance = (*to_balance + amount).result()?;
+
+        Ok(())
     }
 }
 

@@ -6,6 +6,7 @@ use ibc_proto::ibc::core::connection::v1::{
     ConnectionEnd as RawConnectionEnd, IdentifiedConnection,
 };
 use ics23::LeafOp;
+use std::str::FromStr;
 use tendermint_proto::v0_34::abci::{RequestQuery, ResponseQuery};
 use tendermint_proto::v0_34::crypto::{ProofOp, ProofOps};
 
@@ -147,7 +148,8 @@ impl IbcContext {
         Ok(self
             .connections
             .get(conn_id)?
-            .map(|connection_end| connection_end.clone()))
+            .map(|connection_end| connection_end.clone())
+            .map(|connection_end| connection_end.into()))
     }
 
     pub fn query_all_connections(&self) -> Result<Vec<IdentifiedConnection>> {
@@ -311,5 +313,23 @@ impl IbcContext {
         }
 
         Ok(acks)
+    }
+
+    pub fn query_next_sequence_receive(&self, port_chan: PortChannel) -> crate::Result<u64> {
+        let sequence_string = self
+            .next_sequence_recv
+            .get(port_chan)?
+            .ok_or(Error::Ibc("Sequence not found".to_string()))?;
+        let sequence = u64::from_str(&*sequence_string.to_string())?;
+        Ok(sequence)
+    }
+
+    pub fn query_next_sequence_send(&self, port_chan: PortChannel) -> crate::Result<u64> {
+        let sequence_string = self
+            .next_sequence_send
+            .get(port_chan)?
+            .ok_or(Error::Ibc("Sequence not found".to_string()))?;
+        let sequence = u64::from_str(&*sequence_string.to_string())?;
+        Ok(sequence)
     }
 }
