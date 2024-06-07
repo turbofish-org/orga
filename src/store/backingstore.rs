@@ -293,7 +293,7 @@ impl BackingStore {
             }
             BackingStore::Snapshot(store) => {
                 let borrow = store.borrow();
-                let borrow = borrow.checkpoint.borrow();
+                let borrow = borrow.checkpoint.read().unwrap();
                 borrow.root_hash()
             }
             BackingStore::MemSnapshot(store) => {

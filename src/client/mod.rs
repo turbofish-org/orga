@@ -11,6 +11,7 @@ use crate::store::Store;
 
 use crate::Result;
 
+use std::future::Future;
 use std::marker::PhantomData;
 
 pub mod exec;
@@ -22,13 +23,16 @@ pub use exec::Transport;
 pub use wallet::Wallet;
 
 pub trait Client<T: Query + Call>: Send + Sync {
-    fn query_sync<U, F: FnMut(T) -> Result<U>>(&self, f: F) -> Result<U>;
+    fn query<U, F: FnMut(T) -> Result<U> + Send>(
+        &self,
+        f: F,
+    ) -> impl Future<Output = Result<U>> + Send;
 
-    fn call_sync(
+    fn call(
         &self,
         payer: impl FnOnce(&T) -> T::Call,
         payee: impl FnOnce(&T) -> T::Call,
-    ) -> Result<()>;
+    ) -> impl Future<Output = Result<()>>;
 }
 
 pub struct AppClient<T, U, Transport, Symbol, Wallet> {
@@ -38,37 +42,28 @@ pub struct AppClient<T, U, Transport, Symbol, Wallet> {
     sub: fn(T) -> U,
 }
 
-pub mod sync {
-    use super::*;
+impl<T, U, Transport, Symbol, Wallet> Client<U> for AppClient<T, U, Transport, Symbol, Wallet>
+where
+    Transport: exec::Transport<ABCIPlugin<DefaultPlugins<Symbol, T>>>,
+    T: App + Call + State + Query + Default + Describe + ConvertSdkTx<Output = PaidCall<T::Call>>,
+    U: App + Call + State + Query + Default + Describe,
+    Wallet: wallet::Wallet + Clone,
+    Symbol: crate::coins::Symbol,
+{
+    fn query<R, F: FnMut(U) -> Result<R> + Send>(
+        &self,
+        f: F,
+    ) -> impl std::future::Future<Output = Result<R>> + Send {
+        AppClient::query(self, f)
+    }
 
-    pub use exec::sync::Transport;
-
-    impl<T, U, Transport, Symbol, Wallet> Client<U> for AppClient<T, U, Transport, Symbol, Wallet>
-    where
-        Transport: exec::sync::Transport<ABCIPlugin<DefaultPlugins<Symbol, T>>>,
-        T: App
-            + Call
-            + State
-            + Query
-            + Default
-            + Describe
-            + ConvertSdkTx<Output = PaidCall<T::Call>>,
-        U: App + Call + State + Query + Default + Describe,
-        Wallet: wallet::Wallet + Clone,
-        Symbol: crate::coins::Symbol,
-    {
-        fn query_sync<R, F: FnMut(U) -> Result<R>>(&self, f: F) -> Result<R> {
-            AppClient::query_sync(self, f)
-        }
-
-        fn call_sync(
-            &self,
-            _payer: impl FnOnce(&U) -> U::Call,
-            _payee: impl FnOnce(&U) -> U::Call,
-        ) -> Result<()> {
-            todo!()
-            // self.call(payer, payee)
-        }
+    async fn call(
+        &self,
+        _payer: impl FnOnce(&U) -> U::Call,
+        _payee: impl FnOnce(&U) -> U::Call,
+    ) -> Result<()> {
+        todo!()
+        // self.call(payer, payee)
     }
 }
 
@@ -188,86 +183,6 @@ where
             op((self.sub)(inner))
         })
         .await?;
-        Ok(res)
-    }
-}
-
-impl<T, U, Transport, Symbol, Wallet> AppClient<T, U, Transport, Symbol, Wallet>
-where
-    Transport: exec::sync::Transport<ABCIPlugin<DefaultPlugins<Symbol, T>>>,
-    T: App + Call + State + Query + Default + Describe + ConvertSdkTx<Output = PaidCall<T::Call>>,
-    Wallet: wallet::Wallet + Clone,
-    Symbol: crate::coins::Symbol,
-{
-    // TODO: support subclients
-    // TODO: return object with result data (e.g. txid)
-    pub fn call_sync(
-        &self,
-        payer: impl FnOnce(&U) -> T::Call,
-        payee: impl FnOnce(&U) -> T::Call,
-    ) -> Result<()> {
-        let (chain_id, store) = exec::sync::execute(Store::default(), &self.transport, |app| {
-            Ok(app.inner.inner.borrow().inner.inner.chain_id.to_vec())
-        })?;
-        let (nonce, store) = match self.wallet.address()? {
-            None => (None, store),
-            Some(addr) => exec::sync::execute(store, &self.transport, |app| {
-                Ok(Some(
-                    app.inner.inner.borrow_mut().inner.inner.inner.nonce(addr)? + 1,
-                ))
-            })?,
-        };
-
-        let app = self.query_with_store_sync(store, Ok)?;
-
-        let payer_call = payer(&app);
-        let payer_call_bytes = payer_call.encode()?;
-        let payer = <T as Call>::Call::decode(payer_call_bytes.as_slice())?;
-
-        let paid = payee(&app);
-        let call = PayableCall::Paid(PaidCall { payer, paid });
-        let call = crate::plugins::NonceCall {
-            nonce,
-            inner_call: call,
-        };
-        let call = [chain_id, call.encode()?].concat();
-        let call = self.wallet.sign(&call)?;
-        let call = ABCICall::DeliverTx(sdk_compat::Call::Native(call));
-        self.transport.call_sync(call)?;
-
-        Ok(())
-    }
-
-    pub fn query_root_sync<U2, F2: FnMut(ABCIPlugin<DefaultPlugins<Symbol, T>>) -> Result<U2>>(
-        &self,
-        op: F2,
-    ) -> Result<U2> {
-        let (res, _) = exec::sync::execute(Store::default(), &self.transport, op)?;
-        Ok(res)
-    }
-
-    pub fn query_sync<U2, F2: FnMut(U) -> Result<U2>>(&self, op: F2) -> Result<U2> {
-        self.query_with_store_sync(Store::default(), op)
-    }
-
-    pub fn query_with_store_sync<U2, F2: FnMut(U) -> Result<U2>>(
-        &self,
-        store: Store,
-        mut op: F2,
-    ) -> Result<U2> {
-        let (res, _) = exec::sync::execute(store, &self.transport, |app| {
-            let inner = app
-                .inner
-                .inner
-                .into_inner()
-                .inner
-                .inner
-                .inner
-                .inner
-                .inner
-                .inner;
-            op((self.sub)(inner))
-        })?;
         Ok(res)
     }
 }
@@ -520,101 +435,5 @@ mod tests {
         //     .await?;
 
         Ok(())
-    }
-
-    #[serial_test::serial]
-    #[test]
-    fn appclient_sync() -> Result<()> {
-        let mut mock_client = setup()?;
-
-        {
-            let client = AppClient::<Foo, Foo, _, _, _>::new(
-                &mut mock_client,
-                DerivedKey::new(b"alice").unwrap(),
-            );
-
-            let bar_b = client.query_sync(|app| Ok(app.bar.b))?;
-            assert_eq!(bar_b, 8);
-
-            {
-                // TODO: if bar doesn't drop, other queries will fail because
-                // Bar holds on to a reference to the store. this should isntead
-                // be locked at a different level so we can do concurrent
-                // queries with the same client, and either join the values
-                // separately or e.g. wait for equivalent queries to finish
-                let bar = client.query_sync(|app| Ok(app.bar))?;
-                assert_eq!(bar.b, 8);
-            }
-
-            let value = client.query_sync(|app| app.e.get(12)?.unwrap().get_from_map(14, 2))?;
-            assert_eq!(value, Some(32));
-
-            let value = client.query_sync(|app| {
-                let x = app.e.get(12)?.unwrap();
-                let _ = app.e.get(13)?.unwrap();
-                x.get_from_map(14, 2)
-            })?;
-            assert_eq!(value, Some(32));
-
-            let key = 13;
-            let value =
-                client.query_sync(|app| Ok(app.deque.get(0)?.unwrap().get(key)?.unwrap().a))?;
-            assert_eq!(value, 3);
-
-            client.call_sync(
-                |app| build_call!(app.bar.inc_b(4)),
-                |app| build_call!(app.signed_method(DerivedKey::address_for(b"alice").unwrap())),
-            )?;
-        }
-
-        {
-            let client = AppClient::<Foo, Foo, _, _, _>::new(&mut mock_client, Unsigned);
-            let bar_b = client.query_sync(|app| Ok(app.bar.b))?;
-            assert_eq!(bar_b, 12);
-        }
-
-        Ok(())
-    }
-
-    #[serial_test::serial]
-    #[test]
-    fn sub_sync() -> Result<()> {
-        let mut mock_client = setup()?;
-        let client = AppClient::<Foo, Foo, _, _, _>::new(
-            &mut mock_client,
-            DerivedKey::new(b"alice").unwrap(),
-        );
-
-        let bar_client = client.sub(|app| app.bar);
-
-        let bar_b = bar_client.query_sync(|bar| Ok(bar.b))?;
-        assert_eq!(bar_b, 8);
-
-        // TODO
-        // bar_client
-        //     .call(
-        //         |bar| build_call!(bar.inc_b(4)),
-        //         |bar| build_call!(bar.inc_b(4)),
-        //     )
-        //     .await?;
-
-        Ok(())
-    }
-
-    #[test]
-    #[serial_test::serial]
-    fn generic_sync() {
-        let mut mock_client = setup().unwrap();
-        let client = AppClient::<Foo, Foo, _, _, _>::new(
-            &mut mock_client,
-            DerivedKey::new(b"alice").unwrap(),
-        );
-
-        fn do_query(client: impl Client<Foo>) {
-            let bar_b = client.query_sync(|app| Ok(app.bar.b)).unwrap();
-            assert_eq!(bar_b, 8);
-        }
-
-        do_query(client);
     }
 }

@@ -152,11 +152,11 @@ impl<S: Write, T: DerefMut<Target = S>> Write for T {
     }
 }
 
-pub trait ReadWrite: Read + Write + Any + 'static {
+pub trait ReadWrite: Read + Write + Any + Send + Sync + 'static {
     fn into_any(self: Box<Self>) -> Box<dyn Any>;
 }
 
-impl<T: Read + Write + 'static> ReadWrite for T {
+impl<T: Read + Write + Send + Sync + 'static> ReadWrite for T {
     fn into_any(self: Box<Self>) -> Box<dyn Any> {
         self
     }

@@ -1,7 +1,7 @@
 use crate::{
     abci::App,
     call::Call,
-    client::{sync::Transport as SyncTransport, Transport},
+    client::Transport,
     encoding::Encode,
     merk::ProofStore,
     plugins::{ABCICall, ABCIPlugin},
@@ -10,7 +10,6 @@ use crate::{
     store::{BackingStore, Shared, Store},
     Error, Result,
 };
-use futures_lite::future::block_on;
 use tendermint_rpc::{self as tm, Client as _};
 use tokio::sync::Mutex;
 
@@ -86,16 +85,6 @@ impl<T: App + Call + Query + State + Default> Transport<ABCIPlugin<T>> for HttpC
         let store = Store::new(BackingStore::ProofMap(store));
 
         Ok(store)
-    }
-}
-
-impl<T: App + Call + Query + State + Default> SyncTransport<ABCIPlugin<T>> for HttpClient {
-    fn call_sync(&self, call: <ABCIPlugin<T> as Call>::Call) -> Result<()> {
-        block_on(Transport::<ABCIPlugin<T>>::call(self, call))
-    }
-
-    fn query_sync(&self, query: T::Query) -> Result<Store> {
-        block_on(Transport::<ABCIPlugin<T>>::query(self, query))
     }
 }
 
@@ -193,7 +182,7 @@ mod tests {
     #[cfg(feature = "tokio")]
     #[tokio::test]
     #[serial_test::serial]
-    async fn basic_async() -> Result<()> {
+    async fn basic() -> Result<()> {
         spawn_node();
         // TODO: node spawn should wait for node to be ready
         tokio::time::sleep(std::time::Duration::from_secs(15)).await;
@@ -250,75 +239,5 @@ mod tests {
         assert_eq!(res.value, 50_000);
 
         Ok(())
-    }
-
-    #[ignore]
-    #[cfg(feature = "tokio")]
-    #[tokio::test]
-    #[serial_test::serial]
-    async fn basic_sync() -> Result<()> {
-        tokio::task::spawn_blocking(|| {
-            spawn_node();
-
-            // TODO: node spawn should wait for node to be ready
-            std::thread::sleep(std::time::Duration::from_secs(15));
-
-            let client = HttpClient::new("http://localhost:26657").unwrap();
-            let client = AppClient::<App, App, _, FooCoin, _>::new(
-                client,
-                DerivedKey::new(b"alice").unwrap(),
-            );
-
-            let res = client.query_sync(|app| Ok(app.bar)).unwrap();
-            assert_eq!(res, 0);
-
-            let res = client
-                .query_sync(|app| {
-                    app.accounts
-                        .balance(DerivedKey::address_for(b"alice").unwrap())
-                })
-                .unwrap();
-            assert_eq!(res.value, 100_000);
-
-            client
-                .call_sync(
-                    |app| build_call!(app.accounts.take_as_funding(50_000.into())),
-                    |app| build_call!(app.increment_foo()),
-                )
-                .unwrap();
-
-            let old_height = 2; // TODO: get from call response
-            let client = HttpClient::with_height("http://localhost:26657", old_height).unwrap();
-            let client = AppClient::<App, App, _, FooCoin, _>::new(
-                client,
-                DerivedKey::new(b"alice").unwrap(),
-            );
-
-            let res = client
-                .query_sync(|app| {
-                    app.accounts
-                        .balance(DerivedKey::address_for(b"alice").unwrap())
-                })
-                .unwrap();
-            assert_eq!(res.value, 100_000, "should still query past height");
-
-            let client = HttpClient::new("http://localhost:26657").unwrap();
-            let client = AppClient::<App, App, _, FooCoin, _>::new(
-                client,
-                DerivedKey::new(b"alice").unwrap(),
-            );
-
-            let res = client
-                .query_sync(|app| {
-                    app.accounts
-                        .balance(DerivedKey::address_for(b"alice").unwrap())
-                })
-                .unwrap();
-            assert_eq!(res.value, 50_000);
-
-            Ok(())
-        })
-        .await
-        .unwrap()
     }
 }

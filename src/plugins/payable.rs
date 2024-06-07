@@ -126,9 +126,6 @@ pub enum PayableCall<T> {
     Unpaid(T),
 }
 
-#[allow(clippy::non_send_fields_in_send_ty)]
-unsafe impl<T> Send for PayableCall<T> {}
-
 impl<T> Call for PayablePlugin<T>
 where
     T: Call + State,

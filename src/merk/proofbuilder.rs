@@ -1,5 +1,4 @@
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::{Arc, RwLock};
 
 use super::memsnapshot::MemSnapshot;
 use super::snapshot::Snapshot;
@@ -14,7 +13,7 @@ use store::Read;
 /// accessed keys.
 pub struct ProofBuilder<T> {
     store: Shared<T>,
-    query: Rc<RefCell<Query>>,
+    query: Arc<RwLock<Query>>,
 }
 
 impl<T> Clone for ProofBuilder<T> {
@@ -32,7 +31,7 @@ impl<T: Prove> ProofBuilder<T> {
     pub fn new(store: Shared<T>) -> Self {
         ProofBuilder {
             store,
-            query: Rc::new(RefCell::new(Query::new())),
+            query: Arc::new(RwLock::new(Query::new())),
         }
     }
 
@@ -40,7 +39,7 @@ impl<T: Prove> ProofBuilder<T> {
     /// the `ProofBuilder`.
     pub fn build(self) -> Result<(Vec<u8>, Shared<T>)> {
         let store = self.store.borrow();
-        let query = self.query.take();
+        let query = Arc::into_inner(self.query).unwrap().into_inner().unwrap();
         let proof = store.prove(query)?;
         drop(store);
         Ok((proof, self.store))
@@ -51,7 +50,7 @@ impl<T: Read> store::Read for ProofBuilder<T> {
     /// Gets the value from the underlying store, recording the key to be
     /// included in the proof when `build` is called.
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        self.query.borrow_mut().insert_key(key.to_vec());
+        self.query.write().unwrap().insert_key(key.to_vec());
 
         self.store.get(key)
     }
@@ -69,7 +68,7 @@ impl<T: Read> store::Read for ProofBuilder<T> {
             None => key.to_vec()..=key.to_vec(),
         };
 
-        self.query.borrow_mut().insert_range_inclusive(range);
+        self.query.write().unwrap().insert_range_inclusive(range);
         Ok(maybe_entry)
     }
 
@@ -81,7 +80,7 @@ impl<T: Read> store::Read for ProofBuilder<T> {
         });
 
         // TODO: support inserting `(Bound, Bound)` into query
-        let mut query = self.query.borrow_mut();
+        let mut query = self.query.write().unwrap();
         match key {
             Some(key) => match maybe_prev_key {
                 Some(prev_key) => query.insert_range(prev_key.to_vec()..key.to_vec()),
@@ -109,7 +108,7 @@ impl Prove for MerkStore {
 
 impl Prove for Snapshot {
     fn prove(&self, query: Query) -> Result<Vec<u8>> {
-        Ok(self.checkpoint.borrow().prove(query)?)
+        Ok(self.checkpoint.read().unwrap().prove(query)?)
     }
 }
 
