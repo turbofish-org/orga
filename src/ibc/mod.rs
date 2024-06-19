@@ -5,7 +5,6 @@ use ibc::clients::tendermint::{
     client_state::ClientState as TmClientState, consensus_state::ConsensusState as TmConsensusState,
 };
 use ibc::core::channel::types::channel::ChannelEnd as IbcChannelEnd;
-use std::path::PathBuf;
 use std::str::FromStr;
 // use ibc::core::client::context::client_type::ClientType;
 use ibc::core::client::context::consensus_state::ConsensusState as ConsensusStateTrait;
@@ -920,6 +919,7 @@ impl TryFrom<IbcSigner> for Address {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
     use std::time::Duration;
 
     use ibc_rs::{
@@ -1216,7 +1216,7 @@ mod tests {
 
     #[test]
     fn migrate_v8() {
-        let mut store = create_ibc_state_from_file("v8-ibc-test-state");
+        let mut store = create_ibc_state_from_file("v8-ibc-test-state.txt");
 
         let mut bytes = store.get(&[]).unwrap().unwrap();
         let app = App::migrate(store.clone(), store.clone(), &mut bytes.as_slice()).unwrap();
