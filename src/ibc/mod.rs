@@ -5,6 +5,7 @@ use ibc::clients::tendermint::{
     client_state::ClientState as TmClientState, consensus_state::ConsensusState as TmConsensusState,
 };
 use ibc::core::channel::types::channel::ChannelEnd as IbcChannelEnd;
+use std::path::PathBuf;
 use std::str::FromStr;
 // use ibc::core::client::context::client_type::ClientType;
 use ibc::core::client::context::consensus_state::ConsensusState as ConsensusStateTrait;
@@ -1010,7 +1011,7 @@ mod tests {
         let counterparty = ibc::core::connection::types::Counterparty::new(
             ClientId::new("07-tendermint", 0).unwrap(),
             None,
-            ibc::core::commitment_types::commitment::CommitmentPrefix::empty(),
+            vec![1, 2, 3].try_into().unwrap(),
         );
         let conn = ConnectionEnd::new(
             ibc::core::connection::types::State::Uninitialized,
@@ -1170,8 +1171,9 @@ mod tests {
             &[
                 10, 15, 48, 55, 45, 116, 101, 110, 100, 101, 114, 109, 105, 110, 116, 45, 48, 18,
                 35, 10, 1, 49, 18, 13, 79, 82, 68, 69, 82, 95, 79, 82, 68, 69, 82, 69, 68, 18, 15,
-                79, 82, 68, 69, 82, 95, 85, 78, 79, 82, 68, 69, 82, 69, 68, 34, 19, 10, 15, 48, 55,
-                45, 116, 101, 110, 100, 101, 114, 109, 105, 110, 116, 45, 48, 26, 0,
+                79, 82, 68, 69, 82, 95, 85, 78, 79, 82, 68, 69, 82, 69, 68, 34, 24, 10, 15, 48, 55,
+                45, 116, 101, 110, 100, 101, 114, 109, 105, 110, 116, 45, 48, 26, 5, 10, 3, 1, 2,
+                3,
             ],
         );
         assert_next(b"nextSequenceAck/ports/transfer/channels/channel-123", b"3");
@@ -1188,6 +1190,41 @@ mod tests {
             &[1],
         );
         assert!(entries.next().is_none());
+    }
+
+    fn create_ibc_state_from_file<I: Into<PathBuf>>(path: I) -> Store {
+        use std::fs::File;
+        use std::io::{self, BufRead};
+
+        let file = File::open(&path.into()).unwrap();
+        let reader = io::BufReader::new(file);
+
+        let mut tuples = Vec::new();
+        let mut lines = reader.lines();
+        while let Some(Ok(line)) = lines.next() {
+            let tuple: (Vec<u8>, Vec<u8>) = serde_json::from_str(&line).unwrap();
+            tuples.push(tuple);
+        }
+
+        let mut store = Store::new(BackingStore::MapStore(Shared::new(MapStore::new())));
+        for (key, value) in tuples {
+            store.put(key, value).unwrap();
+        }
+
+        store
+    }
+
+    #[test]
+    fn migrate_v8() {
+        let mut store = create_ibc_state_from_file("v8-ibc-test-state");
+
+        let mut bytes = store.get(&[]).unwrap().unwrap();
+        let app = App::migrate(store.clone(), store.clone(), &mut bytes.as_slice()).unwrap();
+        bytes.clear();
+        app.flush(&mut bytes).unwrap();
+        store.put(vec![], bytes).unwrap();
+
+        assert_state(&store);
     }
 
     #[test]
