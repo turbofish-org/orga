@@ -1,5 +1,5 @@
 use ibc::{
-    clients::tendermint::{client_state::ClientState, consensus_state::ConsensusState},
+    clients::tendermint::consensus_state::ConsensusState,
     core::{
         client::{
             context::{ClientExecutionContext, ClientValidationContext},
@@ -15,15 +15,12 @@ use ibc::{
     primitives::{proto::Any, Timestamp},
 };
 
-use ibc::clients::tendermint::context::{
-    ConsensusStateConverter, ValidationContext as TmValidationContext,
-};
+use ibc::clients::tendermint::context::ValidationContext as TmValidationContext;
 
 use crate::encoding::EofTerminatedString;
 use ibc::clients::tendermint::client_state::ClientState as TmClientState;
-use ibc::clients::tendermint::consensus_state::ConsensusState as TmConsensusState;
 
-use super::{IbcContext, WrappedClientState, WrappedConsensusState};
+use super::{IbcContext, WrappedConsensusState};
 use ibc::core::host::ValidationContext;
 use std::ops::Bound;
 
@@ -104,17 +101,17 @@ impl ClientValidationContext for IbcContext {
             })?
             .ok_or(ClientError::UpdateMetaDataNotFound {
                 client_id: client_id.clone(),
-                height: height.clone(),
+                height: *height,
             })?;
         let metadata = client
             .updates
-            .get(height.clone().into())
+            .get((*height).into())
             .map_err(|_| ClientError::ClientSpecific {
                 description: "Unable to get update metadata".to_string(),
             })?
             .ok_or(ClientError::UpdateMetaDataNotFound {
                 client_id: client_id.clone(),
-                height: height.clone(),
+                height: *height,
             })?;
 
         Ok((
@@ -230,15 +227,7 @@ impl ClientExecutionContext for IbcContext {
 
         client
             .updates
-            .insert(
-                height.into(),
-                (
-                    host_timestamp.into(),
-                    host_height
-                        .try_into()
-                        .map_err(|_| ClientError::InvalidHeight)?,
-                ),
-            )
+            .insert(height.into(), (host_timestamp.into(), host_height.into()))
             .map_err(|_| ClientError::ClientSpecific {
                 description: "Unable to store update metadata".to_string(),
             })?;

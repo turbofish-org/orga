@@ -129,28 +129,28 @@ impl TokenTransferValidationContext for Transfer {
         &self,
         _account: &Self::AccountId,
         _coin: &PrefixedCoin,
-        memo: &Memo,
+        _memo: &Memo,
     ) -> Result<(), TokenTransferError> {
         Ok(())
     }
 
     fn escrow_coins_validate(
         &self,
-        from_account: &Self::AccountId,
-        port_id: &PortId,
-        channel_id: &ChannelId,
-        coin: &PrefixedCoin,
-        memo: &ibc::apps::transfer::types::Memo,
+        _from_account: &Self::AccountId,
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
+        _coin: &PrefixedCoin,
+        _memo: &ibc::apps::transfer::types::Memo,
     ) -> Result<(), TokenTransferError> {
         Ok(())
     }
 
     fn unescrow_coins_validate(
         &self,
-        to_account: &Self::AccountId,
-        port_id: &PortId,
-        channel_id: &ChannelId,
-        coin: &PrefixedCoin,
+        _to_account: &Self::AccountId,
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
+        _coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
         Ok(())
     }
@@ -191,7 +191,7 @@ impl TokenTransferExecutionContext for Transfer {
         &mut self,
         account: &Self::AccountId,
         coin: &PrefixedCoin,
-        memo: &Memo,
+        _memo: &Memo,
     ) -> Result<(), TokenTransferError> {
         let denom: Denom = coin.denom.clone().try_into()?;
         let amount: Amount = coin.amount.try_into()?;
@@ -246,7 +246,7 @@ impl TokenTransferExecutionContext for Transfer {
         port_id: &PortId,
         channel_id: &ChannelId,
         coin: &PrefixedCoin,
-        memo: &ibc::apps::transfer::types::Memo,
+        _memo: &ibc::apps::transfer::types::Memo,
     ) -> Result<(), TokenTransferError> {
         let escrow_address = self.get_escrow_account(port_id, channel_id)?;
 

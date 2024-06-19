@@ -320,7 +320,7 @@ impl IbcContext {
             .next_sequence_recv
             .get(port_chan)?
             .ok_or(Error::Ibc("Sequence not found".to_string()))?;
-        let sequence = u64::from_str(&*sequence_string.to_string())?;
+        let sequence = u64::from_str(&sequence_string.to_string())?;
         Ok(sequence)
     }
 
@@ -329,7 +329,7 @@ impl IbcContext {
             .next_sequence_send
             .get(port_chan)?
             .ok_or(Error::Ibc("Sequence not found".to_string()))?;
-        let sequence = u64::from_str(&*sequence_string.to_string())?;
+        let sequence = u64::from_str(&sequence_string.to_string())?;
         Ok(sequence)
     }
 }

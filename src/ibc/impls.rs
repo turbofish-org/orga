@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use ibc::primitives::Signer;
-use ibc_rs::clients::tendermint::types::{ClientState, ConsensusState};
 use ibc_rs::core::channel::types::commitment::{AcknowledgementCommitment, PacketCommitment};
 use ibc_rs::core::channel::types::error::{ChannelError, PacketError};
 use ibc_rs::core::channel::types::packet::Receipt;

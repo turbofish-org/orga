@@ -5,22 +5,8 @@ use ibc::clients::tendermint::{
     client_state::ClientState as TmClientState, consensus_state::ConsensusState as TmConsensusState,
 };
 use ibc::core::channel::types::channel::ChannelEnd as IbcChannelEnd;
-use std::str::FromStr;
-// use ibc::core::client::context::client_type::ClientType;
 use ibc::core::client::context::consensus_state::ConsensusState as ConsensusStateTrait;
-// use ibc::core::client::context::height::Height;
-// use ibc::core::dispatch;
-// use ibc::core::host::path::{
-//     AckPath, ChannelEndPath, ClientConnectionPath, CommitmentPath, ConnectionPath, ReceiptPath,
-//     SeqAckPath, SeqRecvPath, SeqSendPath,
-// };
-// use ibc::core::host::types::identifiers::{
-//     ChannelId, ClientId as IbcClientId, ConnectionId as IbcConnectionId, PortId,
-// };
-// use ibc::core::ics03_connection::connection::ConnectionEnd as IbcConnectionEnd;
-// use ibc::core::ics04_channel::packet::Sequence;
 use ibc::primitives::Signer as IbcSigner;
-use ibc_proto::google::protobuf::Any;
 use ibc_proto::ibc::applications::transfer::v1::MsgTransfer as RawMsgTransfer;
 use ibc_proto::ibc::core::{
     channel::v1::Channel as RawChannelEnd, connection::v1::ConnectionEnd as RawConnectionEnd,
@@ -42,7 +28,6 @@ use ibc_rs::core::host::types::path::{
     AckPath, ChannelEndPath, ClientConnectionPath, CommitmentPath, ConnectionPath, ReceiptPath,
     SeqAckPath, SeqRecvPath, SeqSendPath,
 };
-// use ibc_rs::core::MsgEnvelope;
 use serde::Serialize;
 
 use crate::coins::Address;
@@ -228,9 +213,9 @@ impl Ibc {
 
     pub fn update_client_from_header(
         &mut self,
-        client_index: u64,
-        rev_number: u64,
-        header_json: &str,
+        _client_index: u64,
+        _rev_number: u64,
+        _header_json: &str,
     ) -> crate::Result<()> {
         todo!();
     }
@@ -737,11 +722,8 @@ impl State for LegacyWrappedConnectionEnd {
             <RawConnectionEnd as prost::Message>::decode(bytes).unwrap();
         inner.versions = ibc::core::connection::types::version::Version::compatibles()
             .into_iter()
-            .map(|v| {
-                v.try_into()
-                    .map_err(|_| crate::Error::Ibc("Invalid connection version".to_string()))
-            })
-            .collect::<crate::Result<_>>()?;
+            .map(|v| v.into())
+            .collect();
         Ok(Self {
             inner: inner.try_into().map_err(|_| {
                 crate::Error::Ibc("Unable to load state for LegacyWrappedConnectionEnd".to_string())
@@ -752,9 +734,7 @@ impl State for LegacyWrappedConnectionEnd {
 
 impl MigrateFrom<LegacyWrappedConnectionEnd> for WrappedConnectionEnd {
     fn migrate_from(value: LegacyWrappedConnectionEnd) -> crate::Result<Self> {
-        Ok(Self {
-            inner: value.inner.into(),
-        })
+        Ok(Self { inner: value.inner })
     }
 }
 
