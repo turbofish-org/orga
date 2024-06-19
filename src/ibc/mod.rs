@@ -1,3 +1,4 @@
+use crate::migrate::MigrateFrom;
 use ed::Terminated;
 use ibc::apps::transfer::handler::send_transfer;
 use ibc::clients::tendermint::{
@@ -680,7 +681,8 @@ macro_rules! protobuf_newtype {
 
         impl Migrate for $newtype {
             fn migrate(_src: Store, _dest: Store, bytes: &mut &[u8]) -> OrgaResult<Self> {
-                todo!()
+                let prev = <$prev>::load(Store::default(), bytes)?;
+                prev.migrate_into()
             }
         }
 
@@ -717,12 +719,51 @@ protobuf_newtype!(
 //     ConsensusState
 // );
 
+pub struct LegacyWrappedConnectionEnd {
+    pub inner: ConnectionEnd,
+}
+
+impl State for LegacyWrappedConnectionEnd {
+    fn attach(&mut self, _store: crate::store::Store) -> crate::Result<()> {
+        Ok(())
+    }
+
+    fn flush<W: std::io::Write>(self, _out: &mut W) -> crate::Result<()> {
+        Ok(())
+    }
+
+    fn load(_store: crate::store::Store, bytes: &mut &[u8]) -> crate::Result<Self> {
+        let mut inner: RawConnectionEnd =
+            <RawConnectionEnd as prost::Message>::decode(bytes).unwrap();
+        inner.versions = ibc::core::connection::types::version::Version::compatibles()
+            .into_iter()
+            .map(|v| {
+                v.try_into()
+                    .map_err(|_| crate::Error::Ibc("Invalid connection version".to_string()))
+            })
+            .collect::<crate::Result<_>>()?;
+        Ok(Self {
+            inner: inner.try_into().map_err(|_| {
+                crate::Error::Ibc("Unable to load state for LegacyWrappedConnectionEnd".to_string())
+            })?,
+        })
+    }
+}
+
+impl MigrateFrom<LegacyWrappedConnectionEnd> for WrappedConnectionEnd {
+    fn migrate_from(value: LegacyWrappedConnectionEnd) -> crate::Result<Self> {
+        Ok(Self {
+            inner: value.inner.into(),
+        })
+    }
+}
+
 protobuf_newtype!(
     WrappedConnectionEnd,
     ConnectionEnd,
     RawConnectionEnd,
     Protobuf,
-    ConnectionEnd
+    LegacyWrappedConnectionEnd
 );
 protobuf_newtype!(
     WrappedChannelEnd,
@@ -732,7 +773,7 @@ protobuf_newtype!(
     WrappedChannelEnd
 );
 
-protobuf_newtype!(WrappedHeader, Header, RawHeader, Protobuf, Header);
+protobuf_newtype!(WrappedHeader, Header, RawHeader, Protobuf, WrappedHeader);
 impl Terminated for WrappedHeader {}
 
 #[derive(Serialize, Clone, Debug)]
