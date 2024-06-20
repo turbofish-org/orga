@@ -973,7 +973,7 @@ mod tests {
             .insert(
                 "0-100".to_string().into(),
                 (
-                    IbcTimestamp::default().into(),
+                    IbcTimestamp::none().into(),
                     Height::new(0, 123).unwrap().into(),
                 ),
             )
