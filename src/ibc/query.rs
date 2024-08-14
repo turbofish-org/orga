@@ -1,4 +1,6 @@
+use ibc::core::client::context::client_state::ClientStateValidation;
 use ibc::core::client::types::Height;
+use ibc::core::client::types::Status;
 use ibc::core::host::types::path::Path;
 use ibc_proto::ibc::core::channel::v1::{Channel, IdentifiedChannel, PacketState};
 use ibc_proto::ibc::core::client::v1::{ConsensusStateWithHeight, IdentifiedClientState};
@@ -119,6 +121,29 @@ impl IbcContext {
         }
 
         Ok(states)
+    }
+
+    pub fn query_consensus_state(
+        &self,
+        client_id: ClientIdKey,
+        revision_number: u64,
+        revision_height: u64,
+    ) -> Result<ConsensusStateWithHeight> {
+        let client = self
+            .clients
+            .get(client_id)?
+            .ok_or_else(|| Error::Ibc("Client not found".to_string()))?;
+        let height = Height::new(revision_number, revision_height)
+            .map_err(|_| Error::Ibc("Invalid height".to_string()))?;
+        let consensus_state = client
+            .consensus_states
+            .get(height.into())?
+            .ok_or_else(|| Error::Ibc("Consensus state not found".to_string()))?;
+
+        Ok(ConsensusStateWithHeight {
+            height: Some(height.into()),
+            consensus_state: Some(consensus_state.clone().inner.into()),
+        })
     }
 
     pub fn query_consensus_states(
@@ -331,5 +356,20 @@ impl IbcContext {
             .ok_or(Error::Ibc("Sequence not found".to_string()))?;
         let sequence = u64::from_str(&sequence_string.to_string())?;
         Ok(sequence)
+    }
+
+    pub fn query_client_status(&self, client_id: ClientIdKey) -> Result<Status> {
+        let client = self
+            .clients
+            .get(client_id.clone())?
+            .ok_or_else(|| Error::Ibc("Client not found".to_string()))?;
+        let client_state = client
+            .client_state
+            .get(Default::default())?
+            .ok_or_else(|| Error::Ibc("Client not found".to_string()))?;
+        Ok(client_state
+            .inner
+            .status(self, &client_id.0)
+            .map_err(|e| Error::Ibc(e.to_string()))?)
     }
 }

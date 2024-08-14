@@ -1,4 +1,13 @@
+use ibc::core::channel::types::proto::v1::Channel;
+use ibc::core::connection::types::ConnectionEnd;
+use ibc::core::host::types::identifiers::Sequence;
+use ibc::core::host::types::path::ReceiptPath;
+use ibc::core::host::ValidationContext;
+use ibc_proto::cosmos::tx::v1beta1::Tx;
+use ibc_proto::ibc::core::client::v1::IdentifiedClientState;
 use std::str::FromStr;
+use tendermint_rpc::Client as TendermintClient;
+use tendermint_rpc::HttpClient;
 
 use ibc::core::host::types::identifiers::{ClientId, ConnectionId, PortId};
 use ibc::core::host::types::{identifiers::ChannelId, path::ChannelEndPath};
@@ -145,9 +154,33 @@ impl<C: Client<IbcContext> + 'static> ClientQuery for IbcClientService<C> {
 
     async fn consensus_state(
         &self,
-        _request: Request<QueryConsensusStateRequest>,
+        request: Request<QueryConsensusStateRequest>,
     ) -> Result<Response<QueryConsensusStateResponse>, Status> {
-        unimplemented!()
+        let request = request.into_inner();
+        let client_id = ClientId::from_str(&request.client_id)
+            .map_err(|_| Status::invalid_argument("Invalid client ID".to_string()))?;
+        let revision_number = request.revision_number;
+        let revision_height = request.revision_height;
+
+        let ibc = (self.ibc)();
+
+        let consensus_state = ibc
+            .query(|ibc| {
+                Ok(ibc.query_consensus_state(
+                    client_id.clone().into(),
+                    revision_number,
+                    revision_height,
+                )?)
+            })
+            .await?;
+
+        let res = QueryConsensusStateResponse {
+            consensus_state: consensus_state.consensus_state.into(),
+            proof: vec![],
+            proof_height: None,
+        };
+
+        Ok(Response::new(res))
     }
 
     async fn consensus_states(
@@ -179,9 +212,22 @@ impl<C: Client<IbcContext> + 'static> ClientQuery for IbcClientService<C> {
 
     async fn client_status(
         &self,
-        _request: Request<QueryClientStatusRequest>,
+        request: Request<QueryClientStatusRequest>,
     ) -> Result<Response<QueryClientStatusResponse>, Status> {
-        unimplemented!()
+        let request = request.into_inner();
+        let client_id = ClientId::from_str(&request.client_id)
+            .map_err(|_| Status::invalid_argument("Invalid client ID".to_string()))?;
+        let ibc = (self.ibc)();
+
+        let client_status = ibc
+            .query(|ibc| Ok(ibc.query_client_status(client_id.clone().into())?))
+            .await?;
+
+        let res = QueryClientStatusResponse {
+            status: client_status.to_string(),
+        };
+
+        Ok(Response::new(res))
     }
 
     async fn client_params(
@@ -359,9 +405,54 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
 
     async fn channel_client_state(
         &self,
-        _request: Request<QueryChannelClientStateRequest>,
+        request: Request<QueryChannelClientStateRequest>,
     ) -> Result<Response<QueryChannelClientStateResponse>, Status> {
-        unimplemented!()
+        let ibc = (self.ibc)();
+        let request = request.into_inner();
+        let port_id = PortId::from_str(&request.port_id)
+            .map_err(|_| Status::invalid_argument("invalid port id"))?;
+        let channel_id = ChannelId::from_str(&request.channel_id)
+            .map_err(|_| Status::invalid_argument("invalid channel id"))?;
+
+        let path = ChannelEndPath(port_id, channel_id);
+        let channel: Channel = ibc
+            .query(|ibc| Ok(ibc.query_channel(path.clone().into())))
+            .await??
+            .ok_or_else(|| Status::not_found("channel not found"))?;
+        let connection_id = channel
+            .connection_hops
+            .first()
+            .ok_or_else(|| Status::not_found("channel does not have a connection hop"))?;
+        let connection_end: ConnectionEnd = ibc
+            .query(|ibc| {
+                Ok(ibc.query_connection(ConnectionId::from_str(connection_id).unwrap().into()))
+            })
+            .await??
+            .ok_or_else(|| Status::not_found("connection not found"))?;
+        let client_id = connection_end.client_id();
+        let client_state = ibc
+            .query(|ibc| {
+                Ok(ibc
+                    .clients
+                    .get(client_id.clone().into())?
+                    .ok_or_else(|| crate::Error::Ibc("Client state not found".to_string()))?
+                    .client_state
+                    .get(Default::default())?
+                    .ok_or_else(|| crate::Error::Ibc("Client state not found".to_string()))?
+                    .clone())
+            })
+            .await?;
+
+        let res = QueryChannelClientStateResponse {
+            identified_client_state: Some(IdentifiedClientState {
+                client_id: client_id.to_string(),
+                client_state: Some(client_state.inner.into()),
+            }),
+            proof: vec![],
+            proof_height: None,
+        };
+
+        Ok(Response::new(res))
     }
 
     async fn channel_consensus_state(
@@ -408,9 +499,29 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
 
     async fn packet_receipt(
         &self,
-        _request: Request<QueryPacketReceiptRequest>,
+        request: Request<QueryPacketReceiptRequest>,
     ) -> Result<Response<QueryPacketReceiptResponse>, Status> {
-        unimplemented!()
+        let request = request.into_inner();
+        let port_id = PortId::from_str(&request.port_id)
+            .map_err(|_| Status::invalid_argument("invalid port id"))?;
+        let channel_id = ChannelId::from_str(&request.channel_id)
+            .map_err(|_| Status::invalid_argument("invalid channel id"))?;
+        let sequence = Sequence::from(request.sequence);
+
+        let ibc = (self.ibc)();
+        let receipt_path = ReceiptPath::new(&port_id, &channel_id, sequence);
+
+        let receipt = ibc
+            .query(|ibc| Ok(ibc.get_packet_receipt(&receipt_path.clone())?))
+            .await;
+
+        let res = QueryPacketReceiptResponse {
+            received: receipt.is_ok(),
+            proof: vec![],
+            proof_height: None,
+        };
+
+        Ok(Response::new(res))
     }
 
     async fn packet_acknowledgement(
@@ -824,7 +935,12 @@ impl BankQuery for BankService {
         &self,
         _request: Request<QueryTotalSupplyRequest>,
     ) -> Result<Response<QueryTotalSupplyResponse>, Status> {
-        unimplemented!()
+        let res = QueryTotalSupplyResponse {
+            supply: vec![],
+            pagination: None,
+        };
+
+        Ok(Response::new(res))
     }
 
     async fn supply_of(
@@ -950,16 +1066,41 @@ impl TxService for AppTxService {
 
     async fn get_tx(
         &self,
-        _request: Request<GetTxRequest>,
+        request: Request<GetTxRequest>,
     ) -> Result<Response<GetTxResponse>, Status> {
-        unimplemented!()
+        let client =
+            HttpClient::new("http://localhost:26657").map_err(|e| Status::unavailable("Error"))?;
+
+        let request = request.into_inner();
+        let hash = request
+            .hash
+            .parse()
+            .map_err(|_| Status::invalid_argument("Invalid hash"))?;
+        let res = client
+            .tx(hash, false)
+            .await
+            .map_err(|_| Status::not_found("Tx not found"))?;
+        Ok(Response::new(GetTxResponse {
+            tx: Some(Tx::decode(res.tx.as_slice()).map_err(|_| Status::internal("Error"))?),
+            ..Default::default()
+        }))
     }
 
     async fn broadcast_tx(
         &self,
-        _request: Request<BroadcastTxRequest>,
+        request: Request<BroadcastTxRequest>,
     ) -> Result<Response<BroadcastTxResponse>, Status> {
-        unimplemented!()
+        let client =
+            HttpClient::new("http://localhost:26657").map_err(|e| Status::unavailable("Error"))?;
+        let request = request.into_inner();
+        let res = client
+            .broadcast_tx_sync(request.tx_bytes)
+            .await
+            .map_err(|_| Status::internal("Error"))?;
+
+        let res = BroadcastTxResponse { tx_response: None };
+
+        Ok(Response::new(res))
     }
 
     async fn get_txs_event(
