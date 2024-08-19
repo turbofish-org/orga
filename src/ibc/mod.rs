@@ -6,6 +6,8 @@ use ibc::clients::tendermint::{
 };
 use ibc::core::channel::types::channel::ChannelEnd as IbcChannelEnd;
 use ibc::core::client::context::consensus_state::ConsensusState as ConsensusStateTrait;
+use ibc::core::client::types::error::ClientError;
+use ibc::primitives::proto::Any;
 use ibc::primitives::Signer as IbcSigner;
 use ibc_proto::ibc::applications::transfer::v1::MsgTransfer as RawMsgTransfer;
 use ibc_proto::ibc::core::{
@@ -13,6 +15,9 @@ use ibc_proto::ibc::core::{
 };
 use ibc_proto::ibc::lightclients::tendermint::v1::Header as RawHeader;
 
+use ibc::clients::tendermint::types::{
+    TENDERMINT_CLIENT_STATE_TYPE_URL, TENDERMINT_CONSENSUS_STATE_TYPE_URL,
+};
 use ibc::primitives::proto::Protobuf;
 use ibc_rs::apps::transfer::types::msgs::transfer::MsgTransfer;
 use ibc_rs::clients::tendermint::types::{client_type, Header};
@@ -300,8 +305,7 @@ impl Encode for Adapter<WrappedTimestamp> {
 impl Decode for Adapter<WrappedTimestamp> {
     fn decode<R: std::io::Read>(input: R) -> ed::Result<Self> {
         Ok(Self(WrappedTimestamp {
-            inner: IbcTimestamp::from_nanoseconds(u64::decode(input)?)
-                .map_err(|_| ed::Error::UnexpectedByte(40))?,
+            inner: IbcTimestamp::from_nanoseconds(u64::decode(input)?),
         }))
     }
 }
@@ -834,17 +838,32 @@ impl Describe for WrappedConsensusState {
     }
 }
 
+impl TryFrom<Any> for WrappedConsensusState {
+    type Error = ClientError;
+
+    fn try_from(value: Any) -> Result<Self, Self::Error> {
+        match value.type_url.as_str() {
+            TENDERMINT_CONSENSUS_STATE_TYPE_URL => {
+                let inner = TmConsensusState::try_from(value)?;
+                Ok(Self { inner })
+            }
+            _ => Err(ClientError::Other {
+                description: "Unknown consensus state type".into(),
+            }),
+        }
+    }
+}
+
 impl ConsensusStateTrait for WrappedConsensusState {
     fn root(&self) -> &ibc_rs::core::commitment_types::commitment::CommitmentRoot {
         self.inner.root()
     }
 
     fn timestamp(&self) -> IbcTimestamp {
-        self.inner.timestamp().into()
-    }
-
-    fn encode_vec(self) -> Vec<u8> {
-        ConsensusStateTrait::encode_vec(self.inner)
+        self.inner
+            .timestamp()
+            .try_into()
+            .expect("UNIX Timestamp can't be negative")
     }
 }
 
@@ -916,7 +935,6 @@ mod tests {
         state::State,
         store::{BackingStore, MapStore, Read, Shared, Store, Write},
     };
-    use borsh::BorshDeserialize;
 
     #[orga]
     pub struct App {
@@ -973,7 +991,7 @@ mod tests {
             .insert(
                 "0-100".to_string().into(),
                 (
-                    IbcTimestamp::none().into(),
+                    IbcTimestamp::from_nanoseconds(0).into(),
                     Height::new(0, 123).unwrap().into(),
                 ),
             )

@@ -8,6 +8,7 @@ use ibc_proto::ibc::core::connection::v1::{
     ConnectionEnd as RawConnectionEnd, IdentifiedConnection,
 };
 use ics23::LeafOp;
+use prost::Message;
 use std::str::FromStr;
 use tendermint_proto::v0_34::abci::{RequestQuery, ResponseQuery};
 use tendermint_proto::v0_34::crypto::{ProofOp, ProofOps};
@@ -19,6 +20,7 @@ use crate::abci::AbciQuery;
 use crate::encoding::LengthVec;
 use crate::store::Read;
 use crate::{Error, Result};
+use ibc::primitives::prelude::*;
 
 impl AbciQuery for Ibc {
     fn abci_query(&self, req: &RequestQuery) -> Result<ResponseQuery> {

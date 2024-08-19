@@ -1,3 +1,6 @@
+use ibc::clients::tendermint::types::{
+    TENDERMINT_CLIENT_STATE_TYPE_URL, TENDERMINT_CONSENSUS_STATE_TYPE_URL,
+};
 use ibc::{
     clients::tendermint::consensus_state::ConsensusState,
     core::{
@@ -15,10 +18,9 @@ use ibc::{
     primitives::{proto::Any, Timestamp},
 };
 
-use ibc::clients::tendermint::context::ValidationContext as TmValidationContext;
-
 use crate::encoding::EofTerminatedString;
 use ibc::clients::tendermint::client_state::ClientState as TmClientState;
+use ibc::core::client::context::ExtClientValidationContext as TmValidationContext;
 
 use super::{IbcContext, WrappedConsensusState};
 use ibc::core::host::ValidationContext;
@@ -413,6 +415,21 @@ impl TryFrom<AnyConsensusState> for ConsensusStateType {
             AnyConsensusState::Tendermint(tm_consensus_state) => {
                 Ok(tm_consensus_state.inner().clone())
             }
+        }
+    }
+}
+
+impl TryFrom<Any> for AnyConsensusState {
+    type Error = ClientError;
+
+    fn try_from(value: Any) -> Result<Self, Self::Error> {
+        match value.type_url.as_str() {
+            TENDERMINT_CONSENSUS_STATE_TYPE_URL => {
+                Ok(AnyConsensusState::Tendermint(value.try_into()?))
+            }
+            _ => Err(ClientError::Other {
+                description: "Unknown consensus state type".into(),
+            }),
         }
     }
 }

@@ -171,7 +171,12 @@ impl ValidationContext for IbcContext {
     fn host_timestamp(&self) -> Result<Timestamp, ContextError> {
         let host_height = self.host_height()?;
         let host_cons_state = self.host_consensus_state(&host_height)?;
-        Ok(host_cons_state.timestamp().into())
+        Ok(host_cons_state
+            .timestamp()
+            .try_into()
+            .map_err(|_| ClientError::Other {
+                description: "Invalid timestamp".into(),
+            })?)
     }
 
     fn host_consensus_state(
@@ -608,8 +613,8 @@ mod tests {
     use crate::Result;
 
     use super::*;
-    use ibc::clients::tendermint::context::ValidationContext;
     use ibc::clients::tendermint::types::ConsensusState;
+    use ibc::core::client::context::ExtClientValidationContext;
 
     fn tm_client_id(n: u64) -> ClientIdKey {
         ClientId::new("07-tendermint", n).unwrap().into()

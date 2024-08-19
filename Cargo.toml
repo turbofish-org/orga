@@ -7,10 +7,13 @@ description = "State machine engine"
 license = "MIT"
 
 [dependencies]
-abci2 = { git = "https://github.com/turbofish-org/abci2", rev = "6c55dc6d8936879d339ab9178d589518ee5e16fa", optional = true }
-tendermint-rpc = { version = "0.34.1", features = ["http-client"], optional = true }
-tendermint = { version = "0.34.1", optional = true }
-tendermint-proto = { version = "0.34.1" }
+# abci2 = { git = "https://github.com/turbofish-org/abci2", rev = "6c55dc6d8936879d339ab9178d589518ee5e16fa", optional = true }
+abci2 = { path = "../abci2", optional = true }
+tendermint-rpc = { version = "0.38.0", features = [
+    "http-client",
+], optional = true }
+tendermint = { version = "0.38.0", optional = true }
+tendermint-proto = { version = "0.38.0" }
 merk = { git = "https://github.com/nomic-io/merk", rev = "0906a5a2b9a3cf99de12ea0726bb5e5167a7fa81", optional = true, default-features = false }
 orga-macros = { path = "macros", version = "0.3.1" }
 seq-macro = "0.3.3"
@@ -18,12 +21,12 @@ log = "0.4.17"
 hex-literal = "0.4.1"
 sha2 = "0.10.6"
 is_executable = { version = "1.0.1", optional = true }
-reqwest = {version = "0.11.16", features = ["blocking"], optional = true }
+reqwest = { version = "0.11.16", features = ["blocking"], optional = true }
 flate2 = "1.0.22"
 tar = "0.4.38"
 ed = { git = "https://github.com/nomic-io/ed", rev = "9c0e206ffdb59dacb90f083e004e8080713e6ad8" }
 toml_edit = "0.22.9"
-prost = {version = "0.12.3"}
+prost = { version = "0.13.1" }
 home = { version = "0.5.4", optional = true }
 ed25519-dalek = "2.1.1"
 thiserror = "1.0.40"
@@ -44,24 +47,28 @@ base64 = "0.22.0"
 secp256k1 = { version = "0.28.2", features = ["hashes"] }
 serde = { version = "1.0.159", features = ["derive"] }
 serde_json = "1.0.95"
-bincode = {version = "1.3.3", optional = true }
+bincode = { version = "1.3.3", optional = true }
 # ibc = { git = "https://github.com/nomic-io/ibc-rs", rev =
 # "91de3c673c59ed0a4344272dee6dd822d1355d59", optional = true, features =
 # ["borsh"] }
-ibc = {version = "0.51.0", optional = true, features = ["borsh", "serde"]}
-ibc-proto = { version = "0.42.2", default-features = false, features = ["std", "borsh", "serde"], optional = true }
-ics23 = { version = "0.11.1", optional = true }
-prost-types = {version = "0.12.3", optional = true}
+ibc = { version = "0.54.0", optional = true, features = ["borsh", "serde"] }
+ibc-proto = { version = "0.47.0", default-features = false, features = [
+    "std",
+    "borsh",
+    "serde",
+], optional = true }
+ics23 = { version = "0.12.0", optional = true }
+prost-types = { version = "0.13.1", optional = true }
 tokio = { version = "1.27.0", optional = true }
-tonic = { version = "0.10.0", optional = true, features = ["prost"] }
-cosmrs = "0.15.0"
+tonic = { version = "0.12.1", optional = true, features = ["prost"] }
+cosmrs = "0.18.0"
 derive_more = "0.99.17"
 sha3 = "0.10.6"
 serde-wasm-bindgen = "0.6.5"
 nom = "7.1.3"
 chrono = "0.4.24"
 paste = "1.0.12"
-borsh = "0.10.3"
+borsh = "1.5.1"
 educe = "0.5.11"
 rand = "0.8.5"
 
@@ -77,8 +84,19 @@ ibc-testkit = "0.51.0"
 features = ["abci", "merk/full"]
 
 [features]
-default = []
-abci = ["abci2", "tendermint", "tendermint-rpc", "is_executable", "home", "secp256k1/rand-std", "tokio/full", "tonic", "ibc-proto/server", "reqwest"]
+default = ["abci", "feat-ibc", "merk-full", "merk-verify"]
+abci = [
+    "abci2",
+    "tendermint",
+    "tendermint-rpc",
+    "is_executable",
+    "home",
+    "secp256k1/rand-std",
+    "tokio/full",
+    "tonic",
+    "ibc-proto/server",
+    "reqwest",
+]
 merk-verify = ["merk/verify"]
 merk-full = ["merk/full", "ics23"]
 state-sync = []
