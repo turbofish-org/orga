@@ -13,6 +13,7 @@ use ibc_rs::core::handler::types::error::ContextError;
 use ibc_rs::core::handler::types::events::IbcEvent;
 use ibc_rs::core::host::{ExecutionContext, ValidationContext};
 use ibc_rs::primitives::Timestamp;
+use tendermint::abci::v0_34::EventAttribute;
 
 use crate::context::{Context, GetContext};
 use crate::plugins::{ChainId as ChainIdCtx, Events, Logs};
@@ -580,10 +581,19 @@ impl ExecutionContext for IbcContext {
             Some(ctx) => ctx,
             None => return Ok(()),
         };
-        let event: tendermint::abci::Event = match event.try_into() {
+        let mut event: tendermint::abci::Event = match event.try_into() {
             Ok(event) => event,
             Err(_) => return Ok(()),
         };
+        for attr in event.attributes.iter_mut() {
+            let proto_attr = tendermint::abci::v0_34::EventAttribute {
+                key: attr.key_bytes().to_vec(),
+                value: attr.value_bytes().to_vec(),
+                index: true,
+            };
+            *attr = tendermint::abci::EventAttribute::V034(proto_attr)
+        }
+
         let mut event: tendermint_proto::v0_34::abci::Event = event.into();
 
         for attribute in event.attributes.iter_mut() {

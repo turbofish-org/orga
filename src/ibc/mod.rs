@@ -49,7 +49,7 @@ use crate::state::State;
 use crate::store::Store;
 use crate::{orga, Error, Result as OrgaResult};
 pub use ibc as ibc_rs;
-use ibc::primitives::Timestamp as IbcTimestamp;
+pub use ibc::primitives::Timestamp as IbcTimestamp;
 
 mod impls;
 pub mod transfer;
