@@ -1018,7 +1018,7 @@ impl HealthService for AppHealthService {
         &self,
         _request: Request<GetSyncingRequest>,
     ) -> Result<Response<GetSyncingResponse>, Status> {
-        unimplemented!()
+        Ok(Response::new(GetSyncingResponse { syncing: false }))
     }
 
     async fn get_latest_block(
