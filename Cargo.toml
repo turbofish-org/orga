@@ -7,8 +7,7 @@ description = "State machine engine"
 license = "MIT"
 
 [dependencies]
-# abci2 = { git = "https://github.com/turbofish-org/abci2", rev = "6c55dc6d8936879d339ab9178d589518ee5e16fa", optional = true }
-abci2 = { path = "../abci2", optional = true }
+abci2 = { git = "https://github.com/turbofish-org/abci2", rev = "96b0d3f388ffc8fa014d442ace7f697e54a94726", optional = true }
 tendermint-rpc = { version = "0.38.0", features = [
     "http-client",
 ], optional = true }
