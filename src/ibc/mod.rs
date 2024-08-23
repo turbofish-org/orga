@@ -1214,7 +1214,7 @@ mod tests {
 
     #[test]
     fn migrate_v8() {
-        let mut store = create_ibc_state_from_file("v8-ibc-test-state.txt");
+        let mut store = create_ibc_state_from_file("prev-ibc-test-state.txt");
 
         let mut bytes = store.get(&[]).unwrap().unwrap();
         let app = App::migrate(store.clone(), store.clone(), &mut bytes.as_slice()).unwrap();
