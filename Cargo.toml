@@ -83,7 +83,7 @@ ibc-testkit = "0.51.0"
 features = ["abci", "merk/full"]
 
 [features]
-default = ["abci", "feat-ibc", "merk-full", "merk-verify"]
+default = []
 abci = [
     "abci2",
     "tendermint",
