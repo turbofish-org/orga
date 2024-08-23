@@ -1,20 +1,26 @@
-use ibc::core::ics03_connection::connection::ConnectionEnd as IbcConnectionEnd;
-use ibc::core::ics24_host::path::Path;
-use ibc::Height;
+use ibc::core::client::context::client_state::ClientStateValidation;
+use ibc::core::client::types::Height;
+use ibc::core::client::types::Status;
+use ibc::core::host::types::path::Path;
 use ibc_proto::ibc::core::channel::v1::{Channel, IdentifiedChannel, PacketState};
 use ibc_proto::ibc::core::client::v1::{ConsensusStateWithHeight, IdentifiedClientState};
 use ibc_proto::ibc::core::connection::v1::{
     ConnectionEnd as RawConnectionEnd, IdentifiedConnection,
 };
 use ics23::LeafOp;
+use prost::Message;
+use std::str::FromStr;
 use tendermint_proto::v0_34::abci::{RequestQuery, ResponseQuery};
 use tendermint_proto::v0_34::crypto::{ProofOp, ProofOps};
 
-use super::{ClientId, ConnectionEnd, ConnectionId, Ibc, IbcContext, PortChannel, IBC_QUERY_PATH};
+use super::{
+    ClientIdKey, ConnectionEnd, ConnectionIdKey, Ibc, IbcContext, PortChannel, IBC_QUERY_PATH,
+};
 use crate::abci::AbciQuery;
 use crate::encoding::LengthVec;
 use crate::store::Read;
 use crate::{Error, Result};
+use ibc::primitives::prelude::*;
 
 impl AbciQuery for Ibc {
     fn abci_query(&self, req: &RequestQuery) -> Result<ResponseQuery> {
@@ -119,9 +125,32 @@ impl IbcContext {
         Ok(states)
     }
 
+    pub fn query_consensus_state(
+        &self,
+        client_id: ClientIdKey,
+        revision_number: u64,
+        revision_height: u64,
+    ) -> Result<ConsensusStateWithHeight> {
+        let client = self
+            .clients
+            .get(client_id)?
+            .ok_or_else(|| Error::Ibc("Client not found".to_string()))?;
+        let height = Height::new(revision_number, revision_height)
+            .map_err(|_| Error::Ibc("Invalid height".to_string()))?;
+        let consensus_state = client
+            .consensus_states
+            .get(height.into())?
+            .ok_or_else(|| Error::Ibc("Consensus state not found".to_string()))?;
+
+        Ok(ConsensusStateWithHeight {
+            height: Some(height.into()),
+            consensus_state: Some(consensus_state.clone().inner.into()),
+        })
+    }
+
     pub fn query_consensus_states(
         &self,
-        client_id: ClientId,
+        client_id: ClientIdKey,
     ) -> Result<Vec<ConsensusStateWithHeight>> {
         let mut states = vec![];
 
@@ -142,11 +171,12 @@ impl IbcContext {
         Ok(states)
     }
 
-    pub fn query_connection(&self, conn_id: ConnectionId) -> Result<Option<ConnectionEnd>> {
+    pub fn query_connection(&self, conn_id: ConnectionIdKey) -> Result<Option<ConnectionEnd>> {
         Ok(self
             .connections
             .get(conn_id)?
-            .map(|connection_end| connection_end.clone()))
+            .map(|connection_end| connection_end.clone())
+            .map(|connection_end| connection_end.into()))
     }
 
     pub fn query_all_connections(&self) -> Result<Vec<IdentifiedConnection>> {
@@ -154,7 +184,7 @@ impl IbcContext {
 
         for entry in self.connections.iter()? {
             let (id, connection) = entry?;
-            let connection: IbcConnectionEnd = connection.clone().into();
+            let connection: ConnectionEnd = connection.clone().into();
             let raw_connection: RawConnectionEnd = connection.into();
             connections.push(IdentifiedConnection {
                 client_id: raw_connection.client_id,
@@ -169,7 +199,7 @@ impl IbcContext {
         Ok(connections)
     }
 
-    pub fn query_client_connections(&self, client_id: ClientId) -> Result<Vec<ConnectionId>> {
+    pub fn query_client_connections(&self, client_id: ClientIdKey) -> Result<Vec<ConnectionIdKey>> {
         let mut connection_ids = vec![];
 
         let client = self
@@ -207,6 +237,7 @@ impl IbcContext {
                 counterparty: channel_end.counterparty,
                 ordering: channel_end.ordering,
                 state: channel_end.state,
+                upgrade_sequence: 0,
             });
         }
 
@@ -215,7 +246,7 @@ impl IbcContext {
 
     pub fn query_connection_channels(
         &self,
-        conn_id: ConnectionId,
+        conn_id: ConnectionIdKey,
     ) -> Result<Vec<IdentifiedChannel>> {
         let channels = self
             .query_all_channels()?
@@ -309,5 +340,38 @@ impl IbcContext {
         }
 
         Ok(acks)
+    }
+
+    pub fn query_next_sequence_receive(&self, port_chan: PortChannel) -> crate::Result<u64> {
+        let sequence_string = self
+            .next_sequence_recv
+            .get(port_chan)?
+            .ok_or(Error::Ibc("Sequence not found".to_string()))?;
+        let sequence = u64::from_str(&sequence_string.to_string())?;
+        Ok(sequence)
+    }
+
+    pub fn query_next_sequence_send(&self, port_chan: PortChannel) -> crate::Result<u64> {
+        let sequence_string = self
+            .next_sequence_send
+            .get(port_chan)?
+            .ok_or(Error::Ibc("Sequence not found".to_string()))?;
+        let sequence = u64::from_str(&sequence_string.to_string())?;
+        Ok(sequence)
+    }
+
+    pub fn query_client_status(&self, client_id: ClientIdKey) -> Result<Status> {
+        let client = self
+            .clients
+            .get(client_id.clone())?
+            .ok_or_else(|| Error::Ibc("Client not found".to_string()))?;
+        let client_state = client
+            .client_state
+            .get(Default::default())?
+            .ok_or_else(|| Error::Ibc("Client not found".to_string()))?;
+        Ok(client_state
+            .inner
+            .status(self, &client_id.0)
+            .map_err(|e| Error::Ibc(e.to_string()))?)
     }
 }

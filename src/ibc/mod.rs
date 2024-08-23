@@ -1,36 +1,38 @@
+use crate::migrate::MigrateFrom;
 use ed::Terminated;
-use ibc::applications::transfer::send_transfer;
-use ibc::clients::ics07_tendermint::{
-    client_state::ClientState as TmClientState,
-    consensus_state::ConsensusState as TmConsensusState, header::Header as TmHeader,
+use ibc::apps::transfer::handler::send_transfer;
+use ibc::clients::tendermint::{
+    client_state::ClientState as TmClientState, consensus_state::ConsensusState as TmConsensusState,
 };
-use ibc::core::dispatch;
-use ibc::core::ics02_client::client_type::ClientType;
-use ibc::core::ics02_client::consensus_state::ConsensusState as ConsensusStateTrait;
-use ibc::core::ics02_client::height::Height;
-use ibc::core::ics03_connection::connection::ConnectionEnd as IbcConnectionEnd;
-use ibc::core::ics04_channel::channel::ChannelEnd as IbcChannelEnd;
-use ibc::core::ics04_channel::packet::Sequence;
-use ibc::core::ics24_host::identifier::{
-    ChannelId, ClientId as IbcClientId, ConnectionId as IbcConnectionId, PortId,
-};
-use ibc::core::ics24_host::path::{
-    AckPath, ChannelEndPath, ClientConnectionPath, CommitmentPath, ConnectionPath, ReceiptPath,
-    SeqAckPath, SeqRecvPath, SeqSendPath,
-};
-use ibc::Signer as IbcSigner;
-use ibc_proto::google::protobuf::Any;
+use ibc::core::channel::types::channel::ChannelEnd as IbcChannelEnd;
+use ibc::core::client::context::consensus_state::ConsensusState as ConsensusStateTrait;
+use ibc::core::client::types::error::ClientError;
+use ibc::primitives::proto::Any;
+use ibc::primitives::Signer as IbcSigner;
 use ibc_proto::ibc::applications::transfer::v1::MsgTransfer as RawMsgTransfer;
 use ibc_proto::ibc::core::{
     channel::v1::Channel as RawChannelEnd, connection::v1::ConnectionEnd as RawConnectionEnd,
 };
 use ibc_proto::ibc::lightclients::tendermint::v1::Header as RawHeader;
 
-use ibc_proto::protobuf::Protobuf;
-use ibc_rs::applications::transfer::msgs::transfer::MsgTransfer;
-use ibc_rs::clients::ics07_tendermint::client_type;
-use ibc_rs::core::ics02_client::msgs::ClientMsg;
-use ibc_rs::core::MsgEnvelope;
+use ibc::clients::tendermint::types::{
+    TENDERMINT_CLIENT_STATE_TYPE_URL, TENDERMINT_CONSENSUS_STATE_TYPE_URL,
+};
+use ibc::primitives::proto::Protobuf;
+use ibc_rs::apps::transfer::types::msgs::transfer::MsgTransfer;
+use ibc_rs::clients::tendermint::types::{client_type, Header};
+use ibc_rs::core::client::context::types::msgs::ClientMsg;
+use ibc_rs::core::client::types::Height;
+use ibc_rs::core::connection::types::ConnectionEnd;
+use ibc_rs::core::entrypoint::dispatch;
+use ibc_rs::core::handler::types::msgs::MsgEnvelope;
+use ibc_rs::core::host::types::identifiers::{
+    ChannelId, ClientId, ClientType, ConnectionId, PortId, Sequence,
+};
+use ibc_rs::core::host::types::path::{
+    AckPath, ChannelEndPath, ClientConnectionPath, CommitmentPath, ConnectionPath, ReceiptPath,
+    SeqAckPath, SeqRecvPath, SeqSendPath,
+};
 use serde::Serialize;
 
 use crate::coins::Address;
@@ -47,7 +49,7 @@ use crate::state::State;
 use crate::store::Store;
 use crate::{orga, Error, Result as OrgaResult};
 pub use ibc as ibc_rs;
-use ibc::core::timestamp::Timestamp as IbcTimestamp;
+pub use ibc::primitives::Timestamp as IbcTimestamp;
 
 mod impls;
 pub mod transfer;
@@ -63,8 +65,7 @@ mod messages;
 mod migration;
 mod query;
 mod router;
-// #[cfg(test)]
-// mod tests2;
+
 pub const IBC_QUERY_PATH: &str = "store/ibc/key";
 
 #[orga(version = 3)]
@@ -93,19 +94,19 @@ pub struct Ibc {
 #[orga(version = 1)]
 pub struct IbcContext {
     height: u64,
-    host_consensus_states: Deque<ConsensusState>,
+    host_consensus_states: Deque<WrappedConsensusState>,
     channel_counter: u64,
     connection_counter: u64,
     client_counter: u64,
 
     #[state(absolute_prefix(b"clients/"))]
-    pub clients: Map<ClientId, Client>,
+    pub clients: Map<ClientIdKey, Client>,
 
     #[state(absolute_prefix(b"connections/"))]
-    pub connections: Map<ConnectionId, ConnectionEnd>,
+    pub connections: Map<ConnectionIdKey, WrappedConnectionEnd>,
 
     #[state(absolute_prefix(b"channelEnds/"))]
-    pub channel_ends: Map<PortChannel, ChannelEnd>,
+    pub channel_ends: Map<PortChannel, WrappedChannelEnd>,
 
     #[state(absolute_prefix(b"nextSequenceSend/"))]
     pub next_sequence_send: Map<PortChannel, Number>,
@@ -184,7 +185,7 @@ impl Ibc {
         };
 
         if let Some(msg) = maybe_client_update {
-            match TmHeader::try_from(msg.header) {
+            match Header::try_from(msg.client_message) {
                 Ok(header) => {
                     let mut client = self
                         .ctx
@@ -217,41 +218,11 @@ impl Ibc {
 
     pub fn update_client_from_header(
         &mut self,
-        client_index: u64,
-        rev_number: u64,
-        header_json: &str,
+        _client_index: u64,
+        _rev_number: u64,
+        _header_json: &str,
     ) -> crate::Result<()> {
-        let client_id: ClientId =
-            IbcClientId::new(ClientType::new("07-tendermint").unwrap(), client_index)
-                .unwrap()
-                .into();
-        let header: orga::cosmrs::tendermint::block::Header = serde_json::from_str(header_json)?;
-        let mut client = self
-            .ctx
-            .clients
-            .get_mut(client_id)?
-            .ok_or(Error::Ibc("Client not found".to_string()))?;
-        let height = Height::new(rev_number, header.height.value()).unwrap();
-        client.updates.insert(
-            height.into(),
-            (IbcTimestamp::from(header.time).into(), height.into()),
-        )?;
-
-        let mut state = client
-            .client_state
-            .get_mut(orga::encoding::FixedString::<"State">)?
-            .unwrap();
-
-        state.inner.latest_height = height;
-
-        let consensus_state = ConsensusState {
-            inner: header.into(),
-        };
-        client
-            .consensus_states
-            .insert(height.into(), consensus_state)?;
-
-        Ok(())
+        todo!();
     }
 }
 
@@ -264,19 +235,19 @@ impl std::fmt::Debug for IbcContext {
 #[orga]
 pub struct Client {
     #[state(prefix(b"updates/"))]
-    pub updates: Map<EpochHeight, (Timestamp, BinaryHeight)>,
+    pub updates: Map<EpochHeight, (WrappedTimestamp, BinaryHeight)>,
 
     #[state(prefix(b"client"))]
-    pub client_state: Map<FixedString<"State">, ClientState>,
+    pub client_state: Map<FixedString<"State">, WrappedClientState>,
 
     #[state(prefix(b"consensusStates/"))]
-    pub consensus_states: Map<EpochHeight, ConsensusState>,
+    pub consensus_states: Map<EpochHeight, WrappedConsensusState>,
 
     #[state(prefix(b"connections/"))]
-    pub connections: Map<ConnectionId, ()>,
+    pub connections: Map<ConnectionIdKey, ()>,
 
     // TODO: support headers for non-tendermint clients
-    pub last_header: Option<Header>,
+    pub last_header: Option<WrappedHeader>,
 
     client_type: EofTerminatedString,
 }
@@ -290,7 +261,7 @@ impl Client {
         self.client_type = client_type.into();
     }
 
-    pub fn last_header(&self) -> crate::Result<TmHeader> {
+    pub fn last_header(&self) -> crate::Result<Header> {
         Ok(self
             .last_header
             .as_ref()
@@ -302,26 +273,26 @@ impl Client {
 
 pub type SlashTerminatedString<T> = ByteTerminatedString<b'/', T>;
 
-pub type ClientId = SlashTerminatedString<IbcClientId>;
-pub type ConnectionId = EofTerminatedString<IbcConnectionId>;
+pub type ClientIdKey = SlashTerminatedString<ClientId>;
+pub type ConnectionIdKey = EofTerminatedString<ConnectionId>;
 pub type Number = EofTerminatedString<u64>;
 pub type EpochHeight = EofTerminatedString;
 
-#[orga(simple, skip(Migrate))]
+#[orga(simple, skip(Migrate, Default))]
 #[derive(Debug)]
-pub struct Timestamp {
+pub struct WrappedTimestamp {
     inner: IbcTimestamp,
 }
 
-impl Migrate for Timestamp {}
+impl Migrate for WrappedTimestamp {}
 
-impl Describe for Timestamp {
+impl Describe for WrappedTimestamp {
     fn describe() -> Descriptor {
         crate::describe::Builder::new::<Self>().build()
     }
 }
 
-impl Encode for Adapter<Timestamp> {
+impl Encode for Adapter<WrappedTimestamp> {
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
         self.0.inner.nanoseconds().encode_into(dest)
     }
@@ -331,22 +302,21 @@ impl Encode for Adapter<Timestamp> {
     }
 }
 
-impl Decode for Adapter<Timestamp> {
+impl Decode for Adapter<WrappedTimestamp> {
     fn decode<R: std::io::Read>(input: R) -> ed::Result<Self> {
-        Ok(Self(Timestamp {
-            inner: IbcTimestamp::from_nanoseconds(u64::decode(input)?)
-                .map_err(|_| ed::Error::UnexpectedByte(40))?,
+        Ok(Self(WrappedTimestamp {
+            inner: IbcTimestamp::from_nanoseconds(u64::decode(input)?),
         }))
     }
 }
 
-impl From<Timestamp> for IbcTimestamp {
-    fn from(timestamp: Timestamp) -> Self {
+impl From<WrappedTimestamp> for IbcTimestamp {
+    fn from(timestamp: WrappedTimestamp) -> Self {
         timestamp.inner
     }
 }
 
-impl From<IbcTimestamp> for Timestamp {
+impl From<IbcTimestamp> for WrappedTimestamp {
     fn from(timestamp: IbcTimestamp) -> Self {
         Self { inner: timestamp }
     }
@@ -410,15 +380,15 @@ impl TryFrom<BinaryHeight> for Height {
     }
 }
 
-impl Terminated for Adapter<Timestamp> {}
+impl Terminated for Adapter<WrappedTimestamp> {}
 
-impl From<ConnectionPath> for ConnectionId {
+impl From<ConnectionPath> for ConnectionIdKey {
     fn from(path: ConnectionPath) -> Self {
         Self(path.0)
     }
 }
 
-impl From<ClientConnectionPath> for ClientId {
+impl From<ClientConnectionPath> for ClientIdKey {
     fn from(path: ClientConnectionPath) -> Self {
         Self(path.0)
     }
@@ -637,7 +607,7 @@ macro_rules! protobuf_newtype {
         impl Encode for $newtype {
             fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
                 let mut buf = vec![];
-                $proto::<$raw>::encode(&self.inner, &mut buf)
+                $proto::<$raw>::encode(self.inner.clone(), &mut buf)
                     .map_err(|_| ed::Error::UnexpectedByte(10))?;
                 dest.write_all(&buf)?;
                 Ok(())
@@ -645,7 +615,7 @@ macro_rules! protobuf_newtype {
 
             fn encoding_length(&self) -> ed::Result<usize> {
                 let mut buf = vec![];
-                $proto::<$raw>::encode(&self.inner, &mut buf)
+                $proto::<$raw>::encode(self.inner.clone(), &mut buf)
                     .map_err(|_| ed::Error::UnexpectedByte(10))?;
                 Ok(buf.len())
             }
@@ -720,9 +690,15 @@ macro_rules! protobuf_newtype {
         }
     };
 }
-use ibc::Any as IbcAny;
+use ibc::primitives::proto::Any as IbcAny;
 
-protobuf_newtype!(ClientState, TmClientState, IbcAny, Protobuf, ClientState);
+protobuf_newtype!(
+    WrappedClientState,
+    TmClientState,
+    IbcAny,
+    Protobuf,
+    WrappedClientState
+);
 
 // protobuf_newtype!(
 //     ConsensusState,
@@ -732,53 +708,88 @@ protobuf_newtype!(ClientState, TmClientState, IbcAny, Protobuf, ClientState);
 //     ConsensusState
 // );
 
+pub struct LegacyWrappedConnectionEnd {
+    pub inner: ConnectionEnd,
+}
+
+impl State for LegacyWrappedConnectionEnd {
+    fn attach(&mut self, _store: crate::store::Store) -> crate::Result<()> {
+        Ok(())
+    }
+
+    fn flush<W: std::io::Write>(self, _out: &mut W) -> crate::Result<()> {
+        Ok(())
+    }
+
+    fn load(_store: crate::store::Store, bytes: &mut &[u8]) -> crate::Result<Self> {
+        let mut inner: RawConnectionEnd =
+            <RawConnectionEnd as prost::Message>::decode(bytes).unwrap();
+        inner.versions = ibc::core::connection::types::version::Version::compatibles()
+            .into_iter()
+            .map(|v| v.into())
+            .collect();
+        Ok(Self {
+            inner: inner.try_into().map_err(|_| {
+                crate::Error::Ibc("Unable to load state for LegacyWrappedConnectionEnd".to_string())
+            })?,
+        })
+    }
+}
+
+impl MigrateFrom<LegacyWrappedConnectionEnd> for WrappedConnectionEnd {
+    fn migrate_from(value: LegacyWrappedConnectionEnd) -> crate::Result<Self> {
+        Ok(Self { inner: value.inner })
+    }
+}
+
 protobuf_newtype!(
+    WrappedConnectionEnd,
     ConnectionEnd,
-    IbcConnectionEnd,
     RawConnectionEnd,
     Protobuf,
-    ConnectionEnd
+    LegacyWrappedConnectionEnd
 );
 protobuf_newtype!(
-    ChannelEnd,
+    WrappedChannelEnd,
     IbcChannelEnd,
     RawChannelEnd,
     Protobuf,
-    ChannelEnd
+    WrappedChannelEnd
 );
 
-protobuf_newtype!(Header, TmHeader, RawHeader, Protobuf, Header);
-impl Terminated for Header {}
+protobuf_newtype!(WrappedHeader, Header, RawHeader, Protobuf, WrappedHeader);
+impl Terminated for WrappedHeader {}
 
 #[derive(Serialize, Clone, Debug)]
-pub struct ConsensusState {
+pub struct WrappedConsensusState {
     inner: TmConsensusState,
 }
-impl Encode for ConsensusState {
+
+impl Encode for WrappedConsensusState {
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
         let mut buf = vec![];
-        Protobuf::<ibc::Any>::encode(&self.inner, &mut buf)
+        Protobuf::<IbcAny>::encode(self.inner.clone(), &mut buf)
             .map_err(|_| ed::Error::UnexpectedByte(10))?;
         dest.write_all(&buf)?;
         Ok(())
     }
     fn encoding_length(&self) -> ed::Result<usize> {
         let mut buf = vec![];
-        Protobuf::<ibc::Any>::encode(&self.inner, &mut buf)
+        Protobuf::<IbcAny>::encode(self.inner.clone(), &mut buf)
             .map_err(|_| ed::Error::UnexpectedByte(10))?;
         Ok(buf.len())
     }
 }
-impl Decode for ConsensusState {
+impl Decode for WrappedConsensusState {
     fn decode<R: std::io::Read>(mut input: R) -> ed::Result<Self> {
         let mut buf = vec![];
         input.read_to_end(&mut buf)?;
-        let inner = Protobuf::<ibc::Any>::decode(buf.as_slice())
+        let inner = Protobuf::<IbcAny>::decode(buf.as_slice())
             .map_err(|_| ed::Error::UnexpectedByte(10))?;
         Ok(Self { inner })
     }
 }
-impl crate::state::State for ConsensusState {
+impl crate::state::State for WrappedConsensusState {
     fn attach(&mut self, _store: crate::store::Store) -> crate::Result<()> {
         Ok(())
     }
@@ -791,53 +802,68 @@ impl crate::state::State for ConsensusState {
     }
 }
 
-impl From<TmConsensusState> for ConsensusState {
+impl From<TmConsensusState> for WrappedConsensusState {
     fn from(inner: TmConsensusState) -> Self {
         Self { inner }
     }
 }
 
-impl TryFrom<ConsensusState> for TmConsensusState {
+impl TryFrom<WrappedConsensusState> for TmConsensusState {
     type Error = &'static str;
 
-    fn try_from(outer: ConsensusState) -> Result<Self, &'static str> {
+    fn try_from(outer: WrappedConsensusState) -> Result<Self, &'static str> {
         Ok(outer.inner)
     }
 }
 #[allow(trivial_bounds)]
-impl From<ConsensusState> for ibc::Any
+impl From<WrappedConsensusState> for IbcAny
 where
-    TmConsensusState: Into<ibc::Any>,
+    TmConsensusState: Into<IbcAny>,
 {
-    fn from(outer: ConsensusState) -> Self {
+    fn from(outer: WrappedConsensusState) -> Self {
         outer.inner.into()
     }
 }
 
-impl Migrate for ConsensusState {
+impl Migrate for WrappedConsensusState {
     fn migrate(_src: Store, _dest: Store, bytes: &mut &[u8]) -> OrgaResult<Self> {
-        let prev = <ConsensusState>::load(Store::default(), bytes)?;
+        let prev = <WrappedConsensusState>::load(Store::default(), bytes)?;
         prev.migrate_into()
     }
 }
 
-impl Describe for ConsensusState {
+impl Describe for WrappedConsensusState {
     fn describe() -> Descriptor {
         crate::describe::Builder::new::<Self>().build()
     }
 }
 
-impl ConsensusStateTrait for ConsensusState {
-    fn root(&self) -> &ibc_rs::core::ics23_commitment::commitment::CommitmentRoot {
+impl TryFrom<Any> for WrappedConsensusState {
+    type Error = ClientError;
+
+    fn try_from(value: Any) -> Result<Self, Self::Error> {
+        match value.type_url.as_str() {
+            TENDERMINT_CONSENSUS_STATE_TYPE_URL => {
+                let inner = TmConsensusState::try_from(value)?;
+                Ok(Self { inner })
+            }
+            _ => Err(ClientError::Other {
+                description: "Unknown consensus state type".into(),
+            }),
+        }
+    }
+}
+
+impl ConsensusStateTrait for WrappedConsensusState {
+    fn root(&self) -> &ibc_rs::core::commitment_types::commitment::CommitmentRoot {
         self.inner.root()
     }
 
     fn timestamp(&self) -> IbcTimestamp {
-        self.inner.timestamp()
-    }
-
-    fn encode_vec(&self) -> Vec<u8> {
-        ConsensusStateTrait::encode_vec(&self.inner)
+        self.inner
+            .timestamp()
+            .try_into()
+            .expect("UNIX Timestamp can't be negative")
     }
 }
 
@@ -855,7 +881,7 @@ impl From<MsgTransfer> for TransferMessage {
 impl Encode for TransferMessage {
     fn encode_into<W: std::io::Write>(&self, dest: &mut W) -> ed::Result<()> {
         let mut buf = vec![];
-        Protobuf::<RawMsgTransfer>::encode(&self.inner, &mut buf)
+        Protobuf::<RawMsgTransfer>::encode(self.inner.clone(), &mut buf)
             .map_err(|_| ed::Error::UnexpectedByte(10))?;
         dest.write_all(&buf)?;
         Ok(())
@@ -863,7 +889,7 @@ impl Encode for TransferMessage {
 
     fn encoding_length(&self) -> ed::Result<usize> {
         let mut buf = vec![];
-        Protobuf::<RawMsgTransfer>::encode(&self.inner, &mut buf)
+        Protobuf::<RawMsgTransfer>::encode(self.inner.clone(), &mut buf)
             .map_err(|_| ed::Error::UnexpectedByte(10))?;
         Ok(buf.len())
     }
@@ -892,14 +918,14 @@ impl TryFrom<IbcSigner> for Address {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
     use std::time::Duration;
 
-    use ibc::{
-        clients::ics07_tendermint::{client_state::AllowUpdate, trust_threshold::TrustThreshold},
+    use ibc_rs::{
+        clients::tendermint::types::{AllowUpdate, TrustThreshold},
         core::{
-            ics02_client::{client_type::ClientType, height::Height},
-            ics23_commitment::{commitment::CommitmentRoot, specs::ProofSpecs},
-            ics24_host::identifier::ChainId,
+            commitment_types::{commitment::CommitmentRoot, specs::ProofSpecs},
+            host::types::identifiers::ChainId,
         },
     };
     use tendermint::{Hash, Time};
@@ -927,67 +953,88 @@ mod tests {
         ibc.ctx.client_counter = 789;
 
         let mut client = Client::default();
-        let client_state = TmClientState::new(
-            ChainId::new("foo", 0).unwrap(),
-            TrustThreshold::default(),
-            Duration::from_secs(60 * 60 * 24 * 7),
-            Duration::from_secs(60 * 60 * 24 * 14),
-            Duration::from_secs(60),
-            Height::new(0, 1234).unwrap(),
-            ProofSpecs::default(),
-            vec![],
-            AllowUpdate {
+        let client_state = TmClientState::from(ibc::clients::tendermint::types::ClientState {
+            chain_id: ChainId::new("foo-0").unwrap(),
+            trust_level: TrustThreshold::ONE_THIRD,
+            trusting_period: Duration::from_secs(60 * 60 * 24 * 7),
+            unbonding_period: Duration::from_secs(60 * 60 * 24 * 14),
+            max_clock_drift: Duration::from_secs(60),
+            latest_height: Height::new(0, 1234).unwrap(),
+            proof_specs: ProofSpecs::cosmos(),
+            upgrade_path: vec![],
+            allow_update: AllowUpdate {
                 after_expiry: false,
                 after_misbehaviour: false,
             },
-        )
-        .unwrap()
+            frozen_height: None,
+        })
         .into();
         client
             .client_state
             .insert(Default::default(), client_state)
             .unwrap();
-        let consensus_state = TmConsensusState::new(
-            CommitmentRoot::from_bytes(&[0; 32]),
-            Time::from_unix_timestamp(0, 0).unwrap(),
-            Hash::Sha256([5; 32]),
-        )
-        .into();
+        let consensus_state =
+            TmConsensusState::from(ibc::clients::tendermint::types::ConsensusState {
+                root: CommitmentRoot::from_bytes(&[0; 32]),
+                timestamp: Time::from_unix_timestamp(0, 0).unwrap(),
+                next_validators_hash: Hash::Sha256([5; 32]),
+            })
+            .into();
         client
             .consensus_states
             .insert("0-100".to_string().into(), consensus_state)
             .unwrap();
-        let client_id = IbcClientId::new(ClientType::new("07-tendermint").unwrap(), 123)
-            .unwrap()
-            .into();
+        let client_id = ClientId::new("07-tendermint", 123).unwrap();
         client.client_type = ClientType::new("07-tendermint").unwrap().into();
         client
             .updates
             .insert(
                 "0-100".to_string().into(),
                 (
-                    IbcTimestamp::default().into(),
+                    IbcTimestamp::from_nanoseconds(0).into(),
                     Height::new(0, 123).unwrap().into(),
                 ),
             )
             .unwrap();
-        let conn_id = IbcConnectionId::new(123);
+        let conn_id = ConnectionId::new(123);
         client
             .connections
             .insert(conn_id.clone().into(), ())
             .unwrap();
 
-        ibc.ctx.clients.insert(client_id, client).unwrap();
-        let conn = IbcConnectionEnd::default().into();
-        ibc.ctx.connections.insert(conn_id.into(), conn).unwrap();
+        ibc.ctx
+            .clients
+            .insert(client_id.clone().into(), client)
+            .unwrap();
+        let counterparty = ibc::core::connection::types::Counterparty::new(
+            ClientId::new("07-tendermint", 0).unwrap(),
+            None,
+            vec![1, 2, 3].try_into().unwrap(),
+        );
+        let conn = ConnectionEnd::new(
+            ibc::core::connection::types::State::Uninitialized,
+            ClientId::new("07-tendermint", 0).unwrap(),
+            counterparty,
+            ibc::core::connection::types::version::Version::compatibles(),
+            Default::default(),
+        )
+        .unwrap();
+        ibc.ctx
+            .connections
+            .insert(conn_id.into(), conn.into())
+            .unwrap();
 
         let channel_end_path = ChannelEndPath(PortId::transfer(), ChannelId::new(123)).into();
-        let chan = IbcChannelEnd::new(
-            ibc::core::ics04_channel::channel::State::Open,
+        let counterparty = ibc::core::channel::types::channel::Counterparty::new(
+            ibc::core::host::types::identifiers::PortId::new("defaultPort".to_string()).unwrap(),
+            None,
+        );
+        let chan = ibc::core::channel::types::channel::ChannelEnd::new(
+            ibc::core::channel::types::channel::State::Open,
+            ibc::core::channel::types::channel::Order::Unordered,
+            counterparty,
             Default::default(),
-            Default::default(),
-            Default::default(),
-            Default::default(),
+            ibc::core::channel::types::Version::new("".to_string()),
         )
         .unwrap()
         .into();
@@ -1120,9 +1167,11 @@ mod tests {
         assert_next(
             b"connections/connection-123",
             &[
-                10, 15, 48, 55, 45, 116, 101, 110, 100, 101, 114, 109, 105, 110, 116, 45, 48, 34,
-                19, 10, 15, 48, 55, 45, 116, 101, 110, 100, 101, 114, 109, 105, 110, 116, 45, 48,
-                26, 0,
+                10, 15, 48, 55, 45, 116, 101, 110, 100, 101, 114, 109, 105, 110, 116, 45, 48, 18,
+                35, 10, 1, 49, 18, 13, 79, 82, 68, 69, 82, 95, 79, 82, 68, 69, 82, 69, 68, 18, 15,
+                79, 82, 68, 69, 82, 95, 85, 78, 79, 82, 68, 69, 82, 69, 68, 34, 24, 10, 15, 48, 55,
+                45, 116, 101, 110, 100, 101, 114, 109, 105, 110, 116, 45, 48, 26, 5, 10, 3, 1, 2,
+                3,
             ],
         );
         assert_next(b"nextSequenceAck/ports/transfer/channels/channel-123", b"3");
@@ -1139,6 +1188,41 @@ mod tests {
             &[1],
         );
         assert!(entries.next().is_none());
+    }
+
+    fn create_ibc_state_from_file<I: Into<PathBuf>>(path: I) -> Store {
+        use std::fs::File;
+        use std::io::{self, BufRead};
+
+        let file = File::open(&path.into()).unwrap();
+        let reader = io::BufReader::new(file);
+
+        let mut tuples = Vec::new();
+        let mut lines = reader.lines();
+        while let Some(Ok(line)) = lines.next() {
+            let tuple: (Vec<u8>, Vec<u8>) = serde_json::from_str(&line).unwrap();
+            tuples.push(tuple);
+        }
+
+        let mut store = Store::new(BackingStore::MapStore(Shared::new(MapStore::new())));
+        for (key, value) in tuples {
+            store.put(key, value).unwrap();
+        }
+
+        store
+    }
+
+    #[test]
+    fn migrate_v8() {
+        let mut store = create_ibc_state_from_file("prev-ibc-test-state.txt");
+
+        let mut bytes = store.get(&[]).unwrap().unwrap();
+        let app = App::migrate(store.clone(), store.clone(), &mut bytes.as_slice()).unwrap();
+        bytes.clear();
+        app.flush(&mut bytes).unwrap();
+        store.put(vec![], bytes).unwrap();
+
+        assert_state(&store);
     }
 
     #[test]

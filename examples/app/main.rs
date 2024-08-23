@@ -30,7 +30,7 @@ pub struct App {
 pub async fn main() {
     pretty_env_logger::init();
 
-    let home = tempdir::TempDir::new("orga-foo").unwrap();
+    let home = tempfile::TempDir::new().unwrap();
     let node = orga::abci::Node::<DefaultPlugins<FooCoin, App>>::new(
         home.path(),
         Some("orga-foo"),

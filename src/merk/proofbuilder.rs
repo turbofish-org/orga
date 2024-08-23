@@ -125,10 +125,10 @@ mod tests {
     use super::*;
     use crate::store::*;
     use merk::proofs::query::verify;
-    use tempdir::TempDir;
+    use tempfile::TempDir;
 
     fn temp_merk_store() -> MerkStore {
-        let temp_dir = TempDir::new("TempMerkStore").unwrap();
+        let temp_dir = TempDir::new().unwrap();
         MerkStore::new(temp_dir.path())
     }
 

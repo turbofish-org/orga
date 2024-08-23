@@ -3,8 +3,8 @@ use crate::Result;
 use cosmrs::proto::cosmos::tx::v1beta1::Tx as TxProto;
 use cosmrs::Tx;
 use ed::Terminated;
-use ibc::applications::transfer::msgs::transfer::MsgTransfer;
-use ibc::core::MsgEnvelope;
+use ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
+use ibc::core::handler::types::msgs::MsgEnvelope;
 use ibc_proto::google::protobuf::Any;
 use prost::Message;
 

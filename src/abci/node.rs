@@ -640,8 +640,7 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
         if !req.path.is_empty() {
             let store = BackingStore::MemSnapshot(mss);
             let state = Mutex::new(create_state(store)?);
-
-            let mut res = catch_unwind(|| state.lock().unwrap().abci_query(&req))
+            let mut res = catch_unwind(|| (&*state.lock().unwrap()).abci_query(&req))
                 .map_err(|_| crate::Error::Query("Panicked".to_string()))??;
 
             res.height = height.try_into().unwrap();
@@ -780,7 +779,7 @@ mod tests {
 
             Context::add(ChainId("foo".to_string()));
 
-            let home = tempdir::TempDir::new("orga-node").unwrap();
+            let home = tempfile::TempDir::new().unwrap();
             let mut node = Node::<DefaultPlugins<FooCoin, App>>::new(
                 home.path(),
                 Some("foo"),

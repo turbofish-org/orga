@@ -1,26 +1,36 @@
+use ibc::core::channel::types::proto::v1::Channel;
+use ibc::core::connection::types::ConnectionEnd;
+use ibc::core::host::types::identifiers::Sequence;
+use ibc::core::host::types::path::ReceiptPath;
+use ibc::core::host::ValidationContext;
+use ibc_proto::cosmos::tx::v1beta1::Tx;
+use ibc_proto::ibc::core::client::v1::IdentifiedClientState;
 use std::str::FromStr;
+use tendermint_rpc::Client as TendermintClient;
+use tendermint_rpc::HttpClient;
 
-use ibc::core::ics24_host::identifier::{ClientId, ConnectionId, PortId};
-use ibc::core::ics24_host::{identifier::ChannelId, path::ChannelEndPath};
+use ibc::core::host::types::identifiers::{ClientId, ConnectionId, PortId};
+use ibc::core::host::types::{identifiers::ChannelId, path::ChannelEndPath};
 
 use ibc_proto::cosmos::auth::v1beta1::{
     query_server::Query as AuthQuery, query_server::QueryServer as AuthQueryServer,
     AddressBytesToStringRequest, AddressBytesToStringResponse, AddressStringToBytesRequest,
     AddressStringToBytesResponse, BaseAccount, Bech32PrefixRequest, Bech32PrefixResponse,
-    QueryAccountAddressByIdRequest, QueryAccountAddressByIdResponse, QueryAccountRequest,
-    QueryAccountResponse, QueryAccountsRequest, QueryAccountsResponse,
-    QueryModuleAccountByNameRequest, QueryModuleAccountByNameResponse, QueryModuleAccountsRequest,
-    QueryModuleAccountsResponse, QueryParamsRequest as AuthQueryParamsRequest,
-    QueryParamsResponse as AuthQueryParamsResponse,
+    QueryAccountAddressByIdRequest, QueryAccountAddressByIdResponse, QueryAccountInfoRequest,
+    QueryAccountInfoResponse, QueryAccountRequest, QueryAccountResponse, QueryAccountsRequest,
+    QueryAccountsResponse, QueryModuleAccountByNameRequest, QueryModuleAccountByNameResponse,
+    QueryModuleAccountsRequest, QueryModuleAccountsResponse,
+    QueryParamsRequest as AuthQueryParamsRequest, QueryParamsResponse as AuthQueryParamsResponse,
 };
 use ibc_proto::cosmos::bank::v1beta1::{
     query_server::{Query as BankQuery, QueryServer as BankQueryServer},
     QueryAllBalancesRequest, QueryAllBalancesResponse, QueryBalanceRequest, QueryBalanceResponse,
     QueryDenomMetadataRequest, QueryDenomMetadataResponse, QueryDenomOwnersRequest,
     QueryDenomOwnersResponse, QueryDenomsMetadataRequest, QueryDenomsMetadataResponse,
-    QueryParamsRequest, QueryParamsResponse, QuerySpendableBalancesRequest,
-    QuerySpendableBalancesResponse, QuerySupplyOfRequest, QuerySupplyOfResponse,
-    QueryTotalSupplyRequest, QueryTotalSupplyResponse,
+    QueryParamsRequest, QueryParamsResponse, QuerySendEnabledRequest, QuerySendEnabledResponse,
+    QuerySpendableBalanceByDenomRequest, QuerySpendableBalanceByDenomResponse,
+    QuerySpendableBalancesRequest, QuerySpendableBalancesResponse, QuerySupplyOfRequest,
+    QuerySupplyOfResponse, QueryTotalSupplyRequest, QueryTotalSupplyResponse,
 };
 use ibc_proto::cosmos::base::v1beta1::Coin;
 use ibc_proto::ibc::core::connection::v1::{
@@ -30,16 +40,19 @@ use ibc_proto::ibc::core::{
     channel::v1::{
         query_server::{Query as ChannelQuery, QueryServer as ChannelQueryServer},
         QueryChannelClientStateRequest, QueryChannelClientStateResponse,
-        QueryChannelConsensusStateRequest, QueryChannelConsensusStateResponse, QueryChannelRequest,
+        QueryChannelConsensusStateRequest, QueryChannelConsensusStateResponse,
+        QueryChannelParamsRequest, QueryChannelParamsResponse, QueryChannelRequest,
         QueryChannelResponse, QueryChannelsRequest, QueryChannelsResponse,
         QueryConnectionChannelsRequest, QueryConnectionChannelsResponse,
         QueryNextSequenceReceiveRequest, QueryNextSequenceReceiveResponse,
+        QueryNextSequenceSendRequest, QueryNextSequenceSendResponse,
         QueryPacketAcknowledgementRequest, QueryPacketAcknowledgementResponse,
         QueryPacketAcknowledgementsRequest, QueryPacketAcknowledgementsResponse,
         QueryPacketCommitmentRequest, QueryPacketCommitmentResponse, QueryPacketCommitmentsRequest,
         QueryPacketCommitmentsResponse, QueryPacketReceiptRequest, QueryPacketReceiptResponse,
         QueryUnreceivedAcksRequest, QueryUnreceivedAcksResponse, QueryUnreceivedPacketsRequest,
-        QueryUnreceivedPacketsResponse,
+        QueryUnreceivedPacketsResponse, QueryUpgradeErrorRequest, QueryUpgradeErrorResponse,
+        QueryUpgradeRequest, QueryUpgradeResponse,
     },
     client::v1::{
         query_server::{Query as ClientQuery, QueryServer as ClientQueryServer},
@@ -93,7 +106,9 @@ use ibc_proto::{
             service_server::{Service as TxService, ServiceServer as TxServer},
             BroadcastTxRequest, BroadcastTxResponse, GetBlockWithTxsRequest,
             GetBlockWithTxsResponse, GetTxRequest, GetTxResponse, GetTxsEventRequest,
-            GetTxsEventResponse, SimulateRequest, SimulateResponse,
+            GetTxsEventResponse, SimulateRequest, SimulateResponse, TxDecodeAminoRequest,
+            TxDecodeAminoResponse, TxDecodeRequest, TxDecodeResponse, TxEncodeAminoRequest,
+            TxEncodeAminoResponse, TxEncodeRequest, TxEncodeResponse,
         },
     },
     google::protobuf::Any,
@@ -139,9 +154,33 @@ impl<C: Client<IbcContext> + 'static> ClientQuery for IbcClientService<C> {
 
     async fn consensus_state(
         &self,
-        _request: Request<QueryConsensusStateRequest>,
+        request: Request<QueryConsensusStateRequest>,
     ) -> Result<Response<QueryConsensusStateResponse>, Status> {
-        unimplemented!()
+        let request = request.into_inner();
+        let client_id = ClientId::from_str(&request.client_id)
+            .map_err(|_| Status::invalid_argument("Invalid client ID".to_string()))?;
+        let revision_number = request.revision_number;
+        let revision_height = request.revision_height;
+
+        let ibc = (self.ibc)();
+
+        let consensus_state = ibc
+            .query(|ibc| {
+                Ok(ibc.query_consensus_state(
+                    client_id.clone().into(),
+                    revision_number,
+                    revision_height,
+                )?)
+            })
+            .await?;
+
+        let res = QueryConsensusStateResponse {
+            consensus_state: consensus_state.consensus_state.into(),
+            proof: vec![],
+            proof_height: None,
+        };
+
+        Ok(Response::new(res))
     }
 
     async fn consensus_states(
@@ -173,9 +212,22 @@ impl<C: Client<IbcContext> + 'static> ClientQuery for IbcClientService<C> {
 
     async fn client_status(
         &self,
-        _request: Request<QueryClientStatusRequest>,
+        request: Request<QueryClientStatusRequest>,
     ) -> Result<Response<QueryClientStatusResponse>, Status> {
-        unimplemented!()
+        let request = request.into_inner();
+        let client_id = ClientId::from_str(&request.client_id)
+            .map_err(|_| Status::invalid_argument("Invalid client ID".to_string()))?;
+        let ibc = (self.ibc)();
+
+        let client_status = ibc
+            .query(|ibc| Ok(ibc.query_client_status(client_id.clone().into())?))
+            .await?;
+
+        let res = QueryClientStatusResponse {
+            status: client_status.to_string(),
+        };
+
+        Ok(Response::new(res))
     }
 
     async fn client_params(
@@ -353,9 +405,54 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
 
     async fn channel_client_state(
         &self,
-        _request: Request<QueryChannelClientStateRequest>,
+        request: Request<QueryChannelClientStateRequest>,
     ) -> Result<Response<QueryChannelClientStateResponse>, Status> {
-        unimplemented!()
+        let ibc = (self.ibc)();
+        let request = request.into_inner();
+        let port_id = PortId::from_str(&request.port_id)
+            .map_err(|_| Status::invalid_argument("invalid port id"))?;
+        let channel_id = ChannelId::from_str(&request.channel_id)
+            .map_err(|_| Status::invalid_argument("invalid channel id"))?;
+
+        let path = ChannelEndPath(port_id, channel_id);
+        let channel: Channel = ibc
+            .query(|ibc| Ok(ibc.query_channel(path.clone().into())))
+            .await??
+            .ok_or_else(|| Status::not_found("channel not found"))?;
+        let connection_id = channel
+            .connection_hops
+            .first()
+            .ok_or_else(|| Status::not_found("channel does not have a connection hop"))?;
+        let connection_end: ConnectionEnd = ibc
+            .query(|ibc| {
+                Ok(ibc.query_connection(ConnectionId::from_str(connection_id).unwrap().into()))
+            })
+            .await??
+            .ok_or_else(|| Status::not_found("connection not found"))?;
+        let client_id = connection_end.client_id();
+        let client_state = ibc
+            .query(|ibc| {
+                Ok(ibc
+                    .clients
+                    .get(client_id.clone().into())?
+                    .ok_or_else(|| crate::Error::Ibc("Client state not found".to_string()))?
+                    .client_state
+                    .get(Default::default())?
+                    .ok_or_else(|| crate::Error::Ibc("Client state not found".to_string()))?
+                    .clone())
+            })
+            .await?;
+
+        let res = QueryChannelClientStateResponse {
+            identified_client_state: Some(IdentifiedClientState {
+                client_id: client_id.to_string(),
+                client_state: Some(client_state.inner.into()),
+            }),
+            proof: vec![],
+            proof_height: None,
+        };
+
+        Ok(Response::new(res))
     }
 
     async fn channel_consensus_state(
@@ -402,9 +499,29 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
 
     async fn packet_receipt(
         &self,
-        _request: Request<QueryPacketReceiptRequest>,
+        request: Request<QueryPacketReceiptRequest>,
     ) -> Result<Response<QueryPacketReceiptResponse>, Status> {
-        unimplemented!()
+        let request = request.into_inner();
+        let port_id = PortId::from_str(&request.port_id)
+            .map_err(|_| Status::invalid_argument("invalid port id"))?;
+        let channel_id = ChannelId::from_str(&request.channel_id)
+            .map_err(|_| Status::invalid_argument("invalid channel id"))?;
+        let sequence = Sequence::from(request.sequence);
+
+        let ibc = (self.ibc)();
+        let receipt_path = ReceiptPath::new(&port_id, &channel_id, sequence);
+
+        let receipt = ibc
+            .query(|ibc| Ok(ibc.get_packet_receipt(&receipt_path.clone())?))
+            .await;
+
+        let res = QueryPacketReceiptResponse {
+            received: receipt.is_ok(),
+            proof: vec![],
+            proof_height: None,
+        };
+
+        Ok(Response::new(res))
     }
 
     async fn packet_acknowledgement(
@@ -519,8 +636,70 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
 
     async fn next_sequence_receive(
         &self,
-        _request: Request<QueryNextSequenceReceiveRequest>,
+        request: Request<QueryNextSequenceReceiveRequest>,
     ) -> Result<Response<QueryNextSequenceReceiveResponse>, Status> {
+        let ibc_client = (self.ibc)();
+        let request_inner = request.into_inner();
+        let port_id = PortId::from_str(&request_inner.port_id)
+            .map_err(|_| Status::invalid_argument("invalid port id"))?;
+        let channel_id = ChannelId::from_str(&request_inner.channel_id)
+            .map_err(|_| Status::invalid_argument("invalid channel id"))?;
+        let res = QueryNextSequenceReceiveResponse {
+            next_sequence_receive: ibc_client
+                .query(|ibc| {
+                    ibc.query_next_sequence_receive(PortChannel::new(
+                        port_id.clone(),
+                        channel_id.clone(),
+                    ))
+                })
+                .await?,
+            ..Default::default()
+        };
+        Ok(Response::new(res))
+    }
+
+    async fn next_sequence_send(
+        &self,
+        request: Request<QueryNextSequenceSendRequest>,
+    ) -> Result<Response<QueryNextSequenceSendResponse>, Status> {
+        let ibc_client = (self.ibc)();
+        let request_inner = request.into_inner();
+        let port_id = PortId::from_str(&request_inner.port_id)
+            .map_err(|_| Status::invalid_argument("invalid port id"))?;
+        let channel_id = ChannelId::from_str(&request_inner.channel_id)
+            .map_err(|_| Status::invalid_argument("invalid channel id"))?;
+        let res = QueryNextSequenceSendResponse {
+            next_sequence_send: ibc_client
+                .query(|ibc| {
+                    ibc.query_next_sequence_send(PortChannel::new(
+                        port_id.clone(),
+                        channel_id.clone(),
+                    ))
+                })
+                .await?,
+            ..Default::default()
+        };
+        Ok(Response::new(res))
+    }
+
+    async fn upgrade(
+        &self,
+        _request: Request<QueryUpgradeRequest>,
+    ) -> Result<Response<QueryUpgradeResponse>, Status> {
+        unimplemented!()
+    }
+
+    async fn upgrade_error(
+        &self,
+        _request: Request<QueryUpgradeErrorRequest>,
+    ) -> Result<Response<QueryUpgradeErrorResponse>, Status> {
+        unimplemented!()
+    }
+
+    async fn channel_params(
+        &self,
+        _request: Request<QueryChannelParamsRequest>,
+    ) -> Result<Response<QueryChannelParamsResponse>, Status> {
         unimplemented!()
     }
 }
@@ -713,6 +892,13 @@ impl AuthQuery for AuthService {
     ) -> Result<Response<AddressStringToBytesResponse>, Status> {
         unimplemented!()
     }
+
+    async fn account_info(
+        &self,
+        _request: Request<QueryAccountInfoRequest>,
+    ) -> Result<Response<QueryAccountInfoResponse>, Status> {
+        unimplemented!()
+    }
 }
 
 pub struct BankService {}
@@ -749,7 +935,12 @@ impl BankQuery for BankService {
         &self,
         _request: Request<QueryTotalSupplyRequest>,
     ) -> Result<Response<QueryTotalSupplyResponse>, Status> {
-        unimplemented!()
+        let res = QueryTotalSupplyResponse {
+            supply: vec![],
+            pagination: None,
+        };
+
+        Ok(Response::new(res))
     }
 
     async fn supply_of(
@@ -786,6 +977,20 @@ impl BankQuery for BankService {
     ) -> Result<Response<QueryDenomOwnersResponse>, Status> {
         unimplemented!()
     }
+
+    async fn send_enabled(
+        &self,
+        _request: Request<QuerySendEnabledRequest>,
+    ) -> Result<Response<QuerySendEnabledResponse>, Status> {
+        unimplemented!()
+    }
+
+    async fn spendable_balance_by_denom(
+        &self,
+        _request: Request<QuerySpendableBalanceByDenomRequest>,
+    ) -> Result<Response<QuerySpendableBalanceByDenomResponse>, Status> {
+        unimplemented!()
+    }
 }
 
 pub struct AppHealthService {}
@@ -813,7 +1018,7 @@ impl HealthService for AppHealthService {
         &self,
         _request: Request<GetSyncingRequest>,
     ) -> Result<Response<GetSyncingResponse>, Status> {
-        unimplemented!()
+        Ok(Response::new(GetSyncingResponse { syncing: false }))
     }
 
     async fn get_latest_block(
@@ -861,16 +1066,41 @@ impl TxService for AppTxService {
 
     async fn get_tx(
         &self,
-        _request: Request<GetTxRequest>,
+        request: Request<GetTxRequest>,
     ) -> Result<Response<GetTxResponse>, Status> {
-        unimplemented!()
+        let client =
+            HttpClient::new("http://localhost:26657").map_err(|e| Status::unavailable("Error"))?;
+
+        let request = request.into_inner();
+        let hash = request
+            .hash
+            .parse()
+            .map_err(|_| Status::invalid_argument("Invalid hash"))?;
+        let res = client
+            .tx(hash, false)
+            .await
+            .map_err(|_| Status::not_found("Tx not found"))?;
+        Ok(Response::new(GetTxResponse {
+            tx: Some(Tx::decode(res.tx.as_slice()).map_err(|_| Status::internal("Error"))?),
+            ..Default::default()
+        }))
     }
 
     async fn broadcast_tx(
         &self,
-        _request: Request<BroadcastTxRequest>,
+        request: Request<BroadcastTxRequest>,
     ) -> Result<Response<BroadcastTxResponse>, Status> {
-        unimplemented!()
+        let client =
+            HttpClient::new("http://localhost:26657").map_err(|e| Status::unavailable("Error"))?;
+        let request = request.into_inner();
+        let res = client
+            .broadcast_tx_sync(request.tx_bytes)
+            .await
+            .map_err(|_| Status::internal("Error"))?;
+
+        let res = BroadcastTxResponse { tx_response: None };
+
+        Ok(Response::new(res))
     }
 
     async fn get_txs_event(
@@ -884,6 +1114,34 @@ impl TxService for AppTxService {
         &self,
         _request: Request<GetBlockWithTxsRequest>,
     ) -> Result<Response<GetBlockWithTxsResponse>, Status> {
+        unimplemented!()
+    }
+
+    async fn tx_decode(
+        &self,
+        _request: Request<TxDecodeRequest>,
+    ) -> Result<Response<TxDecodeResponse>, Status> {
+        unimplemented!()
+    }
+
+    async fn tx_encode(
+        &self,
+        _request: Request<TxEncodeRequest>,
+    ) -> Result<Response<TxEncodeResponse>, Status> {
+        unimplemented!()
+    }
+
+    async fn tx_decode_amino(
+        &self,
+        _request: Request<TxDecodeAminoRequest>,
+    ) -> Result<Response<TxDecodeAminoResponse>, Status> {
+        unimplemented!()
+    }
+
+    async fn tx_encode_amino(
+        &self,
+        _request: Request<TxEncodeAminoRequest>,
+    ) -> Result<Response<TxEncodeAminoResponse>, Status> {
         unimplemented!()
     }
 }

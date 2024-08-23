@@ -31,7 +31,7 @@ pub enum Error {
     Ibc(String),
     #[cfg(feature = "ibc")]
     #[error(transparent)]
-    IbcContext(#[from] ibc::core::ContextError),
+    IbcContext(#[from] ibc::core::handler::types::error::ContextError),
     #[error("Invalid ID")]
     InvalidID,
     #[error(transparent)]
