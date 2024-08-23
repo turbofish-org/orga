@@ -108,15 +108,6 @@ impl TokenTransferValidationContext for Transfer {
         Ok(())
     }
 
-    // fn send_coins_validate(
-    //     &self,
-    //     _from_account: &Self::AccountId,
-    //     _to_account: &Self::AccountId,
-    //     _coin: &PrefixedCoin,
-    // ) -> Result<(), TokenTransferError> {
-    //     Ok(())
-    // }
-
     fn mint_coins_validate(
         &self,
         _account: &Self::AccountId,
@@ -203,26 +194,6 @@ impl TokenTransferExecutionContext for Transfer {
 
         Ok(())
     }
-
-    // fn send_coins_execute(
-    //     &mut self,
-    //     from: &Self::AccountId,
-    //     to: &Self::AccountId,
-    //     coin: &PrefixedCoin,
-    // ) -> Result<(), TokenTransferError> {
-    //     let denom: Denom = coin.denom.clone().try_into()?;
-    //     let amount: Amount = coin.amount.try_into()?;
-
-    //     let mut denom_balances = self.accounts.entry(denom)?.or_default()?;
-
-    //     let mut sender_balance = denom_balances.entry(*from)?.or_default()?;
-    //     *sender_balance = (*sender_balance - amount).result()?;
-
-    //     let mut receiver_balance = denom_balances.entry(*to)?.or_default()?;
-    //     *receiver_balance = (*receiver_balance + amount).result()?;
-
-    //     Ok(())
-    // }
 
     fn mint_coins_execute(
         &mut self,

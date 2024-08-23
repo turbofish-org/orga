@@ -105,54 +105,6 @@ impl ValidationContext for IbcContext {
         Ok(())
     }
 
-    // fn client_state(&self, client_id: &IbcClientId) -> Result<Self::AnyClientState, ContextError> {
-    //     Ok(self
-    //         .clients
-    //         .get(client_id.clone().into())
-    //         .map_err(|_| ClientError::ImplementationSpecific)?
-    //         .ok_or_else(|| ClientError::ClientStateNotFound {
-    //             client_id: client_id.clone(),
-    //         })?
-    //         .client_state
-    //         .get(Default::default())
-    //         .map_err(|_| ClientError::ImplementationSpecific)?
-    //         .ok_or(ClientError::ImplementationSpecific)?
-    //         .clone()
-    //         .into())
-    // }
-
-    // fn decode_client_state(&self, client_state: Any) -> Result<Self::AnyClientState, ContextError> {
-    //     if let Ok(client_state) = TmClientState::try_from(client_state.clone()) {
-    //         Ok(client_state)
-    //     } else {
-    //         Err(ContextError::from(ClientError::UnknownClientStateType {
-    //             client_state_type: client_state.type_url,
-    //         }))
-    //     }
-    // }
-
-    // fn consensus_state(
-    //     &self,
-    //     client_cons_state_path: &ClientConsensusStatePath,
-    // ) -> Result<Self::AnyConsensusState, ContextError> {
-    //     Ok(self
-    //         .clients
-    //         .get(client_cons_state_path.client_id.clone().into())
-    //         .map_err(|_| ClientError::ImplementationSpecific)?
-    //         .ok_or_else(|| ClientError::ClientStateNotFound {
-    //             client_id: client_cons_state_path.client_id.clone(),
-    //         })?
-    //         .consensus_states
-    //         .get(
-    //             Height::new(client_cons_state_path.epoch, client_cons_state_path.height)
-    //                 .map_err(|_| ClientError::ImplementationSpecific)?
-    //                 .into(),
-    //         )
-    //         .map_err(|_| ClientError::ImplementationSpecific)?
-    //         .ok_or(ClientError::ImplementationSpecific)?
-    //         .clone())
-    // }
-
     fn host_height(&self) -> Result<Height, ContextError> {
         let ctx = Context::resolve::<ChainIdCtx>().ok_or_else(|| {
             log::error!("Missing chain ID context");
@@ -319,54 +271,6 @@ impl ValidationContext for IbcContext {
             .clone()
             .into())
     }
-
-    // fn client_update_time(
-    //     &self,
-    //     client_id: &IbcClientId,
-    //     height: &Height,
-    // ) -> Result<Timestamp, ContextError> {
-    //     Ok(self
-    //         .clients
-    //         .get(client_id.clone().into())
-    //         .map_err(|_| ClientError::ImplementationSpecific)?
-    //         .ok_or(ClientError::ClientStateNotFound {
-    //             client_id: client_id.clone(),
-    //         })?
-    //         .updates
-    //         .get((*height).into())
-    //         .map_err(|_| ClientError::ImplementationSpecific)?
-    //         .ok_or(ChannelError::ProcessedTimeNotFound {
-    //             client_id: client_id.clone(),
-    //             height: *height,
-    //         })?
-    //         .0
-    //         .clone()
-    //         .into())
-    // }
-
-    // fn client_update_height(
-    //     &self,
-    //     client_id: &IbcClientId,
-    //     height: &Height,
-    // ) -> Result<Height, ContextError> {
-    //     self.clients
-    //         .get(client_id.clone().into())
-    //         .map_err(|_| ClientError::ImplementationSpecific)?
-    //         .ok_or(ClientError::ClientStateNotFound {
-    //             client_id: client_id.clone(),
-    //         })?
-    //         .updates
-    //         .get((*height).into())
-    //         .map_err(|_| ClientError::ImplementationSpecific)?
-    //         .ok_or(ChannelError::ProcessedHeightNotFound {
-    //             client_id: client_id.clone(),
-    //             height: *height,
-    //         })?
-    //         .1
-    //         .clone()
-    //         .try_into()
-    //         .map_err(|_| ClientError::ImplementationSpecific.into())
-    // }
 
     fn channel_counter(&self) -> Result<u64, ContextError> {
         Ok(self.channel_counter)
