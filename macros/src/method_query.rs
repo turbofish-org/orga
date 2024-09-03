@@ -79,7 +79,12 @@ fn method_query_enum(tokens: &mut TokenStream2, item: &ItemImpl) {
             //     quote! { () }
             // };
             args.push(quote! { Vec<u8> });
-            quote! { #ident(#( #args ),*) }
+
+            let doctext = format!("Method query for [{}::{}]", parent_ident, &method.sig.ident);
+            quote! {
+                #[doc = #doctext]
+                #ident(#( #args ),*)
+            }
         })
         .collect_vec();
 
@@ -92,7 +97,10 @@ fn method_query_enum(tokens: &mut TokenStream2, item: &ItemImpl) {
             quote! { #ident }
         })
         .collect_vec();
-    variants.push(quote! { Noop(::std::marker::PhantomData<fn((#( #tp ),*))>) });
+    variants.push(quote! {
+        /// No-op method query.
+        Noop(::std::marker::PhantomData<fn((#( #tp ),*))>)
+    });
 
     let _enum_debug = {
         let child_debugs = query_methods(&item).into_iter().map(|field| {
@@ -132,7 +140,9 @@ fn method_query_enum(tokens: &mut TokenStream2, item: &ItemImpl) {
         }
     };
 
+    let doctext = format!("Method query for [{}]", parent_ident);
     tokens.extend(quote! {
+        #[doc = #doctext]
         #[derive(#encode_trait, #decode_trait, Debug)]
         pub enum #ident #ty {
             #( #variants ),*

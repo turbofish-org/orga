@@ -71,8 +71,12 @@ fn method_call_enum(tokens: &mut TokenStream2, item: &ItemImpl) {
             let ident = to_camel_case(&method.sig.ident);
 
             let args = method_args(method);
+            let doctext = format!("Method call for [{}::{}]", parent_ident, &method.sig.ident);
 
-            quote! { #ident(#( #args ),*) }
+            quote! {
+                #[doc = #doctext]
+                #ident(#( #args ),*)
+            }
         })
         .collect_vec();
 
@@ -85,7 +89,10 @@ fn method_call_enum(tokens: &mut TokenStream2, item: &ItemImpl) {
             quote! { #ident }
         })
         .collect_vec();
-    variants.push(quote! { Noop(::std::marker::PhantomData<fn((#( #tp ),*))>) });
+    variants.push(quote! {
+        /// No-op method call.
+        Noop(::std::marker::PhantomData<fn((#( #tp ),*))>)
+    });
 
     let enum_debug = {
         let child_debugs = call_methods(&item).into_iter().map(|field| {
@@ -125,9 +132,10 @@ fn method_call_enum(tokens: &mut TokenStream2, item: &ItemImpl) {
         }
     };
 
+    let doctext = format!("Method calls for [{}]", parent_ident);
     tokens.extend(quote! {
+        #[doc = #doctext]
         #[derive(#encode_trait, #decode_trait)]
-
         pub enum #ident #ty {
             #( #variants ),*
         }
