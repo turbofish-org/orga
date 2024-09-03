@@ -8,54 +8,99 @@ use crate::{Error, Result};
 
 use super::{Commission, Delegator, Redelegation};
 
+/// [Pool] of [Delegator] indexed by validator [Address]
 type Delegators<S> = Pool<Address, Delegator<S>, S>;
 
+/// A single declared validator.
+///
+/// A `Validator` tracks the staking state of a single validator, including its
+/// commission rate, delegators, and unbonding status.
 #[orga]
 pub struct Validator<S: Symbol> {
+    /// If the validator is jailed, the time (in unix seconds) when it will be
+    /// eligible to unjail.
     pub(super) jailed_until: Option<i64>,
+    /// Whether the validator may re-enter the active set.
     pub(super) tombstoned: bool,
+    /// Operator address.
     pub(super) address: VersionedAddress,
+    /// Commission settings.
     pub(super) commission: Commission,
+    /// Delegators staked to this validator.
     pub(super) delegators: Delegators<S>,
+    /// Metadata used for display purposes. Not parsed on-chain.
     pub(super) info: ValidatorInfo,
+    /// Whether this validator is currently in the active set.
     pub(super) in_active_set: bool,
+    /// Whether this validator is currently unbonding.
     pub(super) unbonding: bool,
+    /// When this validator started unbonding, if applicable.
     pub(super) unbonding_start_seconds: i64,
+    /// The last time this validator was edited, in unix seconds.
     pub(super) last_edited_seconds: i64,
+    /// The minimum amount this validator must keep self-delegated to remain
     pub(super) min_self_delegation: Amount,
 }
 
+/// Queryable information about a validator, aggregated for convenience.
 #[derive(Encode, Decode)]
 pub struct ValidatorQueryInfo {
+    /// If the validator is jailed, the time (in unix seconds) when it will be
+    /// eligible to unjail.
     pub jailed_until: Option<i64>,
+    /// Whether the validator may re-enter the active set.
     pub tombstoned: bool,
+    /// Operator address.
     pub address: VersionedAddress,
+    /// Commission settings.
     pub commission: Commission,
+    /// Metadata used for display purposes. Not parsed on-chain.
     pub info: ValidatorInfo,
+    /// Whether the validator is currently in the active set.
     pub in_active_set: bool,
+    /// Whether the validator is currently unbonding.
     pub unbonding: bool,
+    /// When the validator started unbonding, if applicable.
     pub unbonding_start_seconds: i64,
+    /// The minimum amount this validator must keep self-delegated to remain
+    /// active.
     pub min_self_delegation: Amount,
-
+    /// Whether the validator is currently jailed.
     pub jailed: bool,
+    /// The total amount staked to this validator.
     pub amount_staked: Amount,
 }
 
+/// Metadata used for display purposes. Not parsed on-chain.
 pub type ValidatorInfo = LengthVec<u16, u8>;
 
+/// Current validator status, computed by [Validator::status]
 #[derive(Encode, Decode)]
 pub enum Status {
+    /// Inactive, tokens may be freely unbonded.
     Unbonded,
+    /// Active, tokens are staked and participating in consensus. Unbonds are
+    /// subject to the full unbonding period.
     Bonded,
-    Unbonding { start_seconds: i64 },
+    /// Inactive, but tokens are still at stake for past actions. Unbonds are
+    /// initialized with the time this status was entered.
+    Unbonding {
+        /// The time (in unix seconds) when the unbonding started.
+        start_seconds: i64,
+    },
 }
 
+/// Data required to slash redelegations from a single DVP.
 pub(super) struct SlashableRedelegation {
+    /// Delegator address
     pub delegator_address: VersionedAddress,
+    /// Outbound redelegations that may be slashed.
     pub outbound_redelegations: Vec<Redelegation>,
 }
 
 impl<S: Symbol + Default> Validator<S> {
+    /// Returns a [PoolChildMut] for the given delegator address, resolving
+    /// mutations efficiently on drop.
     pub(super) fn get_mut(
         &mut self,
         address: Address,
@@ -63,10 +108,14 @@ impl<S: Symbol + Default> Validator<S> {
         self.delegators.get_mut(address)
     }
 
+    /// Returns a [PoolChild] for the given delegator address, ensuring
+    /// correctness of the [Delegator] state on deref.
     pub fn get(&self, address: Address) -> Result<PoolChild<Delegator<S>, S>> {
         self.delegators.get(address)
     }
 
+    /// How much voting power the validator would have, were they in the active
+    /// set.
     pub fn potential_vp(&mut self) -> Result<Amount> {
         let in_active_set_before = self.in_active_set;
         self.in_active_set = true;
@@ -76,14 +125,17 @@ impl<S: Symbol + Default> Validator<S> {
         res
     }
 
+    /// Amount staked to this validator.
     pub fn staked(&self) -> Result<Amount> {
         self.balance()?.amount()
     }
 
+    /// Whether this validator is currently jailed.
     pub fn jailed(&self) -> bool {
         self.jailed_until.is_some()
     }
 
+    /// The current bonding status of the validator.
     pub fn status(&self) -> Status {
         if self.unbonding {
             Status::Unbonding {
@@ -96,6 +148,7 @@ impl<S: Symbol + Default> Validator<S> {
         }
     }
 
+    /// Jails the validator for a given number of seconds.
     pub(super) fn jail_for_seconds(&mut self, seconds: u64) -> Result<()> {
         let now = self.current_seconds()?;
         let jailed_until = match self.jailed_until {
@@ -108,10 +161,12 @@ impl<S: Symbol + Default> Validator<S> {
         Ok(())
     }
 
+    /// Jails the validator indefinitely.
     pub(super) fn jail_forever(&mut self) {
         self.jailed_until.replace(i64::MAX);
     }
 
+    /// Unjails the validator if it is currently jailed and eligible to unjail.
     pub(super) fn try_unjail(&mut self) -> Result<()> {
         match self.jailed_until {
             Some(jailed_until) => {
@@ -128,6 +183,7 @@ impl<S: Symbol + Default> Validator<S> {
         Ok(())
     }
 
+    /// Slash all funds staked to the validator by the given `penalty`.
     pub(super) fn slash(
         &mut self,
         penalty: Decimal,
@@ -155,6 +211,7 @@ impl<S: Symbol + Default> Validator<S> {
         Ok(redelegations)
     }
 
+    /// Returns all addresses delegated to this validator.
     pub fn delegator_keys(&self) -> Result<Vec<Address>> {
         let mut delegator_keys: Vec<Address> = vec![];
         self.delegators
@@ -169,6 +226,7 @@ impl<S: Symbol + Default> Validator<S> {
         Ok(delegator_keys)
     }
 
+    /// Returns a [ValidatorQueryInfo] for this validator.
     pub(super) fn query_info(&self) -> Result<ValidatorQueryInfo> {
         Ok(ValidatorQueryInfo {
             jailed_until: self.jailed_until,
@@ -186,6 +244,7 @@ impl<S: Symbol + Default> Validator<S> {
         })
     }
 
+    /// Returns the current time in unix seconds.
     fn current_seconds(&mut self) -> Result<i64> {
         let time = self
             .context::<Time>()
@@ -194,10 +253,12 @@ impl<S: Symbol + Default> Validator<S> {
         Ok(time.seconds)
     }
 
+    /// Returns the self-delegation amount of the validator.
     pub(super) fn self_delegation(&self) -> Result<Amount> {
         self.delegators.get(self.address.into())?.staked.amount()
     }
 
+    /// Checks whether the validator is below their required self-delegation.
     fn below_required_self_delegation(&self) -> Result<bool> {
         Ok(self.self_delegation()? < self.min_self_delegation)
     }

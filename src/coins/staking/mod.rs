@@ -1,3 +1,28 @@
+//! Staking module.
+//!
+//! Orga's included staking module is loosely modeled after the Cosmos SDK's
+//! `x/staking`. We rely heavily on [Pool] to enable staking with minimal
+//! iteration.
+//!
+//! Conceptually, the staking system is mostly a [Pool] of [Validator]s, and
+//! each [Validator] is a [Pool] of [Delegator]s (plus some extra state at each
+//! level).
+//!
+//! At each layer, changes are handled via [Pool] children on deref or drop,
+//! using the ideas proposed in [F1 Pool] to ensure efficiency and numerical
+//! accuracy without approximation.
+//!
+//! See:
+//! - [Pool]
+//! - [F1 Pool]
+//! - [x/staking](https://github.com/cosmos/cosmos-sdk/blob/main/x/staking/README.md)
+//!
+//! Current limitations:
+//! - Slashing currently iterates over all delegations.
+//! - Redelegation to inactive validators is not supported.
+//!
+//! [F1 Pool]: https://github.com/cosmos/cosmos-sdk/blob/main/docs/spec/fee_distribution/f1_fee_distr.pdf
+
 use super::pool::{Child as PoolChild, ChildMut as PoolChildMut};
 use super::{Address, Amount, Balance, Coin, Decimal, Give, Pool, Symbol, VersionedAddress};
 use crate::abci::{BeginBlock, EndBlock};
@@ -15,37 +40,65 @@ use sha2::{Digest, Sha256};
 use std::convert::TryInto;
 use tendermint_proto::v0_34::abci::{Event, EventAttribute, EvidenceType};
 
+/// Delegator entries within a validator.
 mod delegator;
 pub use delegator::*;
 
+/// Validators.
 mod validator;
 pub use validator::*;
 
+/// Default unbonding period length in seconds.
 #[cfg(test)]
 pub const UNBONDING_SECONDS: u64 = 10; // 10 seconds
+
+/// Default unbonding period length in seconds.
 #[cfg(not(test))]
 pub const UNBONDING_SECONDS: u64 = 60 * 60 * 24 * 14; // 2 weeks
+
+/// How often a validator can be edited, in seconds.
 const EDIT_INTERVAL_SECONDS: u64 = 60 * 60 * 24; // 1 day
 
+/// A vanilla Cosmos-style staking module.
 #[orga(version = 1)]
 pub struct Staking<S: Symbol> {
+    /// Validators indexed by operator address.
     validators: Pool<Address, Validator<S>, S>,
+    /// Minimum self-delegation amount setting for validator declarations.
     pub min_self_delegation_min: u64,
+    /// Consensus keys indexed by operator address.
     pub consensus_keys: Map<Address, [u8; 32]>,
+    /// The last block height at which a validator signed.
     pub last_signed_block: Map<[u8; 20], u64>,
+    /// Index of validator addresses sorted by voting power (descending).
     validators_by_power: EntryMap<ValidatorPowerEntry>,
+    /// Voting power of each validator at the previous height.
     last_validator_powers: Map<Address, u64>,
+    /// Maximum number of active validators.
     pub max_validators: u64,
+    /// Previously reported voting power of each validator for detecting changes
+    /// in EndBlock.
     last_indexed_power: Map<Address, u64>,
+    /// Index of operator addresses by Tendermint public key hash.
     address_for_tm_hash: Map<[u8; 20], VersionedAddress>,
+    /// Unbonding period length in seconds.
     pub unbonding_seconds: u64,
+    /// Maximum number of blocks a validator can be offline before being jailed.
     pub max_offline_blocks: u64,
+    /// Fraction of stake to slash for double signing.
     pub slash_fraction_double_sign: Decimal,
+    /// Fraction of stake to slash for downtime.
     pub slash_fraction_downtime: Decimal,
+    /// Duration in seconds for which a validator is jailed for downtime.
     pub downtime_jail_seconds: u64,
+    /// Queue of validators to transition to the unbonded status.
     validator_queue: EntryMap<ValidatorQueueEntry>,
+    /// Queue of unbonding delegations.
     unbonding_delegation_queue: Deque<UnbondingDelegationEntry>,
+    /// Queue of redelegations.
     redelegation_queue: Deque<RedelegationEntry>,
+    /// Index of which validators a delegator has delegated to for faster
+    /// iteration.
     delegation_index: Map<Address, Map<Address, ()>>,
 }
 
@@ -55,15 +108,20 @@ impl<S: Symbol> MigrateFrom<StakingV0<S>> for StakingV1<S> {
     }
 }
 
+/// An entry in the validator queue, used to track progress toward a validator
+/// status change.
 #[derive(Entry, Clone, Serialize, Deserialize, State, Migrate)]
 struct ValidatorQueueEntry {
+    /// The time at which the validator began unbonding, in unix seconds.
     #[key]
     start_seconds: i64,
+    /// The operator address of the unbonding validator.
     #[key]
     address_bytes: [u8; 20],
 }
 
 impl EntryMap<ValidatorQueueEntry> {
+    /// Remove all entries with the given operator address.
     fn remove_by_address(&mut self, address: Address) -> Result<()> {
         let entries: Vec<Result<_>> = self.iter()?.collect();
         for res in entries {
@@ -79,32 +137,44 @@ impl EntryMap<ValidatorQueueEntry> {
     }
 }
 
+/// Queue entry for unbonding delegations.
 #[orga]
 pub struct UnbondingDelegationEntry {
+    /// Validator address.
     validator_address: VersionedAddress,
+    /// Delegator address..
     delegator_address: VersionedAddress,
+    /// Time at which the unbonding began (unix seconds).
     start_seconds: i64,
 }
 
+/// Queue entry for redelegations.
 #[orga]
 pub struct RedelegationEntry {
+    /// Source validator address.
     src_validator_address: VersionedAddress,
+    /// Destination validator address.
     dst_validator_address: VersionedAddress,
+    /// Delegator address in each DVP.
     delegator_address: VersionedAddress,
+    /// Time at which the redelegation began (unix seconds).
     start_seconds: i64,
 }
 
 #[derive(Entry, State, Migrate)]
 struct ValidatorPowerEntry {
+    /// `u64::MAX - power`, to allow for descending order iteration.
     #[key]
     inverted_power: u64,
+    /// Validator operator address bytes.
     #[key]
     address_bytes: [u8; 20],
 }
 
 impl ValidatorPowerEntry {
+    /// Uninverted voting power.
     fn power(&self) -> u64 {
-        u64::max_value() - self.inverted_power
+        u64::MAX - self.inverted_power
     }
 }
 
@@ -197,6 +267,7 @@ impl<S: Symbol> BeginBlock for Staking<S> {
 
 #[orga]
 impl<S: Symbol> Staking<S> {
+    /// Initiate a new delegation.
     pub fn delegate(
         &mut self,
         val_address: Address,
@@ -218,6 +289,7 @@ impl<S: Symbol> Staking<S> {
         self.update_vp(val_address)
     }
 
+    /// Index a delegation for faster iteration.
     fn index_delegation(&mut self, val_address: Address, delegator_address: Address) -> Result<()> {
         self.delegation_index
             .entry(delegator_address)?
@@ -225,6 +297,7 @@ impl<S: Symbol> Staking<S> {
             .insert(val_address, ())
     }
 
+    /// Query a consensus key by validator operator address.
     #[query]
     pub fn consensus_key(&self, val_address: Address) -> Result<[u8; 32]> {
         let consensus_key = match self.consensus_keys.get(val_address)? {
@@ -235,6 +308,7 @@ impl<S: Symbol> Staking<S> {
         Ok(consensus_key)
     }
 
+    /// Query all consensus keys.
     #[query]
     pub fn consensus_keys(&self) -> Result<Vec<(Address, [u8; 32])>> {
         let mut vec = vec![];
@@ -249,6 +323,7 @@ impl<S: Symbol> Staking<S> {
         Ok(vec)
     }
 
+    /// Query the last signed block height for all validators.
     #[query]
     pub fn last_signed_blocks(&self) -> Result<Vec<(Address, Option<u64>)>> {
         let mut res = vec![];
@@ -264,6 +339,7 @@ impl<S: Symbol> Staking<S> {
         Ok(res)
     }
 
+    /// Get the operator address for a given consensus key.
     pub fn address_by_consensus_key(&self, cons_key: [u8; 32]) -> Result<Option<Address>> {
         let tm_pubkey_hash = tm_pubkey_hash(cons_key)?;
         if let Some(address) = self.address_for_tm_hash.get(tm_pubkey_hash)? {
@@ -273,6 +349,9 @@ impl<S: Symbol> Staking<S> {
         }
     }
 
+    /// Validate a declaration and initialize a new validator.
+    /// `coins` is the validator's initial self-delegation, and must be >=
+    /// `declaration.min_self_delegation`.
     pub fn declare(
         &mut self,
         val_address: Address,
@@ -346,6 +425,7 @@ impl<S: Symbol> Staking<S> {
         self.delegate(val_address, val_address, coins)
     }
 
+    /// Edit a validator's metadata or fee policy.
     pub fn edit_validator(
         &mut self,
         val_address: Address,
@@ -397,10 +477,12 @@ impl<S: Symbol> Staking<S> {
         Ok(())
     }
 
+    /// Total amount staked across all validators.
     pub fn staked(&self) -> Result<Amount> {
         self.validators.balance()?.amount()
     }
 
+    /// Slash and jail a validator for extended downtime.
     pub fn punish_downtime(&mut self, val_address: Address) -> Result<()> {
         {
             let mut validator = self.validators.get_mut(val_address)?;
@@ -410,6 +492,8 @@ impl<S: Symbol> Staking<S> {
         self.update_vp(val_address)
     }
 
+    /// Slash a validator for double signing, preventing them from re-entering
+    /// the active validator set indefinitely.
     fn punish_double_sign(&mut self, val_address: Address) -> Result<()> {
         let redelegations = {
             let mut validator = self.validators.get_mut(val_address)?;
@@ -428,11 +512,14 @@ impl<S: Symbol> Staking<S> {
         self.update_vp(val_address)
     }
 
+    /// Slash a validator for a light client attack, with the same punishment as
+    /// double signing.
     fn punish_light_client_attack(&mut self, val_address: Address) -> Result<()> {
         // Currently the same punishment as double sign evidence
         self.punish_double_sign(val_address)
     }
 
+    /// Deduct funds of the provided denom from a single delegation entry.
     pub fn deduct<A: Into<Amount>>(
         &mut self,
         val_address: Address,
@@ -450,6 +537,12 @@ impl<S: Symbol> Staking<S> {
         Ok(())
     }
 
+    /// Initiate an unbond of staking tokens. The unbond's start time will be:
+    ///
+    /// - The current time if the validator is bonded.
+    /// - The time the validator started unbonding if they're already unbonding.
+    /// - `None` if the validator is fully unbonded, resolving the unbond
+    ///   immediately.
     pub fn unbond<A: Into<Amount>>(
         &mut self,
         validator_address: Address,
@@ -484,6 +577,7 @@ impl<S: Symbol> Staking<S> {
         self.update_vp(validator_address)
     }
 
+    /// Redelegate staked tokens from one validator to another.
     pub fn redelegate<A: Into<Amount>>(
         &mut self,
         src_validator_address: Address,
@@ -552,10 +646,17 @@ impl<S: Symbol> Staking<S> {
         self.update_vp(dst_validator_address)
     }
 
+    /// Returns a [PoolChild] for the validator with the given operator address,
+    /// ensuring a correct view of the validator's state when the underlying
+    /// validator is dereferenced.
     pub fn get(&self, val_address: Address) -> Result<PoolChild<Validator<S>, S>> {
         self.validators.get(val_address)
     }
 
+    /// Returns a [PoolChildMut] for the validator with the given operator
+    /// address, ensuring a correct view of the validator's state when
+    /// dereferenced and resolving mutations efficiently when the child
+    /// drops.
     pub fn get_mut(
         &mut self,
         val_address: Address,
@@ -563,6 +664,7 @@ impl<S: Symbol> Staking<S> {
         self.validators.get_mut(val_address)
     }
 
+    /// Query all delegations for a delegator address.
     #[query]
     pub fn delegations(
         &self,
@@ -581,6 +683,7 @@ impl<S: Symbol> Staking<S> {
             .collect()
     }
 
+    /// Query all active delegations to the provided validator address.
     #[query]
     pub fn validator_delegations(
         &self,
@@ -597,6 +700,7 @@ impl<S: Symbol> Staking<S> {
             .collect()
     }
 
+    /// Query all validators (expensive).
     #[query]
     pub fn all_validators(&self) -> Result<Vec<ValidatorQueryInfo>> {
         self.validators
@@ -610,6 +714,7 @@ impl<S: Symbol> Staking<S> {
             .collect()
     }
 
+    /// Initiate an unbond of staking tokens.
     #[call]
     pub fn unbond_self(&mut self, val_address: Address, amount: Amount) -> Result<()> {
         assert_positive(amount)?;
@@ -642,6 +747,7 @@ impl<S: Symbol> Staking<S> {
         self.unbond(val_address, signer, amount)
     }
 
+    /// Redelegates staking tokens from a source validator to a destination.
     #[call]
     pub fn redelegate_self(
         &mut self,
@@ -684,6 +790,8 @@ impl<S: Symbol> Staking<S> {
         self.redelegate(src_val_address, dst_val_address, signer, amount)
     }
 
+    /// Declare a new validator, using any provided staking tokens from [Paid]
+    /// as initial self-delegation.
     #[call]
     pub fn declare_self(&mut self, declaration: Declaration) -> Result<()> {
         assert_positive(declaration.amount)?;
@@ -692,6 +800,7 @@ impl<S: Symbol> Staking<S> {
         self.declare(signer, declaration, payment)
     }
 
+    /// Use staking tokens from [Paid] to delegate to a validator.
     #[call]
     pub fn delegate_from_self(&mut self, validator_address: Address, amount: Amount) -> Result<()> {
         assert_positive(amount)?;
@@ -725,11 +834,14 @@ impl<S: Symbol> Staking<S> {
         self.delegate(validator_address, signer, payment)
     }
 
+    /// Events context helper.
     fn events(&mut self) -> Result<&mut Events> {
         self.context::<Events>()
             .ok_or_else(|| Error::Coins("No Events context available".into()))
     }
 
+    /// Load an amount of liquid tokens from a single DVP into the [Paid]
+    /// context.
     #[call]
     pub fn take_as_funding(
         &mut self,
@@ -762,6 +874,8 @@ impl<S: Symbol> Staking<S> {
         self.paid()?.give_denom(amount, denom)
     }
 
+    /// Claim all rewards for a delegator, transferring them to the [Paid]
+    /// context.
     #[call]
     pub fn claim_all(&mut self) -> Result<()> {
         let signer = self.signer()?;
@@ -798,6 +912,8 @@ impl<S: Symbol> Staking<S> {
         Ok(())
     }
 
+    /// Attempt to unjail a validator, restoring it to the active set if
+    /// eligible.
     #[call]
     pub fn unjail(&mut self) -> Result<()> {
         let signer = self.signer()?;
@@ -809,6 +925,7 @@ impl<S: Symbol> Staking<S> {
         self.update_vp(signer)
     }
 
+    /// Edit a validator's metadata or fee policy.
     #[call]
     pub fn edit_validator_self(
         &mut self,
@@ -822,6 +939,7 @@ impl<S: Symbol> Staking<S> {
         self.edit_validator(val_address, commission, min_self_delegation, validator_info)
     }
 
+    /// Returns the address of the current call's signer.
     fn signer(&mut self) -> Result<Address> {
         self.context::<Signer>()
             .ok_or_else(|| Error::Coins("No Signer context available".into()))?
@@ -829,11 +947,13 @@ impl<S: Symbol> Staking<S> {
             .ok_or_else(|| Error::Coins("Call must be signed".into()))
     }
 
+    /// [Paid] context helper.
     fn paid(&mut self) -> Result<&mut Paid> {
         self.context::<Paid>()
             .ok_or_else(|| Error::Coins("No Payment context available".into()))
     }
 
+    /// Recompute the validator's potential voting power.
     fn update_vp(&mut self, val_address: Address) -> Result<()> {
         let mut validator = self.validators.get_mut(val_address)?;
         let vp = validator.potential_vp()?.into();
@@ -841,6 +961,7 @@ impl<S: Symbol> Staking<S> {
         self.set_potential_voting_power(val_address, vp)
     }
 
+    /// Updates voting power indices for the validator.
     fn set_potential_voting_power(&mut self, address: Address, power: u64) -> Result<()> {
         if let Some(last_indexed) = self.last_indexed_power.get(address)? {
             self.validators_by_power.delete(ValidatorPowerEntry {
@@ -857,12 +978,19 @@ impl<S: Symbol> Staking<S> {
         self.last_indexed_power.insert(address, power)
     }
 
+    /// Steps the queues (once per block) for:
+    ///
+    /// - Validator status transitions
+    /// - Unbonding delegations
+    /// - Redelegations
     fn process_all_queues(&mut self) -> Result<()> {
         self.process_validator_queue()?;
         self.process_unbonding_delegation_queue()?;
         self.process_redelegation_queue()
     }
 
+    /// Process the validator queue, possibly transitioning validators to the
+    /// unbonded state.
     fn process_validator_queue(&mut self) -> Result<()> {
         let now = self.current_seconds()?;
         // TODO: should be one pass (needs drain iterator)
@@ -881,6 +1009,8 @@ impl<S: Symbol> Staking<S> {
             })
     }
 
+    /// Iterates through the unbonding delegation queue, processing matured
+    /// unbonds.
     fn process_unbonding_delegation_queue(&mut self) -> Result<()> {
         let now = self.current_seconds()?;
 
@@ -902,6 +1032,8 @@ impl<S: Symbol> Staking<S> {
         Ok(())
     }
 
+    /// Iterates through the redelegation queue, processing matured
+    /// redelegations.
     fn process_redelegation_queue(&mut self) -> Result<()> {
         let now = self.current_seconds()?;
 
@@ -938,6 +1070,8 @@ impl<S: Symbol> Staking<S> {
         Ok(())
     }
 
+    /// In the EndBlock step, all queues are processed and the minimum set of
+    /// updates required to send back to Tendermint are computed.
     fn end_block_step(&mut self, ctx: &EndBlockCtx) -> Result<()> {
         self.process_all_queues()?;
         use std::collections::HashSet;
@@ -1042,12 +1176,14 @@ impl<S: Symbol> Staking<S> {
         Ok(())
     }
 
+    /// Transition a validator to the bonded state.
     fn transition_to_bonded(&mut self, val_address: Address) -> Result<()> {
         let mut validator = self.validators.get_mut(val_address)?;
         validator.unbonding = false;
         self.validator_queue.remove_by_address(val_address)
     }
 
+    /// Transition a validator to the unbonding state.
     fn transition_to_unbonding(&mut self, val_address: Address) -> Result<()> {
         let now = self.current_seconds()?;
         {
@@ -1062,6 +1198,7 @@ impl<S: Symbol> Staking<S> {
         })
     }
 
+    /// Transition a validator to the unbonded state.
     fn transition_to_unbonded(&mut self, val_address: Address) -> Result<()> {
         let mut validator = self.validators.get_mut(val_address)?;
         validator.unbonding = false;
@@ -1069,6 +1206,7 @@ impl<S: Symbol> Staking<S> {
         Ok(())
     }
 
+    /// Current unix second timestamp, from the [Time] context.
     fn current_seconds(&mut self) -> Result<i64> {
         let time = self
             .context::<Time>()
@@ -1077,6 +1215,8 @@ impl<S: Symbol> Staking<S> {
         Ok(time.seconds)
     }
 
+    /// Repair invalid state data after the v0 -> v1 migration.
+    #[deprecated]
     pub fn repair(&mut self) -> Result<()> {
         let mut addresses = vec![];
         for entry in self.validators.iter()? {
@@ -1096,6 +1236,7 @@ impl<S: Symbol> Staking<S> {
     }
 }
 
+/// Error if the amount is not positive.
 fn assert_positive(amount: Amount) -> Result<()> {
     if amount > 0 {
         Ok(())
@@ -1104,6 +1245,7 @@ fn assert_positive(amount: Amount) -> Result<()> {
     }
 }
 
+/// Restricts the length of the validator's provided metadata at declaration.
 fn validate_info(info: &ValidatorInfo) -> Result<()> {
     if info.len() > 5000 {
         return Err(Error::Coins("Validator info too long".into()));
@@ -1118,6 +1260,7 @@ impl<S: Symbol, T: Symbol> Give<Coin<T>> for Staking<S> {
     }
 }
 
+/// Computes the Tendermint public key hash.
 fn tm_pubkey_hash(consensus_key: [u8; 32]) -> Result<[u8; 20]> {
     let mut hasher = Sha256::new();
     hasher.update(consensus_key);
@@ -1127,20 +1270,36 @@ fn tm_pubkey_hash(consensus_key: [u8; 32]) -> Result<[u8; 20]> {
         .map_err(|_| Error::Coins("Invalid consensus key".into()))
 }
 
+/// Validator declaration information.
 #[derive(Debug, Encode, Decode, Clone)]
 pub struct Declaration {
+    /// Public key used for consensus.
     pub consensus_key: [u8; 32],
+    /// Commission settings.
     pub commission: Commission,
+    /// Minimum self-delegation, which may only be increased.
+    /// Must be >= `min_self_delegation_min`.
+    /// The validator will be removed from the active set if their
+    /// self-delegation amount falls below this value.
     pub min_self_delegation: Amount,
+    /// Amount to delegate to the validator at declaration. May be zero.
     pub amount: Amount,
+    /// Metadata about this validator, typically JSON-encoded in practice. Not
+    /// parsed on-chain.
     pub validator_info: ValidatorInfo,
 }
 
+/// Commission settings for a validator.
 #[orga]
 #[derive(Debug, Clone, Copy)]
 pub struct Commission {
+    /// The amount of rewards taken by the validator as a commission (0-1). May
+    /// be changed by validator edits.
     pub rate: Decimal,
+    /// The max commission rate the validator can set. May not be edited.
     pub max: Decimal,
+    /// The maximum amount that the rate may change in a single edit. May not be
+    /// edited.
     pub max_change: Decimal,
 }
 
