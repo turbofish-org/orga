@@ -1,10 +1,10 @@
 [package]
 name = "orga"
 version = "0.3.1"
-authors = ["Matt Bell <mappum@gmail.com>"]
+authors = ["Turbofish <team@turbofish.org>"]
 edition = "2021"
-description = "State machine engine"
-license = "MIT"
+description = "Deterministic state machine engine written in Rust"
+license = "Apache-2.0"
 
 [dependencies]
 abci2 = { git = "https://github.com/turbofish-org/abci2", rev = "96b0d3f388ffc8fa014d442ace7f697e54a94726", optional = true }
