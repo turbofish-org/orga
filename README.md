@@ -23,7 +23,7 @@ Orga is currently used by [Nomic](https://github.com/nomic-io/nomic), a blockcha
 
 Orga is an open-source project spearheaded by Turbofish. Anyone is able to contribute to Orga via GitHub.
 
-[Contribute to Orga](https://github.com/turbofish-io/orga/contribute)
+[Contribute to Orga](https://github.com/turbofish-org/orga/contribute)
 
 ## Security
 
@@ -31,7 +31,7 @@ Orga is currently undergoing security audits.
 
 Vulnerabilities should not be reported through public channels, including GitHub Issues. You can report a vulnerability via GitHub's Private Vulnerability Reporting or to Turbofish at `security@turbofish.org`.
 
-[Report a Vulnerability](https://github.com/turbofish-io/orga/security/advisories/new)
+[Report a Vulnerability](https://github.com/turbofish-org/orga/security/advisories/new)
 
 ## License
 
