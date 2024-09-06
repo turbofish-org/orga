@@ -374,7 +374,7 @@ fn val_size_limit() -> Result<()> {
     }
     staking.end_block_step(&Default::default())?;
     assert_eq!(staking.staked()?, 1700);
-    assert!(ctx.updates.get(&[7; 32]).is_none());
+    assert!(!ctx.updates.contains_key(&[7; 32]));
     assert_eq!(ctx.updates.get(&[8; 32]).unwrap().power, 800);
     assert_eq!(ctx.updates.get(&[9; 32]).unwrap().power, 900);
     staking.give(Simp::mint(3400))?;

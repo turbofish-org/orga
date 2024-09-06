@@ -1,6 +1,4 @@
-use ibc::clients::tendermint::types::{
-    TENDERMINT_CLIENT_STATE_TYPE_URL, TENDERMINT_CONSENSUS_STATE_TYPE_URL,
-};
+use ibc::clients::tendermint::types::TENDERMINT_CONSENSUS_STATE_TYPE_URL;
 use ibc::{
     clients::tendermint::consensus_state::ConsensusState,
     core::{

@@ -1,19 +1,27 @@
-use super::{Adjust, Amount, Balance, Decimal, Give, Symbol, Take};
+//! Tokens with integer amounts.
+use super::{Amount, Balance, Decimal, Give, Symbol, Take};
 use crate::context::GetContext;
 use crate::orga;
 use crate::plugins::Paid;
 use crate::{Error, Result};
 use std::marker::PhantomData;
 
+/// Represents a coin of a specific symbol type.
+///
+/// This type aims to prevent accidental creation of coins by encouraging
+/// explicit minting, and making it more difficult to add amounts of different
+/// symbols.
 #[orga]
 #[derive(Debug)]
-// #[must_use = "If these coins are meant to be discarded, explicitly call the `burn` method"]
 pub struct Coin<S: Symbol> {
+    /// The amount of the coin.
     pub amount: Amount,
+    /// Phantom data to hold the symbol type.
     symbol: PhantomData<S>,
 }
 
 impl<S: Symbol> Coin<S> {
+    /// Creates a new [Coin] with zero amount.
     pub fn new() -> Self {
         Coin {
             amount: 0.into(),
@@ -21,6 +29,7 @@ impl<S: Symbol> Coin<S> {
         }
     }
 
+    /// Creates a new `Coin` with the specified amount.
     pub fn mint<A>(amount: A) -> Self
     where
         A: Into<Amount>,
@@ -31,12 +40,16 @@ impl<S: Symbol> Coin<S> {
         }
     }
 
+    /// Transfers the coin to the given destination.
     pub fn transfer<G: Give<Coin<S>>>(self, dest: &mut G) -> Result<()> {
         dest.give(self)
     }
 
+    /// Consume the coin.
     pub fn burn(self) {}
 
+    /// Takes coins from self and transfers them to the [Paid] context as
+    /// funding.
     pub fn take_as_funding(&mut self, amount: Amount) -> Result<()> {
         let taken_coins = self.take(amount)?;
         let paid = self
@@ -56,14 +69,6 @@ impl<S: Symbol> Balance<S, Amount> for Coin<S> {
 impl<S: Symbol> Balance<S, Decimal> for Coin<S> {
     fn balance(&self) -> Result<Decimal> {
         Ok(self.amount.into())
-    }
-}
-
-impl<S: Symbol> Adjust for Coin<S> {
-    fn adjust(&mut self, multiplier: Decimal) -> Result<()> {
-        self.amount = (self.amount * multiplier)?.amount()?;
-
-        Ok(())
     }
 }
 

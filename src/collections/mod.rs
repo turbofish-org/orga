@@ -31,7 +31,11 @@ pub trait Entry: 'static {
     fn from_entry(entry: (Self::Key, Self::Value)) -> Self;
 }
 
+/// A trait for types which have a logical next sequential value.
 pub trait Next: Sized {
+    /// Returns the next sequential value if it exists, or `None` if the value
+    /// is at the end of its domain, e.g. `u32::MAX -> None`, or
+    /// `0 -> Some(1)`).
     fn next(&self) -> Option<Self>;
 }
 

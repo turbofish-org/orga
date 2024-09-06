@@ -16,13 +16,42 @@ use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
+/// A trait for defining the mapping between a type and an underlying key-value
+/// store.
+///
+/// # Lifecycle
+///
+/// The State trait defines three main lifecycle methods:
+///
+/// 1. `attach`: Connects the type to a backing [Store].
+/// 2. `flush`: Consumes the value, writing changes to the underlying [Store]
+///    and writing bytes to a [std::io::Write].
+/// 3. `load`: Reconstructs the type from a [Store] and a `&mut &[u8]`.
+///
+/// These methods allow for efficient serialization, deserialization, and
+/// persistence of complex data structures using a key-value store backend.
+///
+/// Implementations are provided for various collection types like
+/// [super::collections::Map] and [super::collections::Deque], as well as for
+/// many standard library types.
 pub trait State: Sized + 'static {
+    /// Attaches the state to a store. Typically, implementations for structs
+    /// will call `attach` for each of its fields with uniquely-prefixed
+    /// sub-stores, but this is not required.
     fn attach(&mut self, store: Store) -> Result<()>;
 
+    /// Consumes the value, writing changes to the underlying store and/or
+    /// writing bytes to the output writer.
     fn flush<W: std::io::Write>(self, out: &mut W) -> Result<()>;
 
+    /// Reconstructs the value from a store and a mutable reference to a byte
+    /// slice.
     fn load(store: Store, bytes: &mut &[u8]) -> Result<Self>;
 
+    /// Returns the key prefixing operation for a field if applicable. This is
+    /// used to unify the keyspace between `State` and
+    /// [FieldCall](crate::call::FieldCall) or
+    /// [FieldQuery](crate::query::FieldQuery).
     fn field_keyop(_field_name: &str) -> Option<KeyOp> {
         None
     }
@@ -67,6 +96,7 @@ state_impl!(i128);
 state_impl!(bool);
 state_impl!(());
 
+/// Returns the varint encoding of a number `n` with a maximum value `max`.
 pub fn varint(n: usize, max: usize) -> Vec<u8> {
     if max < u8::MAX as usize {
         vec![n as u8]
@@ -276,6 +306,8 @@ state_tuple_impl!(A, B, C, D, E, F, G, H, I; J; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
 state_tuple_impl!(A, B, C, D, E, F, G, H, I, J; K; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
 state_tuple_impl!(A, B, C, D, E, F, G, H, I, J, K; L; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
 
+/// Marker trait for types that cannot write to a [Store] and are fully
+/// represented by their encoded bytes.
 pub auto trait Simple {}
 
 impl<S> !Simple for Store<S> {}

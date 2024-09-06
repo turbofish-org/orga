@@ -8,7 +8,6 @@ use ibc_proto::ibc::core::connection::v1::{
     ConnectionEnd as RawConnectionEnd, IdentifiedConnection,
 };
 use ics23::LeafOp;
-use prost::Message;
 use std::str::FromStr;
 use tendermint_proto::v0_34::abci::{RequestQuery, ResponseQuery};
 use tendermint_proto::v0_34::crypto::{ProofOp, ProofOps};
@@ -30,6 +29,9 @@ impl AbciQuery for Ibc {
 
 #[cfg(feature = "abci")]
 impl AbciQuery for IbcContext {
+    /// This implementation exists to support raw abci queries for IBC data, as
+    /// required by relayers like Hermes, with proofs verifiable by other
+    /// IBC chains.
     fn abci_query(&self, req: &RequestQuery) -> Result<ResponseQuery> {
         if req.path != IBC_QUERY_PATH {
             return Err(Error::Ibc("Invalid query path".to_string()));
@@ -104,11 +106,15 @@ impl AbciQuery for IbcContext {
     }
 }
 
+/// The methods in this impl block are used to support the gRPC services in
+/// [super::service].
 impl IbcContext {
+    /// Returns the current height of the chain.
     pub fn query_height(&self) -> Result<u64> {
         Ok(self.height)
     }
 
+    /// Returns all client states with their client identifiers.
     pub fn query_client_states(&self) -> Result<Vec<IdentifiedClientState>> {
         let mut states = vec![];
         for entry in self.clients.iter()? {
@@ -125,6 +131,7 @@ impl IbcContext {
         Ok(states)
     }
 
+    /// Returns the consensus state for a client at the provided height.
     pub fn query_consensus_state(
         &self,
         client_id: ClientIdKey,
@@ -148,6 +155,7 @@ impl IbcContext {
         })
     }
 
+    /// Returns all consensus states for a client.
     pub fn query_consensus_states(
         &self,
         client_id: ClientIdKey,
@@ -171,6 +179,8 @@ impl IbcContext {
         Ok(states)
     }
 
+    /// Returns the connection with the provided connection identifier if it
+    /// exists.
     pub fn query_connection(&self, conn_id: ConnectionIdKey) -> Result<Option<ConnectionEnd>> {
         Ok(self
             .connections
@@ -179,6 +189,7 @@ impl IbcContext {
             .map(|connection_end| connection_end.into()))
     }
 
+    /// Returns all connections with their connection identifiers.
     pub fn query_all_connections(&self) -> Result<Vec<IdentifiedConnection>> {
         let mut connections = vec![];
 
@@ -199,6 +210,7 @@ impl IbcContext {
         Ok(connections)
     }
 
+    /// Returns all connection identifiers associated with a client.
     pub fn query_client_connections(&self, client_id: ClientIdKey) -> Result<Vec<ConnectionIdKey>> {
         let mut connection_ids = vec![];
 
@@ -215,6 +227,8 @@ impl IbcContext {
         Ok(connection_ids)
     }
 
+    /// Returns the channel with the provided port and channel identifiers if it
+    /// exists.
     pub fn query_channel(&self, port_chan: PortChannel) -> Result<Option<Channel>> {
         let channel = self
             .channel_ends
@@ -224,6 +238,7 @@ impl IbcContext {
         Ok(channel)
     }
 
+    /// Returns all channels with their port and channel identifiers.
     pub fn query_all_channels(&self) -> Result<Vec<IdentifiedChannel>> {
         let mut channels = vec![];
         for entry in self.channel_ends.iter()? {
@@ -244,6 +259,7 @@ impl IbcContext {
         Ok(channels)
     }
 
+    /// Returns all channels associated with a connection.
     pub fn query_connection_channels(
         &self,
         conn_id: ConnectionIdKey,
@@ -259,6 +275,7 @@ impl IbcContext {
         Ok(channels)
     }
 
+    /// Returns all packet commitments for a channel.
     pub fn query_packet_commitments(&self, port_chan: PortChannel) -> Result<Vec<PacketState>> {
         let mut commitments = vec![];
 
@@ -282,6 +299,7 @@ impl IbcContext {
         Ok(commitments)
     }
 
+    /// Returns all unreceived packets for a channel.
     pub fn query_unreceived_packets(
         &self,
         port_chan: PortChannel,
@@ -299,6 +317,7 @@ impl IbcContext {
         Ok(unreceived)
     }
 
+    /// Returns all unreceived acks for a channel.
     pub fn query_unreceived_acks(
         &self,
         port_chan: PortChannel,
@@ -317,6 +336,7 @@ impl IbcContext {
         Ok(unreceived)
     }
 
+    /// Returns all packet acks for a channel.
     pub fn query_packet_acks(
         &self,
         sequences: LengthVec<u8, u64>,
@@ -342,6 +362,7 @@ impl IbcContext {
         Ok(acks)
     }
 
+    /// Returns the next sequence receive for a channel.
     pub fn query_next_sequence_receive(&self, port_chan: PortChannel) -> crate::Result<u64> {
         let sequence_string = self
             .next_sequence_recv
@@ -351,6 +372,7 @@ impl IbcContext {
         Ok(sequence)
     }
 
+    /// Returns the next sequence send for a channel.
     pub fn query_next_sequence_send(&self, port_chan: PortChannel) -> crate::Result<u64> {
         let sequence_string = self
             .next_sequence_send
@@ -360,6 +382,7 @@ impl IbcContext {
         Ok(sequence)
     }
 
+    /// Returns the client status for the provided client identifier.
     pub fn query_client_status(&self, client_id: ClientIdKey) -> Result<Status> {
         let client = self
             .clients
@@ -369,9 +392,9 @@ impl IbcContext {
             .client_state
             .get(Default::default())?
             .ok_or_else(|| Error::Ibc("Client not found".to_string()))?;
-        Ok(client_state
+        client_state
             .inner
             .status(self, &client_id.0)
-            .map_err(|e| Error::Ibc(e.to_string()))?)
+            .map_err(|e| Error::Ibc(e.to_string()))
     }
 }

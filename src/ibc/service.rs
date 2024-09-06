@@ -166,16 +166,16 @@ impl<C: Client<IbcContext> + 'static> ClientQuery for IbcClientService<C> {
 
         let consensus_state = ibc
             .query(|ibc| {
-                Ok(ibc.query_consensus_state(
+                ibc.query_consensus_state(
                     client_id.clone().into(),
                     revision_number,
                     revision_height,
-                )?)
+                )
             })
             .await?;
 
         let res = QueryConsensusStateResponse {
-            consensus_state: consensus_state.consensus_state.into(),
+            consensus_state: consensus_state.consensus_state,
             proof: vec![],
             proof_height: None,
         };
@@ -220,7 +220,7 @@ impl<C: Client<IbcContext> + 'static> ClientQuery for IbcClientService<C> {
         let ibc = (self.ibc)();
 
         let client_status = ibc
-            .query(|ibc| Ok(ibc.query_client_status(client_id.clone().into())?))
+            .query(|ibc| ibc.query_client_status(client_id.clone().into()))
             .await?;
 
         let res = QueryClientStatusResponse {
@@ -1069,7 +1069,7 @@ impl TxService for AppTxService {
         request: Request<GetTxRequest>,
     ) -> Result<Response<GetTxResponse>, Status> {
         let client =
-            HttpClient::new("http://localhost:26657").map_err(|e| Status::unavailable("Error"))?;
+            HttpClient::new("http://localhost:26657").map_err(|_e| Status::unavailable("Error"))?;
 
         let request = request.into_inner();
         let hash = request
@@ -1091,9 +1091,9 @@ impl TxService for AppTxService {
         request: Request<BroadcastTxRequest>,
     ) -> Result<Response<BroadcastTxResponse>, Status> {
         let client =
-            HttpClient::new("http://localhost:26657").map_err(|e| Status::unavailable("Error"))?;
+            HttpClient::new("http://localhost:26657").map_err(|_e| Status::unavailable("Error"))?;
         let request = request.into_inner();
-        let res = client
+        let _res = client
             .broadcast_tx_sync(request.tx_bytes)
             .await
             .map_err(|_| Status::internal("Error"))?;
@@ -1146,12 +1146,17 @@ impl TxService for AppTxService {
     }
 }
 
+/// Options for the gRPC server.
 pub struct GrpcOpts {
+    /// The address to listen on.
     pub host: String,
+    /// The port to listen on.
     pub port: u16,
+    /// The chain ID.
     pub chain_id: String,
 }
 
+/// Start the gRPC server.
 pub async fn start_grpc<C: Client<IbcContext> + 'static>(client: fn() -> C, opts: &GrpcOpts) {
     use tonic::transport::Server;
     let auth_service = AuthQueryServer::new(AuthService {});

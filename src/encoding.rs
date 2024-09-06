@@ -161,8 +161,8 @@ where
 
 // impl<P, T> Describe for LengthVec<P, T>
 // where
-//     P: State + Encode + Decode + TryInto<usize> + Terminated + Clone + 'static,
-//     T: State + Encode + Decode + Terminated + 'static,
+//     P: State + Encode + Decode + TryInto<usize> + Terminated + Clone +
+// 'static,     T: State + Encode + Decode + Terminated + 'static,
 // {
 //     fn describe() -> crate::describe::Descriptor {
 //         crate::describe::Builder::new::<Self>().build()

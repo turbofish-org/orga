@@ -1,15 +1,19 @@
+//! Logging reads for a store.
+
 use std::sync::{RwLock, RwLockReadGuard};
 
 use crate::Result;
 
 use super::{Read, Write, KV};
 
+/// A store which wraps another store and logs all read keys.
 pub struct ReadLog<T> {
     inner: T,
     reads: RwLock<Vec<Vec<u8>>>,
 }
 
 impl<T> ReadLog<T> {
+    /// Creates a new read log store.
     pub fn new(inner: T) -> Self {
         Self {
             inner,
@@ -17,6 +21,7 @@ impl<T> ReadLog<T> {
         }
     }
 
+    /// Returns a read-only guard for the reads log.
     pub fn reads(&self) -> RwLockReadGuard<Vec<Vec<u8>>> {
         self.reads.read().unwrap()
     }

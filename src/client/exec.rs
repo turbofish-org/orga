@@ -1,3 +1,4 @@
+//! Client execution logic
 use std::{any::TypeId, collections::HashSet};
 
 use super::trace::{take_trace, tracing_guard};
@@ -16,19 +17,32 @@ use crate::{
 #[cfg(feature = "merk-verify")]
 use crate::merk::ProofStore;
 
+/// Result of a single execution step of the client.
 #[derive(Debug, Clone)]
 pub enum StepResult<T: Query, U> {
+    /// The query has been executed and the result is ready.
     Done(U),
+    /// A required key was not and should be fetched.
     FetchKey(Vec<u8>),
+    /// The next key for the provided key was not known and should be fetched.
     FetchNext(Vec<u8>),
+    /// The previous key for the provided key was not known and should be
+    /// fetched.
     FetchPrev(Option<Vec<u8>>),
+    /// A query should be transmitted, and the resulting proof integrated into
+    /// the client's store.
     FetchQuery(T::Query),
 }
 
+/// Trait for asynchronously executing queries and calls.
 #[allow(async_fn_in_trait)]
 pub trait Transport<T: Query + Call>: Send + Sync {
+    /// Fetch the result for a and return a store containing the newly-fetched
+    /// entries. The returned store will be joined into the client's local
+    /// store.
     fn query(&self, query: T::Query) -> impl std::future::Future<Output = Result<Store>> + Send;
 
+    /// Transmit a call.
     fn call(&self, call: T::Call) -> impl std::future::Future<Output = Result<()>> + Send;
 }
 
@@ -43,6 +57,19 @@ impl<T: Transport<U>, U: Query + Call> Transport<U> for &mut T {
 }
 
 // TODO: remove need for ABCIPlugin wrapping at this level, and App bound
+/// Perform a client operation.
+///
+/// The provided `query_fn` will be called repeatedly:
+///
+/// Each time `query_fn` returns a [store::Error], the missing data will be
+/// fetched and joined into the local store, then we call the function again.
+///
+/// If `query_fn` returns any other `Result`, we return that result directly.
+///
+/// The function will return when `query_fn` returns [StepResult::Done].
+///
+/// If the client errors because it's missing store data which we've already
+/// attempted to fetch, we return an error.
 pub async fn execute<T, U>(
     store: Store,
     client: &impl Transport<ABCIPlugin<QueryPlugin<T>>>,
@@ -80,6 +107,17 @@ where
 
 type QueryPluginQuery<T> = <QueryPlugin<T> as Query>::Query;
 
+/// Perform a single step of the client execution.
+///
+/// We execute the provided `query_fn` with an initial store which may or may
+/// not contain the data needed to execute the operation. See [execute] for
+/// details on how this lifecycle is managed.
+///
+/// In this function, we use a thread-local tracing system to track which
+/// `#[query]` method we've called most recently and its arguments, and use the
+/// type's [Descriptor] to determine the full bytes of the encoded query that
+/// should be transported to the remote node to determine which data should be
+/// proven to us.
 pub fn step<T, U>(
     store: Store,
     mut query_fn: impl FnMut(ABCIPlugin<QueryPlugin<T>>) -> Result<U>,
@@ -143,6 +181,7 @@ where
     Ok(fallback_res)
 }
 
+/// Join two partial stores together.
 pub fn join_store(dst: Store, src: Store) -> Result<Store> {
     let dst = dst.into_backing_store().into_inner();
     let src = src.into_backing_store().into_inner();
@@ -173,6 +212,8 @@ pub fn join_store(dst: Store, src: Store) -> Result<Store> {
 }
 
 impl Descriptor {
+    /// Resolve the key prefix for a value in the state hierarchy based on data
+    /// collected during traced execution.
     pub fn resolve_by_type_id(
         &self,
         target_type_id: TypeId,
@@ -220,6 +261,8 @@ impl Descriptor {
         }
     }
 
+    /// Consume bytes from the provided slice according to this descriptor's
+    /// load function.
     pub fn encoding_bytes_subslice<'a>(&self, bytes: &'a [u8]) -> Result<&'a [u8]> {
         let store = Store::default();
         let mut consume_bytes = bytes;

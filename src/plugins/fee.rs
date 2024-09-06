@@ -1,3 +1,4 @@
+//! Simple fee deduction for calls.
 use orga_macros::orga;
 
 use super::sdk_compat::{sdk::Tx as SdkTx, ConvertSdkTx};
@@ -12,12 +13,17 @@ use crate::{Error, Result};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
+/// Minimum fee to deduct for a transaction.
+// TODO: This should be configurable, part of the fee plugin's state.
 pub const MIN_FEE: u64 = 10_000;
 
+/// A plugin which requires that at least `MIN_FEE` units of symbol `S` are paid
+/// into the [Paid] context by the `payer` call before running the `paid` call.
 #[orga(skip(Call, Query))]
 pub struct FeePlugin<S, T> {
     #[state(skip)]
     _symbol: PhantomData<S>,
+    /// The inner value.
     #[state(transparent)]
     pub inner: T,
 }
@@ -47,6 +53,8 @@ impl<S: Symbol, T: Call + State> Call for FeePlugin<S, T> {
     }
 }
 
+/// Disables the fee checking for the call. Only useful when called while
+/// executing the `payer` half of a paid call.
 pub fn disable_fee() {
     if let Some(paid_ctx) = Context::resolve::<Paid>() {
         paid_ctx.fee_disabled = true;

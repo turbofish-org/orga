@@ -1,3 +1,4 @@
+//! A double-ended queue backed by a store
 use serde::Serialize;
 
 use super::map::{ChildMut, Map, ReadOnly, Ref};
@@ -12,6 +13,10 @@ use crate::state::State;
 use crate::store::Store;
 use crate::Result;
 
+/// A double-ended queue implementation backed by a [Map].
+///
+/// `Deque` provides efficient insertion and deletion at both ends, and
+/// efficient iteration in either direction.
 #[derive(FieldQuery, Encode, Decode)]
 pub struct Deque<T> {
     meta: Meta,
@@ -34,12 +39,14 @@ where
 }
 
 impl<T> Deque<T> {
+    /// Create a new empty deque.
     pub fn new() -> Self {
         Self::default()
     }
 }
 
 impl<T: State> Deque<T> {
+    /// Create a new deque with the provided backing store.
     pub fn with_store(store: Store) -> Result<Self> {
         Ok(Self {
             meta: Meta::default(),
@@ -78,6 +85,18 @@ impl<T: Serialize + State> Serialize for Deque<T> {
     }
 }
 
+/// The head and tail indices of a [Deque].
+///
+/// The `head` and `tail` represent the integer indices of the first and last
+/// elements in the deque, respectively.
+///
+/// - Push front: decrements the head index
+/// - Push back: increments the tail index
+/// - Pop front: increments the head index
+/// - Pop back: decrements the tail index
+///
+/// By default, the head and tail are set to the midpoint of the u64 range,
+/// `u64::MAX / 2`.
 #[orga(skip(Default))]
 #[derive(Clone, Debug)]
 pub struct Meta {
@@ -175,6 +194,10 @@ impl<T: State> Deque<T> {
         self.map.get(self.meta.tail - 1)
     }
 
+    /// Retain elements in the deque that satisfy a predicate, removing elements
+    /// which do not.
+    ///
+    /// The order of elements is preserved.
     pub fn retain<F>(&mut self, mut f: F) -> Result<()>
     where
         F: FnMut(ChildMut<u64, T>) -> Result<bool>,
@@ -216,6 +239,11 @@ impl<T: State> Deque<T> {
         Ok(())
     }
 
+    /// Retain elements in the deque that satisfy a predicate, removing elements
+    /// which do not.
+    ///
+    /// Unlike [Deque::retain], this method does not necessarily preserve the
+    /// order of elements, but may be faster.
     pub fn retain_unordered<F>(&mut self, mut f: F) -> Result<()>
     where
         F: FnMut(ChildMut<u64, T>) -> Result<bool>,
@@ -236,6 +264,7 @@ impl<T: State> Deque<T> {
 }
 
 impl<'a, T: State> Deque<T> {
+    /// Create an iterator over the elements of the deque.
     pub fn iter(&'a self) -> Result<Iter<'a, T>> {
         Ok(Iter {
             map_iter: self.map.iter()?,
@@ -244,10 +273,13 @@ impl<'a, T: State> Deque<T> {
 }
 
 impl<T: State> Deque<T> {
+    /// Returns a mutable reference to the element at the given index, or `None`
+    /// if the index is out of bounds.
     pub fn get_mut(&mut self, index: u64) -> Result<Option<ChildMut<u64, T>>> {
         self.map.get_mut(index + self.meta.head)
     }
 
+    /// Push a value onto the back of the deque.
     pub fn push_back(&mut self, value: T) -> Result<()> {
         let index = self.meta.tail;
         self.meta.tail += 1;
@@ -255,6 +287,7 @@ impl<T: State> Deque<T> {
         Ok(())
     }
 
+    /// Push a value onto the front of the deque.
     pub fn push_front(&mut self, value: T) -> Result<()> {
         self.meta.head -= 1;
         let index = self.meta.head;
@@ -262,6 +295,8 @@ impl<T: State> Deque<T> {
         Ok(())
     }
 
+    /// Remove and return the element at the front of the deque, or `None` if
+    /// the deque is empty.
     pub fn pop_front(&mut self) -> Result<Option<ReadOnly<T>>> {
         if self.is_empty() {
             return Ok(None);
@@ -271,6 +306,8 @@ impl<T: State> Deque<T> {
         self.map.remove(self.meta.head - 1)
     }
 
+    /// Remove and return the element at the back of the deque, or `None` if
+    /// the deque is empty.
     pub fn pop_back(&mut self) -> Result<Option<ReadOnly<T>>> {
         if self.is_empty() {
             return Ok(None);
@@ -280,26 +317,35 @@ impl<T: State> Deque<T> {
         self.map.remove(self.meta.tail)
     }
 
+    /// Returns a mutable reference to the element at the front of the deque, or
+    /// `None` if the deque is empty.
     pub fn front_mut(&mut self) -> Result<Option<ChildMut<u64, T>>> {
         self.get_mut(0)
     }
 
+    /// Returns a mutable reference to the element at the back of the deque, or
+    /// `None` if the deque is empty.
     pub fn back_mut(&mut self) -> Result<Option<ChildMut<u64, T>>> {
         self.get_mut(self.len() - 1)
     }
 
+    /// Swap two elements in the deque by their indices.
     pub fn swap(&mut self, i: u64, j: u64) -> Result<()> {
         let i = i + self.meta.head;
         let j = j + self.meta.head;
         self.map.swap(i, j)
     }
 
+    /// Swap the element at the given index with the front of the deque and pop
+    /// it from the front.
     pub fn swap_remove_front(&mut self, i: u64) -> Result<()> {
         self.swap(i, 0)?;
         self.pop_front()?;
         Ok(())
     }
 
+    /// Swap the element at the given index with the back of the deque and pop
+    /// it from the back.
     pub fn swap_remove_back(&mut self, i: u64) -> Result<()> {
         self.swap(i, self.len() - 1)?;
         self.pop_back()?;
@@ -316,6 +362,8 @@ impl<T: Migrate> Migrate for Deque<T> {
     }
 }
 
+/// An iterator over the elements of a [Deque], backed by an underlying
+/// [MapIter]. Supports both forward and reverse iteration.
 pub struct Iter<'a, T>
 where
     T: State,

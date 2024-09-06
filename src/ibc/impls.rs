@@ -13,7 +13,6 @@ use ibc_rs::core::handler::types::error::ContextError;
 use ibc_rs::core::handler::types::events::IbcEvent;
 use ibc_rs::core::host::{ExecutionContext, ValidationContext};
 use ibc_rs::primitives::Timestamp;
-use tendermint::abci::v0_34::EventAttribute;
 
 use crate::context::{Context, GetContext};
 use crate::plugins::{ChainId as ChainIdCtx, Events, Logs};
@@ -175,7 +174,7 @@ impl ValidationContext for IbcContext {
     }
 
     fn commitment_prefix(&self) -> CommitmentPrefix {
-        CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap()
+        CommitmentPrefix::from(b"ibc".to_vec())
     }
 
     fn connection_counter(&self) -> Result<u64, ContextError> {

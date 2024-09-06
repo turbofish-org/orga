@@ -1,3 +1,4 @@
+//! Iteration for stores.
 use crate::store::{Read, KV};
 use crate::Result;
 use std::ops::{Bound, RangeBounds};

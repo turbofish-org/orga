@@ -1,3 +1,4 @@
+//! Low-level query operations.
 use crate::call::Call;
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
@@ -11,9 +12,13 @@ use educe::Educe;
 use serde::Serialize;
 use std::cell::RefCell;
 
+/// A plugin which adds low-level query operations to its query implementation,
+/// such as raw store reads and call simulation.
 #[derive(Default, Serialize)]
 pub struct QueryPlugin<T> {
     store: Store,
+    /// A [RefCell] of the inner type to support interior mutability, e.g. in
+    /// call simulation.
     pub inner: RefCell<T>,
 }
 
@@ -52,13 +57,19 @@ impl<T: Call> Call for QueryPlugin<T> {
     }
 }
 
+/// The query type for [QueryPlugin].
 #[derive(Clone, Encode, Decode, Educe)]
 #[educe(Debug)]
 pub enum Query<T: QueryTrait + Call> {
+    /// Pass the query along to the inner value.
     Query(T::Query),
+    /// Simulate a call.
     Call(T::Call),
+    /// Read a raw key from the store.
     RawKey(Vec<u8>),
+    /// Get the next key in the store from the provided key.
     RawNext(Vec<u8>),
+    /// Get the previous key in the store from the provided key.
     RawPrev(Option<Vec<u8>>),
 }
 

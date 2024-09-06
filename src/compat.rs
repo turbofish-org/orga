@@ -4,10 +4,12 @@ thread_local! {
     static COMPAT_MODE: RefCell<bool> = const { RefCell::new(false) };
 }
 
+/// Check if executing in compatibility mode.
 pub fn compat_mode() -> bool {
     COMPAT_MODE.with(|compat_mode| *compat_mode.borrow())
 }
 
+/// Set compatibility mode.
 pub fn set_compat_mode(compat_mode: bool) {
     COMPAT_MODE.set(compat_mode);
 }

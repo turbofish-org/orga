@@ -121,7 +121,8 @@
 //         Query::This => {}
 //         Query::FieldA(subquery) => _assert_type::<()>(subquery),
 //         Query::FieldB(subquery) => _assert_type::<T::Query>(subquery),
-//         Query::FieldBar(subquery) => _assert_type::<bar_query::Query>(subquery),
+//         Query::FieldBar(subquery) =>
+// _assert_type::<bar_query::Query>(subquery),
 //         Query::MethodBasic(subquery) => _assert_type::<Vec<u8>>(subquery),
 //         Query::MethodInputAndOutput(n, subquery) => {
 //             _assert_type::<u32>(n);
@@ -134,10 +135,12 @@
 //             _assert_type::<T>(t);
 //             _assert_type::<Vec<u8>>(subquery);
 //         }
-//         Query::MethodComplexType(subquery) => _assert_type::<Vec<u8>>(subquery),
-//         Query::MethodGenericOutput(subquery) => _assert_type::<Vec<u8>>(subquery),
-//         Query::MethodWrappedGenericOutput(subquery) => _assert_type::<Vec<u8>>(subquery),
-//     }
+//         Query::MethodComplexType(subquery) =>
+// _assert_type::<Vec<u8>>(subquery),
+//         Query::MethodGenericOutput(subquery) =>
+// _assert_type::<Vec<u8>>(subquery),
+//         Query::MethodWrappedGenericOutput(subquery) =>
+// _assert_type::<Vec<u8>>(subquery),     }
 // }
 
 // fn _exhaustive_match_call<T: Call>(call: foo_call::Call<T>) {
@@ -156,16 +159,18 @@
 //             _assert_type::<T>(t);
 //             _assert_type::<Vec<u8>>(subcall);
 //         }
-//         Call::MethodComplexTypeCall(subcall) => _assert_type::<Vec<u8>>(subcall),
-//         Call::MethodGenericOutputCall(subcall) => _assert_type::<Vec<u8>>(subcall),
-//     }
+//         Call::MethodComplexTypeCall(subcall) =>
+// _assert_type::<Vec<u8>>(subcall),
+//         Call::MethodGenericOutputCall(subcall) =>
+// _assert_type::<Vec<u8>>(subcall),     }
 // }
 
 // #[test]
 // fn query_call_debug() {
-//     let query = <Foo<i32> as orga::query::Query>::Query::MethodGenericInput(123, vec![42]);
-//     println!("{:?}", query);
+//     let query = <Foo<i32> as
+// orga::query::Query>::Query::MethodGenericInput(123, vec![42]);     println!("
+// {:?}", query);
 
-//     let call = <Foo<i32> as orga::call::Call>::Call::MethodGenericInputCall(234, vec![42]);
-//     println!("{:?}", call);
-// }
+//     let call = <Foo<i32> as
+// orga::call::Call>::Call::MethodGenericInputCall(234, vec![42]);     println!
+// ("{:?}", call); }

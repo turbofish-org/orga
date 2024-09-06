@@ -1,3 +1,5 @@
+//! Financial primitives.
+
 pub mod amount;
 use std::{fmt::Display, str::FromStr};
 
@@ -22,9 +24,6 @@ pub use give::*;
 pub mod take;
 pub use take::*;
 
-pub mod transfer;
-pub use transfer::*;
-
 pub mod pool;
 pub use pool::*;
 
@@ -33,9 +32,6 @@ pub use staking::*;
 
 pub mod accounts;
 pub use accounts::*;
-
-pub mod adjust;
-pub use adjust::*;
 
 pub mod balance;
 pub use balance::*;
@@ -58,6 +54,7 @@ use ripemd::{Digest as _, Ripemd160};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
+/// 20-byte `ripemd160(sha256(pubkey))` address.
 #[orga(skip(Serialize, Deserialize))]
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Copy, Next)]
 pub struct Address {
@@ -65,11 +62,14 @@ pub struct Address {
 }
 
 impl Address {
+    /// Address length in bytes.
     pub const LENGTH: usize = 20;
+    /// Null address.
     pub const NULL: Self = Address {
         bytes: [0; Self::LENGTH],
     };
 
+    /// Create an address from a pubkey.
     pub fn from_pubkey(bytes: [u8; 33]) -> Self {
         let mut sha = Sha256::new();
         sha.update(bytes);
@@ -85,6 +85,7 @@ impl Address {
         Self { bytes }
     }
 
+    /// Create an address from a 64-byte Ethereum pubkey.
     pub fn from_pubkey_eth(bytes: [u8; 64]) -> Self {
         use sha3::{Digest, Keccak256};
         let mut hasher = Keccak256::new();
@@ -97,10 +98,12 @@ impl Address {
         Self { bytes }
     }
 
+    /// Returns the bytes of the address.
     pub fn bytes(&self) -> [u8; Address::LENGTH] {
         self.bytes
     }
 
+    /// Returns true if the address is the associated null address.
     pub fn is_null(&self) -> bool {
         *self == Self::NULL
     }
@@ -188,6 +191,7 @@ impl From<Address> for [u8; Address::LENGTH] {
     }
 }
 
+/// 20-byte `ripemd160(sha256(pubkey))` address.
 #[orga]
 #[derive(Clone, Debug, Next, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VersionedAddress {

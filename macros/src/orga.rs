@@ -353,8 +353,10 @@ impl ToTokens for OrgaSubStruct {
 
         if *is_last {
             let versioned_ident = format_ident!("{}V{}", ident, self.version);
+            let doctext = format!("Latest version of [{}]", self.base_ident);
             tokens.extend(quote! {
-               #vis type #versioned_ident #decl_generics = #ident #decl_generics;
+                #[doc = #doctext]
+                #vis type #versioned_ident #decl_generics = #ident #decl_generics;
             });
         }
     }

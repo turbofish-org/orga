@@ -200,7 +200,13 @@ impl ToTokens for FieldQueryEnum {
         let variants = self.data.iter().map(|field| {
             let ident = to_camel_case(field.ident.as_ref().unwrap());
             let ty = &field.ty;
+            let doctext = format!(
+                "Field query for [{}::{}].",
+                parent_ident,
+                field.ident.as_ref().unwrap()
+            );
             quote! {
+                #[doc = #doctext]
                 #ident(<#ty as #query_trait>::Query)
             }
         });
@@ -351,10 +357,13 @@ impl ToTokens for FieldQueryEnum {
             }
         };
 
+        let doctext = format!("Field queries for [{}].", parent_ident);
         tokens.extend(quote! {
             #[derive(::orga::Educe)]
             #[educe(Debug)]
+            #[doc = #doctext]
             #vis enum #ident #imp #wher {
+                /// No-op variant.
                 Noop(::std::marker::PhantomData<fn(#unused_generics)>),
                 #(#variants),*
             }

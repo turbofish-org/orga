@@ -1,3 +1,6 @@
+//! Plugins for general-purpose features like signature verification or fee
+//! handling.
+
 mod signer;
 pub use signer::*;
 
@@ -32,6 +35,7 @@ macro_rules! type_chain {
     };
 }
 
+/// A set of common plugins used by apps.
 pub type DefaultPlugins<S, T> = type_chain! {
     QueryPlugin<_>,
     SdkCompatPlugin<S, _>,

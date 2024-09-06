@@ -1,3 +1,4 @@
+//! Call-pairs with shared context for loading and deducting funds.
 use orga_macros::orga;
 
 use super::sdk_compat::{sdk::Tx as SdkTx, ConvertSdkTx};
@@ -14,23 +15,33 @@ use std::convert::TryInto;
 
 const MAX_SUBCALL_LEN: u32 = 200_000;
 
+/// A plugin which allows a pair of calls to be issued together, with the first
+/// call (`payer` call) loading funds into the [Paid] context for use in the
+/// second call (`paid` call).
 #[orga(skip(Call))]
 pub struct PayablePlugin<T> {
+    /// The inner value.
     pub inner: T,
 }
 
+/// Context for loading and deducting funds of multiple symbols.
 #[derive(Default)]
 pub struct Paid {
+    /// Amounts of each symbol index currently in the context.
     map: HashMap<u8, Amount>,
+    /// True if the current call is the payer call.
     pub running_payer: bool,
+    /// Whether the fee for this call has been explicitly disabled.
     pub fee_disabled: bool,
 }
 
 impl Paid {
+    /// Adds `amount` of symbol `S` to the context.
     pub fn give<S: Symbol, A: Into<Amount>>(&mut self, amount: A) -> Result<()> {
         self.give_denom(amount, S::INDEX)
     }
 
+    /// Adds `amount` of symbol with index `denom` to the context.
     pub fn give_denom<A: Into<Amount>>(&mut self, amount: A, denom: u8) -> Result<()> {
         let entry = self.map.entry(denom).or_insert_with(|| 0.into());
         let amount = amount.into();
@@ -39,6 +50,7 @@ impl Paid {
         Ok(())
     }
 
+    /// Takes `amount` of symbol `S` from the context.
     pub fn take<S: Symbol, A: Into<Amount>>(&mut self, amount: A) -> Result<Coin<S>> {
         let amount = amount.into();
         self.take_denom(amount, S::INDEX)?;
@@ -46,6 +58,7 @@ impl Paid {
         Ok(S::mint(amount))
     }
 
+    /// Takes `amount` of symbol with index `denom` from the context.
     pub fn take_denom<A: Into<Amount>>(&mut self, amount: A, denom: u8) -> Result<()> {
         let entry = self.map.entry(denom).or_insert_with(|| 0.into());
         let amount = amount.into();
@@ -58,6 +71,7 @@ impl Paid {
         Ok(())
     }
 
+    /// Returns the amount of symbol `S` currently in the context.
     pub fn balance<S: Symbol>(&self) -> Result<Amount> {
         let entry = match self.map.get(&S::INDEX) {
             Some(amt) => *amt,
@@ -68,9 +82,18 @@ impl Paid {
     }
 }
 
+/// A two-part call, where the `payer` call may load funds into the [Paid]
+/// context for use in the `paid` call.
+///
+/// This two-call system will be replaced by a more flexible "multi-call" system
+/// in the future.
 #[derive(Debug)]
 pub struct PaidCall<T> {
+    /// The `payer` call, which may load funds into the [Paid] context (e.g. to
+    /// cover fees or deposit into another account).
     pub payer: T,
+    /// The `paid` call, which may use funds loaded into the [Paid] context by
+    /// the `payer` call.
     pub paid: T,
 }
 
@@ -120,9 +143,13 @@ impl<T: Decode + std::fmt::Debug> Decode for PaidCall<T> {
     }
 }
 
+/// A payable call, which may be either a [PaidCall] or the inner type's call
+/// (unpaid).
 #[derive(Debug, Encode, Decode)]
 pub enum PayableCall<T> {
+    /// A paid call.
     Paid(PaidCall<T>),
+    /// An unpaid call, passed through to the inner value.
     Unpaid(T),
 }
 

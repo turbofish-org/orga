@@ -2,6 +2,7 @@ use crate::compat_mode;
 use crate::encoding::{Decode, Result};
 use std::io::Read;
 
+/// A helper for decoding versioned [Decode] types.
 pub struct Decoder<R> {
     field_count: u8,
     version: u8,
@@ -9,6 +10,7 @@ pub struct Decoder<R> {
 }
 
 impl<R: Read> Decoder<R> {
+    /// Create a new decoder.
     pub fn new(bytes: R, version: u8) -> Self {
         Self {
             version,
@@ -17,6 +19,8 @@ impl<R: Read> Decoder<R> {
         }
     }
 
+    /// Decode the next child from the reader, checking the version byte if this
+    /// is the first field in the parent.
     pub fn decode_child<U>(&mut self) -> Result<U>
     where
         U: Decode,
@@ -33,6 +37,7 @@ impl<R: Read> Decoder<R> {
         res
     }
 
+    /// Decode the next child from the reader, converting it to the given type.
     pub fn decode_child_as<T, U>(&mut self) -> Result<U>
     where
         U: From<T>,
