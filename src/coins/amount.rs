@@ -1,11 +1,15 @@
+//! Safe integer amounts.
 use crate::{Error, Result};
 use orga::orga;
 use std::convert::TryFrom;
 
+/// Represents an amount (usually of coins) with safe arithmetic operations to
+/// prevent overflows.
 #[orga]
 #[derive(Debug, Clone, Copy, PartialOrd, Ord)]
 #[serde(transparent)]
 pub struct Amount {
+    /// The value of the amount.
     pub(crate) value: u64,
 }
 
@@ -18,6 +22,7 @@ impl std::fmt::Display for Amount {
 impl Eq for Amount {}
 
 impl Amount {
+    /// Creates a new amount with the given value.
     pub fn new(value: u64) -> Self {
         Amount { value }
     }

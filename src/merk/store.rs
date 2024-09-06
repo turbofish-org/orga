@@ -1,3 +1,5 @@
+//! A store backed by a [Merk].
+
 use crate::abci::ABCIStore;
 use crate::error::{Error, Result};
 use crate::store::*;
@@ -10,7 +12,9 @@ use tendermint_proto::v0_34::abci::{self, *};
 use super::snapshot;
 type Map = BTreeMap<Vec<u8>, Option<Vec<u8>>>;
 
+/// How often snapshots are created, in number of blocks.
 pub const SNAPSHOT_INTERVAL: u64 = 1000;
+/// The height of the first snapshot.
 pub const FIRST_SNAPSHOT_HEIGHT: u64 = 2;
 
 /// A [`store::Store`] implementation backed by a [`merk`](https://docs.rs/merk)
@@ -48,6 +52,7 @@ impl MerkStore {
         }
     }
 
+    /// Opens a `MerkStore` at the provided path for read-only access.
     pub fn open_readonly<P: AsRef<Path>>(home: P) -> Self {
         let home = home.as_ref().to_path_buf();
         let merk = Merk::open_readonly(home.join("db")).unwrap();
@@ -78,12 +83,15 @@ impl MerkStore {
             ])
     }
 
+    /// Initialize a Merk at the destination path from an existing Merk at the
+    /// source path.
     pub fn init_from(
         source: impl AsRef<Path>,
         dest: impl AsRef<Path>,
         height: Option<u64>,
     ) -> Result<Self> {
-        // TODO: error if source isn't already a merk (currently creates a new merk when opening with `new`)
+        // TODO: error if source isn't already a merk (currently creates a new merk when
+        // opening with `new`)
         let source = source.as_ref();
         let dest = dest.as_ref();
 
@@ -129,10 +137,12 @@ impl MerkStore {
             .apply(batch.as_ref(), aux_batch.as_ref())?)
     }
 
+    /// Return a reference to the underlying [Merk].
     pub fn merk(&self) -> &Merk {
         self.merk.as_ref().unwrap()
     }
 
+    /// Consume the store and return the underlying [Merk].
     pub fn into_merk(self) -> Merk {
         self.merk.unwrap()
     }

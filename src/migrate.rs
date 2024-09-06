@@ -1,3 +1,5 @@
+//! State migration for versioned data.
+
 pub use crate::macros::Migrate;
 use crate::{
     encoding::{Decode, Terminated},
@@ -7,7 +9,10 @@ use crate::{
 };
 use std::{cell::RefCell, marker::PhantomData, rc::Rc};
 
+/// Load state data for this type, migrating from a previous version
+/// if necessary.
 pub trait Migrate: State {
+    /// Migrate state data to the current version.
     fn migrate(src: Store, dest: Store, bytes: &mut &[u8]) -> Result<Self> {
         let mut value = Self::load(src, bytes)?;
         value.attach(dest)?;
@@ -15,11 +20,20 @@ pub trait Migrate: State {
     }
 }
 
+/// Create a migrated instance of this type from a loaded value of a previous
+/// version.
 pub trait MigrateFrom<T>: State {
+    /// Migrate from the previous version instance.
     fn migrate_from(value: T) -> Result<Self>;
 }
 
+/// Migrate a previous version of this type into the current version..
+///
+/// One should avoid implementing [MigrateInto] and implement [MigrateFrom]
+/// instead. Implementing [MigrateFrom] automatically provides one with an
+/// implementation of [MigrateInto] thanks to a blanket implementation in orga.
 pub trait MigrateInto<T> {
+    /// Migrate into the current version.
     fn migrate_into(self) -> Result<T>;
 }
 

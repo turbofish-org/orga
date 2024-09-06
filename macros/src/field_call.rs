@@ -245,7 +245,13 @@ impl ToTokens for FieldCallEnum {
         let variants = self.data.iter().map(|field| {
             let ident = to_camel_case(field.ident.as_ref().unwrap());
             let ty = &field.ty;
+            let doctext = format!(
+                "Field call for [{}::{}].",
+                parent_ident,
+                field.ident.as_ref().unwrap()
+            );
             quote! {
+                #[doc = #doctext]
                 #ident(<#ty as #call_trait>::Call)
             }
         });
@@ -396,9 +402,12 @@ impl ToTokens for FieldCallEnum {
                 }
             }
         };
+        let doctext = format!("Field calls for [{}].", parent_ident);
 
         tokens.extend(quote! {
+            #[doc = #doctext]
             #vis enum #ident #imp #wher {
+                /// No-op variant.
                 Noop(::std::marker::PhantomData<fn(#unused_generics)>),
                 #(#variants),*
             }

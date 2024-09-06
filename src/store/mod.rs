@@ -25,12 +25,16 @@ pub use store::{DefaultBackingStore, Store};
 
 // TODO: Key type (for cheaper concat, enum over ref or owned slice, etc)
 
+/// Errors which may occur when reading from a store with partial data.
 #[derive(Error, Debug)]
 pub enum Error {
+    /// The status of the entry for this key isn't known.
     #[error("Tried to read unknown store data with key {0:?}")]
     GetUnknown(Vec<u8>),
+    /// The next key for the provided key isn't known.
     #[error("Tried to read unknown store data after key {0:?}")]
     GetNextUnknown(Vec<u8>),
+    /// The previous key for the provided key isn't known.
     #[error("Tried to read unknown store data before key {0:?}")]
     GetPrevUnknown(Option<Vec<u8>>),
 }
@@ -60,8 +64,13 @@ pub trait Read {
         }
     }
 
+    /// Gets the key/value entry which comes directly before `key` in ascending
+    /// key order, or `None` if there are no entries which precede it.
     fn get_prev(&self, key: Option<&[u8]>) -> Result<Option<KV>>;
 
+    /// Gets the entry at `key` if it exists, otherwise returns the previous
+    /// entry by ascending key order, or `None` if there are no entries which
+    /// precede it.
     fn get_prev_inclusive(&self, key: Option<&[u8]>) -> Result<Option<KV>> {
         match key {
             Some(key) => match self.get(key)? {
@@ -152,7 +161,10 @@ impl<S: Write, T: DerefMut<Target = S>> Write for T {
     }
 }
 
+/// A trait with [Read] and [Write] as supertraits to enable dynamic dispatch
+/// stores (see: [BackingStore::Other]).
 pub trait ReadWrite: Read + Write + Any + Send + Sync + 'static {
+    /// Converts the store into a boxed `dyn Any`.
     fn into_any(self: Box<Self>) -> Box<dyn Any>;
 }
 

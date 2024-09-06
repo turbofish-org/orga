@@ -1,3 +1,4 @@
+//! Compatibility with Cosmos SDK transactions.
 use orga_macros::orga;
 
 use crate::call::Call as CallTrait;
@@ -11,18 +12,32 @@ use crate::{Error, Result};
 
 use std::marker::PhantomData;
 
+/// The maximum size of a call in bytes.
 pub const MAX_CALL_SIZE: usize = 65_535;
+/// The flag for a native call.
 pub const NATIVE_CALL_FLAG: u8 = 0xff;
 
+/// A plugin for compatibility with Cosmos SDK transactions.
+///
+/// Types may implement [`ConvertSdkTx`] to define how their native call types
+/// can be converted from Cosmos SDK transactions.
+///
+/// This plugin's call implementation first converts an SDK transaction to a
+/// native call if required, then passes the native call along to its inner
+/// value.
 #[orga(skip(Call), version = 1)]
 pub struct SdkCompatPlugin<S, T> {
     pub(crate) symbol: PhantomData<S>,
+    /// The inner value.
     pub inner: T,
 }
 
+/// A Cosmos SDK transaction or native call.
 #[derive(Debug)]
 pub enum Call<T> {
+    /// A native call.
     Native(T),
+    /// A Cosmos SDK transaction.
     Sdk(sdk::Tx),
 }
 
@@ -74,15 +89,19 @@ impl<T: Decode> Decode for Call<T> {
 }
 
 pub mod sdk {
+    //! Cosmos SDK types.
     use super::{Address, Decode, Encode, Error, Result, MAX_CALL_SIZE};
     use cosmrs::proto::cosmos::tx::v1beta1::Tx as ProtoTx;
     use prost::Message;
     use serde::{Deserialize, Serialize};
     use std::io::{Error as IoError, ErrorKind};
 
+    /// A Cosmos SDK transaction.
     #[derive(Debug, Clone)]
     pub enum Tx {
+        /// An Amino transaction.
         Amino(AminoTx),
+        /// A Protobuf transaction.
         Protobuf(cosmrs::Tx),
     }
 
@@ -141,15 +160,21 @@ pub mod sdk {
         }
     }
 
+    /// An Amino transaction.
     #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
     pub struct AminoTx {
+        /// The messages in the transaction.
         pub msg: Vec<Msg>,
+        /// The fee.
         pub fee: Fee,
+        /// The tx memo.
         pub memo: String,
+        /// Provided signatures.
         pub signatures: Vec<Signature>,
     }
 
     impl Tx {
+        /// Returns the bytes that must be signed for this transaction.
         pub fn sign_bytes(&self, chain_id: String, nonce: u64) -> Result<Vec<u8>> {
             match self {
                 Tx::Amino(tx) => {
@@ -183,6 +208,7 @@ pub mod sdk {
             }
         }
 
+        /// Returns the public key of the sender of this transaction.
         pub fn sender_pubkey(&self) -> Result<[u8; 33]> {
             let pubkey_vec = match self {
                 Tx::Amino(tx) => {
@@ -216,11 +242,13 @@ pub mod sdk {
             Ok(pubkey_arr)
         }
 
+        /// Returns the [Address] of the sender of this transaction.
         pub fn sender_address(&self) -> Result<Address> {
             let signer_call = super::super::signer::sdk_to_signercall(self)?;
             signer_call.address()
         }
 
+        /// Returns the signature of the sender of this transaction.
         pub fn signature(&self) -> Result<[u8; 64]> {
             let sig_vec = match self {
                 Tx::Amino(tx) => {
@@ -248,6 +276,10 @@ pub mod sdk {
             Ok(sig_arr)
         }
 
+        /// Returns the signature type of the sender of this transaction if it
+        /// is an Amino transaction.
+        ///
+        /// Returns `None` if the transaction is a Protobuf transaction.
         pub fn sig_type(&self) -> Result<Option<&str>> {
             Ok(match self {
                 Tx::Amino(tx) => tx
@@ -262,82 +294,125 @@ pub mod sdk {
         }
     }
 
+    /// Cosmos SDK sign doc.
     #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
     pub struct SignDoc {
+        /// String representation of the account number.
         pub account_number: String,
+        /// The chain ID.
         pub chain_id: String,
+        /// The fee.
         pub fee: Fee,
+        /// The tx memo.
         pub memo: String,
+        /// The messages in the transaction.
         pub msgs: Vec<Msg>,
+        /// String representation of the account sequence number.
         pub sequence: String,
     }
 
+    /// Cosmos SDK message.
     #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
     pub struct Msg {
+        /// The type of the message.
         #[serde(rename = "type")]
         pub type_: String,
+        /// The JSON value of the message.
         pub value: serde_json::Value,
     }
 
+    /// Cosmos SDK fee.
     #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
     pub struct Fee {
+        /// The amount of coins to pay for the transaction.
         pub amount: Vec<Coin>,
+        /// Tx gas setting.
         pub gas: String,
     }
 
+    /// Cosmos SDK coin.
     #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
     pub struct Coin {
+        /// String representation of the amount.
         pub amount: String,
+        /// The type of coin.
         pub denom: String,
     }
 
+    /// Cosmos SDK signature.
     #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
     pub struct Signature {
+        /// The public key of the signer.
         pub pub_key: PubKey,
+        /// The base64-encoded signature.
         pub signature: String,
+        /// The type of signature.
         pub r#type: Option<String>,
     }
 
+    /// Cosmos SDK public key.
     #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
     pub struct PubKey {
+        /// The type of public key.
         #[serde(rename = "type")]
         pub type_: String,
+        /// The base64-encoded public key.
         pub value: String,
     }
 
+    /// Cosmos SDK token transfer message.
     #[derive(Deserialize, Debug, Clone)]
     pub struct MsgSend {
+        /// The sender's address.
         pub from_address: String,
+        /// The receiver's address.
         pub to_address: String,
+        /// The coins to transfer.
         pub amount: Vec<Coin>,
     }
 
+    /// Cosmos SDK delegation message.
     #[derive(Deserialize, Debug, Clone)]
     pub struct MsgDelegate {
+        /// The delegator's address.
         pub delegator_address: String,
+        /// The validator's address.
         pub validator_address: String,
+        /// The coin to delegate.
         pub amount: Option<Coin>,
     }
 
+    /// Cosmos SDK redelegation message.
     #[derive(Deserialize, Debug, Clone)]
     pub struct MsgBeginRedelegate {
+        /// The delegator's address.
         pub delegator_address: String,
+        /// The source validator's address.
         pub validator_src_address: String,
+        /// The destination validator's address.
         pub validator_dst_address: String,
+        /// The coin to redelegate.
         pub amount: Option<Coin>,
     }
 
+    /// Cosmos SDK undelegation message.
     #[derive(Deserialize, Debug, Clone)]
     pub struct MsgUndelegate {
+        /// The delegator's address.
         pub delegator_address: String,
+        /// The validator's address.
         pub validator_address: String,
+        /// The coin to undelegate.
         pub amount: Option<Coin>,
     }
 }
 
+/// A trait for converting Cosmos SDK transactions to native calls.
 pub trait ConvertSdkTx {
+    /// The type returned by the conversion, usually the type's native call.
     type Output;
 
+    /// Convert the given SDK transaction to a native call.
     fn convert(&self, msg: &sdk::Tx) -> Result<Self::Output>;
 }
 

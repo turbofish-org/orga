@@ -8,30 +8,46 @@ use crate::{Error, Result};
 
 use super::UNBONDING_SECONDS;
 
+/// Unbonding entry of staked to liquid coins.
 #[orga]
 pub struct Unbond<S: Symbol> {
+    /// The funds being unbonded.
     pub coins: Share<S>,
+    /// The time (in unix seconds) when the unbonding started.
     pub start_seconds: i64,
 }
 
+/// Redelegation entry of staked coins from one validator to another.
 #[orga]
 #[derive(Clone)]
 pub struct Redelegation {
+    /// The amount of the staking token being redelegated.
     pub amount: Amount,
+    /// The validator address to which the staking token is being redelegated.
     pub address: Address,
+    /// The time (in unix seconds) when the redelegation started.
     pub start_seconds: i64,
 }
 
+/// A single delegator entry within a validator, aka a Delegator Validator Pair
+/// (DVP).
 #[orga]
 pub struct Delegator<S: Symbol> {
+    /// Claimable staking rewards, which may include multiple denoms.
     pub liquid: MultiShare,
+    /// Amount of staking token staked by the delegator.
     pub staked: Share<S>,
+    /// Queue of unbonds for this DVP.
     pub unbonding: Deque<Unbond<S>>,
+    /// Queue of outgoing redelegations from this DVP.
     pub redelegations_out: Deque<Redelegation>,
+    /// Queue of incoming redelegations to this DVP.
     pub redelegations_in: Deque<Redelegation>,
 }
 
 impl<S: Symbol> Delegator<S> {
+    /// Begin an unbond. If no start time is provided, the unbonded coins will
+    /// be liquid immediately.
     pub(super) fn unbond<A: Into<Amount>>(
         &mut self,
         amount: A,
@@ -50,6 +66,7 @@ impl<S: Symbol> Delegator<S> {
         }
     }
 
+    /// Build a summary of the delegator's staking state.
     pub(super) fn info(&self) -> Result<DelegationInfo> {
         let mut unbonds = vec![];
         for i in 0..self.unbonding.len() {
@@ -68,6 +85,11 @@ impl<S: Symbol> Delegator<S> {
         })
     }
 
+    /// Slash the stake of this delegator by the given multiplier, and return
+    /// any redelegations also subject to the slash.
+    ///
+    /// If the slash is due to a liveness fault, outbound
+    /// redelegations are not affected.
     pub(super) fn slash(
         &mut self,
         multiplier: Decimal,
@@ -98,6 +120,7 @@ impl<S: Symbol> Delegator<S> {
         Ok(redelegations)
     }
 
+    /// Slash a redelation by the given amount.
     pub(super) fn slash_redelegation(&mut self, amount: Amount) -> Result<()> {
         let stake_slash = if amount > self.staked.shares.amount()? {
             self.staked.shares.amount()?
@@ -137,6 +160,7 @@ impl<S: Symbol> Delegator<S> {
         Ok(())
     }
 
+    /// Process matured unbonds.
     pub(super) fn process_unbonds(&mut self) -> Result<()> {
         let now = self.current_seconds()?;
 
@@ -156,6 +180,7 @@ impl<S: Symbol> Delegator<S> {
         Ok(())
     }
 
+    /// Process matured redelegations with this DVP as their destination.
     pub(super) fn process_redelegations_in(&mut self) -> Result<()> {
         let now = self.current_seconds()?;
         while let Some(redelegation) = self.redelegations_in.front()? {
@@ -172,6 +197,7 @@ impl<S: Symbol> Delegator<S> {
         Ok(())
     }
 
+    /// Process matured redelegations with this DVP as their source.
     pub(super) fn process_redelegations_out(&mut self) -> Result<()> {
         let now = self.current_seconds()?;
         while let Some(redelegation) = self.redelegations_out.front()? {
@@ -188,6 +214,7 @@ impl<S: Symbol> Delegator<S> {
         Ok(())
     }
 
+    /// Initialize a redelegation away from this DVP.
     pub(super) fn redelegate_out(
         &mut self,
         dst_val_address: Address,
@@ -212,6 +239,7 @@ impl<S: Symbol> Delegator<S> {
         Ok(redelegated_coins)
     }
 
+    /// Initialize a redelegation to this DVP.
     pub(super) fn redelegate_in(
         &mut self,
         src_val_address: Address,
@@ -229,14 +257,17 @@ impl<S: Symbol> Delegator<S> {
         self.add_stake(coins)
     }
 
+    /// Add staked coins to this delegator.
     pub(super) fn add_stake(&mut self, coins: Coin<S>) -> Result<()> {
         self.staked.give(coins)
     }
 
+    /// Deduct staked coins from this delegator.
     pub(super) fn deduct<A: Into<Amount>>(&mut self, amount: A, denom: u8) -> Result<()> {
         self.liquid.deduct(amount.into(), denom)
     }
 
+    /// Time context helper.
     fn current_seconds(&mut self) -> Result<i64> {
         Ok(self
             .context::<Time>()
@@ -259,16 +290,23 @@ impl<S: Symbol> Give<(u8, Amount)> for Delegator<S> {
     }
 }
 
+/// Information about a single unbond of the staking token.
 #[orga]
 #[derive(Debug)]
 pub struct UnbondInfo {
+    /// The time (in unix seconds) when the unbonding started.
     pub start_seconds: i64,
+    /// Amount of the staking token being unbonded.
     pub amount: Amount,
 }
 
+/// Summary of a delegator for a single DVP.
 #[derive(Debug)]
 pub struct DelegationInfo {
+    /// Pending unbonds.
     pub unbonding: Vec<UnbondInfo>,
+    /// Total amount staked.
     pub staked: Amount,
+    /// Claimable staking rewards, in (denom, amount) pairs.
     pub liquid: Vec<(u8, Amount)>,
 }

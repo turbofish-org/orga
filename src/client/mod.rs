@@ -1,3 +1,5 @@
+//! Remote interaction with orga apps.
+
 use crate::call::Call;
 use crate::describe::Describe;
 use crate::encoding::{Decode, Encode};
@@ -22,12 +24,16 @@ pub mod wallet;
 pub use exec::Transport;
 pub use wallet::Wallet;
 
+/// High-level trait for performing calls and queries remotely.
 pub trait Client<T: Query + Call>: Send + Sync {
+    /// Perform a query on the app.
     fn query<U, F: FnMut(T) -> Result<U> + Send>(
         &self,
         f: F,
     ) -> impl Future<Output = Result<U>> + Send;
 
+    /// Perform a call on the app. Accepts two subcalls, which are used in a
+    /// [PaidCall].
     fn call(
         &self,
         payer: impl FnOnce(&T) -> T::Call,
@@ -35,6 +41,7 @@ pub trait Client<T: Query + Call>: Send + Sync {
     ) -> impl Future<Output = Result<()>>;
 }
 
+/// A generic client for an app.
 pub struct AppClient<T, U, Transport, Symbol, Wallet> {
     _pd: PhantomData<Symbol>,
     transport: Transport,
@@ -70,6 +77,7 @@ where
 use crate::plugins::DefaultPlugins;
 
 impl<T, U, Transport, Symbol, Wallet> AppClient<T, U, Transport, Symbol, Wallet> {
+    /// Create a new client from a transport and wallet.
     pub fn new(client: Transport, wallet: Wallet) -> Self
     where
         T: Into<U>,
@@ -82,6 +90,7 @@ impl<T, U, Transport, Symbol, Wallet> AppClient<T, U, Transport, Symbol, Wallet>
         }
     }
 
+    /// Create a new client with a different wallet.
     pub fn with_wallet<W2>(self, wallet: W2) -> AppClient<T, U, Transport, Symbol, W2> {
         AppClient {
             _pd: PhantomData,
@@ -91,6 +100,7 @@ impl<T, U, Transport, Symbol, Wallet> AppClient<T, U, Transport, Symbol, Wallet>
         }
     }
 
+    /// Create a subclient of this one..
     #[allow(clippy::should_implement_trait)]
     pub fn sub<U2>(self, sub: fn(T) -> U2) -> AppClient<T, U2, Transport, Symbol, Wallet> {
         AppClient {
@@ -111,6 +121,7 @@ where
 {
     // TODO: support subclients
     // TODO: return object with result data (e.g. txid)
+    /// Call a method on the app.
     pub async fn call(
         &self,
         payer: impl FnOnce(&U) -> T::Call,
@@ -152,6 +163,7 @@ where
         Ok(())
     }
 
+    /// Queries the root app.
     pub async fn query_root<U2, F2: FnMut(ABCIPlugin<DefaultPlugins<Symbol, T>>) -> Result<U2>>(
         &self,
         op: F2,
@@ -160,10 +172,12 @@ where
         Ok(res)
     }
 
+    /// Performs the provided query op with a default initial store.
     pub async fn query<U2, F2: FnMut(U) -> Result<U2>>(&self, op: F2) -> Result<U2> {
         self.query_with_store(Store::default(), op).await
     }
 
+    /// Queries the inner app type with the provided store.
     async fn query_with_store<U2, F2: FnMut(U) -> Result<U2>>(
         &self,
         store: Store,

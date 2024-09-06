@@ -1,3 +1,4 @@
+//! Read-only snapshots of a Merk instance.
 use crate::store::Read;
 use crate::Result;
 use merk::{Hash, Merk};
@@ -8,6 +9,10 @@ use tendermint_proto::v0_34::abci::{RequestLoadSnapshotChunk, Snapshot as AbciSn
 
 use super::store::{FIRST_SNAPSHOT_HEIGHT, SNAPSHOT_INTERVAL};
 
+/// A snapshot of a [Merk].
+///
+/// These snapshots are offered to peers via Tendermint to support state
+/// sync.
 #[derive(Clone)]
 pub struct Snapshot {
     pub(crate) checkpoint: Arc<RwLock<Merk>>,
@@ -59,26 +64,39 @@ impl Read for Snapshot {
     }
 }
 
+/// A filter applied to snapshots to determine whether they should be created or
+/// retained.
 pub enum SnapshotFilter {
+    /// Retain a snapshot at most once every `interval` blocks, up to `limit`
+    /// (dropping older snapshots).
     Interval {
+        /// The interval between snapshots, in number of blocks.
         interval: u64,
+        /// The maximum number of snapshots this filter may retain.
         limit: u64,
     },
+    /// Retain a snapshot of a specific height.
     SpecificHeight {
+        /// A snapshot of this height will be retained.
         height: u64,
+        /// The height at which this filter will no longer be applied, if
+        /// provided.
         keep_until: Option<u64>,
     },
 }
 
 impl SnapshotFilter {
+    /// Create an interval filter.
     pub fn interval(interval: u64, limit: u64) -> Self {
         SnapshotFilter::Interval { interval, limit }
     }
 
+    /// Create a specific height filter.
     pub fn specific_height(height: u64, keep_until: Option<u64>) -> Self {
         SnapshotFilter::SpecificHeight { height, keep_until }
     }
 
+    /// Determine whether a snapshot should be created at the given height.
     pub fn should_create(&self, height: u64) -> bool {
         match self {
             SnapshotFilter::Interval { interval, .. } => height % interval == 0,
@@ -86,6 +104,7 @@ impl SnapshotFilter {
         }
     }
 
+    /// Determine whether a snapshot should be retained at the given height.
     pub fn should_keep(&self, ss_height: u64, cur_height: u64) -> bool {
         match self {
             SnapshotFilter::Interval { interval, limit } => {
@@ -98,6 +117,7 @@ impl SnapshotFilter {
     }
 }
 
+/// A collection of snapshots.
 #[derive(Default)]
 pub struct Snapshots {
     snapshots: BTreeMap<u64, Snapshot>,
@@ -106,6 +126,8 @@ pub struct Snapshots {
 }
 
 impl Snapshots {
+    /// Create a new snapshot collection, and ensure the storage directory
+    /// exists.
     pub fn new(path: &Path) -> Result<Self> {
         if !path.exists() {
             std::fs::create_dir(path).expect("Failed to create snapshot directory");
@@ -118,6 +140,7 @@ impl Snapshots {
         })
     }
 
+    /// Load a snapshot collection from disk.
     pub fn load(path: &Path) -> Result<Self> {
         let mut snapshots = Self::new(path)?;
 
@@ -138,29 +161,35 @@ impl Snapshots {
         Ok(snapshots)
     }
 
+    /// Add filters to this snapshot collection.
     pub fn with_filters(mut self, filters: Vec<SnapshotFilter>) -> Self {
         self.filters = filters;
         self
     }
 
+    /// Get a snapshot at the given height, if it exists.
     pub fn get(&self, height: u64) -> Option<&Snapshot> {
         self.snapshots.get(&height)
     }
 
+    /// Get the latest snapshot and its height, if it exists.
     pub fn get_latest(&self) -> Option<(u64, &Snapshot)> {
         self.snapshots.iter().next_back().map(|(h, s)| (*h, s))
     }
 
+    /// Determine whether a snapshot should be created at the given height.
     pub fn should_create(&self, height: u64) -> bool {
         height > 0 && self.filters.iter().any(|f| f.should_create(height))
     }
 
+    /// Determine whether a snapshot should be retained at the given height.
     pub fn should_keep(&self, ss_height: u64, cur_height: u64) -> bool {
         self.filters
             .iter()
             .any(|f| f.should_keep(ss_height, cur_height))
     }
 
+    /// Create a snapshot at the given height.
     pub fn create(&mut self, height: u64, checkpoint: Merk) -> Result<()> {
         if self.snapshots.contains_key(&height) {
             return Ok(());
@@ -172,6 +201,7 @@ impl Snapshots {
         self.maybe_prune(height)
     }
 
+    /// Prune snapshots that are no longer needed.
     pub fn maybe_prune(&mut self, cur_height: u64) -> Result<()> {
         let remove_heights = self
             .snapshots
@@ -197,10 +227,12 @@ impl Snapshots {
         Ok(())
     }
 
+    /// Returns the path to a snapshot at the given height.
     pub fn path(&self, height: u64) -> PathBuf {
         self.path.join(height.to_string())
     }
 
+    /// Returns the ABCI snapshots to offer to a peer.
     pub fn abci_snapshots(&self) -> Result<Vec<AbciSnapshot>> {
         self.snapshots
             .iter()
@@ -218,6 +250,7 @@ impl Snapshots {
             .collect()
     }
 
+    /// Load a chunk from a snapshot.
     pub fn abci_load_chunk(&self, req: RequestLoadSnapshotChunk) -> Result<Vec<u8>> {
         match self.snapshots.get(&req.height) {
             Some(snapshot) => snapshot.chunk(req.chunk as usize),

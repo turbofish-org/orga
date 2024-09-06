@@ -1,3 +1,5 @@
+//! ICS-20 Fungible Token Transfer module
+
 use crate::{
     coins::{Address, Amount, Coin, Symbol},
     collections::Map,
@@ -41,8 +43,10 @@ impl From<TokenTransferError> for crate::Error {
     }
 }
 
+/// ICS-20 Fungible Token Transfer module
 #[orga]
 pub struct Transfer {
+    /// Maps of account balances for each denom
     pub accounts: Map<Denom, Map<Address, Amount>>,
 
     #[state(skip)]
@@ -61,6 +65,7 @@ impl Transfer {
         &mut self.incoming_transfer
     }
 
+    /// Returns the balance of an address for the provided [Denom].
     pub fn balance(&self, address: Address, denom: Denom) -> crate::Result<Amount> {
         Ok(*self
             .accounts
@@ -70,12 +75,14 @@ impl Transfer {
             .unwrap_or_default())
     }
 
+    /// Returns the balance of an address for the provided [Symbol].
     pub fn symbol_balance<S: Symbol>(&self, address: Address) -> crate::Result<Amount> {
         let denom = S::NAME.try_into()?;
 
         self.balance(address, denom)
     }
 
+    /// Returns the escrow address for the given port and channel.
     pub fn get_escrow_account(
         &self,
         port_id: &ibc::core::host::types::identifiers::PortId,
@@ -473,12 +480,18 @@ impl Module for Transfer {
     }
 }
 
+/// Information about an incoming transfer.
 #[derive(Debug, Clone)]
 pub struct TransferInfo {
+    /// The token denom, containing info about its origin.
     pub denom: PrefixedDenom,
+    /// The amount of tokens being transferred.
     pub amount: u64,
+    /// The sender of the transfer.
     pub sender: String,
+    /// The receiver of the transfer.
     pub receiver: String,
+    /// ICS-20 memo.
     pub memo: String,
 }
 

@@ -1,3 +1,4 @@
+//! Mock client for use in tests.
 use std::{any::Any, collections::BTreeMap, marker::PhantomData, sync::Mutex};
 
 use crate::{
@@ -13,15 +14,20 @@ use crate::{
 
 use super::exec::Transport;
 
+/// A mock client for use in tests.
 #[derive(Default)]
 pub struct MockClient<T> {
+    /// Encoded queries.
     pub queries: Mutex<Vec<Vec<u8>>>,
+    /// Encoded calls.
     pub calls: Mutex<Vec<Vec<u8>>>,
+    /// The client's store.
     pub store: Store,
     _marker: PhantomData<fn(T)>,
 }
 
 impl<T> MockClient<T> {
+    /// Create a new mock client with the given store.
     pub fn with_store(store: Store) -> Self {
         Self {
             queries: Mutex::new(vec![]),

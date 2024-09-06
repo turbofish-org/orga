@@ -13,6 +13,8 @@
 #![feature(trait_upcasting)]
 
 extern crate self as orga;
+
+#[doc(inline)]
 pub use orga_macros::{channels, orga};
 
 /// Integration with ABCI.

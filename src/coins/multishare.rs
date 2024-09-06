@@ -1,14 +1,18 @@
+//! Decimal amounts of multiple asset types.
 use super::{Amount, Balance, Coin, Decimal, Give, Symbol, Take};
 use crate::collections::Map;
 use crate::orga;
 use crate::{Error, Result};
 
+/// Represents multiple shares of different denoms.
 #[orga]
 pub struct MultiShare {
+    /// A map of denom indices to their corresponding decimal shares
     pub shares: Map<u8, Decimal>,
 }
 
 impl MultiShare {
+    /// Returns a vector of `(denom, Amount)` pairs for all shares
     pub fn amounts(&self) -> Result<Vec<(u8, Amount)>> {
         self.shares
             .iter()?
@@ -19,6 +23,8 @@ impl MultiShare {
             .collect()
     }
 
+    /// Deducts the specified amount from the share of the given denom.
+    /// Returns an error if the balance is insufficient.
     pub fn deduct<A: Into<Amount>>(&mut self, amount: A, denom: u8) -> Result<()> {
         let amount: Amount = amount.into();
 

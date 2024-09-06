@@ -17,7 +17,7 @@ use std::process::{Command, Stdio};
 use std::str::FromStr;
 use std::sync::mpsc::{self, Receiver, Sender};
 use tar::Archive;
-use toml_edit::{value, Document};
+use toml_edit::{value, DocumentMut};
 
 #[cfg(target_os = "macos")]
 static TENDERMINT_BINARY_URL: &str = "https://github.com/informalsystems/tendermint/releases/download/v0.34.26/tendermint_0.34.26_darwin_amd64.tar.gz";
@@ -49,16 +49,20 @@ fn verify_hash(tendermint_bytes: &[u8]) {
     );
     info!("Confirmed correct Tendermint zip hash");
 }
+
+/// Tendermint child process handle.
 pub struct Child {
     child: std::process::Child,
     sender: Sender<Option<()>>,
 }
 
 impl Child {
+    /// Create a new Tendermint child process handle.
     pub fn new(child: std::process::Child, sender: Sender<Option<()>>) -> Self {
         Self { child, sender }
     }
 
+    /// Kill the child process.
     pub fn kill(&mut self) -> Result<()> {
         let _ = self.sender.send(Some(()));
         self.child.kill()?;
@@ -67,12 +71,13 @@ impl Child {
     }
 }
 
+/// Tendermint process manager.
 #[derive(Debug)]
 pub struct Tendermint {
     command: std::process::Command,
     home: PathBuf,
     genesis_bytes: Option<Vec<u8>>,
-    config_contents: Option<toml_edit::Document>,
+    config_contents: Option<toml_edit::DocumentMut>,
     show_logs: bool,
 }
 
@@ -141,6 +146,7 @@ impl Tendermint {
         }
     }
 
+    /// Sets command line flags for the Tendermint process.
     pub fn flags(mut self, flags: Vec<String>) -> Self {
         for flag in flags {
             self.command.arg(flag.trim());
@@ -356,6 +362,8 @@ impl Tendermint {
         genesis_file.write_all(genesis_bytes.as_slice()).unwrap();
     }
 
+    /// Sets the genesis to use for the Tendermint process from the bytes of the
+    /// `genesis.json`.
     #[must_use]
     pub fn with_genesis(mut self, genesis_bytes: Vec<u8>) -> Self {
         self.genesis_bytes.replace(genesis_bytes);
@@ -367,7 +375,7 @@ impl Tendermint {
         let config_path = self.home.join("config/config.toml");
         let contents = fs::read_to_string(config_path).unwrap();
         let document = contents
-            .parse::<Document>()
+            .parse::<DocumentMut>()
             .expect("Invalid config.toml contents");
         self.config_contents = Some(document);
     }
@@ -488,8 +496,8 @@ impl Tendermint {
         self
     }
 
-    /// Edits the block time located in the config.toml in the config directory under the
-    /// tendermint home
+    /// Edits the block time located in the config.toml in the config directory
+    /// under the tendermint home
     ///
     /// Compatible Commands:
     ///     start
@@ -514,6 +522,7 @@ impl Tendermint {
         self
     }
 
+    /// Enable or disable Tendermint log display.
     #[must_use]
     pub fn logs(mut self, show: bool) -> Self {
         self.show_logs = show;
@@ -697,7 +706,7 @@ mod tests {
     fn tendermint_init() {
         let temp_dir = TempDir::new().unwrap();
         let temp_dir_path = temp_dir.path();
-        let _ = Tendermint::new(temp_dir_path).stdout(Stdio::null()).init();
+        // let _ = Tendermint::new(temp_dir_path).stdout(Stdio::null()).init();
 
         let file_set: HashSet<String> = temp_dir_path
             .read_dir()

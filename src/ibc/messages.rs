@@ -8,9 +8,11 @@ use ibc::core::handler::types::msgs::MsgEnvelope;
 use ibc_proto::google::protobuf::Any;
 use prost::Message;
 
+/// Wrapper for [IbcMessage]s for encoding compatibility.
 #[derive(Clone, Debug)]
 pub struct IbcTx(pub Vec<IbcMessage>);
 
+/// Wrapper for [Tx] for encoding compatibility.
 #[derive(Clone, Debug)]
 pub struct RawIbcTx(pub Tx);
 
@@ -46,15 +48,18 @@ impl Decode for RawIbcTx {
 
 impl Terminated for RawIbcTx {}
 
+/// Supported IBC messages.
 #[derive(Clone, Debug)]
 pub enum IbcMessage {
+    /// ICS20 transfer message.
     Ics20(MsgTransfer),
+    /// ICS26 envelope message.
     Ics26(MsgEnvelope),
 }
 
 // impl Encode for IbcTx {
-//     fn encode_into<W: std::io::Write>(&self, _dest: &mut W) -> ed::Result<()> {
-//         unimplemented!();
+//     fn encode_into<W: std::io::Write>(&self, _dest: &mut W) -> ed::Result<()>
+// {         unimplemented!();
 //     }
 
 //     fn encoding_length(&self) -> ed::Result<usize> {
@@ -67,8 +72,8 @@ pub enum IbcMessage {
 //         let mut bytes = vec![];
 //         reader.read_to_end(&mut bytes)?;
 
-//         Self::try_from(bytes.as_slice()).map_err(|_| ed::Error::UnexpectedByte(0))
-//     }
+//         Self::try_from(bytes.as_slice()).map_err(|_|
+// ed::Error::UnexpectedByte(0))     }
 // }
 
 // impl Terminated for IbcTx {}

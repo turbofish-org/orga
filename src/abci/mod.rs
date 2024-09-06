@@ -28,8 +28,8 @@ mod server {
     use tendermint_proto::v0_34::abci::response::Value as Res;
     use tendermint_proto::v0_34::types::Header;
 
-    /// Top-level struct for running an ABCI application. Maintains an ABCI server,
-    /// mempool, and handles committing data to the store.
+    /// Top-level struct for running an ABCI application. Maintains an ABCI
+    /// server, mempool, and handles committing data to the store.
     pub struct ABCIStateMachine<A: Application> {
         app: Option<A>,
         store: Option<Shared<MerkStore>>,
@@ -45,9 +45,9 @@ mod server {
     }
 
     impl<A: Application> ABCIStateMachine<A> {
-        /// Constructs an `ABCIStateMachine` from the given app (a set of handlers
-        /// for transactions and blocks), and store (a key/value store to persist
-        /// the state data).
+        /// Constructs an `ABCIStateMachine` from the given app (a set of
+        /// handlers for transactions and blocks), and store (a
+        /// key/value store to persist the state data).
         pub fn new(
             app: A,
             store: MerkStore,
@@ -183,7 +183,7 @@ mod server {
                     let app = self.app.take().unwrap();
                     let self_store = self.store.take().unwrap().into_inner();
                     let self_store_shared = Shared::new(self_store);
-                    self.header = req.header.clone();
+                    self.header.clone_from(&req.header);
 
                     let mut store = Some(Shared::new(BufStore::wrap_with_map(
                         self_store_shared.clone(),
@@ -369,7 +369,8 @@ mod server {
             let server = abci2::Server::listen(addr)?;
 
             // TODO: keep workers in struct
-            // TODO: more intelligently handle connections, e.g. handle tendermint dying/reconnecting?
+            // TODO: more intelligently handle connections, e.g. handle tendermint
+            // dying/reconnecting?
             self.create_worker(server.accept()?, self.shutdown.clone())?;
             self.create_worker(server.accept()?, self.shutdown.clone())?;
             self.create_worker(server.accept()?, self.shutdown.clone())?;
@@ -438,7 +439,8 @@ mod server {
 
     struct Worker {
         #[allow(dead_code)]
-        thread: std::thread::JoinHandle<()>, // TODO: keep handle to connection or socket so we can close it
+        thread: std::thread::JoinHandle<()>, /* TODO: keep handle to connection or socket so we
+                                              * can close it */
     }
 
     impl Worker {
@@ -476,15 +478,19 @@ mod server {
         }
     }
 
+    /// Alias for a [MerkStore] wrapped with two layers of [BufStore] to support
+    /// atomic mutations.
     pub type WrappedMerk = Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>;
     /// An interface for handling ABCI requests.
     ///
-    /// All methods have a default implemenation which returns an empty response.
+    /// All methods have a default implemenation which returns an empty
+    /// response.
     ///
-    /// Only exposes the core state machine requests since messages like Echo and
-    /// Info are automatically handled within
+    /// Only exposes the core state machine requests since messages like Echo
+    /// and Info are automatically handled within
     /// [`ABCIStateMachine`](struct.ABCIStateMachine.html).
     pub trait Application {
+        /// Process [InitChain] and initialize application state.
         fn init_chain(
             &self,
             _store: WrappedMerk,
@@ -493,6 +499,7 @@ mod server {
             Ok(Default::default())
         }
 
+        /// Process [BeginBlock]
         fn begin_block(
             &self,
             _store: WrappedMerk,
@@ -501,6 +508,7 @@ mod server {
             Ok(Default::default())
         }
 
+        /// Process a transaction from a `DeliverTx` request.
         fn deliver_tx(
             &self,
             _store: WrappedMerk,
@@ -509,6 +517,7 @@ mod server {
             Ok(Default::default())
         }
 
+        /// Process [EndBlock]
         fn end_block(
             &self,
             _store: WrappedMerk,
@@ -517,40 +526,51 @@ mod server {
             Ok(Default::default())
         }
 
+        /// Process a transaction from a `CheckTx` request.
         fn check_tx(&self, _store: WrappedMerk, _req: RequestCheckTx) -> Result<ResponseCheckTx> {
             Ok(Default::default())
         }
 
+        /// Handle an ABCI Query.
         fn query(&self, _store: Shared<MerkStore>, _req: RequestQuery) -> Result<ResponseQuery> {
             Ok(Default::default())
         }
     }
 
-    /// Interface for persisting ABCI app state, as a supertrait of [`store::Store`](../store/trait.Store.html).
+    /// Interface for persisting ABCI app state, as a supertrait of
+    /// [`store::Store`](../store/trait.Store.html).
     pub trait ABCIStore: Read + Write {
+        /// Returns the current height of the chain.
         fn height(&self) -> Result<u64>;
 
+        /// Returns the root hash of the Merkelized app state.
         fn root_hash(&self) -> Result<Vec<u8>>;
 
+        /// Run the commit step for this store.
         fn commit(&mut self, header: Header) -> Result<()>;
 
+        /// List available state-sync snapshots.
         fn list_snapshots(&self) -> Result<Vec<Snapshot>>;
 
+        /// Load a chunk of a state-sync snapshot.
         fn load_snapshot_chunk(&self, req: RequestLoadSnapshotChunk) -> Result<Vec<u8>>;
 
+        /// Offer a state-sync snapshot to the application.
         fn offer_snapshot(&mut self, req: RequestOfferSnapshot) -> Result<ResponseOfferSnapshot>;
 
+        /// Apply a chunk of a state-sync snapshot.
         fn apply_snapshot_chunk(&mut self, req: RequestApplySnapshotChunk) -> Result<()>;
     }
 
-    /// A basic implementation of [`ABCIStore`](trait.ABCIStore.html) which persists
-    /// data in memory (mostly for use in testing).
+    /// A basic implementation of [`ABCIStore`](trait.ABCIStore.html) which
+    /// persists data in memory (mostly for use in testing).
     pub struct MemStore {
         height: u64,
         store: MapStore,
     }
 
     impl MemStore {
+        /// Create a new, empty [MemStore].
         pub fn new() -> Self {
             MemStore {
                 height: 0,
@@ -626,38 +646,56 @@ mod server {
 pub use server::*;
 
 use crate::plugins::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
+
+/// A trait for types to handle the [BeginBlock] step.
 pub trait BeginBlock {
+    /// Handle a [BeginBlock] step.
     fn begin_block(&mut self, ctx: &BeginBlockCtx) -> Result<()>;
 }
 
+/// Default no-op implementation of [BeginBlock] for all types.
 impl<S> BeginBlock for S {
     default fn begin_block(&mut self, _req: &BeginBlockCtx) -> Result<()> {
         Ok(())
     }
 }
+
+/// A trait for types to handle the [EndBlock] step.
 pub trait EndBlock {
+    /// Handle an [EndBlock] step.
     fn end_block(&mut self, ctx: &EndBlockCtx) -> Result<()>;
 }
+
+/// Default no-op implementation of [EndBlock] for all types.
 
 impl<S> EndBlock for S {
     default fn end_block(&mut self, _ctx: &EndBlockCtx) -> Result<()> {
         Ok(())
     }
 }
+
+/// A trait for types to handle the [InitChain] step.
 pub trait InitChain {
+    /// Handle an [InitChain] step.
     fn init_chain(&mut self, ctx: &InitChainCtx) -> Result<()>;
 }
 
+/// Default no-op implementation of [InitChain] for all types.
 impl<S> InitChain for S {
     default fn init_chain(&mut self, _ctx: &InitChainCtx) -> Result<()> {
         Ok(())
     }
 }
 
+/// A trait for raw handling of ABCI queries.
 pub trait AbciQuery {
+    /// Handle an ABCI query, returning a raw [ResponseQuery].to send back via
+    /// ABCI.
     fn abci_query(&self, request: &RequestQuery) -> Result<ResponseQuery>;
 }
 
+/// Default implementation of [AbciQuery] for all types. Returns an error in
+/// response to the query.
 impl<S> AbciQuery for S {
     default fn abci_query(&self, request: &RequestQuery) -> Result<ResponseQuery> {
         Ok(ResponseQuery {
@@ -669,6 +707,7 @@ impl<S> AbciQuery for S {
     }
 }
 
+/// Convenience trait for types which implement all ABCI methods.
 pub trait App:
     BeginBlock + EndBlock + InitChain + State + Call + Query + Default + AbciQuery
 {

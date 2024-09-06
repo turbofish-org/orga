@@ -1,3 +1,4 @@
+//! Safe decimal amounts.
 use super::Amount;
 use crate::describe::{Builder, Describe};
 use crate::encoding::Adapter;
@@ -10,10 +11,12 @@ use rust_decimal::{prelude::ToPrimitive, Decimal as NumDecimal};
 use std::convert::TryFrom;
 use std::str::FromStr;
 
+/// A decimal type for precise financial calculations.
 #[orga(simple, skip(Describe, Migrate))]
 #[derive(Copy, Debug, PartialOrd, Ord)]
 #[serde(transparent)]
 pub struct Decimal {
+    /// The underlying numeric decimal value.
     pub(crate) value: NumDecimal,
 }
 
@@ -67,6 +70,8 @@ impl From<u64> for Decimal {
 impl Eq for Decimal {}
 
 impl Decimal {
+    /// Converts the decimal to an `Amount`, rounding to the nearest integer.
+    /// Returns an error if the value is negative or exceeds u64::MAX.
     pub fn amount(&self) -> Result<Amount> {
         if self.value.is_sign_negative() {
             Err(Error::Coins("Amounts may not be negative".into()))
@@ -80,18 +85,21 @@ impl Decimal {
         }
     }
 
+    /// Returns the absolute value of the decimal.
     pub fn abs(&self) -> Self {
         Decimal {
             value: self.value.abs(),
         }
     }
 
+    /// Returns a new `Decimal` with value zero.
     pub fn zero() -> Self {
         Decimal {
             value: NumDecimal::ZERO,
         }
     }
 
+    /// Returns a new `Decimal` with value one.
     pub fn one() -> Self {
         Decimal {
             value: NumDecimal::ONE,

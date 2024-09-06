@@ -1,3 +1,4 @@
+//! A store which buffers writes to another store.
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
@@ -63,6 +64,7 @@ impl<S> BufStore<S> {
         self.map
     }
 
+    /// Returns the a reference to the underlying store.
     #[inline]
     pub fn store(&self) -> &S {
         &self.store

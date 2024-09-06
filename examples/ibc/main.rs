@@ -28,10 +28,10 @@
 
 //     fn signer(&mut self) -> Result<Address> {
 //         self.context::<Signer>()
-//             .ok_or_else(|| orga::Error::Signer("No Signer context available".into()))?
-//             .signer
-//             .ok_or_else(|| orga::Error::Coins("Unauthorized account action".into()))
-//     }
+//             .ok_or_else(|| orga::Error::Signer("No Signer context
+// available".into()))?             .signer
+//             .ok_or_else(|| orga::Error::Coins("Unauthorized account
+// action".into()))     }
 // }
 
 // #[derive(State, Debug, Clone, Default, Encode, Decode, Migrate)]
@@ -71,8 +71,8 @@
 // }
 
 // impl AbciQuery for Counter {
-//     fn abci_query(&self, request: &messages::RequestQuery) -> Result<messages::ResponseQuery> {
-//         self.ibc.abci_query(request)
+//     fn abci_query(&self, request: &messages::RequestQuery) ->
+// Result<messages::ResponseQuery> {         self.ibc.abci_query(request)
 //     }
 // }
 

@@ -1,8 +1,17 @@
+//! A store backed by Merkle proofs.
 use crate::error::{Error, Result};
 use crate::store::*;
 use merk::proofs::query::Map as ProofMap;
 use std::ops::Bound;
 
+/// A store backed by a [ProofMap], allowing the loading of [State] types from
+/// partial proofs.
+///
+/// The read operations of this store may produce errors due to missing data in
+/// the underlying proof, in which case the consumer may fetch the missing data,
+/// add it to the [ProofMap], and retry the operation.
+///
+/// [State]: crate::state::State
 pub struct ProofStore(pub ProofMap);
 
 impl Read for ProofStore {
