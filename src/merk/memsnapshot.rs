@@ -1,3 +1,4 @@
+//! A read-only store backed by a snapshot.
 use crate::{
     store::{Read, Shared},
     Result,
@@ -5,12 +6,17 @@ use crate::{
 
 use super::MerkStore;
 
+/// A KV store backed by a [merk::snapshot::StaticSnapshot].
+///
+/// This is used to provide a read-only view into the Merk tree at a given point
+/// in time.
 pub struct MemSnapshot {
     snapshot: merk::snapshot::StaticSnapshot,
     merk_store: Shared<MerkStore>,
 }
 
 impl MemSnapshot {
+    /// Create a new [MemSnapshot] from a [merk::snapshot::StaticSnapshot].
     pub fn new(
         mut snapshot: merk::snapshot::StaticSnapshot,
         merk_store: Shared<MerkStore>,
@@ -22,6 +28,7 @@ impl MemSnapshot {
         }
     }
 
+    /// Use the snapshot to run the provided function.
     pub fn use_snapshot<R, F: FnOnce(&merk::Snapshot) -> R>(&self, f: F) -> R {
         let store = self.merk_store.borrow();
         let db = store.merk().db();

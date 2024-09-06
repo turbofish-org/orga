@@ -1,3 +1,4 @@
+//! Scheduled coin issuance.
 use super::{Amount, Coin, Decimal, Symbol};
 use crate::context::GetContext;
 use crate::orga;
@@ -6,20 +7,31 @@ use crate::{Error, Result};
 use std::marker::PhantomData;
 use std::time::Duration;
 
+/// A faucet for minting coins of a specific symbol over time.
 #[orga]
 pub struct Faucet<S: Symbol> {
+    /// Phantom data to hold the symbol type.
     _symbol: PhantomData<S>,
+    /// Whether the faucet has been configured.
     configured: bool,
+    /// Total amount of coins minted so far.
     pub amount_minted: Amount,
+    /// Start time of the faucet in unix seconds.
     start_seconds: i64,
+    /// Sum of all period multipliers.
     multiplier_total: Decimal,
+    /// Total amount of coins to be minted.
     total_to_mint: Amount,
+    /// Decay rate between periods.
     period_decay: Decimal,
+    /// Duration of each period in seconds.
     seconds_per_period: u64,
+    /// Number of minting periods.
     num_periods: u32,
 }
 
 impl<S: Symbol> Faucet<S> {
+    /// Initializes the faucet with the given options.
     pub fn configure(&mut self, opts: FaucetOptions) -> Result<()> {
         let mut multiplier_total: Decimal = 1.into();
         let mut running_multiplier: Decimal = 1.into();
@@ -41,6 +53,8 @@ impl<S: Symbol> Faucet<S> {
         Ok(())
     }
 
+    /// Mints new coins based on the current time and faucet configuration.
+    /// Returns the minted amount as a [`Coin`].
     pub fn mint(&mut self) -> Result<Coin<S>> {
         if !self.configured {
             return Err(Error::Coins(
@@ -63,6 +77,8 @@ impl<S: Symbol> Faucet<S> {
         }
     }
 
+    /// Calculates the target amount of coins that should have been minted based
+    /// on elapsed time.
     fn target_amount_minted(&self, seconds_since_start: i64) -> Result<Amount> {
         let mut total: Decimal = 0.into();
         let mut running_multiplier: Decimal = 1.into();
@@ -87,6 +103,7 @@ impl<S: Symbol> Faucet<S> {
         total.amount()
     }
 
+    /// Retrieves the current time in seconds from the Time context.
     fn current_seconds(&mut self) -> Result<i64> {
         Ok(self
             .context::<Time>()
@@ -95,11 +112,17 @@ impl<S: Symbol> Faucet<S> {
     }
 }
 
+/// Options for configuring a Faucet.
 pub struct FaucetOptions {
+    /// Number of minting periods.
     pub num_periods: u32,
+    /// Duration of each period.
     pub period_length: Duration,
+    /// Total amount of coins to be minted.
     pub total_coins: Amount,
+    /// Decay rate between periods.
     pub period_decay: Decimal,
+    /// Start time of the faucet in unix seconds.
     pub start_seconds: i64,
 }
 

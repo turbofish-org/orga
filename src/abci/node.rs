@@ -15,13 +15,14 @@ use crate::{Error, Result};
 use home::home_dir;
 use std::borrow::Borrow;
 use std::marker::PhantomData;
-use std::panic::{catch_unwind, UnwindSafe};
+use std::panic::catch_unwind;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 use tendermint_proto::v0_34::abci::*;
 
+/// A handle to a running Tendermint process.
 pub struct Child {
     tm_child: TendermintChild,
     abci_shutdown_handle: Arc<RwLock<Option<Error>>>,
@@ -41,6 +42,7 @@ impl Child {
         }
     }
 
+    /// Shut down the ABCI server and Tendermint process.
     pub fn kill(&mut self) -> Result<()> {
         let mut shutdown = self.abci_shutdown_handle.write().unwrap();
         *shutdown = Some(Error::App("Node killed".to_string()));
@@ -58,6 +60,7 @@ impl Child {
         Ok(())
     }
 
+    /// Poll for shutdown signal.
     pub fn wait(&self) -> Result<()> {
         loop {
             if let Some(err) = self.abci_shutdown_handle.read().unwrap().as_ref() {
@@ -69,6 +72,8 @@ impl Child {
     }
 }
 
+/// The top-level struct for running an orga application. Manages Tendermint,
+/// the ABCI server, and the underlying Merk store.
 pub struct Node<A> {
     _app: PhantomData<A>,
     tm_home: PathBuf,
@@ -85,6 +90,7 @@ pub struct Node<A> {
 }
 
 impl Node<()> {
+    /// Returns the expected home directory for the given application name.
     pub fn home(name: &str) -> PathBuf {
         match std::env::var("NOMIC_HOME_DIR") {
             Ok(home) => Some(PathBuf::from(home)),
@@ -94,6 +100,9 @@ impl Node<()> {
         .join(format!(".{}", name).as_str())
     }
 
+    /// Returns the height of the Merk store for the application at the given
+    /// home directory. If the application hasn't been initialized, returns
+    /// `Ok(0)`.
     pub fn height<P: AsRef<Path>>(home: P) -> Result<u64> {
         let home = home.as_ref();
 
@@ -106,13 +115,19 @@ impl Node<()> {
     }
 }
 
+/// Default Tendermint configuration settings, used if not overridden in the
+/// node configuration directly.
 #[derive(Default)]
 pub struct DefaultConfig {
+    /// Initial Tendermint seeds.
     pub seeds: Option<String>,
+    /// Default timeout_commit setting.
     pub timeout_commit: Option<String>,
 }
 
 impl<A: App> Node<A> {
+    /// Create a new node, initializing the application's home directory if it
+    /// was not present.
     pub async fn new<P: AsRef<Path>>(
         home: P,
         chain_id: Option<&str>,
@@ -139,11 +154,11 @@ impl<A: App> Node<A> {
             let config =
                 std::fs::read_to_string(&cfg_path).expect("Failed to read Tendermint config");
             config
-                .parse::<toml_edit::Document>()
+                .parse::<toml_edit::DocumentMut>()
                 .expect("Failed to parse toml")
         };
 
-        let write_toml = |toml: toml_edit::Document| {
+        let write_toml = |toml: toml_edit::DocumentMut| {
             std::fs::write(&cfg_path, toml.to_string()).expect("Failed to write Tendermint config");
         };
 
@@ -211,6 +226,7 @@ impl<A: App> Node<A> {
         }
     }
 
+    /// Start the application, including Tendermint and the ABCI server.
     pub async fn run(self) -> Result<Child> {
         let tm_home = self.tm_home.clone();
         let abci_port = self.abci_port;
@@ -298,6 +314,8 @@ impl<A: App> Node<A> {
         Ok(Child::new(tm_child, shutdown_handler, notifier))
     }
 
+    /// Reset the node. This clears the Merk store data and Tendermint data (via
+    /// `unsafe_reset_all`).
     #[must_use]
     pub async fn reset(self) -> Self {
         if self.merk_home.exists() {
@@ -313,6 +331,8 @@ impl<A: App> Node<A> {
     }
 
     // TODO: remove when we don't require compat migrations
+    /// Perform a migration, bringing all data in the underlying store to the
+    /// latest version if required.
     pub fn migrate(self, version: Vec<u8>, compat_mode: bool, repair: bool) -> Self
     where
         ABCIPlugin<A>: Migrate,
@@ -370,18 +390,22 @@ impl<A: App> Node<A> {
         self
     }
 
+    /// Skip the `InitChain` step.
     pub fn skip_init_chain(mut self) -> Self {
         self.skip_init_chain = true;
 
         self
     }
 
+    /// Initialize the application's [MerkStore] from an existing store on
+    /// disk.
     pub fn init_from_store(self, source: impl AsRef<Path>, height: Option<u64>) -> Self {
         MerkStore::init_from(source, &self.merk_home, height).unwrap();
 
         self
     }
 
+    /// Provide the raw bytes of the `genesis.json` file to use at startup.
     #[must_use]
     pub fn with_genesis<const N: usize>(mut self, genesis_bytes: &'static [u8; N]) -> Self {
         self.genesis_bytes.replace(genesis_bytes.to_vec());
@@ -389,6 +413,7 @@ impl<A: App> Node<A> {
         self
     }
 
+    /// Provide an initial list of persistent peers to be used by Tendermint.
     #[must_use]
     pub fn peers<T: Borrow<str>>(mut self, peers: &[T]) -> Self {
         let peers = peers.iter().map(|p| p.borrow().to_string()).collect();
@@ -397,6 +422,7 @@ impl<A: App> Node<A> {
         self
     }
 
+    /// Set the Tendermint process's stdout.
     #[must_use]
     pub fn stdout<T: Into<Stdio>>(mut self, stdout: T) -> Self {
         self.stdout = stdout.into();
@@ -404,6 +430,7 @@ impl<A: App> Node<A> {
         self
     }
 
+    /// Set the Tendermint process's stderr.
     #[must_use]
     pub fn stderr<T: Into<Stdio>>(mut self, stderr: T) -> Self {
         self.stderr = stderr.into();
@@ -411,6 +438,7 @@ impl<A: App> Node<A> {
         self
     }
 
+    /// Enable or disable printing Tendermint logs.
     #[must_use]
     pub fn print_tendermint_logs(mut self, logs: bool) -> Self {
         self.logs = logs;
@@ -418,6 +446,7 @@ impl<A: App> Node<A> {
         self
     }
 
+    /// Set additional flags to pass to Tendermint.
     #[must_use]
     pub fn tendermint_flags(mut self, flags: Vec<String>) -> Self {
         self.flags = flags;
@@ -446,7 +475,7 @@ impl<A: App> InternalApp<ABCIPlugin<A>> {
                 encoded_bytes
             }
         };
-        let mut state: Mutex<ABCIPlugin<A>> = Mutex::new(ABCIPlugin::<A>::load(
+        let state: Mutex<ABCIPlugin<A>> = Mutex::new(ABCIPlugin::<A>::load(
             store.clone(),
             &mut state_bytes.as_slice(),
         )?);
@@ -640,6 +669,7 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
         if !req.path.is_empty() {
             let store = BackingStore::MemSnapshot(mss);
             let state = Mutex::new(create_state(store)?);
+            #[allow(clippy::needless_borrow)]
             let mut res = catch_unwind(|| (&*state.lock().unwrap()).abci_query(&req))
                 .map_err(|_| crate::Error::Query("Panicked".to_string()))??;
 
@@ -660,9 +690,11 @@ impl<A: App> Application for InternalApp<ABCIPlugin<A>> {
 
         match res {
             Ok(Err(err)) | Err(err) => {
-                let mut res = ResponseQuery::default();
-                res.code = 1;
-                res.log = err.to_string();
+                let res = ResponseQuery {
+                    code: 1,
+                    log: err.to_string(),
+                    ..Default::default()
+                };
                 return Ok(res);
             }
             _ => {}
@@ -780,7 +812,7 @@ mod tests {
             Context::add(ChainId("foo".to_string()));
 
             let home = tempfile::TempDir::new().unwrap();
-            let mut node = Node::<DefaultPlugins<FooCoin, App>>::new(
+            let node = Node::<DefaultPlugins<FooCoin, App>>::new(
                 home.path(),
                 Some("foo"),
                 orga::abci::DefaultConfig {
@@ -789,7 +821,7 @@ mod tests {
                 },
             )
             .await;
-            let res = node.run().await.unwrap();
+            let _res = node.run().await.unwrap();
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             }
@@ -851,7 +883,7 @@ mod tests {
             .unwrap();
 
         // ensure node is still live
-        client.query(|app| Ok(app.query_ok())).await.unwrap();
+        let _ = client.query(|app| Ok(app.query_ok())).await.unwrap();
     }
 
     #[ignore]
@@ -876,6 +908,6 @@ mod tests {
             .unwrap_err();
 
         // ensure node is still live
-        client.query(|app| Ok(app.query_ok())).await.unwrap();
+        let _ = client.query(|app| Ok(app.query_ok())).await.unwrap();
     }
 }

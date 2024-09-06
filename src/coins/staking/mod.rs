@@ -1,4 +1,4 @@
-//! Staking module.
+//! Cosmos-style staking module.
 //!
 //! Orga's included staking module is loosely modeled after the Cosmos SDK's
 //! `x/staking`. We rely heavily on [Pool] to enable staking with minimal

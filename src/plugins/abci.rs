@@ -23,13 +23,20 @@ use tendermint_proto::v0_34::abci::{
 use tendermint_proto::v0_34::crypto::{public_key::Sum, PublicKey};
 use tendermint_proto::v0_34::types::Header;
 
+/// The (BFT) timestamp of the block for which calls are currently being
+/// executed.
 pub struct Time {
+    /// Unix seconds
     pub seconds: i64,
+    /// Non-negative fractions of a second at nanosecond resolution, directly
+    /// from ABCI block timestamp via `tendermint_proto` (which also uses an
+    /// i32).
     pub nanos: i32,
 }
 
 impl Time {
     // #[cfg(test)]
+    /// Create a time context from unix seconds, assuming 0 nanoseconds.
     pub fn from_seconds<T: Into<i64>>(seconds: T) -> Self {
         let seconds = seconds.into();
         Self { seconds, nanos: 0 }
@@ -42,17 +49,28 @@ impl<T: Into<i64>> From<T> for Time {
     }
 }
 
+/// A validator entry, whose key is the validator's consensus public key.
 #[derive(Entry, Clone)]
 pub struct ValidatorEntry {
+    /// Validator consensus public key.
     #[key]
     pub pubkey: [u8; 32],
+    /// Voting power.
     pub power: u64,
 }
 
 type UpdateMap = Map<[u8; 32], Adapter<ValidatorUpdate>>;
 
+/// A plugin for interfacing with ABCI.
+///
+/// State-changing ABCI messages are handled by this plugin's [Call]
+/// implementation.
+///
+/// Interfaces for reading or changing the validator set, emitting logs or
+/// events, etc. are provided via [Context].
 #[derive(Serialize)]
 pub struct ABCIPlugin<T> {
+    /// The inner value.
     pub inner: T,
     #[serde(skip)]
     pub(crate) validator_updates: Option<HashMap<[u8; 32], ValidatorUpdate>>,
@@ -103,17 +121,26 @@ impl<T: Default> Default for ABCIPlugin<T> {
     }
 }
 
+/// Context for the `InitChain` ABCI message.
 pub struct InitChainCtx {
+    /// Timestamp from the chain's genesis.
     pub time: Option<Timestamp>,
+    /// Chain ID.
     pub chain_id: String,
+    /// Initial validator set.
     pub validators: Vec<Validator>,
+    /// Initial app state bytes.
     pub app_state_bytes: Vec<u8>,
+    /// Starting height of the chain.
     pub initial_height: i64,
 }
 
+/// A validator in the validator set.
 #[derive(Encode, Decode, Debug)]
 pub struct Validator {
+    /// Consensus public key.
     pub pubkey: [u8; 32],
+    /// Voting power.
     pub power: u64,
 }
 
@@ -145,11 +172,17 @@ impl From<RequestInitChain> for InitChainCtx {
     }
 }
 
+/// Context for the `BeginBlock` ABCI message.
 pub struct BeginBlockCtx {
+    /// The block's hash.
     pub hash: Vec<u8>,
+    /// The block's height.
     pub height: u64,
+    /// Block header
     pub header: Header,
+    /// Last commit info.
     pub last_commit_info: Option<LastCommitInfo>,
+    /// Evidence of bad behavior by validators.
     pub byzantine_validators: Vec<Evidence>,
 }
 
@@ -168,8 +201,10 @@ impl From<RequestBeginBlock> for BeginBlockCtx {
     }
 }
 
+/// Context for the `EndBlock` ABCI message.
 #[cfg_attr(test, derive(Default))]
 pub struct EndBlockCtx {
+    /// The block's height.
     pub height: u64,
 }
 
@@ -183,6 +218,7 @@ impl From<RequestEndBlock> for EndBlockCtx {
 
 type OperatorMap = Map<[u8; 20], [u8; 32]>;
 
+/// A context for reading or updating the validator set.
 pub struct Validators {
     pub(crate) updates: HashMap<[u8; 32], Adapter<ValidatorUpdate>>,
     current_vp: Rc<RefCell<Option<EntryMap<ValidatorEntry>>>>,
@@ -190,6 +226,7 @@ pub struct Validators {
 }
 
 impl Validators {
+    /// Creates a new `Validators` context instance.
     pub fn new(
         current_vp: Rc<RefCell<Option<EntryMap<ValidatorEntry>>>>,
         cons_key_by_op_addr: Rc<RefCell<Option<OperatorMap>>>,
@@ -201,6 +238,7 @@ impl Validators {
         }
     }
 
+    /// Set the voting power of a validator by consensus key.
     pub fn set_voting_power<A: Into<[u8; 32]>>(&mut self, pub_key: A, power: u64) {
         let pub_key = pub_key.into();
 
@@ -224,6 +262,7 @@ impl Validators {
         );
     }
 
+    /// Sets the operator address for a validator by consensus key.
     pub fn set_operator<A: Into<[u8; 32]>, B: Into<[u8; 20]>>(
         &mut self,
         consensus_key: A,
@@ -238,6 +277,7 @@ impl Validators {
             .insert(op_addr, pub_key)
     }
 
+    /// Returns the consensus key for an operator address.
     pub fn consensus_key<A: Into<[u8; 20]>>(&self, op_key: A) -> Result<Option<[u8; 32]>> {
         let op_addr = op_key.into();
         Ok(self
@@ -249,10 +289,12 @@ impl Validators {
             .map(|v| *v))
     }
 
+    /// Returns the current validator set.
     pub fn current_set(&mut self) -> Ref<Option<EntryMap<ValidatorEntry>>> {
         self.current_vp.borrow()
     }
 
+    /// Returns the total voting power of the validator set.
     pub fn total_voting_power(&mut self) -> Result<u64> {
         let mut sum = 0;
         for entry in self
@@ -269,6 +311,7 @@ impl Validators {
         Ok(sum)
     }
 
+    /// Returns a list of all validators in the validator set.
     pub fn entries(&mut self) -> Result<Vec<ValidatorEntry>> {
         let mut res = vec![];
         for entry in self
@@ -286,38 +329,50 @@ impl Validators {
     }
 }
 
+/// A context for emitting events via ABCI responses.
 #[derive(Default)]
 pub struct Events {
     pub(crate) events: Vec<Event>,
 }
 
 impl Events {
+    /// Emit an event.
     pub fn add(&mut self, event: Event) {
         self.events.push(event);
     }
 
+    /// Read the events that have been emitted during the current ABCI call.
     pub fn events(&self) -> &[Event] {
         &self.events
     }
 }
 
+/// A context for emitting log messages via ABCI responses.
 #[derive(Default)]
 pub struct Logs {
     pub(crate) messages: Vec<String>,
 }
 
 impl Logs {
+    /// Emit a log message.
     pub fn add(&mut self, message: impl AsRef<str>) {
         self.messages.push(message.as_ref().to_string());
     }
 }
 
+/// Call variants for ABCI message types.
 #[derive(Debug, Encode, Decode)]
 pub enum ABCICall<C> {
+    /// The `InitChain` ABCI message.
     InitChain(Adapter<RequestInitChain>),
-    BeginBlock(Box<Adapter<RequestBeginBlock>>), // Boxed because this variant is much larger than the others
+    /// The `BeginBlock` ABCI message.
+    BeginBlock(Box<Adapter<RequestBeginBlock>>), /* Boxed because this variant is much larger
+                                                  * than the others */
+    /// The `EndBlock` ABCI message.
     EndBlock(Adapter<RequestEndBlock>),
+    /// The `DeliverTx` ABCI message.
     DeliverTx(C),
+    /// The `CheckTx` ABCI message.
     CheckTx(C),
 }
 
@@ -360,7 +415,7 @@ impl<T: App> Call for ABCIPlugin<T> {
         match call {
             InitChain(req) => {
                 let ctx: InitChainCtx = req.into_inner().into();
-                self.time = ctx.time.clone();
+                self.time = ctx.time;
                 create_time_ctx(&self.time);
                 self.inner.init_chain(&ctx)?;
             }

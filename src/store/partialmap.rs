@@ -1,8 +1,11 @@
+//! A store backed by a partial in-memory map.
 use std::collections::BTreeMap;
 
 use super::Error;
 use super::*;
 
+/// A store backed by an in-memory map which may have missing values, and may be
+/// joined with other partial map stores.
 #[derive(Default)]
 pub struct PartialMapStore {
     map: BTreeMap<Vec<u8>, (bool, Vec<u8>)>,
@@ -10,16 +13,19 @@ pub struct PartialMapStore {
 }
 
 impl PartialMapStore {
+    /// Creates a new empty partial map store.
     #[inline]
     pub fn new() -> Self {
         Default::default()
     }
 
+    /// Creates a new partial map store from an in-memory map.
     #[inline]
     pub fn from_map(map: BTreeMap<Vec<u8>, (bool, Vec<u8>)>, right_edge: bool) -> Self {
         Self { map, right_edge }
     }
 
+    /// Joins two partial map stores.
     pub fn join(self, other: Self) -> Self {
         let mut map = self.map;
         for (k, (mut c, v)) in other.map {

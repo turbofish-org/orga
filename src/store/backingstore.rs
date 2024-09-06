@@ -1,3 +1,4 @@
+//! Backing store for a [Store](crate::store::Store).
 #[cfg(feature = "merk-full")]
 use crate::merk::memsnapshot::MemSnapshot;
 #[cfg(feature = "merk-full")]
@@ -17,27 +18,47 @@ use ics23::CommitmentProof;
 #[cfg(feature = "merk-full")]
 type WrappedMerkStore = Shared<BufStore<Shared<BufStore<Shared<MerkStore>>>>>;
 
+/// A backing store for a [crate::store::Store].
 #[derive(Clone)]
 pub enum BackingStore {
+    /// A store backed by an in-memory map.
     MapStore(Shared<MapStore>),
+    /// A store backed by a partial map.
     PartialMapStore(Shared<PartialMapStore>),
+    /// A store that's always empty.
     Null(Empty),
+    /// A dynamically dispatched store.
     Other(Shared<Box<dyn ReadWrite>>),
 
+    /// A store backed by a [WrappedMerkStore].
     #[cfg(feature = "merk-full")]
     WrappedMerk(WrappedMerkStore),
+
+    /// A store that records its reads for building proofs.
     #[cfg(feature = "merk-full")]
     ProofBuilder(ProofBuilder<MerkStore>),
+
+    /// A proof builder backed by a [Snapshot]
     #[cfg(feature = "merk-full")]
     ProofBuilderSnapshot(ProofBuilder<Snapshot>),
+
+    /// A proof builder backed by a [MemSnapshot]
     #[cfg(feature = "merk-full")]
     ProofBuilderMemSnapshot(ProofBuilder<MemSnapshot>),
+
+    /// A store backed by a [MerkStore].
     #[cfg(feature = "merk-full")]
     Merk(Shared<MerkStore>),
+
+    /// A store backed by a [Snapshot].
     #[cfg(feature = "merk-full")]
     Snapshot(Shared<Snapshot>),
+
+    /// A store backed by a [MemSnapshot].
     #[cfg(feature = "merk-full")]
     MemSnapshot(Shared<MemSnapshot>),
+
+    /// A store backed by a [ProofStore].
     #[cfg(feature = "merk-verify")]
     ProofMap(Shared<ProofStore>),
 }
@@ -211,6 +232,7 @@ impl Write for BackingStore {
 }
 
 impl BackingStore {
+    /// Downcasts the backing store to a [ProofBuilder<MerkStore>].
     #[cfg(feature = "merk-full")]
     pub fn into_proof_builder(self) -> Result<ProofBuilder<MerkStore>> {
         match self {
@@ -222,6 +244,7 @@ impl BackingStore {
         }
     }
 
+    /// Downcasts the backing store to a [ProofBuilder<Snapshot>].
     #[cfg(feature = "merk-full")]
     pub fn into_proof_builder_snapshot(self) -> Result<ProofBuilder<Snapshot>> {
         match self {
@@ -233,6 +256,7 @@ impl BackingStore {
         }
     }
 
+    /// Downcasts the backing store to a [Shared<MemSnapshot>].
     #[cfg(feature = "merk-full")]
     pub fn into_memsnapshot(self) -> Result<Shared<MemSnapshot>> {
         match self {
@@ -244,6 +268,7 @@ impl BackingStore {
         }
     }
 
+    /// Downcasts the backing store to a [ProofBuilder<MemSnapshot>].
     #[cfg(feature = "merk-full")]
     pub fn into_proof_builder_memsnapshot(self) -> Result<ProofBuilder<MemSnapshot>> {
         match self {
@@ -255,6 +280,7 @@ impl BackingStore {
         }
     }
 
+    /// Downcasts the backing store to a [WrappedMerkStore].
     #[cfg(feature = "merk-full")]
     pub fn into_wrapped_merk(self) -> Result<WrappedMerkStore> {
         match self {
@@ -266,6 +292,7 @@ impl BackingStore {
         }
     }
 
+    /// Downcasts the backing store to a [Shared<MapStore>].
     pub fn into_map_store(self) -> Result<Shared<MapStore>> {
         match self {
             BackingStore::MapStore(store) => Ok(store),
@@ -275,6 +302,7 @@ impl BackingStore {
         }
     }
 
+    /// Downcasts the backing store to a [Shared<Box<dyn ReadWrite>>].
     pub fn into_other(self) -> Result<Shared<Box<dyn ReadWrite>>> {
         match self {
             BackingStore::Other(store) => Ok(store),
@@ -284,6 +312,12 @@ impl BackingStore {
         }
     }
 
+    /// Returns the root hash of the backing store.
+    ///
+    /// Supported for the following backing stores:
+    /// - [MerkStore]
+    /// - [Snapshot]
+    /// - [MemSnapshot]
     #[cfg(feature = "merk-full")]
     pub fn root_hash(&self) -> [u8; HASH_LENGTH] {
         match self {
@@ -304,6 +338,10 @@ impl BackingStore {
         }
     }
 
+    /// Creates an ICS23 proof for the given key.
+    ///
+    /// Supported for the following backing stores:
+    /// - [MemSnapshot]
     #[cfg(feature = "merk-full")]
     pub fn create_ics23_proof(&self, key: &[u8]) -> Result<CommitmentProof> {
         match self {

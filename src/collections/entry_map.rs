@@ -1,3 +1,4 @@
+//! A collection for types which can convert to/from a key/value pair.
 use serde::Serialize;
 
 use super::map::Iter as MapIter;
@@ -16,6 +17,13 @@ use crate::state::*;
 use crate::store::*;
 use crate::Result;
 
+/// A collection for types which can be converted to/from a key/value pair.
+///
+/// EntryMap is backed by a [Map], where both the key and value are derived from
+/// the inserted value itself.
+///
+/// This collection is often useful when the data can be naturally thought of as
+/// a set or priority queue.
 #[derive(FieldQuery, FieldCall, Encode, Decode, Describe, Serialize)]
 #[serde(bound = "T::Key: Serialize + Terminated + Clone, T::Value: Serialize")]
 pub struct EntryMap<T: Entry> {
@@ -67,6 +75,7 @@ impl<T: Entry> Default for EntryMap<T> {
 }
 
 impl<T: Entry> EntryMap<T> {
+    /// Create a new, empty [EntryMap].
     pub fn new() -> Self {
         Self::default()
     }
@@ -77,6 +86,7 @@ where
     T::Key: Encode + Terminated + 'static,
     T::Value: State,
 {
+    /// Create a new [EntryMap] with the given backing [Store].
     pub fn with_store(store: Store) -> Result<Self> {
         Ok(Self {
             map: Map::with_store(store)?,
@@ -93,6 +103,7 @@ where
     T::Key: Encode + Terminated + 'static,
     T::Value: State,
 {
+    /// Insert an entry.
     pub fn insert(&mut self, entry: T) -> Result<()> {
         let (key, value) = entry.into_entry();
         self.map.insert(key, value)
@@ -105,6 +116,7 @@ where
     T::Key: Encode + Terminated + Clone + 'static,
     T::Value: State,
 {
+    /// Remove an entry.
     pub fn delete(&mut self, entry: T) -> Result<()> {
         let (key, _) = entry.into_entry();
         self.map.remove(key)?;
@@ -121,6 +133,7 @@ where
     T::Value: State + Eq,
 {
     // #[query]
+    /// Check if the map contains an entry.
     pub fn contains(&self, entry: T) -> Result<bool> {
         let (key, value) = entry.into_entry();
 
@@ -142,6 +155,8 @@ where
     // TODO: this query can be moved to an impl with more permissive bounds
     // after some query macro changes
     // #[query]
+    /// Check if the map contains an entry with a key matching the one computed
+    /// by the provided entry.
     pub fn contains_entry_key(&self, entry: T) -> Result<bool> {
         let (key, _) = entry.into_entry();
         self.map.contains_key(key)
@@ -153,12 +168,14 @@ where
     T::Key: Next + Decode + Encode + Terminated + Clone,
     T::Value: State + Clone,
 {
+    /// Create an iterator over the entries.
     pub fn iter(&'a self) -> Result<Iter<'a, T>> {
         Ok(Iter {
             map_iter: self.map.iter()?,
         })
     }
 
+    /// Create an iterator over the entries within a given range.
     pub fn range<B: RangeBounds<T::Key>>(&'a self, range: B) -> Result<Iter<'a, T>> {
         Ok(Iter {
             map_iter: self.map.range(range)?,
@@ -166,6 +183,7 @@ where
     }
 }
 
+/// An iterator over the entries of an [EntryMap].
 pub struct Iter<'a, T: Entry>
 where
     T::Key: Next + Decode + Encode + Terminated + Clone + 'static,

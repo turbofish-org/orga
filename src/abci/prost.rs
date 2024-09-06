@@ -1,9 +1,13 @@
+//! Prost-compatible encoding for ABCI types.
+
 use crate::encoding::{Decode, Encode};
 use crate::state::State;
 use crate::store::Store;
 use prost::Message;
 use std::io::{Error as IOError, ErrorKind as IOErrorKind, Read, Write};
 
+/// An adapter for types which implement prost's [Message], allowing them to be
+/// used with [Encode] and [Decode].
 #[derive(Debug)]
 pub struct Adapter<T: Message + Default>(pub(crate) T);
 
@@ -25,7 +29,8 @@ impl<T: Message + Default + 'static> State for Adapter<T> {
 impl<T: Message + Default> Encode for Adapter<T> {
     fn encode_into<W: Write>(&self, buf: &mut W) -> ed::Result<()> {
         let mut bytes = vec![];
-        T::encode(&self.0, &mut bytes).unwrap(); // Prost encoding is infallible unless the buffer is full, and we're encoding into a vec, so this is safe.
+        T::encode(&self.0, &mut bytes).unwrap(); // Prost encoding is infallible unless the buffer is full, and we're encoding
+                                                 // into a vec, so this is safe.
         buf.write_all(&bytes)?;
         Ok(())
     }
@@ -36,6 +41,7 @@ impl<T: Message + Default> Encode for Adapter<T> {
 }
 
 impl<T: Message + Default> Adapter<T> {
+    /// Consumes the adapter and returns the inner value.
     pub fn into_inner(self) -> T {
         self.0
     }

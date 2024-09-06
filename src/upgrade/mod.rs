@@ -1,3 +1,5 @@
+//! Network upgrade coordination module.
+
 use crate::coins::{Address, Amount, Decimal};
 use crate::collections::Map;
 use crate::context::GetContext;
@@ -10,32 +12,66 @@ use crate::{Error as OrgaError, Result};
 use std::collections::HashMap;
 use thiserror::Error;
 
+/// The absolute store key where the current network version is stored.
 pub const VERSION_KEY: &[u8] = b"/version";
 
+/// Errors for the [Upgrade] module.
 #[derive(Error, Debug)]
 pub enum Error {
+    /// The network has migrated to a new version, and the process should likely
+    /// exit.
     #[error(
         "Node is running version {expected:?}, but the network has upgraded to version {actual:?}"
     )]
-    Version { expected: Version, actual: Version },
+    Version {
+        /// Local node version.
+        expected: Version,
+        /// Consensus network version.
+        actual: Version,
+    },
 }
 
 type PubKey = [u8; 32];
+
+/// Length-prefixed bytes representing a version, to be interpreted by the
+/// application.
 pub type Version = LengthVec<u8, u8>;
 
+/// A timestamped version signal.
 #[orga]
 #[derive(Debug, Clone)]
 pub struct Signal {
+    /// Signaled version.
     pub version: Version,
+    /// Time in unix seconds at which the signal was submitted.
     pub time: i64,
 }
 
+/// Network upgrade coordination module.
+///
+/// A `threshold` is specified as the fraction of total voting power that must
+/// signal a version for it to become the new network version.
+///
+/// Only signals older than `activation_delay_seconds` are considered when
+/// tallying votes, meaning that the network will transition to the new version
+/// `activation_delay_seconds` after the threshold is reached at the earliest.
+///
+/// To safely allow fee exemption for signaling, a rate limit is maintained per
+/// validator.
 #[orga(skip(Default), version = 1)]
 pub struct Upgrade {
+    /// Map of validator public key to their most recent signal.
     pub signals: Map<PubKey, Signal>,
+    /// The threshold required to activate a new version.
     pub threshold: Decimal,
+    /// The delay after which signals are considered, effectively delaying
+    /// activation after reaching the threshold.
     pub activation_delay_seconds: i64,
+    /// How many seconds must pass before a validator can signal again.
     pub rate_limit_seconds: i64,
+    /// The currently active network version. Uses an absolute prefix to
+    /// allow reading without needing to first migrate at startup, since it
+    /// may determine whether we need to perform a migration.
     #[state(absolute_prefix(b"/version"))]
     // TODO: use Value/Box instead of Map<(), _>
     pub current_version: Map<(), Version>,
@@ -65,6 +101,7 @@ impl MigrateFrom<UpgradeV0> for UpgradeV1 {
 
 #[orga]
 impl Upgrade {
+    /// Call for validators to signal readiness for upgrade to a new version.
     #[call]
     pub fn signal(&mut self, version: Version) -> Result<()> {
         crate::plugins::disable_fee();
@@ -91,6 +128,11 @@ impl Upgrade {
         self.signals.insert(cons_key, signal)
     }
 
+    /// Tallies votes and possibly transitions to a new network version.
+    ///
+    /// This should typically be called in a `BeginBlock`. If an
+    /// [Error::Version] is returned, the node should run the updated version of
+    /// the software, performing a migration if necessary.
     pub fn step(&mut self, bin_version: &Version, upgrade_authorized: bool) -> Result<()> {
         let bin_version = bin_version.clone();
         let net_version = self.current_version.get(())?.unwrap().clone();
@@ -172,6 +214,7 @@ impl Upgrade {
     }
 }
 
+/// Loads the current network version directly from the store.
 pub fn load_version(store: Store) -> Result<Option<Vec<u8>>> {
     let store = store.with_prefix(vec![]);
     store.get(VERSION_KEY)

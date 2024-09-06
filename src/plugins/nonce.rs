@@ -1,3 +1,4 @@
+//! Incrementing nonces per address for calls.
 use orga_macros::orga;
 
 use super::{sdk_compat::sdk::Tx as SdkTx, ConvertSdkTx, Signer};
@@ -13,19 +14,33 @@ use crate::{Error, Result};
 
 const NONCE_INCREASE_LIMIT: u64 = 1000;
 
+/// A plugin which requires calls to be issued with a valid nonce, incrementing
+/// for each address each call.
+///
+/// Calls must include a nonce (`u64`) which is greater than the last one stored
+/// for that address, by no more than 1000.
+///
+/// Nonces may be queried by clients before issuing calls.
 #[orga(skip(Call))]
 pub struct NoncePlugin<T> {
+    /// Stored nonces for each address. Implicitly 0 for addresses without a
+    /// stored value.
     pub map: Map<Address, u64>,
+    /// The inner value.
     pub inner: T,
 }
 
 impl<T: State> NoncePlugin<T> {
+    /// Returns the nonce for the given address, or 0 if the address has no
+    /// stored nonce.
     pub fn nonce(&self, address: Address) -> Result<u64> {
         Ok(*self.map.get_or_default(address)?)
     }
 }
 
+/// A trait for types which can determine the nonce for an address.
 pub trait GetNonce {
+    /// Returns the nonce for the given address.
     fn nonce(&self, address: Address) -> Result<u64>;
 }
 
@@ -53,9 +68,12 @@ where
     }
 }
 
+/// A call which may also include a nonce.
 #[derive(Debug, Encode, Decode)]
 pub struct NonceCall<T> {
+    /// Optional nonce.
     pub nonce: Option<u64>,
+    /// The inner call.
     pub inner_call: T,
 }
 

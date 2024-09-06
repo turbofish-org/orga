@@ -1,3 +1,5 @@
+//! ICS-23 proofs from Merk.
+
 use super::MerkStore;
 use crate::{Error, Result};
 use ics23::{
@@ -6,6 +8,7 @@ use ics23::{
 };
 use merk::tree::{Fetch, RefWalker, Tree};
 
+/// Create an [ics23] proof for the provided key.
 pub fn create_ics23_proof<S>(
     maybe_root: Option<RefWalker<'_, S>>,
     key: &[u8],
@@ -24,6 +27,11 @@ where
 }
 
 impl MerkStore {
+    /// The proof specification used by this store.
+    ///
+    /// See:
+    /// - [Merk algorithms](https://github.com/turbofish-org/merk/blob/develop/docs/algorithms.md)
+    /// - [ProofSpec]
     pub fn ics23_spec() -> ProofSpec {
         ProofSpec {
             leaf_spec: Some(leaf_op()),

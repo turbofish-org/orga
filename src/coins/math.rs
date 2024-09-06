@@ -1,13 +1,18 @@
+//! Safe math ops for coin amounts.
 use crate::{Error, Result};
 use std::ops::{ControlFlow, FromResidual, Try};
 use std::result::Result as StdResult;
 
+/// Result of a mathematical operation.
 pub enum MathResult<T> {
+    /// The operation was successful and the result is returned.
     Ok(T),
+    /// The operation failed and an error is returned.
     Err(Error),
 }
 
 impl<T> MathResult<T> {
+    /// Converts `MathResult<T>` into `Result<T>`.
     pub fn result(self) -> Result<T> {
         self.into()
     }

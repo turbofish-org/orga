@@ -1,3 +1,4 @@
+//! Asset distribution with minimal iteration.
 use super::{Amount, Balance, Coin, Decimal, Give, Symbol};
 use crate::collections::map::{ChildMut as MapChildMut, Ref as MapRef};
 use crate::collections::{Map, Next};
@@ -11,6 +12,18 @@ use std::collections::BTreeMap;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Drop, RangeBounds};
 
+/// Implementation of [F1 Pool] for efficient coin distribution.
+///
+/// Values are held in a [Map] internally, but accessed via [Pool::get] or
+/// [Pool::get_mut], which return [Child] and [ChildMut] respectively.
+///
+/// These wrappers ensure up-to-date balances for their inner values to their
+/// consumer.
+///
+/// When a [ChildMut] drops, it will update its parent pool based on any
+/// changes.
+///
+/// [F1 Pool]: https://github.com/cosmos/cosmos-sdk/blob/main/docs/spec/fee_distribution/f1_fee_distr.pdf
 #[orga]
 pub struct Pool<K, V, S>
 where
@@ -21,6 +34,7 @@ where
     contributions: Decimal,
     rewards: Map<u8, Decimal>,
     shares_issued: Decimal,
+    /// Backing map for values in the pool.
     pub map: Map<K, RefCell<Entry<V>>>,
     rewards_this_period: Map<u8, Decimal>,
     last_period_entry: Map<u8, Decimal>,
@@ -40,6 +54,8 @@ where
     }
 }
 
+/// A pool entry which tracks the shares and last update period entry for each
+/// rewarded denom.
 #[orga]
 pub struct Entry<T>
 where
@@ -84,6 +100,8 @@ where
     V: State + Balance<S, Decimal> + Give<(u8, Amount)> + Default,
     S: Symbol,
 {
+    /// Mutably access an adjusted value in the pool. Changes will be propagated
+    /// to the pool when the returned [ChildMut] drops.
     pub fn get_mut(&mut self, key: K) -> Result<ChildMut<K, V, S>> {
         self.assert_no_unhandled_drop_err()?;
         let mut child = self.map.entry(key)?.or_default()?;
@@ -170,6 +188,8 @@ where
         Ok(())
     }
 
+    /// Returns an adjusted view of the entry, but does not modify the
+    /// underlying map.
     pub fn get(&self, key: K) -> Result<Child<V, S>> {
         self.assert_no_unhandled_drop_err()?;
         let denoms: Vec<u8> = self
@@ -203,6 +223,8 @@ where
     }
 }
 
+/// Represents an entry in the pool iterator, containing a key and a child
+/// value.
 pub type IterEntry<'a, K, V, S> = Result<(K, Child<'a, V, S>)>;
 
 impl<K, V, S> Pool<K, V, S>
@@ -211,6 +233,7 @@ where
     K: Encode + Decode + Terminated + Clone + Next + Send + Sync + 'static,
     V: State + Balance<S, Decimal> + Give<(u8, Amount)> + Default,
 {
+    /// Iterate over a range of entries in the pool.
     pub fn range<B>(&self, bounds: B) -> Result<impl Iterator<Item = IterEntry<K, V, S>>>
     where
         B: RangeBounds<K>,
@@ -223,6 +246,7 @@ where
         }))
     }
 
+    /// Iterate over all entries in the pool.
     pub fn iter(&self) -> Result<impl Iterator<Item = IterEntry<K, V, S>>> {
         self.range(..)
     }
@@ -265,6 +289,8 @@ where
     }
 }
 
+/// A child value in the pool, with a mutable reference to the underlying value.
+/// The parent pool will be updated when the [ChildMut] is dropped.
 pub struct ChildMut<'a, K, V, S>
 where
     S: Symbol,
@@ -376,6 +402,7 @@ where
 mod child {
     use super::*;
 
+    /// A value in the pool, with a reference to the underlying value.
     pub struct Child<'a, V, S>
     where
         S: Symbol,
@@ -390,6 +417,7 @@ mod child {
         S: Symbol,
         V: State + Balance<S, Decimal>,
     {
+        /// Create a new child value.
         pub fn new(entry_ref: MapRef<'a, RefCell<Entry<V>>>) -> Result<Self> {
             Ok(Child {
                 entry: entry_ref,

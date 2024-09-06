@@ -1,3 +1,5 @@
+//! State mutations triggerable by network messages.
+
 use crate::encoding::{Decode, Encode};
 use crate::{Error, Result};
 use std::cell::RefCell;
@@ -7,11 +9,28 @@ use std::rc::Rc;
 use std::result::Result as StdResult;
 
 pub use orga_macros::{build_call, call_block, FieldCall};
+
+/// The prefix offset for method calls, added to avoid conflicts with state or
+/// method query prefixes for fields.
 pub const PREFIX_OFFSET: u8 = 0x40;
 
+/// A trait for types to describe and expose state mutations publicly (e.g.
+/// transactions).
+///
+/// Calls are typically composed hierarchically from
+/// [FieldCall] and [MethodCall]. The [FieldCall] derive macro
+/// generates variants for each field tagged `#[call]`, and [call_block]
+/// generates a [MethodCall] enum with variants for each public method tagged
+/// `#[call]` in an impl block for that type.
+///
+/// `Call` may also be implemented manually to enable more complex behavior,
+/// such as in [crate::plugins::SignerPlugin] or [crate::plugins::PayablePlugin]
 pub trait Call {
+    /// The message type for the call, which must implement [Encode] and
+    /// [Decode]
     type Call: Encode + Decode + std::fmt::Debug + Send + Sync;
 
+    /// Perform the call.
     fn call(&mut self, call: Self::Call) -> Result<()>;
 }
 
@@ -97,6 +116,7 @@ impl<T: Call> Call for (T,) {
     }
 }
 
+/// Call for 2-field tuples.
 #[derive(Debug, Encode, Decode)]
 pub enum Tuple2Call<T, U>
 where
@@ -122,6 +142,7 @@ where
     }
 }
 
+/// Call for 3-field tuples.
 #[derive(Debug, Encode, Decode)]
 pub enum Tuple3Call<T, U, V>
 where
@@ -151,6 +172,7 @@ where
     }
 }
 
+/// Call for 4-field tuples.
 #[derive(Debug, Encode, Decode)]
 pub enum Tuple4Call<T, U, V, W>
 where
@@ -222,6 +244,10 @@ impl<T: Call> MaybeCall for MaybeCallWrapper<T> {
     }
 }
 
+/// Represents either a field or method call item.
+///
+/// The encoding of this type handles the prefix byte convention for fields vs.
+/// methods.
 pub enum Item<T: std::fmt::Debug, U: std::fmt::Debug> {
     Field(T),
     Method(U),
@@ -284,15 +310,35 @@ impl<T: Decode + std::fmt::Debug, U: Decode + std::fmt::Debug> Decode for Item<T
     }
 }
 
+/// A trait for complex types whose fields may also be [Call].
+///
+/// The [FieldCall] derive macro generates variants for each field tagged
+/// `#[call]`, and the unwrapped call is passed along to that field's [Call]
+/// implementation.
+///
+/// The encoding of the `FieldCall` uses the field's [State] prefix by default.
 pub trait FieldCall {
+    /// The encodable message type for calls to this type's fields.
     type FieldCall: Encode + Decode + std::fmt::Debug + Send + Sync = ();
 
+    /// Perform the field call.
     fn field_call(&mut self, call: Self::FieldCall) -> Result<()>;
 }
 
+/// A trait for types that expose public methods as calls (via the `#[call]`
+/// attribute and `#[call_block]` macro).
+///
+/// Method calls are assigned an incrementing byte prefix, starting from
+/// [PREFIX_OFFSET] to avoid conflicts with fields or method queries.
+///
+/// After the prefix byte, the remaining bytes of the encoded method call are
+/// the encoded method arguments (which must each implement [Encode] and
+/// [Decode]).
 pub trait MethodCall {
+    /// The encodable message type for calls to this type's methods.
     type MethodCall: Encode + Decode + std::fmt::Debug + Send + Sync = ();
 
+    /// Perform the method call.
     fn method_call(&mut self, call: Self::MethodCall) -> Result<()>;
 }
 
@@ -317,15 +363,20 @@ impl<T> MethodCall for T {
     }
 }
 
+/// A trait for building calls statically with the [build_call] macro.
 pub trait BuildCall<const ID: &'static str>: Call + Sized {
+    /// The type for this type's field named `ID`
     type Child: Call;
+    /// The arguments to the call.
     type Args = ();
+    /// Build the call.
     fn build_call<F: Fn(CallBuilder<Self::Child>) -> <Self::Child as Call>::Call>(
         f: F,
         args: Self::Args,
     ) -> Self::Call;
 }
 
+/// Helper for building calls, used in the [build_call] macro.
 pub struct CallBuilder<T> {
     _phantom: std::marker::PhantomData<fn(T)>,
 }
@@ -345,6 +396,8 @@ impl<T> Default for CallBuilder<T> {
 }
 
 impl<T> CallBuilder<T> {
+    /// Builds a call for this type, using the provided function to build the
+    /// child's call.
     pub fn build_call<
         const ID: &'static str,
         F: Fn(CallBuilder<<T as BuildCall<ID>>::Child>) -> <<T as BuildCall<ID>>::Child as Call>::Call,
@@ -361,6 +414,7 @@ impl<T> CallBuilder<T> {
 }
 
 impl<T> CallBuilder<T> {
+    /// Makes a CallBuilder for the provided type.
     pub fn make<U: std::ops::Deref<Target = T>>(_value: U) -> Self {
         Self::new()
     }

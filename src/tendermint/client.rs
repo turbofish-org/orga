@@ -1,3 +1,4 @@
+//! Tendermint client transport.
 use crate::{
     abci::App,
     call::Call,
@@ -13,12 +14,14 @@ use crate::{
 use tendermint_rpc::{self as tm, Client as _};
 use tokio::sync::Mutex;
 
+/// An HTTP client transport for Tendermint.
 pub struct HttpClient {
     client: tm::HttpClient,
     height: Mutex<Option<u32>>,
 }
 
 impl HttpClient {
+    /// Creates a new client for the given URL.
     pub fn new(url: &str) -> Result<Self> {
         Ok(Self {
             client: tm::HttpClient::new(url)?,
@@ -26,6 +29,8 @@ impl HttpClient {
         })
     }
 
+    /// Creates a new client for the given URL and specific height to use for
+    /// queries.
     pub fn with_height(url: &str, height: u32) -> Result<Self> {
         Ok(Self {
             client: tm::HttpClient::new(url)?,

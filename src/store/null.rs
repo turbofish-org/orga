@@ -1,3 +1,4 @@
+//! Null / empty stores.
 use super::*;
 use crate::Error as OrgaError;
 
@@ -34,6 +35,7 @@ impl Write for Empty {
     }
 }
 
+/// A store for which reads always produce an [Error::GetUnknown] store error.
 #[derive(Default, Clone)]
 pub struct Unknown;
 

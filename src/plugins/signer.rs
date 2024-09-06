@@ -1,12 +1,12 @@
+//! Signature verification.
 use super::{
     sdk_compat::{self, sdk::Tx as SdkTx, ConvertSdkTx},
     ChainId, Events, GetNonce,
 };
-use crate::coins::{Address, Symbol};
+use crate::coins::Address;
 use crate::context::{Context, GetContext};
 
 use crate::encoding::{Decode, Encode};
-use crate::migrate::Migrate;
 use crate::orga;
 
 use crate::call::Call;
@@ -18,25 +18,38 @@ use serde::Serialize;
 use std::ops::Deref;
 use tendermint_proto::v0_34::abci::{Event, EventAttribute};
 
+/// A plugin for enforcing valid signatures for calls.
 #[orga(skip(Call))]
 pub struct SignerPlugin<T> {
+    /// The inner value.
     #[state(transparent)]
     pub inner: T,
 }
 
+/// A context for checking the address of the signer of the current call.
 pub struct Signer {
+    /// The address of the signer, if any.
     pub signer: Option<Address>,
 }
 
+/// A call which may claim to have been signed by the provided public key, which
+/// is verified by the implementation of [Call] for [SignerPlugin].
 #[derive(Debug, Encode, Decode)]
 pub struct SignerCall {
+    /// The 64-byte signature.
     pub signature: Option<[u8; 64]>,
+    /// The 33-byte public key.
     pub pubkey: Option<[u8; 33]>,
+    /// The signature type.
     pub sigtype: SigType,
+    /// The raw call bytes. Decoded and executed following signature
+    /// verification.
     pub call_bytes: Vec<u8>,
 }
 
 impl SignerCall {
+    /// Returns the address of the signer, based on the [SigType] and provided
+    /// public key.
     pub fn address(&self) -> Result<Address> {
         let pubkey_bytes = self
             .pubkey
@@ -54,12 +67,17 @@ impl SignerCall {
     }
 }
 
+/// The type of signature provided for a call.
 #[derive(Debug, Encode, Decode)]
 pub enum SigType {
+    /// ECDSA (secp256k1) signature.
     Native,
+    /// ADR-36 "arbitrary" signature.
     Adr36,
+    /// SDK signature.
     #[skip]
     Sdk(Box<sdk_compat::sdk::Tx>),
+    /// Ethereum personal sign.
     #[skip]
     EthPersonalSign(Box<sdk_compat::sdk::Tx>),
 }
@@ -412,6 +430,8 @@ pub mod keplr {
     }
 }
 
+/// Loads a saved private key. If one does not exist, generates a new one and
+/// saves it.
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(feature = "abci")]
 pub fn load_privkey() -> Result<SecretKey> {
@@ -439,12 +459,17 @@ pub fn load_privkey() -> Result<SecretKey> {
     }
 }
 
+/// A secp256k1 keypair.
 #[cfg(not(target_arch = "wasm32"))]
 pub struct KeyPair {
+    /// Private key.
     pub private: SecretKey,
+    /// Public key.
     pub public: PublicKey,
 }
 
+/// Load a keypair from the saved private key. A new key is generated if one
+/// does not exist.
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(feature = "abci")]
 pub fn load_keypair() -> Result<KeyPair> {
@@ -459,8 +484,9 @@ pub fn load_keypair() -> Result<KeyPair> {
 }
 
 // TODO: In the future, Signer shouldn't need to know about ABCI, but
-// implementing passthrough of ABCI lifecycle methods as below seems preferable to creating a formal
-// distinction between Contexts and normal State / Call / Query types for now.
+// implementing passthrough of ABCI lifecycle methods as below seems preferable
+// to creating a formal distinction between Contexts and normal State / Call /
+// Query types for now.
 #[cfg(feature = "abci")]
 mod abci {
     use super::super::{BeginBlockCtx, EndBlockCtx, InitChainCtx};
@@ -507,42 +533,45 @@ mod abci {
     }
 }
 
-#[orga]
-struct Counter {
-    pub count: u64,
-    pub last_signer: Address,
-}
-
-#[orga]
-impl Counter {
-    #[call]
-    pub fn increment(&mut self) -> Result<()> {
-        self.count += 1;
-        let signer = self.context::<Signer>().unwrap().signer.unwrap();
-        self.last_signer = signer;
-
-        Ok(())
-    }
-}
-
-impl GetNonce for Counter {
-    fn nonce(&self, _address: Address) -> Result<u64> {
-        Ok(0)
-    }
-}
-
-#[derive(State, Clone, Debug, Encode, Decode, Default, Migrate)]
-pub struct X(());
-impl Symbol for X {
-    const INDEX: u8 = 99;
-    const NAME: &'static str = "X";
-}
-
 #[cfg(test)]
 mod tests {
+
     use super::*;
     use crate::call::Call;
+    use crate::coins::{Address, Symbol};
+    use crate::migrate::Migrate;
     use crate::plugins::{sdk_compat, ConvertSdkTx, SdkCompatPlugin};
+
+    #[orga]
+    struct Counter {
+        pub count: u64,
+        pub last_signer: Address,
+    }
+
+    #[orga]
+    impl Counter {
+        #[call]
+        pub fn increment(&mut self) -> Result<()> {
+            self.count += 1;
+            let signer = self.context::<Signer>().unwrap().signer.unwrap();
+            self.last_signer = signer;
+
+            Ok(())
+        }
+    }
+
+    impl GetNonce for Counter {
+        fn nonce(&self, _address: Address) -> Result<u64> {
+            Ok(0)
+        }
+    }
+
+    #[derive(State, Clone, Debug, Encode, Decode, Default, Migrate)]
+    pub struct X(());
+    impl Symbol for X {
+        const INDEX: u8 = 99;
+        const NAME: &'static str = "X";
+    }
 
     impl ConvertSdkTx for Counter {
         type Output = <Counter as Call>::Call;
@@ -569,8 +598,10 @@ mod tests {
         Context::add(ChainId("testchain".to_string()));
         Context::add(Events::default());
 
-        // sign bytes: {"account_number":"0","chain_id":"testchain","fee":{"amount":[{"amount":"0","denom":"unom"}],"gas":"10000"},"memo":"","msgs":[{"type":"x","value":{}}],"sequence":"1"}
-        // signature and pubkey taken from metamask
+        // sign bytes:
+        // {"account_number":"0","chain_id":"testchain","fee":{"amount":[{"amount":"0","
+        // denom":"unom"}],"gas":"10000"},"memo":"","msgs":[{"type":"x","value":{}}],"
+        // sequence":"1"} signature and pubkey taken from metamask
         let call_bytes = br#"{"msg":[{"type":"x","value":{}}],"fee":{"amount":[{"amount":"0","denom":"unom"}],"gas":"10000"},"memo":"","signatures":[{"pub_key":{"type":"tendermint/PubKeySecp256k1","value":"AgixpAV7cl5HPnmZC5qmJekVd5E8VZUioqrJoaj36p90"},"signature":"w+ZKyFdmhDOoqLIlhZq+yj8Z+eMOZnyjYKQ5rXr/fS4Imt4n5rTbwgHR1TmF6mGdFvZrmeJFedUjyMjnRYV4bA==","type":"eth"}]}"#;
         let call = Decode::decode(call_bytes.as_slice()).unwrap();
         SdkCompatPlugin::<_, _>::call(&mut state, call).unwrap();

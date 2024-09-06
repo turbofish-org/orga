@@ -1,3 +1,4 @@
+//! Require chain ID commitments for calls.
 use orga_macros::orga;
 
 use super::GetNonce;
@@ -12,15 +13,20 @@ use crate::query::Query;
 use crate::{Error, Result};
 use std::ops::Deref;
 
+/// A plugin whose call type requires a commitment to the chain ID to prevent
+/// replay attacks.
 #[orga(skip(Call, Query), version = 1)]
 pub struct ChainCommitmentPlugin<T> {
+    /// The inner value.
     #[orga(version(V0))]
     #[state(transparent)]
     pub inner: T,
 
+    /// The chain ID.
     #[orga(version(V1))]
     pub chain_id: LengthVec<u8, u8>,
 
+    /// The inner value.
     #[orga(version(V1))]
     #[state(prefix(b""))]
     pub inner: T,
@@ -43,6 +49,7 @@ where
     }
 }
 
+/// The chain identifier.
 pub struct ChainId(pub String);
 
 impl Deref for ChainId {

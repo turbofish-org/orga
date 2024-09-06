@@ -1,3 +1,4 @@
+//! IBC compatibility via integration with [ibc-rs](https://docs.rs/ibc)
 use crate::migrate::MigrateFrom;
 use ed::Terminated;
 use ibc::apps::transfer::handler::send_transfer;
@@ -15,9 +16,7 @@ use ibc_proto::ibc::core::{
 };
 use ibc_proto::ibc::lightclients::tendermint::v1::Header as RawHeader;
 
-use ibc::clients::tendermint::types::{
-    TENDERMINT_CLIENT_STATE_TYPE_URL, TENDERMINT_CONSENSUS_STATE_TYPE_URL,
-};
+use ibc::clients::tendermint::types::TENDERMINT_CONSENSUS_STATE_TYPE_URL;
 use ibc::primitives::proto::Protobuf;
 use ibc_rs::apps::transfer::types::msgs::transfer::MsgTransfer;
 use ibc_rs::clients::tendermint::types::{client_type, Header};
@@ -66,8 +65,10 @@ mod migration;
 mod query;
 mod router;
 
+/// Path used in raw ABCI queries for IBC state.
 pub const IBC_QUERY_PATH: &str = "store/ibc/key";
 
+/// Integration with [ibc_rs] for general IBC support.
 #[orga(version = 3)]
 pub struct Ibc {
     #[orga(version(V2))]
@@ -84,13 +85,20 @@ pub struct Ibc {
     #[state(prefix(b""))]
     local_store: Store,
 
+    /// Base IBC context
     #[orga(version(V3))]
     pub ctx: IbcContext,
 
+    /// Router for IBC modules, such as the transfer module.
     #[orga(version(V3))]
     pub router: router::IbcRouter,
 }
 
+/// Inner IBC context supporting the basic host requirements.
+///
+/// IBC depends on being able to prove specific key paths, so some fields of
+/// this type use absolute state prefixes, which must not conflict with other
+/// modules.
 #[orga(version = 1)]
 pub struct IbcContext {
     height: u64,
@@ -99,44 +107,59 @@ pub struct IbcContext {
     connection_counter: u64,
     client_counter: u64,
 
+    /// Clients indexed by client ID (ics-02).
     #[state(absolute_prefix(b"clients/"))]
     pub clients: Map<ClientIdKey, Client>,
 
+    /// Connections indexed by connection ID (ics-03).
     #[state(absolute_prefix(b"connections/"))]
     pub connections: Map<ConnectionIdKey, WrappedConnectionEnd>,
 
+    /// Channel ends indexed by port and channel ID (ics-04).
     #[state(absolute_prefix(b"channelEnds/"))]
     pub channel_ends: Map<PortChannel, WrappedChannelEnd>,
 
+    /// Next sequence send for each port and channel (ics-04).
     #[state(absolute_prefix(b"nextSequenceSend/"))]
     pub next_sequence_send: Map<PortChannel, Number>,
 
+    /// Next sequence receive for each port and channel (ics-04).
     #[state(absolute_prefix(b"nextSequenceRecv/"))]
     pub next_sequence_recv: Map<PortChannel, Number>,
 
+    /// Next sequence ack for each port and channel (ics-04).
     #[state(absolute_prefix(b"nextSequenceAck/"))]
     pub next_sequence_ack: Map<PortChannel, Number>,
 
+    /// Commitments for each port and channel (ics-04).
     #[state(absolute_prefix(b"commitments/"))]
     pub commitments: Map<PortChannelSequence, Vec<u8>>,
 
+    /// (Legacy) Receipts for each port and channel (ics-04).
     #[orga(version(V0))]
     #[state(absolute_prefix(b"receipts/"))]
     pub receipts: Map<PortChannelSequence, ()>,
 
+    /// Receipts for each port and channel (ics-04).
     #[orga(version(V1))]
     #[state(absolute_prefix(b"receipts/"))]
     pub receipts: Map<PortChannelSequence, u8>,
 
+    /// Acknowledgements for each port and channel (ics-04).
     #[state(absolute_prefix(b"acks/"))]
     pub acks: Map<PortChannelSequence, Vec<u8>>,
 
+    /// Root store for use in migrations.
     #[state(absolute_prefix(b""))]
     pub store: Store,
 }
 
 #[orga]
 impl Ibc {
+    /// Execute a batch of messages contained in a [RawIbcTx], usually from a
+    /// transaction built by a relayer.
+    ///
+    /// Returns a list of incoming token transfers as a result of the execution.
     pub fn deliver(&mut self, messages: RawIbcTx) -> crate::Result<Vec<TransferInfo>> {
         let messages: IbcTx = messages.try_into()?;
         let mut incoming_transfers = vec![];
@@ -148,6 +171,7 @@ impl Ibc {
         Ok(incoming_transfers)
     }
 
+    /// Call for triggering a token transfer.
     #[call]
     pub fn raw_transfer(&mut self, message: TransferMessage) -> crate::Result<()> {
         let message: MsgTransfer = message.inner;
@@ -164,6 +188,9 @@ impl Ibc {
         Ok(())
     }
 
+    /// Execute one [IbcMessage].
+    ///
+    /// Returns info about a transfer if the message triggered one.
     pub fn deliver_message(&mut self, message: IbcMessage) -> crate::Result<Option<TransferInfo>> {
         let mut maybe_client_update = None;
 
@@ -208,21 +235,14 @@ impl Ibc {
             .ok_or_else(|| Error::Coins("Call must be signed".into()))
     }
 
+    /// Returns a reference to the transfer module.
     pub fn transfer(&self) -> &Transfer {
         &self.router.transfer
     }
 
+    /// Returns a mutable reference to the transfer module.
     pub fn transfer_mut(&mut self) -> &mut Transfer {
         &mut self.router.transfer
-    }
-
-    pub fn update_client_from_header(
-        &mut self,
-        _client_index: u64,
-        _rev_number: u64,
-        _header_json: &str,
-    ) -> crate::Result<()> {
-        todo!();
     }
 }
 
@@ -232,35 +252,48 @@ impl std::fmt::Debug for IbcContext {
     }
 }
 
+/// IBC client state (ics-02). Relative state prefixing is used here (in
+/// conjunction with the absolute prefixing in [IbcContext]) to ensure that
+/// valid proofs may be generated for counterparty chains.
 #[orga]
 pub struct Client {
+    /// Timestamped / heightstamped client updates.
     #[state(prefix(b"updates/"))]
     pub updates: Map<EpochHeight, (WrappedTimestamp, BinaryHeight)>,
 
+    /// Client state.
     #[state(prefix(b"client"))]
     pub client_state: Map<FixedString<"State">, WrappedClientState>,
 
+    /// Map of consensus states of the client chain by height.
     #[state(prefix(b"consensusStates/"))]
     pub consensus_states: Map<EpochHeight, WrappedConsensusState>,
 
+    /// Map of connections that are using this client.
     #[state(prefix(b"connections/"))]
     pub connections: Map<ConnectionIdKey, ()>,
 
     // TODO: support headers for non-tendermint clients
+    /// The last header received from the chain. Not required by IBC, but useful
+    /// to keep around since it is provided during client updates.
     pub last_header: Option<WrappedHeader>,
 
     client_type: EofTerminatedString,
 }
 
 impl Client {
+    /// The [ClientType] of this client. Currently, only "07-tendermint" clients
+    /// are supported. (ics-02) (ics-07)
     pub fn client_type(&self) -> crate::Result<ClientType> {
         Ok(client_type())
     }
 
+    /// Set the client type.
     pub fn set_client_type(&mut self, client_type: ClientType) {
         self.client_type = client_type.into();
     }
 
+    /// Returns the last header as a [Header]
     pub fn last_header(&self) -> crate::Result<Header> {
         Ok(self
             .last_header
@@ -271,13 +304,21 @@ impl Client {
     }
 }
 
+/// A slash-terminated string.
 pub type SlashTerminatedString<T> = ByteTerminatedString<b'/', T>;
 
+/// A client ID for use as a map key in [IbcContext], e.g. "client-0/"
 pub type ClientIdKey = SlashTerminatedString<ClientId>;
+/// A connection ID.
+///
+/// Supports use as a map key in [IbcContext], e.g. "connection-0"
 pub type ConnectionIdKey = EofTerminatedString<ConnectionId>;
+/// A number for use as a map key in [IbcContext], e.g. "0"
 pub type Number = EofTerminatedString<u64>;
+/// An epoch-height for use as a map key in [IbcContext], e.g. "1-5"
 pub type EpochHeight = EofTerminatedString;
 
+/// Encoding for an [IbcTimestamp].
 #[orga(simple, skip(Migrate, Default))]
 #[derive(Debug)]
 pub struct WrappedTimestamp {
@@ -356,6 +397,7 @@ impl Decode for Adapter<IbcSigner> {
 
 impl Terminated for Adapter<IbcSigner> {}
 
+/// Adapter for [Height]
 #[orga]
 #[derive(Clone, Debug)]
 pub struct BinaryHeight {
@@ -442,6 +484,10 @@ impl From<EofTerminatedString> for ClientType {
     }
 }
 
+/// A port-channel pair.
+///
+/// Supports use as a map key in [IbcContext], e.g.
+/// "ports/transfer/channels/channel-0"
 #[derive(State, Encode, Decode, Serialize, Clone, Debug)]
 pub struct PortChannel(
     #[serde(skip)] FixedString<"ports/">,
@@ -463,6 +509,7 @@ impl Describe for PortChannel {
 }
 
 impl PortChannel {
+    /// Create a new [PortChannel]
     pub fn new(port_id: PortId, channel_id: ChannelId) -> Self {
         Self(
             FixedString,
@@ -472,6 +519,7 @@ impl PortChannel {
         )
     }
 
+    /// Returns the port ID
     pub fn port_id(&self) -> crate::Result<PortId> {
         self.1
             .clone()
@@ -480,6 +528,7 @@ impl PortChannel {
             .map_err(|_| Error::Ibc("Invalid port ID".to_string()))
     }
 
+    /// Returns the channel ID
     pub fn channel_id(&self) -> crate::Result<ChannelId> {
         self.3
             .clone()
@@ -488,6 +537,8 @@ impl PortChannel {
             .map_err(|_| Error::Ibc("Invalid channel ID".to_string()))
     }
 
+    /// Create a new [PortChannelSequence] from this [PortChannel] and a
+    /// [Sequence].
     pub fn with_sequence(self, sequence: Sequence) -> crate::Result<PortChannelSequence> {
         Ok(PortChannelSequence::new(
             self.port_id()?,
@@ -517,6 +568,10 @@ port_channel_from_impl!(SeqSendPath);
 port_channel_from_impl!(SeqRecvPath);
 port_channel_from_impl!(SeqAckPath);
 
+/// A port-channel-sequence.
+///
+/// Supports use as a map key in [IbcContext], e.g.
+/// "ports/transfer/channels/channel-0/sequences/0"
 #[derive(State, Encode, Decode, Serialize, Clone, Debug)]
 pub struct PortChannelSequence(
     #[serde(skip)] FixedString<"ports/">,
@@ -540,6 +595,7 @@ impl Describe for PortChannelSequence {
 }
 
 impl PortChannelSequence {
+    /// Create a new [PortChannelSequence].
     pub fn new(port_id: PortId, channel_id: ChannelId, sequence: Sequence) -> Self {
         Self(
             FixedString,
@@ -551,6 +607,7 @@ impl PortChannelSequence {
         )
     }
 
+    /// Returns the port ID.
     pub fn port_id(&self) -> crate::Result<PortId> {
         self.1
             .clone()
@@ -559,6 +616,7 @@ impl PortChannelSequence {
             .map_err(|_| Error::Ibc("Invalid port ID".to_string()))
     }
 
+    /// Returns the channel ID.
     pub fn channel_id(&self) -> crate::Result<ChannelId> {
         self.3
             .clone()
@@ -567,6 +625,7 @@ impl PortChannelSequence {
             .map_err(|_| Error::Ibc("Invalid channel ID".to_string()))
     }
 
+    /// Returns the sequence.
     pub fn sequence(&self) -> crate::Result<Sequence> {
         self.5
             .clone()
@@ -599,8 +658,12 @@ port_channel_sequence_from_impl!(ReceiptPath);
 
 macro_rules! protobuf_newtype {
     ($newtype:tt, $inner:ty, $raw:ty, $proto:tt, $prev:ty) => {
+        #[doc = " Adapter for `"]
+        #[doc = stringify!($inner)]
+        #[doc = "` for state compatibility"]
         #[derive(Serialize, Clone, Debug)]
         pub struct $newtype {
+            /// The inner value.
             pub inner: $inner,
         }
 
@@ -708,7 +771,9 @@ protobuf_newtype!(
 //     ConsensusState
 // );
 
+/// Connection end with previous encoding format to allow migration.
 pub struct LegacyWrappedConnectionEnd {
+    /// Decoded connection end.
     pub inner: ConnectionEnd,
 }
 
@@ -760,6 +825,7 @@ protobuf_newtype!(
 protobuf_newtype!(WrappedHeader, Header, RawHeader, Protobuf, WrappedHeader);
 impl Terminated for WrappedHeader {}
 
+/// Adapter for [TmConsensusState] for state compatibility.
 #[derive(Serialize, Clone, Debug)]
 pub struct WrappedConsensusState {
     inner: TmConsensusState,
@@ -867,6 +933,7 @@ impl ConsensusStateTrait for WrappedConsensusState {
     }
 }
 
+/// A message used to build a token transfer packet.
 #[derive(Debug, Clone)]
 pub struct TransferMessage {
     inner: MsgTransfer,
@@ -1194,7 +1261,7 @@ mod tests {
         use std::fs::File;
         use std::io::{self, BufRead};
 
-        let file = File::open(&path.into()).unwrap();
+        let file = File::open(path.into()).unwrap();
         let reader = io::BufReader::new(file);
 
         let mut tuples = Vec::new();

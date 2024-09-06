@@ -3,8 +3,9 @@
 //     Result,
 // };
 
-// /// A client which decodes and verifies Merk proofs when accessing data from an
-// /// underlying [`Read`](../store/trait.Read.html).
+// /// A client which decodes and verifies Merk proofs when accessing data from
+// an /// underlying [`Read`](../store/trait.Read.html).
+#[doc(hidden)]
 #[allow(dead_code)]
 pub struct Client<R> {
     read: R,

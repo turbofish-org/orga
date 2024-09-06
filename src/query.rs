@@ -1,3 +1,5 @@
+//! Efficient data querying via network messages.
+
 use crate::encoding::{Decode, Encode};
 use crate::{Error, Result};
 use std::error::Error as StdError;
@@ -6,10 +8,28 @@ use std::result::Result as StdResult;
 
 pub use orga_macros::{query_block, FieldQuery};
 
+/// The prefix offset for method queries, added to avoid conflicts with state or
+/// method call prefixes for fields.
 pub const PREFIX_OFFSET: u8 = 0x80;
+
+/// A trait for efficiently querying data, e.g. by a client from a remote node.
+///
+/// Query allows the implementor to create a minimal expression of what data is
+/// required, typically as a hierarchical combination of [FieldQuery] and
+/// [MethodQuery], composed via [Item].
+///
+/// The [FieldQuery] macro generates variants for each public
+/// field on structs, and a type's [MethodQuery] is generated via
+/// public methods tagged `#[query]` by the [query_block] macro on an impl block
+/// for that type.
+///
+/// `Query` may also be implemented manually to enable more complex behavior,
+/// such as in [crate::plugins::QueryPlugin].
 pub trait Query {
+    /// The encodable message for queries to this type.
     type Query: Encode + Decode + std::fmt::Debug + Send + Sync;
 
+    /// Perform the query.
     fn query(&self, query: Self::Query) -> Result<()>;
 }
 
@@ -181,6 +201,10 @@ impl<T: Query, const N: usize> Query for [T; N] {
     }
 }
 
+/// Represents either a field or method query item.
+///
+/// The encoding of this type handles the prefix byte convention for fields vs.
+/// methods.
 pub enum Item<T: std::fmt::Debug, U: std::fmt::Debug> {
     Field(T),
     Method(U),
@@ -242,15 +266,36 @@ impl<T: Decode + std::fmt::Debug, U: Decode + std::fmt::Debug> Decode for Item<T
         }
     }
 }
+
+/// A trait for complex types whose fields may also be [Query].
+///
+/// The [FieldQuery] derive macro generates variants for each field tagged
+/// `#[query]`, and the unwrapped query is passed along to that field's [Query]
+/// implementation.
+///
+/// The encoding of the `FieldQuery` uses the field's [State] prefix by default.
 pub trait FieldQuery {
+    /// The encodable message type for queries to this type's fields.
     type FieldQuery: Encode + Decode + std::fmt::Debug + Send + Sync = ();
 
+    /// Perform the field query.
     fn field_query(&self, query: Self::FieldQuery) -> Result<()>;
 }
 
+/// A trait for types that expose public methods as queries (via the `#[query]`
+/// attribute and `#[query_block]` macro).
+///
+/// Method queries are assigned an incrementing byte prefix, starting from
+/// [PREFIX_OFFSET] to avoid conflicts with fields or method calls.
+///
+/// After the prefix byte, the remaining bytes of the encoded method query are
+/// the encoded method arguments (which must each implement [Encode] and
+/// [Decode]).
 pub trait MethodQuery {
+    /// The encodable message type for queries to this type's methods.
     type MethodQuery: Encode + Decode + std::fmt::Debug + Send + Sync = ();
 
+    /// Perform the method query.
     fn method_query(&self, query: Self::MethodQuery) -> Result<()>;
 }
 

@@ -1,3 +1,5 @@
+//! Utilities for cross-hierarchy state access.
+
 use crate::state::State;
 use std::any::TypeId;
 use std::collections::HashMap;

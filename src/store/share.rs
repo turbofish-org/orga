@@ -1,3 +1,4 @@
+//! Shared references to stores.
 use super::{Read, Write, KV};
 use crate::Result;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -23,6 +24,11 @@ impl<T> Shared<T> {
         Shared(Arc::new(RwLock::new(inner)))
     }
 
+    /// Consumes the `Shared` and returns the inner store.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the store is currently borrowed.
     pub fn into_inner(self) -> T {
         match Arc::try_unwrap(self.0) {
             Ok(inner) => inner.into_inner().unwrap(),
@@ -30,10 +36,20 @@ impl<T> Shared<T> {
         }
     }
 
+    /// Returns a mutable reference to the inner store.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the store is currently borrowed.
     pub fn borrow_mut(&mut self) -> RwLockWriteGuard<T> {
         self.0.write().unwrap()
     }
 
+    /// Returns a shared reference to the inner store.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the store is currently borrowed.
     pub fn borrow(&self) -> RwLockReadGuard<T> {
         self.0.read().unwrap()
     }

@@ -1,3 +1,4 @@
+//! Key management for clients.
 use std::path::Path;
 
 use secp256k1::SecretKey;
@@ -8,16 +9,22 @@ use crate::{
     Result,
 };
 
+/// A trait for wallets which can manage user keys.
 pub trait Wallet: Clone + Send + Sync {
+    /// Sign a call.
     fn sign(&self, call_bytes: &[u8]) -> Result<SignerCall>;
 
+    /// Returns the address for this wallet if it has one.
     fn address(&self) -> Result<Option<Address>>;
 
+    /// Optionally returns a suggested nonce, e.g. by querying the [NoncePlugin]
+    /// or using a local incrementing counter.
     fn nonce_hint(&self) -> Result<Option<u64>> {
         Ok(None)
     }
 }
 
+/// A wallet without keys. It produces unsigned calls and has no address.
 #[derive(Clone, Debug, Default)]
 pub struct Unsigned;
 
@@ -44,6 +51,7 @@ pub struct DerivedKey {
 }
 
 impl DerivedKey {
+    /// Derive a new key from a seed.
     pub fn new(seed: &[u8]) -> Result<Self> {
         use sha2::Digest;
         let mut hasher = sha2::Sha256::new();
@@ -55,23 +63,28 @@ impl DerivedKey {
         Ok(Self { privkey })
     }
 
+    /// Create a new wallet from a secret key.
     pub fn from_secret_key(privkey: SecretKey) -> Self {
         Self { privkey }
     }
 
+    /// Create a new wallet from a seed and return its address.
     pub fn address_for(seed: &[u8]) -> Result<Address> {
         Ok(Self::new(seed)?.address())
     }
 
+    /// Returns a reference to the secret key for this wallet.
     pub fn privkey(&self) -> &secp256k1::SecretKey {
         &self.privkey
     }
 
+    /// Returns the public key for this wallet.
     pub fn pubkey(&self) -> secp256k1::PublicKey {
         let secp = secp256k1::Secp256k1::new();
         secp256k1::PublicKey::from_secret_key(&secp, &self.privkey)
     }
 
+    /// Returns the address for this wallet.
     pub fn address(&self) -> Address {
         Address::from_pubkey(self.pubkey().serialize())
     }
@@ -98,6 +111,7 @@ impl Wallet for DerivedKey {
     }
 }
 
+/// A simple wallet with a secp256k1 keypair.
 #[derive(Clone, Debug)]
 pub struct SimpleWallet {
     privkey: secp256k1::SecretKey,
@@ -105,6 +119,8 @@ pub struct SimpleWallet {
 }
 
 impl SimpleWallet {
+    /// Load the keypair from the specified path, creating it if it doesn't
+    /// exist.
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
         std::fs::create_dir_all(&path)?;
         let keypair_path = path.as_ref().join("privkey");

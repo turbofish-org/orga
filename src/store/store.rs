@@ -1,3 +1,4 @@
+//! Core `Store` type and traits
 use serde::{Deserialize, Serialize};
 use std::ops::{Bound, RangeBounds};
 
@@ -33,11 +34,13 @@ pub struct Store<S = DefaultBackingStore> {
 }
 
 impl Store {
+    /// Creates a new store with a [MapStore] as its backing store.
     pub fn with_map_store() -> Self {
         use super::MapStore;
         Self::new(BackingStore::MapStore(Shared::new(MapStore::new())))
     }
 
+    /// Creates a new store with a [PartialMapStore] as its backing store.
     pub fn with_partial_map_store() -> Self {
         use super::PartialMapStore;
         Self::new(BackingStore::PartialMapStore(Shared::new(
@@ -45,6 +48,7 @@ impl Store {
         )))
     }
 
+    /// Removes all entries in the given key range.
     pub fn remove_range<B: RangeBounds<Vec<u8>>>(&mut self, bounds: B) -> Result<()> {
         self.range(bounds).try_for_each(|entry| {
             let (k, _) = entry?;
@@ -113,6 +117,7 @@ impl<S: Read> Store<S> {
         }
     }
 
+    /// Returns the prefix of this store.
     pub fn prefix(&self) -> &[u8] {
         self.prefix.as_slice()
     }
@@ -125,14 +130,18 @@ impl<S: Read> Store<S> {
         store
     }
 
+    /// Returns the backing store.
     pub fn backing_store(&self) -> Shared<S> {
         self.store.clone()
     }
 
+    /// Consumes the store and returns the backing store.
     pub fn into_backing_store(self) -> Shared<S> {
         self.store
     }
 
+    /// Returns an iterator over key/value entries in the store within the given
+    /// key range.
     pub fn range<B: RangeBounds<Vec<u8>>>(&self, bounds: B) -> Iter<Self>
     where
         Self: Read,

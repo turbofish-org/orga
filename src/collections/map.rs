@@ -1,3 +1,4 @@
+//! A map collection backed by a store
 use std::cmp::Ordering;
 use std::collections::btree_map::Entry::{Occupied, Vacant};
 use std::collections::{btree_map, BTreeMap};
@@ -16,6 +17,7 @@ use crate::{Error, Result};
 use ed::*;
 use serde::Serialize;
 
+/// A key in a [Map], which retains its encoded representation.
 #[derive(Clone, Debug)]
 pub struct MapKey<K> {
     inner: K,
@@ -50,6 +52,7 @@ impl<K> Encode for MapKey<K> {
 //implement deref for MapKey to deref into the inner type
 //implement Encode for MapKey that just returns the inner_bytes
 impl<K> MapKey<K> {
+    /// Create a new [MapKey] from an encodable value.
     pub fn new<E: Encode>(key: E) -> Result<MapKey<E>> {
         let inner_bytes = Encode::encode(&key)?;
         Ok(MapKey {
@@ -131,6 +134,7 @@ where
 }
 
 impl<K, V> Map<K, V> {
+    /// Create a new, empty [Map].
     pub fn new() -> Self {
         Self::default()
     }
@@ -189,6 +193,8 @@ where
             .transpose()
     }
 
+    /// Insert a value at the provided key, replacing any existing value that
+    /// may have been stored at that key.
     pub fn insert(&mut self, key: K, mut value: V) -> Result<()> {
         let map_key = MapKey::<K>::new(key)?;
 
@@ -255,8 +261,9 @@ where
             let value = V::migrate(src.sub(&k), dest.sub(&k), &mut v.as_slice())?;
             map.insert(key, value)?;
             Self::apply_change(&mut src, k, None)?;
-            // TODO: flush the changes to the dest as we go - we are caching changes in memory
-            // for now while we phase out old migration implementations that don't honor the contract
+            // TODO: flush the changes to the dest as we go - we are caching
+            // changes in memory for now while we phase out old
+            // migration implementations that don't honor the contract
         }
 
         Ok(map)
@@ -268,6 +275,8 @@ where
     K: Encode + Terminated + Send + Sync + 'static,
     V: State + Default,
 {
+    /// Returns a [Ref] of the value at the given key, or of the default
+    /// value if the key was not present.
     pub fn get_or_default(&self, key: K) -> Result<Ref<V>> {
         let key_bytes = key.encode()?;
         let maybe_value = self.get(key)?;
@@ -401,10 +410,13 @@ where
     K: Encode + Decode + Terminated + Clone + 'static,
     V: State,
 {
+    /// Create an iterator over all KV pairs in the map.
     pub fn iter(&'a self) -> Result<Iter<'a, K, V>> {
         self.range(..)
     }
 
+    /// Create an iterator over all KV pairs in the map within the given key
+    /// range.
     pub fn range<B: RangeBounds<K>>(&'a self, range: B) -> Result<Iter<'a, K, V>> {
         let map_start = range
             .start_bound()
@@ -488,6 +500,7 @@ where
     }
 }
 
+/// An iterator over the elements of a [Map].
 pub struct Iter<'a, K, V>
 where
     K: Decode + Encode + Terminated + 'static,
@@ -820,10 +833,12 @@ impl<V> Deref for ReadOnly<V> {
 }
 
 impl<V> ReadOnly<V> {
+    /// Create a new [ReadOnly] wrapper around the given value.
     pub fn new(inner: V) -> Self {
         ReadOnly { inner }
     }
 
+    /// Consume this [ReadOnly] wrapper, returning the inner value.
     pub fn into_inner(self) -> V {
         self.inner
     }
@@ -981,10 +996,18 @@ where
 /// empty.
 pub enum Entry<'a, K: Encode, V> {
     /// References an entry in the collection which does not have a value.
-    Vacant { key: K, parent: &'a mut Map<K, V> },
+    Vacant {
+        /// The key.
+        key: K,
+        /// The parent map.
+        parent: &'a mut Map<K, V>,
+    },
 
     /// References an entry in the collection which has a value.
-    Occupied { child: ChildMut<'a, K, V> },
+    Occupied {
+        /// The occupied key and value.
+        child: ChildMut<'a, K, V>,
+    },
 }
 
 impl<'a, K, V> Entry<'a, K, V>
@@ -1028,6 +1051,7 @@ where
 }
 
 impl<K: Encode + Decode + Terminated + 'static, V: State> Map<K, V> {
+    /// Create a new, empty [Map] with the given backing [Store].
     pub fn with_store(store: Store) -> Result<Self> {
         let mut map = Map::new();
         State::attach(&mut map, store)?;
