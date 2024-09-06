@@ -3,7 +3,7 @@ name = "orga"
 version = "0.3.1"
 authors = ["Turbofish <team@turbofish.org>"]
 edition = "2021"
-description = "Deterministic state machine engine written"
+description = "Deterministic state machine engine"
 license = "Apache-2.0"
 
 [dependencies]
