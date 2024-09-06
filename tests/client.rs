@@ -43,8 +43,8 @@
 // pub struct Client<C: ::orga::client::ClientFor<Counter>> {
 //     client: C,
 //     state: Option<Counter>,
-//     pub count2: <u32 as ::orga::client::CreateClient<Count2Client<C>>>::Client,
-// }
+//     pub count2: <u32 as
+// ::orga::client::CreateClient<Count2Client<C>>>::Client, }
 
 // impl<C: ::orga::client::ClientFor<Counter>> From<C> for Client<C> {
 //     fn from(client: C) -> Self {
@@ -66,8 +66,8 @@
 // pub struct Count2Client<C: ::orga::client::ClientFor<Counter>> {
 //     client: C,
 // }
-// impl<C: ::orga::client::ClientFor<Counter>> ::orga::client::Client for Count2Client<C> {
-//     type Query = <u32 as ::orga::query::Query>::Query;
+// impl<C: ::orga::client::ClientFor<Counter>> ::orga::client::Client for
+// Count2Client<C> {     type Query = <u32 as ::orga::query::Query>::Query;
 //     type QueryRes = u32;
 
 //     type Call = <u32 as ::orga::call::Call>::Call;
