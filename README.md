@@ -1,31 +1,46 @@
-# orga
+<h1 align="left">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./orga-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="./orga.svg">
+  <img alt="orga" src="./orga.svg">
+</picture>
+</h1>
 
 *Deterministic state machine engine written in Rust*
 
-![CI](https://github.com/nomic-io/orga/actions/workflows/ci.yml/badge.svg)
-[![codecov](https://codecov.io/gh/nomic-io/orga/branch/develop/graph/badge.svg?token=ZYA7B56825)](https://codecov.io/gh/nomic-io/orga)
+![CI](https://github.com/turbofish-org/orga/actions/workflows/ci.yml/badge.svg)
+[![codecov](https://codecov.io/gh/turbofish-org/orga/branch/develop/graph/badge.svg?token=ZYA7B56825)](https://codecov.io/gh/turbofish-org/orga)
 [![Crate](https://img.shields.io/crates/v/orga.svg)](https://crates.io/crates/orga)
 [![API](https://docs.rs/orga/badge.svg)](https://docs.rs/orga)
 
-Orga is a stack for building blockchain applications powered by [Tendermint](https://github.com/tendermint/tendermint) consensus.
+Orga is a stack for building blockchain applications powered by [CometBFT](https://github.com/cometbft/cometbft) consensus. [Learn more about Orga.](https://turbofish.org/blog/orga)
 
-**Status:** Orga is not ready for production applications, but is in rapid development. Some APIs are subject to change.
+## Usage
 
-## Module Status
+Orga is currently used by [Nomic](https://github.com/nomic-io/nomic), a blockchain powering decentralized custody of Bitcoin. Documentation for additional usage is coming soon.
 
-| Module            | Description                                                                                                          | Completeness                                                                                                                                                                                                                   | API Stability                                                   |
-|-------------------|----------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------|
-| [ed](https://github.com/nomic-io/ed)                           | Minimalist traits for fast, deterministic encoding/decoding                                            | Provides `Encode` and `Decode` traits, with implementations for many built-in types (integers, `Vec<T: Encode + Decode>`, etc.). Will likely add tools for easier handmade encodings and composable encoding types (e.g. length-prefixed arrays). | Unlikely to change.                                             |
-| [ed_derive](https://github.com/nomic-io/ed/tree/master/derive) | Derive macros for `ed::Encode` and `ed::Decode`                                                                      | Derive macros are implemented for structs. Still needs enum support.                                                                                                                                                                              | Can not change (only provides derive macros).                   |
-| orga::abci        | Integration with ABCI (gated by `abci` feature)                                                                      | Implements ABCI app abstraction with serial tx processing. Still needs full ABCI pipeline for parallel tx processing.                                                                                                          | Likely to change significantly.                                 |
-| orga::collections | State data structures which implement `orga::state::State` trait                                                     | Implements Map, Set, Deque. Will likely add more.                                                                                                                                                                              | May change significantly as we explore different paradigms.     |
-| orga::merkstore   | Integration with [merk](https://github.com/nomic-io/merk) (gated by `merk` feature)                                  | Implements `orga::store::Store` trait for Merk storage, and implements `abci::ABCIStore` so it can be used in an ABCI app. Will grow as `orga::store` grows, e.g. implementing `orga::store::Iter` to iterate through entries. | Unlikely to change beyond changes in `orga::store`.             |
-| orga::state       | Traits for representing state data using higher-level abstractions (on top of a `orga::store::Store` implementation) | Implements base `State` trait, and basic implementations of it such as `Value<T>`.                                                                                                                                             | May change significantly as we explore different paradigms.     |
-| orga::store       | Traits and implementations for low-level key/value store abstraction                                                 | Implements base `Store` trait, and many composable implementations such as `MapStore`, `NullStore`, `Prefixed`, etc. Will likely add more composable pieces.                                                                   | The base traits may change minorly, overall paradigm is stable. |
-| orga_macros       | Macros for Orga traits.                                                                                              | Implements `#[state]` macro for combining `orga::state::State` implementations into struct hierarchies. Currently only supports normal structs, will likely support e.g. enums.                                                | Unlikely to change.                                             |
+## Contributing
 
-## Project Goals
-- *Performance* - To serve a large user base, blockchains need to be engineered for high throughput, e.g. 10k+ transactions per second. Orga is engineered for maximum concurrency and with the ability to use the right data structures.
-- *Simplicity* - Keeping complexity under control makes it easier to understand the system, prevent flaws, and introduce new functionality. When thinking something through, a good heuristic is to choose the solution with fewer lines of code or smaller compiler output.
-- *Ease of use* - In our earlier work on [`LotionJS`](https://github.com/nomic-io/lotion), we discovered that blockchain development can be fast and pleasant with the right abstractions. We aim to replicate this experience in Orga.
-- *Idiomatic Rust* - When figuring out how to do something, we can often answer it by asking "what would the Rust standard library do?".
+Orga is an open-source project spearheaded by Turbofish. Anyone is able to contribute to Orga via GitHub.
+
+[Contribute to Orga](https://github.com/turbofish-org/orga/contribute)
+
+## Security
+
+Orga is currently undergoing security audits.
+
+Vulnerabilities should not be reported through public channels, including GitHub Issues. You can report a vulnerability via GitHub's Private Vulnerability Reporting or to Turbofish at `security@turbofish.org`.
+
+[Report a Vulnerability](https://github.com/turbofish-org/orga/security/advisories/new)
+
+## License
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use the files in this repository except in compliance with the License. You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+
+---
+
+Copyright © 2024 Turbofish, Inc.
