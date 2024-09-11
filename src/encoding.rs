@@ -185,6 +185,162 @@ where
     }
 }
 
+#[derive(
+    Deref,
+    DerefMut,
+    Into,
+    Default,
+    Clone,
+    Debug,
+    FieldQuery,
+    PartialEq,
+    Hash,
+    Eq,
+    Describe,
+    Serialize,
+    Deserialize,
+)]
+#[serde(transparent)]
+pub struct LengthString<P>
+where
+    P: Encode + Decode + TryInto<usize> + Terminated + Clone + 'static,
+{
+    #[serde(skip)]
+    len: P,
+
+    #[deref]
+    #[deref_mut]
+    #[into]
+    inner: String,
+}
+
+impl<P> Migrate for LengthString<P> where
+    P: Encode + Decode + TryInto<usize> + Terminated + Clone + 'static
+{
+}
+
+impl<P> LengthString<P>
+where
+    P: Encode + Decode + TryInto<usize> + Terminated + Clone,
+{
+    pub fn new(len: P, inner: String) -> Self {
+        LengthString { len, inner }
+    }
+}
+
+impl<P> Decode for LengthString<P>
+where
+    P: Encode + Decode + Terminated + TryInto<usize> + Clone,
+{
+    fn decode<R: std::io::Read>(mut input: R) -> Result<Self> {
+        let len = P::decode(&mut input)?;
+
+        let len_usize = len
+            .clone()
+            .try_into()
+            .map_err(|_| Error::UnexpectedByte(80))?;
+
+        let mut inner = String::with_capacity(len_usize);
+        for _ in 0..len_usize {
+            let value = u8::decode(&mut input)?;
+            inner.push(value as char);
+        }
+
+        Ok(LengthString { len, inner })
+    }
+}
+
+impl<P> Encode for LengthString<P>
+where
+    P: Encode + Decode + TryInto<usize> + Terminated + Clone,
+{
+    fn encode_into<W: std::io::Write>(&self, mut out: &mut W) -> Result<()> {
+        self.len.encode_into(&mut out)?;
+        for c in self.inner.chars() {
+            (c as u8).encode_into(&mut out)?;
+        }
+
+        Ok(())
+    }
+
+    fn encoding_length(&self) -> Result<usize> {
+        let mut len = self.len.encoding_length()?;
+        for c in self.inner.chars() {
+            len += (c as u8).encoding_length()?;
+        }
+
+        Ok(len)
+    }
+}
+
+impl<P> Terminated for LengthString<P> where P: Encode + Decode + TryInto<usize> + Terminated + Clone
+{}
+
+impl<P> State for LengthString<P>
+where
+    P: Encode + Decode + TryInto<usize> + Terminated + Clone + 'static,
+{
+    fn attach(&mut self, _store: Store) -> crate::Result<()> {
+        Ok(())
+    }
+
+    fn flush<W: std::io::Write>(self, out: &mut W) -> crate::Result<()> {
+        self.len.encode_into(out)?;
+        // TODO: non-utf8 support?
+        self.inner.as_bytes().encode_into(out)?;
+
+        Ok(())
+    }
+
+    fn load(_store: Store, mut bytes: &mut &[u8]) -> crate::Result<Self> {
+        let len = P::decode(&mut bytes)?;
+        let len_usize = len
+            .clone()
+            .try_into()
+            .map_err(|_| Error::UnexpectedByte(80))?;
+
+        let mut inner = String::with_capacity(len_usize);
+        for _ in 0..len_usize {
+            let value = u8::decode(&mut bytes)?;
+            inner.push(value as char);
+        }
+
+        Ok(LengthString { len, inner })
+    }
+}
+
+impl<P> TryFrom<&str> for LengthString<P>
+where
+    P: State + Encode + Decode + TryInto<usize> + TryFrom<usize> + Terminated + Clone,
+{
+    type Error = crate::Error;
+
+    fn try_from(value: &str) -> crate::Result<Self> {
+        value.to_string().try_into()
+    }
+}
+
+// impl<P> Describe for LengthString<P>
+// where
+//     P: State + Encode + Decode + TryInto<usize> + Terminated + Clone +
+// 'static, {
+//     fn describe() -> crate::describe::Descriptor {
+//         crate::describe::Builder::new::<Self>().build()
+//     }
+// }
+
+impl<P> TryFrom<String> for LengthString<P>
+where
+    P: State + Encode + Decode + TryInto<usize> + TryFrom<usize> + Terminated + Clone,
+{
+    type Error = crate::Error;
+
+    fn try_from(inner: String) -> crate::Result<Self> {
+        let len = inner.len().try_into().map_err(|_| crate::Error::Overflow)?;
+        Ok(Self { len, inner })
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Adapter<T>(pub T);
 
