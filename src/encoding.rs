@@ -322,8 +322,8 @@ where
 
 // impl<P> Describe for LengthString<P>
 // where
-//     P: State + Encode + Decode + TryInto<usize> + Terminated + Clone + 'static,
-// {
+//     P: State + Encode + Decode + TryInto<usize> + Terminated + Clone +
+// 'static, {
 //     fn describe() -> crate::describe::Descriptor {
 //         crate::describe::Builder::new::<Self>().build()
 //     }
