@@ -7,13 +7,13 @@ description = "Deterministic state machine engine"
 license = "Apache-2.0"
 
 [dependencies]
-abci2 = { git = "https://github.com/turbofish-org/abci2", rev = "96b0d3f388ffc8fa014d442ace7f697e54a94726", optional = true }
+abci2 = { git = "https://github.com/turbofish-org/abci2", rev = "27d8d7a5a6e458f5881e3eb13116cb2a3ae049b5", optional = true }
 tendermint-rpc = { version = "0.38.0", features = [
     "http-client",
 ], optional = true }
 tendermint = { version = "0.38.0", optional = true }
 tendermint-proto = { version = "0.38.0" }
-merk = { git = "https://github.com/nomic-io/merk", rev = "0906a5a2b9a3cf99de12ea0726bb5e5167a7fa81", optional = true, default-features = false }
+merk = { git = "https://github.com/nomic-io/merk", rev = "cc496300bff8a9223e5589cdc2f2e0db3ae14208", optional = true, default-features = false }
 orga-macros = { path = "macros", version = "0.3.1" }
 log = "0.4.17"
 hex-literal = "0.4.1"
@@ -22,7 +22,7 @@ is_executable = { version = "1.0.1", optional = true }
 reqwest = { version = "0.11.16", features = ["blocking"], optional = true }
 flate2 = "1.0.22"
 tar = "0.4.38"
-ed = { git = "https://github.com/nomic-io/ed", rev = "9c0e206ffdb59dacb90f083e004e8080713e6ad8" }
+ed = { git = "https://github.com/nomic-io/ed", rev = "a657be856792039ff60c2f67e7920e38cd3acffc" }
 toml_edit = "0.22.9"
 prost = { version = "0.13.1" }
 home = { version = "0.5.4", optional = true }
