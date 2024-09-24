@@ -184,6 +184,7 @@ macro_rules! named_fields {
 
 pub(crate) use named_fields;
 
+#[allow(dead_code)]
 pub struct Types {
     pub state_trait: TokenStream,
     pub store_ty: TokenStream,

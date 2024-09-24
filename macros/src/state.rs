@@ -28,6 +28,7 @@ pub struct StateInputReceiver {
     #[darling(default)]
     pub version: u8,
     #[darling(default)]
+    #[allow(dead_code)]
     pub previous: Option<Path>,
     #[darling(default)]
     pub as_type: Option<Path>,

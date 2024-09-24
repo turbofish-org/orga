@@ -192,7 +192,7 @@ where
                         hasher.update(&bytes);
                         let hash = hasher.finalize();
 
-                        let msg = Message::from_slice(&hash)?;
+                        let msg = Message::from_digest_slice(&hash)?;
 
                         (msg, addr)
                     }
