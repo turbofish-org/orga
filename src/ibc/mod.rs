@@ -1,5 +1,4 @@
 //! IBC compatibility via integration with [ibc-rs](https://docs.rs/ibc)
-use crate::migrate::MigrateFrom;
 use ed::Terminated;
 use ibc::apps::transfer::handler::send_transfer;
 use ibc::clients::tendermint::{
@@ -61,7 +60,6 @@ pub use service::{start_grpc, GrpcOpts};
 pub use self::messages::{IbcMessage, IbcTx, RawIbcTx};
 mod client_contexts;
 mod messages;
-mod migration;
 mod query;
 mod router;
 
@@ -69,28 +67,12 @@ mod router;
 pub const IBC_QUERY_PATH: &str = "store/ibc/key";
 
 /// Integration with [ibc_rs] for general IBC support.
-#[orga(version = 3)]
+#[orga(version = 3..=3)]
 pub struct Ibc {
-    #[orga(version(V2))]
-    _bytes1: [u8; 32],
-
-    #[orga(version(V2))]
-    _bytes2: [u8; 20],
-
-    #[orga(version(V2))]
-    #[state(absolute_prefix(b""))]
-    root_store: Store,
-
-    #[orga(version(V2))]
-    #[state(prefix(b""))]
-    local_store: Store,
-
     /// Base IBC context
-    #[orga(version(V3))]
     pub ctx: IbcContext,
 
     /// Router for IBC modules, such as the transfer module.
-    #[orga(version(V3))]
     pub router: router::IbcRouter,
 }
 
@@ -99,7 +81,7 @@ pub struct Ibc {
 /// IBC depends on being able to prove specific key paths, so some fields of
 /// this type use absolute state prefixes, which must not conflict with other
 /// modules.
-#[orga(version = 1)]
+#[orga(version = 1..=1)]
 pub struct IbcContext {
     height: u64,
     host_consensus_states: Deque<WrappedConsensusState>,
@@ -135,13 +117,7 @@ pub struct IbcContext {
     #[state(absolute_prefix(b"commitments/"))]
     pub commitments: Map<PortChannelSequence, Vec<u8>>,
 
-    /// (Legacy) Receipts for each port and channel (ics-04).
-    #[orga(version(V0))]
-    #[state(absolute_prefix(b"receipts/"))]
-    pub receipts: Map<PortChannelSequence, ()>,
-
     /// Receipts for each port and channel (ics-04).
-    #[orga(version(V1))]
     #[state(absolute_prefix(b"receipts/"))]
     pub receipts: Map<PortChannelSequence, u8>,
 
@@ -771,48 +747,12 @@ protobuf_newtype!(
 //     ConsensusState
 // );
 
-/// Connection end with previous encoding format to allow migration.
-pub struct LegacyWrappedConnectionEnd {
-    /// Decoded connection end.
-    pub inner: ConnectionEnd,
-}
-
-impl State for LegacyWrappedConnectionEnd {
-    fn attach(&mut self, _store: crate::store::Store) -> crate::Result<()> {
-        Ok(())
-    }
-
-    fn flush<W: std::io::Write>(self, _out: &mut W) -> crate::Result<()> {
-        Ok(())
-    }
-
-    fn load(_store: crate::store::Store, bytes: &mut &[u8]) -> crate::Result<Self> {
-        let mut inner: RawConnectionEnd =
-            <RawConnectionEnd as prost::Message>::decode(bytes).unwrap();
-        inner.versions = ibc::core::connection::types::version::Version::compatibles()
-            .into_iter()
-            .map(|v| v.into())
-            .collect();
-        Ok(Self {
-            inner: inner.try_into().map_err(|_| {
-                crate::Error::Ibc("Unable to load state for LegacyWrappedConnectionEnd".to_string())
-            })?,
-        })
-    }
-}
-
-impl MigrateFrom<LegacyWrappedConnectionEnd> for WrappedConnectionEnd {
-    fn migrate_from(value: LegacyWrappedConnectionEnd) -> crate::Result<Self> {
-        Ok(Self { inner: value.inner })
-    }
-}
-
 protobuf_newtype!(
     WrappedConnectionEnd,
     ConnectionEnd,
     RawConnectionEnd,
     Protobuf,
-    LegacyWrappedConnectionEnd
+    WrappedConnectionEnd
 );
 protobuf_newtype!(
     WrappedChannelEnd,
@@ -985,7 +925,6 @@ impl TryFrom<IbcSigner> for Address {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
     use std::time::Duration;
 
     use ibc_rs::{
@@ -1255,41 +1194,6 @@ mod tests {
             &[1],
         );
         assert!(entries.next().is_none());
-    }
-
-    fn create_ibc_state_from_file<I: Into<PathBuf>>(path: I) -> Store {
-        use std::fs::File;
-        use std::io::{self, BufRead};
-
-        let file = File::open(path.into()).unwrap();
-        let reader = io::BufReader::new(file);
-
-        let mut tuples = Vec::new();
-        let mut lines = reader.lines();
-        while let Some(Ok(line)) = lines.next() {
-            let tuple: (Vec<u8>, Vec<u8>) = serde_json::from_str(&line).unwrap();
-            tuples.push(tuple);
-        }
-
-        let mut store = Store::new(BackingStore::MapStore(Shared::new(MapStore::new())));
-        for (key, value) in tuples {
-            store.put(key, value).unwrap();
-        }
-
-        store
-    }
-
-    #[test]
-    fn migrate_v8() {
-        let mut store = create_ibc_state_from_file("prev-ibc-test-state.txt");
-
-        let mut bytes = store.get(&[]).unwrap().unwrap();
-        let app = App::migrate(store.clone(), store.clone(), &mut bytes.as_slice()).unwrap();
-        bytes.clear();
-        app.flush(&mut bytes).unwrap();
-        store.put(vec![], bytes).unwrap();
-
-        assert_state(&store);
     }
 
     #[test]
