@@ -20,10 +20,10 @@ impl Context<()> {
         let mut context_store = CONTEXT_MAP.lock().unwrap();
         let id = TypeId::of::<T>();
         let boxed_ctx = Box::new(ctx);
-        let raw = unsafe { transmute::<_, Box<()>>(boxed_ctx) };
+        let raw = unsafe { transmute::<Box<T>, Box<()>>(boxed_ctx) };
         let replaced = context_store.insert(id, raw);
         if let Some(replaced) = replaced {
-            unsafe { transmute::<_, Box<T>>(replaced) };
+            unsafe { transmute::<Box<()>, Box<T>>(replaced) };
         }
     }
 
@@ -32,7 +32,7 @@ impl Context<()> {
         let id = TypeId::of::<T>();
         let boxed_ctx = context_store.get_mut(&id);
         match boxed_ctx {
-            Some(ctx) => unsafe { Some(transmute::<_, &'a mut Box<T>>(ctx)) },
+            Some(ctx) => unsafe { Some(transmute::<&mut Box<()>, &'a mut Box<T>>(ctx)) },
             None => None,
         }
     }
@@ -40,7 +40,7 @@ impl Context<()> {
     pub fn remove<T: 'static>() {
         let mut context_store = CONTEXT_MAP.lock().unwrap();
         if let Some(replaced) = context_store.remove(&TypeId::of::<T>()) {
-            unsafe { transmute::<_, Box<T>>(replaced) };
+            unsafe { transmute::<Box<()>, Box<T>>(replaced) };
         }
     }
 }
