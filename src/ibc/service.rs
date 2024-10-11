@@ -667,7 +667,8 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
         let channel_id = ChannelId::from_str(&request_inner.channel_id)
             .map_err(|_| Status::invalid_argument("invalid channel id"))?;
         let res = QueryNextSequenceSendResponse {
-            next_sequence_send: self.ibc
+            next_sequence_send: self
+                .ibc
                 .query(|ibc| {
                     ibc.query_next_sequence_send(PortChannel::new(
                         port_id.clone(),
