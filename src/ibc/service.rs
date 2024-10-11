@@ -128,7 +128,7 @@ impl From<crate::Error> for tonic::Status {
 }
 
 pub struct IbcClientService<C> {
-    pub ibc: fn() -> C,
+    pub ibc: C,
 }
 
 #[tonic::async_trait]
@@ -144,9 +144,8 @@ impl<C: Client<IbcContext> + 'static> ClientQuery for IbcClientService<C> {
         &self,
         _request: Request<QueryClientStatesRequest>,
     ) -> Result<Response<QueryClientStatesResponse>, Status> {
-        let ibc = (self.ibc)();
         let res = QueryClientStatesResponse {
-            client_states: ibc.query(|ibc| ibc.query_client_states()).await?,
+            client_states: self.ibc.query(|ibc| ibc.query_client_states()).await?,
             ..Default::default()
         };
         Ok(Response::new(res))
@@ -162,9 +161,8 @@ impl<C: Client<IbcContext> + 'static> ClientQuery for IbcClientService<C> {
         let revision_number = request.revision_number;
         let revision_height = request.revision_height;
 
-        let ibc = (self.ibc)();
-
-        let consensus_state = ibc
+        let consensus_state = self
+            .ibc
             .query(|ibc| {
                 ibc.query_consensus_state(
                     client_id.clone().into(),
@@ -187,7 +185,6 @@ impl<C: Client<IbcContext> + 'static> ClientQuery for IbcClientService<C> {
         &self,
         request: Request<QueryConsensusStatesRequest>,
     ) -> Result<Response<QueryConsensusStatesResponse>, Status> {
-        let ibc = (self.ibc)();
         let client_id: ClientId = request
             .into_inner()
             .client_id
@@ -195,7 +192,8 @@ impl<C: Client<IbcContext> + 'static> ClientQuery for IbcClientService<C> {
             .map_err(|_| Status::invalid_argument("Invalid client ID".to_string()))?;
 
         let res = QueryConsensusStatesResponse {
-            consensus_states: ibc
+            consensus_states: self
+                .ibc
                 .query(|ibc| ibc.query_consensus_states(client_id.clone().into()))
                 .await?,
             ..Default::default()
@@ -217,9 +215,9 @@ impl<C: Client<IbcContext> + 'static> ClientQuery for IbcClientService<C> {
         let request = request.into_inner();
         let client_id = ClientId::from_str(&request.client_id)
             .map_err(|_| Status::invalid_argument("Invalid client ID".to_string()))?;
-        let ibc = (self.ibc)();
 
-        let client_status = ibc
+        let client_status = self
+            .ibc
             .query(|ibc| ibc.query_client_status(client_id.clone().into()))
             .await?;
 
@@ -253,7 +251,7 @@ impl<C: Client<IbcContext> + 'static> ClientQuery for IbcClientService<C> {
 }
 
 pub struct IbcConnectionService<C> {
-    ibc: fn() -> C,
+    ibc: C,
 }
 
 #[tonic::async_trait]
@@ -262,12 +260,12 @@ impl<C: Client<IbcContext> + 'static> ConnectionQuery for IbcConnectionService<C
         &self,
         request: Request<QueryConnectionRequest>,
     ) -> Result<Response<QueryConnectionResponse>, Status> {
-        let ibc = (self.ibc)();
         let conn_id = ConnectionId::from_str(&request.into_inner().connection_id)
             .map_err(|_| Status::invalid_argument("Invalid connection ID".to_string()))?;
 
         Ok(Response::new(QueryConnectionResponse {
-            connection: ibc
+            connection: self
+                .ibc
                 .query(|ibc| ibc.query_connection(conn_id.clone().into()))
                 .await?
                 .map(Into::into),
@@ -279,9 +277,8 @@ impl<C: Client<IbcContext> + 'static> ConnectionQuery for IbcConnectionService<C
         &self,
         _request: Request<QueryConnectionsRequest>,
     ) -> Result<Response<QueryConnectionsResponse>, Status> {
-        let ibc = (self.ibc)();
         Ok(Response::new(QueryConnectionsResponse {
-            connections: ibc.query(|ibc| ibc.query_all_connections()).await?,
+            connections: self.ibc.query(|ibc| ibc.query_all_connections()).await?,
             ..Default::default()
         }))
     }
@@ -290,13 +287,13 @@ impl<C: Client<IbcContext> + 'static> ConnectionQuery for IbcConnectionService<C
         &self,
         request: Request<QueryClientConnectionsRequest>,
     ) -> Result<Response<QueryClientConnectionsResponse>, Status> {
-        let ibc = (self.ibc)();
         let client_id: ClientId = request
             .into_inner()
             .client_id
             .parse()
             .map_err(|_| Status::invalid_argument("Invalid client ID".to_string()))?;
-        let connection_ids = ibc
+        let connection_ids = self
+            .ibc
             .query(|ibc| ibc.query_client_connections(client_id.clone().into()))
             .await?;
 
@@ -329,7 +326,7 @@ impl<C: Client<IbcContext> + 'static> ConnectionQuery for IbcConnectionService<C
 }
 
 pub struct IbcChannelService<C> {
-    ibc: fn() -> C,
+    ibc: C,
     revision_number: u64,
 }
 
@@ -339,7 +336,6 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
         &self,
         request: Request<QueryChannelRequest>,
     ) -> Result<Response<QueryChannelResponse>, Status> {
-        let ibc = (self.ibc)();
         let request = request.into_inner();
         let port_id = PortId::from_str(&request.port_id)
             .map_err(|_| Status::invalid_argument("invalid port id"))?;
@@ -349,7 +345,8 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
         let path = ChannelEndPath(port_id, channel_id);
 
         Ok(Response::new(QueryChannelResponse {
-            channel: ibc
+            channel: self
+                .ibc
                 .query(|ibc| ibc.query_channel(path.clone().into()))
                 .await?,
             ..Default::default()
@@ -360,9 +357,9 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
         &self,
         _request: Request<QueryChannelsRequest>,
     ) -> Result<Response<QueryChannelsResponse>, Status> {
-        let ibc = (self.ibc)();
         let revision_number = self.revision_number;
-        let (channels, height) = ibc
+        let (channels, height) = self
+            .ibc
             .query(|ibc| Ok((ibc.query_all_channels()?, ibc.height)))
             .await?;
 
@@ -380,12 +377,12 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
         &self,
         request: Request<QueryConnectionChannelsRequest>,
     ) -> Result<Response<QueryConnectionChannelsResponse>, Status> {
-        let ibc = (self.ibc)();
         let revision_number = self.revision_number;
         let conn_id = ConnectionId::from_str(&request.get_ref().connection)
             .map_err(|_| Status::invalid_argument("invalid connection id"))?;
 
-        let (channels, height) = ibc
+        let (channels, height) = self
+            .ibc
             .query(|ibc| {
                 Ok((
                     ibc.query_connection_channels(conn_id.clone().into())?,
@@ -407,7 +404,6 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
         &self,
         request: Request<QueryChannelClientStateRequest>,
     ) -> Result<Response<QueryChannelClientStateResponse>, Status> {
-        let ibc = (self.ibc)();
         let request = request.into_inner();
         let port_id = PortId::from_str(&request.port_id)
             .map_err(|_| Status::invalid_argument("invalid port id"))?;
@@ -415,7 +411,8 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
             .map_err(|_| Status::invalid_argument("invalid channel id"))?;
 
         let path = ChannelEndPath(port_id, channel_id);
-        let channel: Channel = ibc
+        let channel: Channel = self
+            .ibc
             .query(|ibc| Ok(ibc.query_channel(path.clone().into())))
             .await??
             .ok_or_else(|| Status::not_found("channel not found"))?;
@@ -423,14 +420,16 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
             .connection_hops
             .first()
             .ok_or_else(|| Status::not_found("channel does not have a connection hop"))?;
-        let connection_end: ConnectionEnd = ibc
+        let connection_end: ConnectionEnd = self
+            .ibc
             .query(|ibc| {
                 Ok(ibc.query_connection(ConnectionId::from_str(connection_id).unwrap().into()))
             })
             .await??
             .ok_or_else(|| Status::not_found("connection not found"))?;
         let client_id = connection_end.client_id();
-        let client_state = ibc
+        let client_state = self
+            .ibc
             .query(|ibc| {
                 Ok(ibc
                     .clients
@@ -473,7 +472,6 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
         &self,
         request: Request<QueryPacketCommitmentsRequest>,
     ) -> Result<Response<QueryPacketCommitmentsResponse>, Status> {
-        let ibc = (self.ibc)();
         let revision_number = self.revision_number;
         let request = request.into_inner();
         let port_id = PortId::from_str(&request.port_id)
@@ -483,7 +481,8 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
 
         let path = PortChannel::new(port_id, channel_id);
 
-        let (commitments, height) = ibc
+        let (commitments, height) = self
+            .ibc
             .query(|ibc| Ok((ibc.query_packet_commitments(path.clone())?, ibc.height)))
             .await?;
 
@@ -508,10 +507,10 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
             .map_err(|_| Status::invalid_argument("invalid channel id"))?;
         let sequence = Sequence::from(request.sequence);
 
-        let ibc = (self.ibc)();
         let receipt_path = ReceiptPath::new(&port_id, &channel_id, sequence);
 
-        let receipt = ibc
+        let receipt = self
+            .ibc
             .query(|ibc| Ok(ibc.get_packet_receipt(&receipt_path.clone())?))
             .await;
 
@@ -535,7 +534,6 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
         &self,
         request: Request<QueryPacketAcknowledgementsRequest>,
     ) -> Result<Response<QueryPacketAcknowledgementsResponse>, Status> {
-        let ibc = (self.ibc)();
         let revision_number = self.revision_number;
         let request = request.into_inner();
         let port_id = PortId::from_str(&request.port_id)
@@ -545,7 +543,8 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
         let sequences = request.packet_commitment_sequences;
 
         let path = PortChannel::new(port_id, channel_id);
-        let (acknowledgements, height) = ibc
+        let (acknowledgements, height) = self
+            .ibc
             .query(|ibc| {
                 Ok((
                     ibc.query_packet_acks(sequences.clone().try_into().unwrap(), path.clone())?,
@@ -568,7 +567,6 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
         &self,
         request: Request<QueryUnreceivedPacketsRequest>,
     ) -> Result<Response<QueryUnreceivedPacketsResponse>, Status> {
-        let ibc = (self.ibc)();
         let revision_number = self.revision_number;
         let request = request.into_inner();
         let port_id = PortId::from_str(&request.port_id)
@@ -578,7 +576,8 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
         let sequences_to_check: Vec<u64> = request.packet_commitment_sequences;
         let path = PortChannel::new(port_id, channel_id);
 
-        let (sequences, height) = ibc
+        let (sequences, height) = self
+            .ibc
             .query(|ibc| {
                 Ok((
                     ibc.query_unreceived_packets(
@@ -603,7 +602,6 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
         &self,
         request: Request<QueryUnreceivedAcksRequest>,
     ) -> Result<Response<QueryUnreceivedAcksResponse>, Status> {
-        let ibc = (self.ibc)();
         let revision_number = self.revision_number;
         let request = request.into_inner();
         let port_id = PortId::from_str(&request.port_id)
@@ -613,7 +611,8 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
         let sequences_to_check: Vec<u64> = request.packet_ack_sequences;
         let path = PortChannel::new(port_id, channel_id);
 
-        let (sequences, height) = ibc
+        let (sequences, height) = self
+            .ibc
             .query(|ibc| {
                 Ok((
                     ibc.query_unreceived_acks(
@@ -638,14 +637,14 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
         &self,
         request: Request<QueryNextSequenceReceiveRequest>,
     ) -> Result<Response<QueryNextSequenceReceiveResponse>, Status> {
-        let ibc_client = (self.ibc)();
         let request_inner = request.into_inner();
         let port_id = PortId::from_str(&request_inner.port_id)
             .map_err(|_| Status::invalid_argument("invalid port id"))?;
         let channel_id = ChannelId::from_str(&request_inner.channel_id)
             .map_err(|_| Status::invalid_argument("invalid channel id"))?;
         let res = QueryNextSequenceReceiveResponse {
-            next_sequence_receive: ibc_client
+            next_sequence_receive: self
+                .ibc
                 .query(|ibc| {
                     ibc.query_next_sequence_receive(PortChannel::new(
                         port_id.clone(),
@@ -662,14 +661,14 @@ impl<C: Client<IbcContext> + 'static> ChannelQuery for IbcChannelService<C> {
         &self,
         request: Request<QueryNextSequenceSendRequest>,
     ) -> Result<Response<QueryNextSequenceSendResponse>, Status> {
-        let ibc_client = (self.ibc)();
         let request_inner = request.into_inner();
         let port_id = PortId::from_str(&request_inner.port_id)
             .map_err(|_| Status::invalid_argument("invalid port id"))?;
         let channel_id = ChannelId::from_str(&request_inner.channel_id)
             .map_err(|_| Status::invalid_argument("invalid channel id"))?;
         let res = QueryNextSequenceSendResponse {
-            next_sequence_send: ibc_client
+            next_sequence_send: self
+                .ibc
                 .query(|ibc| {
                     ibc.query_next_sequence_send(PortChannel::new(
                         port_id.clone(),
@@ -1157,20 +1156,20 @@ pub struct GrpcOpts {
 }
 
 /// Start the gRPC server.
-pub async fn start_grpc<C: Client<IbcContext> + 'static>(client: fn() -> C, opts: &GrpcOpts) {
+pub async fn start_grpc<C: Client<IbcContext> + 'static, F: Fn() -> C>(client: F, opts: &GrpcOpts) {
     use tonic::transport::Server;
     let auth_service = AuthQueryServer::new(AuthService {});
     let bank_service = BankQueryServer::new(BankService {});
     let staking_service = StakingQueryServer::new(StakingService {});
-    let ibc_client_service = ClientQueryServer::new(IbcClientService { ibc: client });
-    let ibc_connection_service = ConnectionQueryServer::new(IbcConnectionService { ibc: client });
+    let ibc_client_service = ClientQueryServer::new(IbcClientService { ibc: client() });
+    let ibc_connection_service = ConnectionQueryServer::new(IbcConnectionService { ibc: client() });
     let revision_number = opts
         .chain_id
         .rsplit_once('-')
         .map(|(_, n)| n.parse::<u64>().unwrap_or(0))
         .unwrap_or(0);
     let ibc_channel_service = ChannelQueryServer::new(IbcChannelService {
-        ibc: client,
+        ibc: client(),
         revision_number,
     });
     let health_service = HealthServer::new(AppHealthService {});
