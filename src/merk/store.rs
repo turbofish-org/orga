@@ -295,6 +295,7 @@ impl ABCIStore for MerkStore {
         self.write(metadata)?;
         self.merk.as_mut().unwrap().flush()?;
 
+        #[cfg(feature = "state-sync")]
         let recent = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
