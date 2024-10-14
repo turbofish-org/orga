@@ -387,6 +387,7 @@ impl ABCIStore for MerkStore {
                 && calc_app_hash(snapshot.hash.to_vec().as_slice()) == req.app_hash
             {
                 self.target_snapshot = Some(snapshot);
+                self.restorer = None;
                 res.set_result(abci::response_offer_snapshot::Result::Accept);
             }
         }
