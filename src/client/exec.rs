@@ -143,7 +143,11 @@ where
             (key.clone(), StepResult::FetchKey(key))
         }
         Err(Error::StoreErr(store::Error::GetNextUnknown(key))) => {
-            (key.clone(), StepResult::FetchNext(key))
+            // (key.clone(), StepResult::FetchNext(key))
+            // TODO: optimistically attempt to trace and only use fetchnext as fallback. we
+            // only do this because unwrapping a collections::Map::Iter entry
+            // does not push a trace yet
+            return Ok(StepResult::FetchNext(key));
         }
         Err(Error::StoreErr(store::Error::GetPrevUnknown(maybe_key))) => {
             if let Some(key) = maybe_key {
