@@ -244,8 +244,8 @@ impl<S: Write> Write for Store<S> {
         // assertion can be removed if the merk key length limit is removed, or
         // if we instead check this statically using known encoding lengths via
         // ed.
-        if key.len() + self.prefix.len() >= 256 {
-            return Err(Error::Store("Store keys must be < 256 bytes".into()));
+        if key.len() + self.prefix.len() >= 65535 {
+            return Err(Error::Store("Store keys must be < 65535 bytes".into()));
         }
 
         let prefixed = concat(self.prefix.as_slice(), key.as_slice());

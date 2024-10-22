@@ -2250,7 +2250,7 @@ checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
 [[package]]
 name = "merk"
 version = "2.0.0"
-source = "git+https://github.com/nomic-io/merk?rev=cc496300bff8a9223e5589cdc2f2e0db3ae14208#cc496300bff8a9223e5589cdc2f2e0db3ae14208"
+source = "git+https://github.com/nomic-io/merk?rev=d6f0490993bcf88f786c5271091aa9a84ff2fe69#d6f0490993bcf88f786c5271091aa9a84ff2fe69"
 dependencies = [
  "colored",
  "ed 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
