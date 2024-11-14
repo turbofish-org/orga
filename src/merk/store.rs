@@ -71,6 +71,13 @@ impl MerkStore {
         }
     }
 
+    pub fn initialized<P: AsRef<Path>>(home: P) -> bool {
+        let home = home.as_ref();
+        Merk::open_and_get_aux(home.join("db"), b"height")
+            .unwrap()
+            .is_some()
+    }
+
     fn load_snapshots<P: AsRef<Path>>(path: P) -> snapshot::Snapshots {
         snapshot::Snapshots::load(path.as_ref())
             .expect("Failed to load snapshots")
