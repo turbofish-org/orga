@@ -500,13 +500,14 @@ impl<S: Symbol> Staking<S> {
             validator.jail_forever();
             validator.slash(self.slash_fraction_double_sign, false)?
         };
-        let multiplier = (Decimal::one() - self.slash_fraction_double_sign)?;
         for entry in redelegations.iter() {
             let del_address = entry.delegator_address;
             for redelegation in entry.outbound_redelegations.iter() {
                 let mut validator = self.validators.get_mut(redelegation.address.into())?;
                 let mut delegator = validator.get_mut(del_address.into())?;
-                delegator.slash_redelegation((multiplier * redelegation.amount)?.amount()?)?;
+                delegator.slash_redelegation(
+                    (self.slash_fraction_double_sign * redelegation.amount)?.amount()?,
+                )?;
             }
         }
         self.update_vp(val_address)

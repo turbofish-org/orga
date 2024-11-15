@@ -89,7 +89,7 @@ abci = [
     "reqwest",
 ]
 merk-verify = ["merk/verify"]
-merk-full = ["merk/full", "ics23"]
+merk-full = ["merk/full", "merk-verify", "ics23"]
 state-sync = []
 feat-ibc = ["ibc", "ics23", "prost-types", "ibc-proto", "tendermint"]
 
@@ -104,4 +104,4 @@ required-features = ["abci", "merk-full", "feat-ibc"]
 name = "app"
 crate-type = ["bin"]
 path = "examples/app/main.rs"
-required-features = ["feat-ibc", "merk-verify"]
+required-features = ["abci", "merk-full", "feat-ibc"]

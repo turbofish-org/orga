@@ -191,6 +191,10 @@ impl ClientExecutionContext for IbcContext {
         &mut self,
         consensus_state_path: ibc::core::host::types::path::ClientConsensusStatePath,
     ) -> Result<(), ContextError> {
+        let epoch_height = format!(
+            "{}-{}",
+            consensus_state_path.revision_number, consensus_state_path.revision_height
+        );
         self.clients
             .get_mut(consensus_state_path.client_id.clone().into())
             .map_err(|_| ClientError::ClientSpecific {
@@ -200,7 +204,7 @@ impl ClientExecutionContext for IbcContext {
                 client_id: consensus_state_path.client_id.clone(),
             })?
             .consensus_states
-            .remove(consensus_state_path.revision_height.to_string().into())
+            .remove(epoch_height.into())
             .map_err(|_| ClientError::ClientSpecific {
                 description: "Unable to delete consensus state".to_string(),
             })?;

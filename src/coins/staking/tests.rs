@@ -33,8 +33,8 @@ fn setup_state() -> Result<Staking<Simp>> {
         unbonding_seconds: UNBONDING_SECONDS,
         max_validators: 100,
         max_offline_blocks: 50_000,
-        slash_fraction_downtime: (Amount::new(1) / Amount::new(2))?,
-        slash_fraction_double_sign: (Amount::new(1) / Amount::new(2))?,
+        slash_fraction_downtime: (Amount::new(1) / Amount::new(3))?,
+        slash_fraction_double_sign: (Amount::new(1) / Amount::new(3))?,
         min_self_delegation_min: 1,
         ..Default::default()
     };
@@ -541,12 +541,12 @@ fn undelegate_slash_before_unbond() -> Result<()> {
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 0);
     assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 0);
 
-    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 50);
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 67);
 
     Context::add(Time::from_seconds(10));
     staking.end_block_step(&Default::default())?;
     let balance: Amount = simp_balance(&staking.get(val_0)?.get(staker)?.liquid);
-    assert_eq!(balance, 50);
+    assert_eq!(balance, 67);
 
     Ok(())
 }
@@ -595,7 +595,7 @@ fn undelegate_slash_after_unbond() -> Result<()> {
     assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 0);
     assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 0);
 
-    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 50);
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 67);
 
     staking.end_block_step(&Default::default())?;
     let balance: Amount = simp_balance(&staking.get(val_0)?.get(staker)?.liquid);
@@ -702,10 +702,10 @@ fn redelegate_slash_before_unbond() -> Result<()> {
     let val_1 = Address::from_pubkey([1; 33]);
 
     assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 0);
-    assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 50);
+    assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 67);
 
-    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 50);
-    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 150);
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 67);
+    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 167);
 
     Ok(())
 }
@@ -766,7 +766,7 @@ fn redelegate_slash_after_unbond() -> Result<()> {
     assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 0);
     assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 100);
 
-    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 50);
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 67);
     assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 200);
 
     Ok(())
@@ -848,23 +848,23 @@ fn redelegation_slash() -> Result<()> {
     let val_1 = Address::from_pubkey([1; 33]);
     let val_2 = Address::from_pubkey([2; 33]);
 
-    assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 65);
-    assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 20);
-    assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 165);
+    assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 70);
+    assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 27);
+    assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 170);
 
-    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 165);
-    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 70);
-    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 265);
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 170);
+    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 93);
+    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 270);
 
     staking.punish_double_sign(Address::from_pubkey([0; 33]))?;
     staking.end_block_step(&Default::default())?;
-    assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 32);
-    assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 20);
-    assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 140);
+    assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 47);
+    assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 27);
+    assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 153);
 
-    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 82);
-    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 70);
-    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 240);
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 113);
+    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 93);
+    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 253);
 
     Ok(())
 }
@@ -915,7 +915,7 @@ fn redelegation_double_slash() -> Result<()> {
     staking.end_block_step(&Default::default())?;
 
     assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 0);
-    assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 25);
+    assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 45);
 
     Ok(())
 }
@@ -996,13 +996,13 @@ fn redelegation_slash_with_unbond() -> Result<()> {
     let val_1 = Address::from_pubkey([1; 33]);
     let val_2 = Address::from_pubkey([2; 33]);
 
-    assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 65);
-    assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 20);
-    assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 165);
+    assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 70);
+    assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 27);
+    assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 170);
 
-    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 165);
-    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 70);
-    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 265);
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 170);
+    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 93);
+    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 270);
 
     staking.unbond(val_2, staker, Amount::from(100))?;
     staking.end_block_step(&Default::default())?;
@@ -1010,13 +1010,13 @@ fn redelegation_slash_with_unbond() -> Result<()> {
     staking.punish_double_sign(Address::from_pubkey([0; 33]))?;
     staking.end_block_step(&Default::default())?;
 
-    assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 32);
-    assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 20);
-    assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 40);
+    assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 47);
+    assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 27);
+    assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 53);
 
-    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 82);
-    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 70);
-    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 140);
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 113);
+    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 93);
+    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 153);
 
     Context::add(Time::from_seconds(10));
     staking.end_block_step(&Default::default())?;
@@ -1102,13 +1102,13 @@ fn redelegation_slash_with_slash_unbond_overflow() -> Result<()> {
     let val_1 = Address::from_pubkey([1; 33]);
     let val_2 = Address::from_pubkey([2; 33]);
 
-    assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 65);
-    assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 20);
-    assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 165);
+    assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 70);
+    assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 27);
+    assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 170);
 
-    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 165);
-    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 70);
-    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 265);
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 170);
+    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 93);
+    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 270);
 
     for _ in 0..15 {
         staking.unbond(val_2, staker, Amount::from(10))?;
@@ -1116,23 +1116,23 @@ fn redelegation_slash_with_slash_unbond_overflow() -> Result<()> {
 
     staking.end_block_step(&Default::default())?;
 
-    assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 15);
+    assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 20);
 
     staking.punish_double_sign(Address::from_pubkey([0; 33]))?;
     staking.end_block_step(&Default::default())?;
 
-    assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 32);
-    assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 20);
-    assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 0);
+    assert_eq!(staking.get(val_0)?.get(staker)?.staked.amount()?, 47);
+    assert_eq!(staking.get(val_1)?.get(staker)?.staked.amount()?, 27);
+    assert_eq!(staking.get(val_2)?.get(staker)?.staked.amount()?, 3);
 
-    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 82);
-    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 70);
-    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 100);
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 113);
+    assert_eq!(staking.get_mut(val_1)?.delegators.balance()?.amount()?, 93);
+    assert_eq!(staking.get_mut(val_2)?.delegators.balance()?.amount()?, 103);
 
     Context::add(Time::from_seconds(10));
     staking.end_block_step(&Default::default())?;
 
-    assert_eq!(simp_balance(&staking.get(val_2)?.get(staker)?.liquid), 140);
+    assert_eq!(simp_balance(&staking.get(val_2)?.get(staker)?.liquid), 150);
 
     Ok(())
 }
@@ -1204,7 +1204,7 @@ fn min_delegation_fall_below() -> Result<()> {
     staking.end_block_step(&Default::default())?;
 
     staking.punish_downtime(Address::from_pubkey([0; 33]))?;
-    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 50);
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 67);
     Context::add(Time::from_seconds(10));
 
     staking.end_block_step(&Default::default())?;
@@ -1219,8 +1219,8 @@ fn min_delegation_fall_below() -> Result<()> {
 
     staking.end_block_step(&Default::default())?;
 
-    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 75);
-    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 75);
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 92);
+    assert_eq!(ctx.updates.get(&[0; 32]).unwrap().power, 92);
 
     Ok(())
 }
@@ -1314,13 +1314,13 @@ fn punish_downtime_jailed() -> Result<()> {
     staking.end_block_step(&Default::default())?;
 
     staking.punish_downtime(Address::from_pubkey([0; 33]))?;
-    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 50);
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 67);
     staking.end_block_step(&Default::default())?;
 
     staking.punish_double_sign(val_0)?;
     staking.end_block_step(&Default::default())?;
 
-    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 25);
+    assert_eq!(staking.get_mut(val_0)?.delegators.balance()?.amount()?, 44);
 
     Ok(())
 }

@@ -302,6 +302,7 @@ impl ABCIStore for MerkStore {
         self.write(metadata)?;
         self.merk.as_mut().unwrap().flush()?;
 
+        #[cfg(feature = "state-sync")]
         let recent = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -393,6 +394,7 @@ impl ABCIStore for MerkStore {
                 && calc_app_hash(snapshot.hash.to_vec().as_slice()) == req.app_hash
             {
                 self.target_snapshot = Some(snapshot);
+                self.restorer = None;
                 res.set_result(abci::response_offer_snapshot::Result::Accept);
             }
         }
