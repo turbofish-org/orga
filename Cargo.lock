@@ -2250,7 +2250,7 @@ checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
 [[package]]
 name = "merk"
 version = "2.0.0"
-source = "git+https://github.com/turbofish-org/merk?rev=058839b813bb373e724b7c9826030e6df1aec2cb#058839b813bb373e724b7c9826030e6df1aec2cb"
+source = "git+https://github.com/turbofish-org/merk?rev=84261c2c0fdcc09792cede6b21ba72b6d008fea6#84261c2c0fdcc09792cede6b21ba72b6d008fea6"
 dependencies = [
  "colored",
  "ed 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
