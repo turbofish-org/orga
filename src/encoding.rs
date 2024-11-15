@@ -198,12 +198,11 @@ where
     Eq,
     Describe,
     Serialize,
-    Deserialize,
 )]
 #[serde(transparent)]
 pub struct LengthString<P>
 where
-    P: Encode + Decode + TryInto<usize> + Terminated + Clone + 'static,
+    P: Encode + Decode + TryInto<usize> + TryFrom<usize> + Terminated + Clone + 'static,
 {
     #[serde(skip)]
     len: P,
@@ -214,14 +213,31 @@ where
     inner: String,
 }
 
+impl<'de, P> Deserialize<'de> for LengthString<P>
+where
+    P: Encode + Decode + TryInto<usize> + TryFrom<usize> + Terminated + Clone + 'static,
+{
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let inner = String::deserialize(deserializer)?;
+        let len = inner
+            .len()
+            .try_into()
+            .map_err(|_| serde::de::Error::custom("overflow"))?;
+        Ok(LengthString { len, inner })
+    }
+}
+
 impl<P> Migrate for LengthString<P> where
-    P: Encode + Decode + TryInto<usize> + Terminated + Clone + 'static
+    P: Encode + Decode + TryInto<usize> + TryFrom<usize> + Terminated + Clone + 'static
 {
 }
 
 impl<P> LengthString<P>
 where
-    P: Encode + Decode + TryInto<usize> + Terminated + Clone,
+    P: Encode + Decode + TryInto<usize> + TryFrom<usize> + Terminated + Clone,
 {
     pub fn new(len: P, inner: String) -> Self {
         LengthString { len, inner }
@@ -230,7 +246,7 @@ where
 
 impl<P> Decode for LengthString<P>
 where
-    P: Encode + Decode + Terminated + TryInto<usize> + Clone,
+    P: Encode + Decode + Terminated + TryInto<usize> + TryFrom<usize> + Clone,
 {
     fn decode<R: std::io::Read>(mut input: R) -> Result<Self> {
         let len = P::decode(&mut input)?;
@@ -252,7 +268,7 @@ where
 
 impl<P> Encode for LengthString<P>
 where
-    P: Encode + Decode + TryInto<usize> + Terminated + Clone,
+    P: Encode + Decode + TryInto<usize> + TryFrom<usize> + Terminated + Clone,
 {
     fn encode_into<W: std::io::Write>(&self, mut out: &mut W) -> Result<()> {
         self.len.encode_into(&mut out)?;
@@ -273,12 +289,14 @@ where
     }
 }
 
-impl<P> Terminated for LengthString<P> where P: Encode + Decode + TryInto<usize> + Terminated + Clone
-{}
+impl<P> Terminated for LengthString<P> where
+    P: Encode + Decode + TryInto<usize> + TryFrom<usize> + Terminated + Clone
+{
+}
 
 impl<P> State for LengthString<P>
 where
-    P: Encode + Decode + TryInto<usize> + Terminated + Clone + 'static,
+    P: Encode + Decode + TryInto<usize> + TryFrom<usize> + Terminated + Clone + 'static,
 {
     fn attach(&mut self, _store: Store) -> crate::Result<()> {
         Ok(())
