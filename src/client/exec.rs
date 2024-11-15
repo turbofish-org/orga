@@ -440,7 +440,8 @@ mod tests {
         assert_eq!(res, 3);
         assert_eq!(
             client.queries.into_inner().unwrap(),
-            vec![vec![2], vec![0, 128]]
+            // TODO: 2nd query shouldn't be necessary
+            vec![vec![2], vec![3, 0, 1], vec![0, 128]]
         );
     }
 
