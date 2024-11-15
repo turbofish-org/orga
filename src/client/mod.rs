@@ -46,7 +46,7 @@ pub struct AppClient<T, U, Transport, Symbol, Wallet> {
     _pd: PhantomData<Symbol>,
     transport: Transport,
     wallet: Wallet,
-    sub: fn(T) -> U,
+    sub: fn(T) -> Result<U>,
 }
 
 impl<T, U, Transport, Symbol, Wallet> Client<U> for AppClient<T, U, Transport, Symbol, Wallet>
@@ -86,7 +86,7 @@ impl<T, U, Transport, Symbol, Wallet> AppClient<T, U, Transport, Symbol, Wallet>
             _pd: PhantomData,
             transport: client,
             wallet,
-            sub: Into::into,
+            sub: |x| Ok(Into::into(x)),
         }
     }
 
@@ -102,7 +102,7 @@ impl<T, U, Transport, Symbol, Wallet> AppClient<T, U, Transport, Symbol, Wallet>
 
     /// Create a subclient of this one..
     #[allow(clippy::should_implement_trait)]
-    pub fn sub<U2>(self, sub: fn(T) -> U2) -> AppClient<T, U2, Transport, Symbol, Wallet> {
+    pub fn sub<U2>(self, sub: fn(T) -> Result<U2>) -> AppClient<T, U2, Transport, Symbol, Wallet> {
         AppClient {
             _pd: PhantomData,
             transport: self.transport,
@@ -194,7 +194,8 @@ where
                 .inner
                 .inner
                 .inner;
-            op((self.sub)(inner))
+            let substate = (self.sub)(inner)?;
+            op(substate)
         })
         .await?;
         Ok(res)
@@ -435,7 +436,7 @@ mod tests {
             DerivedKey::new(b"alice").unwrap(),
         );
 
-        let bar_client = client.sub(|app| app.bar);
+        let bar_client = client.sub(|app| Ok(app.bar));
 
         let bar_b = bar_client.query(|bar| Ok(bar.b)).await?;
         assert_eq!(bar_b, 8);

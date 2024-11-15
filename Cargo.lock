@@ -751,9 +751,9 @@ dependencies = [
 [[package]]
 name = "ed"
 version = "0.3.0"
-source = "git+https://github.com/nomic-io/ed?rev=a657be856792039ff60c2f67e7920e38cd3acffc#a657be856792039ff60c2f67e7920e38cd3acffc"
+source = "git+https://github.com/turbofish-org/ed?rev=a657be856792039ff60c2f67e7920e38cd3acffc#a657be856792039ff60c2f67e7920e38cd3acffc"
 dependencies = [
- "ed-derive 0.3.0 (git+https://github.com/nomic-io/ed?rev=a657be856792039ff60c2f67e7920e38cd3acffc)",
+ "ed-derive 0.3.0 (git+https://github.com/turbofish-org/ed?rev=a657be856792039ff60c2f67e7920e38cd3acffc)",
  "thiserror",
 ]
 
@@ -771,7 +771,7 @@ dependencies = [
 [[package]]
 name = "ed-derive"
 version = "0.3.0"
-source = "git+https://github.com/nomic-io/ed?rev=a657be856792039ff60c2f67e7920e38cd3acffc#a657be856792039ff60c2f67e7920e38cd3acffc"
+source = "git+https://github.com/turbofish-org/ed?rev=a657be856792039ff60c2f67e7920e38cd3acffc#a657be856792039ff60c2f67e7920e38cd3acffc"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2250,7 +2250,7 @@ checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
 [[package]]
 name = "merk"
 version = "2.0.0"
-source = "git+https://github.com/nomic-io/merk?rev=cc496300bff8a9223e5589cdc2f2e0db3ae14208#cc496300bff8a9223e5589cdc2f2e0db3ae14208"
+source = "git+https://github.com/turbofish-org/merk?rev=058839b813bb373e724b7c9826030e6df1aec2cb#058839b813bb373e724b7c9826030e6df1aec2cb"
 dependencies = [
  "colored",
  "ed 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2426,7 +2426,7 @@ dependencies = [
  "borsh",
  "cosmrs",
  "derive_more",
- "ed 0.3.0 (git+https://github.com/nomic-io/ed?rev=a657be856792039ff60c2f67e7920e38cd3acffc)",
+ "ed 0.3.0 (git+https://github.com/turbofish-org/ed?rev=a657be856792039ff60c2f67e7920e38cd3acffc)",
  "ed25519-dalek",
  "educe",
  "flate2",
