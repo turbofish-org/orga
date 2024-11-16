@@ -53,14 +53,14 @@ impl MerkStore {
     }
 
     /// Opens a `MerkStore` at the provided path for read-only access.
-    pub fn open_readonly<P: AsRef<Path>>(home: P) -> Self {
+    pub fn open_readonly<P: AsRef<Path>>(home: P) -> Result<Self> {
         let home = home.as_ref().to_path_buf();
-        let merk = Merk::open_readonly(home.join("db")).unwrap();
+        let merk = Merk::open_readonly(home.join("db"))?;
 
         // TODO: populate snapshots, if we can do it safely concurrently with
         // other processes
 
-        MerkStore {
+        Ok(MerkStore {
             map: Some(Default::default()),
             merk: Some(merk),
             snapshots: snapshot::Snapshots::default(),
@@ -68,7 +68,7 @@ impl MerkStore {
             target_snapshot: None,
             restorer: None,
             mem_snapshots: BTreeMap::new(),
-        }
+        })
     }
 
     pub fn initialized<P: AsRef<Path>>(home: P) -> bool {
