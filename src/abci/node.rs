@@ -8,7 +8,7 @@ use crate::migrate::Migrate;
 use crate::plugins::{ABCICall, ABCIPlugin};
 use crate::query::Query;
 use crate::state::State;
-use crate::store::{BackingStore, Read, Shared, Store, Write};
+use crate::store::{BackingStore, BufStore, Read, Shared, Store, Write};
 use crate::tendermint::Child as TendermintChild;
 use crate::tendermint::Tendermint;
 use crate::{Error, Result};
@@ -354,8 +354,10 @@ impl<A: App> Node<A> {
         Context::add(crate::plugins::ChainId(chain_id.to_string()));
 
         log::info!("Migrating store data... (This might take a while)");
-        let store = Shared::new(merk_store);
-        let mut store = Store::new(BackingStore::Merk(store));
+        let store = Shared::new(BufStore::wrap(Shared::new(BufStore::wrap(Shared::new(
+            merk_store,
+        )))));
+        let mut store = Store::new(BackingStore::WrappedMerk(store));
         let bytes = store.get(&[]).unwrap().unwrap();
 
         orga::set_compat_mode(compat_mode);
@@ -374,8 +376,13 @@ impl<A: App> Node<A> {
                 [vec![version.len() as u8], version.clone()].concat(),
             )
             .unwrap();
-        if let BackingStore::Merk(merk_store) = store.into_backing_store().into_inner() {
-            let mut store = merk_store.into_inner();
+        if let BackingStore::WrappedMerk(wrapper) = store.into_backing_store().into_inner() {
+            let mut wrapper = wrapper.into_inner();
+            wrapper.flush().unwrap();
+            let mut wrapper = wrapper.into_inner().into_inner();
+            wrapper.flush().unwrap();
+            let mut store = wrapper.into_inner().into_inner();
+
             store
                 .write(vec![(b"consensus_version".to_vec(), Some(version))])
                 .unwrap();

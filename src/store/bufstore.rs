@@ -70,6 +70,10 @@ impl<S> BufStore<S> {
         &self.store
     }
 
+    pub fn into_inner(self) -> S {
+        self.store
+    }
+
     /// Consumes the `BufStore`'s in-memory buffer and writes all of its values
     /// to the underlying store.
     ///
