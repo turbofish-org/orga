@@ -204,6 +204,57 @@ impl Ibc {
         Ok(self.transfer_mut().incoming_transfer_mut().take())
     }
 
+    pub fn update_client_from_header(
+        &mut self,
+        client_index: u64,
+        rev_number: u64,
+        header_json: &str,
+    ) -> crate::Result<()> {
+        let client_id: ClientId = ClientId::new("07-tendermint", client_index).unwrap();
+        let header: orga::cosmrs::tendermint::block::Header = serde_json::from_str(header_json)?;
+        let mut client = self
+            .ctx
+            .clients
+            .get_mut(client_id.into())?
+            .ok_or(Error::Ibc("Client not found".to_string()))?;
+        let height = Height::new(rev_number, header.height.value()).unwrap();
+        client.updates.insert(
+            height.into(),
+            (
+                WrappedTimestamp {
+                    inner: header.time.try_into().unwrap(),
+                },
+                height.into(),
+            ),
+        )?;
+
+        let consensus_state = WrappedConsensusState {
+            inner: header.into(),
+        };
+
+        let mut client_state = client
+            .client_state
+            .get(Default::default())?
+            .ok_or(Error::Ibc("Client not found".to_string()))?
+            .inner
+            .inner()
+            .clone();
+
+        client_state.latest_height = height;
+        client.client_state.insert(
+            Default::default(),
+            WrappedClientState {
+                inner: client_state.into(),
+            },
+        )?;
+
+        client
+            .consensus_states
+            .insert(height.into(), consensus_state)?;
+
+        Ok(())
+    }
+
     fn signer(&mut self) -> crate::Result<Address> {
         self.context::<Signer>()
             .ok_or_else(|| Error::Coins("No Signer context available".into()))?
