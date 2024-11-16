@@ -231,6 +231,23 @@ impl Ibc {
         let consensus_state = WrappedConsensusState {
             inner: header.into(),
         };
+
+        let mut client_state = client
+            .client_state
+            .get(Default::default())?
+            .ok_or(Error::Ibc("Client not found".to_string()))?
+            .inner
+            .inner()
+            .clone();
+
+        client_state.latest_height = height;
+        client.client_state.insert(
+            Default::default(),
+            WrappedClientState {
+                inner: client_state.into(),
+            },
+        )?;
+
         client
             .consensus_states
             .insert(height.into(), consensus_state)?;
