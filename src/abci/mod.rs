@@ -226,7 +226,6 @@ mod server {
                             unwrapped_fs.flush()?;
                         }
                         let mut owned_store_inner = owned_store.into_inner();
-                        owned_store_inner.flush()?;
                         let owned_store = Shared::new(owned_store_inner);
                         store.replace(owned_store);
                         res
