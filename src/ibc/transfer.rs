@@ -445,11 +445,19 @@ impl Module for Transfer {
 
     fn on_acknowledgement_packet_execute(
         &mut self,
-        _packet: &Packet,
-        _acknowledgement: &Acknowledgement,
-        _relayer: &Signer,
+        packet: &Packet,
+        acknowledgement: &Acknowledgement,
+        relayer: &Signer,
     ) -> (ModuleExtras, Result<(), PacketError>) {
-        (ModuleExtras::empty(), Ok(()))
+        let (extras, res) =
+            on_acknowledgement_packet_execute(self, packet, acknowledgement, relayer);
+
+        (
+            extras,
+            res.map_err(|e| PacketError::AppModule {
+                description: e.to_string(),
+            }),
+        )
     }
 
     fn on_timeout_packet_validate(
